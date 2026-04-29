@@ -648,6 +648,7 @@ const songListParameters = paginationParameters.merge(
         Filters: z.string().optional(),
         GenreIds: z.string().optional(),
         Genres: z.string().optional(),
+        Ids: z.string().optional(),
         IsFavorite: z.boolean().optional(),
         IsPlayed: z.boolean().optional(),
         SearchTerm: z.string().optional(),
@@ -656,6 +657,17 @@ const songListParameters = paginationParameters.merge(
         Years: z.string().optional(),
     }),
 );
+
+const capabilitiesFull = z.object({
+    DeviceProfile: z.null().optional(),
+    MessageCallbackUrl: z.string().optional(),
+    PlayableMediaTypes: z.array(z.string()),
+    SupportedCommands: z.array(z.string()),
+    SupportsMediaControl: z.boolean(),
+    SupportsPersistentIdentifier: z.boolean(),
+});
+
+const capabilitiesFullResponse = z.null();
 
 const songList = pagination.extend({
     Items: z.array(song),
@@ -857,6 +869,7 @@ export const jfType = {
         albumDetail: albumDetailParameters,
         albumList: albumListParameters,
         authenticate: authenticateParameters,
+        capabilitiesFull,
         createPlaylist: createPlaylistParameters,
         deletePlaylist: deletePlaylistParameters,
         favorite: favoriteParameters,
@@ -885,6 +898,7 @@ export const jfType = {
         albumArtistList,
         albumList,
         authenticate,
+        capabilitiesFull: capabilitiesFullResponse,
         createPlaylist,
         deletePlaylist,
         error,

@@ -283,6 +283,15 @@ export const contract = c.router({
             400: jfType._response.error,
         },
     },
+    postCapabilitiesFull: {
+        body: jfType._parameters.capabilitiesFull,
+        method: 'POST',
+        path: 'sessions/capabilities/full',
+        responses: {
+            204: jfType._response.capabilitiesFull,
+            400: jfType._response.error,
+        },
+    },
     removeFavorite: {
         body: jfType._parameters.favorite,
         method: 'DELETE',
