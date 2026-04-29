@@ -626,6 +626,7 @@ const PlaybackSettingsSchema = z.object({
     audioDeviceId: z.string().nullable().optional(),
     audioFadeOnStatusChange: z.boolean(),
     filters: z.array(PlayerFilterSchema),
+    jellyfinRemoteControl: z.boolean(),
     mediaSession: z.boolean(),
     mpvAudioDeviceId: z.string().nullable().optional(),
     mpvExtraParameters: z.array(z.string()),
@@ -1826,6 +1827,7 @@ const initialState: SettingsState = {
         audioDeviceId: undefined,
         audioFadeOnStatusChange: true,
         filters: [],
+        jellyfinRemoteControl: true,
         mediaSession: false,
         mpvAudioDeviceId: undefined,
         mpvExtraParameters: [],
@@ -2427,10 +2429,17 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
+                if (version <= 28) {
+                    if (state.playback.jellyfinRemoteControl === undefined) {
+                        state.playback.jellyfinRemoteControl =
+                            initialState.playback.jellyfinRemoteControl;
+                    }
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 27,
+            version: 28,
         },
     ),
 );
