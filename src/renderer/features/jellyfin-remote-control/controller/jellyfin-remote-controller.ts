@@ -10,10 +10,13 @@ const RECONNECT_BACKOFF_MS = [1_000, 2_000, 5_000, 10_000, 30_000];
 export interface ControllerStartArgs {
     authHeader: string;
     capabilitiesPayload: unknown;
+    client: string; // e.g. "Feishin"
+    device: string; // e.g. "Desktop Client"
     deviceId: string;
     dispatcherDeps: DispatcherDeps;
     serverUrl: string;
     token: string;
+    version: string; // e.g. "1.11.0"
 }
 
 export class JellyfinRemoteController {
@@ -65,9 +68,14 @@ export class JellyfinRemoteController {
         const httpUrl = new URL(args.serverUrl);
         const wsScheme = httpUrl.protocol === 'https:' ? 'wss:' : 'ws:';
         const path = httpUrl.pathname.replace(/\/$/, '') + '/socket';
-        return `${wsScheme}//${httpUrl.host}${path}?api_key=${encodeURIComponent(
-            args.token,
-        )}&deviceId=${encodeURIComponent(args.deviceId)}`;
+        const params = new URLSearchParams({
+            api_key: args.token,
+            client: args.client,
+            device: args.device,
+            deviceId: args.deviceId,
+            version: args.version,
+        });
+        return `${wsScheme}//${httpUrl.host}${path}?${params.toString()}`;
     }
 
     private openSocket(): void {
@@ -85,7 +93,10 @@ export class JellyfinRemoteController {
         }
         this.ws = socket;
 
+        console.log('[jellyfin-remote] opening socket', url);
+
         socket.onopen = () => {
+            console.log('[jellyfin-remote] socket open');
             this.attempt = 0;
             if (this.keepaliveTimer) clearInterval(this.keepaliveTimer);
             this.keepaliveTimer = setInterval(() => {
@@ -103,6 +114,9 @@ export class JellyfinRemoteController {
                 return;
             }
             if (!parsed || typeof parsed.MessageType !== 'string') return;
+            if (parsed.MessageType !== 'KeepAlive' && parsed.MessageType !== 'ForceKeepAlive') {
+                console.log('[jellyfin-remote] received', parsed.MessageType, parsed);
+            }
             dispatchJellyfinMessage(parsed, args.dispatcherDeps).catch((err) => {
                 console.error('[jellyfin-remote] dispatch failed', err);
             });
@@ -112,7 +126,14 @@ export class JellyfinRemoteController {
             console.warn('[jellyfin-remote] socket error', event);
         };
 
-        socket.onclose = () => {
+        socket.onclose = (event) => {
+            console.log(
+                '[jellyfin-remote] socket closed',
+                event.code,
+                event.reason,
+                'wasClean=',
+                event.wasClean,
+            );
             if (this.keepaliveTimer) {
                 clearInterval(this.keepaliveTimer);
                 this.keepaliveTimer = null;
@@ -125,8 +146,9 @@ export class JellyfinRemoteController {
     private async postCapabilities(): Promise<void> {
         if (!this.startArgs) return;
         const args = this.startArgs;
+        const url = `${args.serverUrl}/Sessions/Capabilities/Full`;
         try {
-            const res = await fetch(`${args.serverUrl}/Sessions/Capabilities/Full`, {
+            const res = await fetch(url, {
                 body: JSON.stringify(args.capabilitiesPayload),
                 headers: {
                     Authorization: args.authHeader,
@@ -134,6 +156,7 @@ export class JellyfinRemoteController {
                 },
                 method: 'POST',
             });
+            console.log('[jellyfin-remote] capabilities POST', url, '→', res.status);
             if (res.status === 401) {
                 console.warn(
                     '[jellyfin-remote] capabilities POST: 401 — disabling for this credential',
