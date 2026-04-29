@@ -1,0 +1,59 @@
+export type JellyfinPlaystateCommand =
+    | 'FastForward'
+    | 'NextTrack'
+    | 'Pause'
+    | 'PlayPause'
+    | 'PreviousTrack'
+    | 'Rewind'
+    | 'Seek'
+    | 'Stop'
+    | 'Unpause';
+
+export type JellyfinGeneralCommandName =
+    | 'DisplayMessage'
+    | 'Mute'
+    | 'SetVolume'
+    | 'ToggleMute'
+    | 'Unmute'
+    | 'VolumeDown'
+    | 'VolumeUp';
+
+export type JellyfinPlayCommand = 'PlayLast' | 'PlayNext' | 'PlayNow';
+
+export interface JellyfinPlaystateMessage {
+    Data: {
+        Command: JellyfinPlaystateCommand;
+        ControllingUserId?: string;
+        SeekPositionTicks?: number;
+    };
+    MessageId?: string;
+    MessageType: 'Playstate';
+}
+
+export interface JellyfinGeneralCommandMessage {
+    Data: {
+        Arguments?: Record<string, string>;
+        ControllingUserId?: string;
+        Name: JellyfinGeneralCommandName | string;
+    };
+    MessageId?: string;
+    MessageType: 'GeneralCommand';
+}
+
+export interface JellyfinPlayMessage {
+    Data: {
+        ControllingUserId?: string;
+        ItemIds: string[];
+        PlayCommand: JellyfinPlayCommand;
+        StartIndex?: number;
+        StartPositionTicks?: number;
+    };
+    MessageId?: string;
+    MessageType: 'Play';
+}
+
+export type JellyfinIncomingMessage =
+    | JellyfinGeneralCommandMessage
+    | JellyfinPlayMessage
+    | JellyfinPlaystateMessage
+    | { Data?: unknown; MessageId?: string; MessageType: string };
