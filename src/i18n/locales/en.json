@@ -1057,6 +1057,8 @@
         "sidePlayQueueLayout_description": "sets the layout of the attached side play queue",
         "sidePlayQueueLayout_optionHorizontal": "horizontal",
         "sidePlayQueueLayout_optionVertical": "vertical",
+        "jellyfinRemoteControl": "allow jellyfin remote control",
+        "jellyfinRemoteControl_description": "when connected to a jellyfin server, allow other jellyfin clients (such as home assistant or the jellyfin web 'play on' picker) to control playback",
         "mediaSession_description": "enables Media Session integration, displaying media controls and metadata in the system volume overlay and lock screen",
         "mediaSession": "enable media session",
         "sidePlayQueueStyle": "side play queue style",
