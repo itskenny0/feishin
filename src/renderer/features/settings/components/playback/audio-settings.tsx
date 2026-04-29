@@ -216,6 +216,27 @@ export const AudioSettings = memo(() => {
                 postProcess: 'sentenceCase',
             }),
         },
+        {
+            control: (
+                <Switch
+                    defaultChecked={settings.jellyfinRemoteControl}
+                    onChange={(e) => {
+                        setSettings({
+                            playback: {
+                                jellyfinRemoteControl: e.currentTarget.checked,
+                            },
+                        });
+                    }}
+                />
+            ),
+            description: t('setting.jellyfinRemoteControl', {
+                context: 'description',
+                postProcess: 'sentenceCase',
+            }),
+            title: t('setting.jellyfinRemoteControl', {
+                postProcess: 'sentenceCase',
+            }),
+        },
     ];
 
     return (
