@@ -83,7 +83,7 @@ const VERSION_INFO: VersionInfo = [
     ['10.0.0', { [ServerFeature.TAGS]: [1] }],
 ];
 
-const JF_FIELDS = {
+export const JF_FIELDS = {
     ALBUM_ARTIST_DETAIL: ['Genres', 'Overview', 'SortName', 'ProviderIds'],
     ALBUM_ARTIST_LIST: [
         'Genres',
