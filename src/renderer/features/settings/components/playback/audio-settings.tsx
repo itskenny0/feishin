@@ -198,6 +198,27 @@ export const AudioSettings = memo(() => {
             }),
             title: t('setting.audioFadeOnStatusChange'),
         },
+        {
+            control: (
+                <Switch
+                    defaultChecked={settings.jellyfinRemoteControl}
+                    onChange={(e) => {
+                        setSettings({
+                            playback: {
+                                jellyfinRemoteControl: e.currentTarget.checked,
+                            },
+                        });
+                    }}
+                />
+            ),
+            description: t('setting.jellyfinRemoteControl', {
+                context: 'description',
+                postProcess: 'sentenceCase',
+            }),
+            title: t('setting.jellyfinRemoteControl', {
+                postProcess: 'sentenceCase',
+            }),
+        },
     ];
 
     return <SettingsSection options={audioOptions} title={t('page.setting.audio')} />;
