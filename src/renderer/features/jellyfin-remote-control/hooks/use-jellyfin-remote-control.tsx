@@ -66,9 +66,7 @@ export const useJellyfinRemoteControl = () => {
                 const byId = new Map(
                     res.body.Items.map((item) => [item.Id, jfNormalize.song(item, currentServer)]),
                 );
-                return itemIds
-                    .map((id) => byId.get(id))
-                    .filter((s): s is Song => Boolean(s));
+                return itemIds.map((id) => byId.get(id)).filter((s): s is Song => Boolean(s));
             } catch (err) {
                 console.warn('[jellyfin-remote] fetchSongsByIds failed', err);
                 return [];
