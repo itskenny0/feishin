@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { shallow } from 'zustand/shallow';
 
+import packageJson from '../../../../../package.json';
+
 import { createAuthHeader, jfApiClient } from '/@/renderer/api/jellyfin/jellyfin-api';
 import { JF_FIELDS } from '/@/renderer/api/jellyfin/jellyfin-controller';
 import { JellyfinRemoteController } from '/@/renderer/features/jellyfin-remote-control/controller/jellyfin-remote-controller';
@@ -9,6 +11,7 @@ import { usePlayerActions } from '/@/renderer/store/player.store';
 import { usePlaybackSettings, useVolumeWheelStep } from '/@/renderer/store/settings.store';
 import { getServerUrl } from '/@/renderer/utils/normalize-server-url';
 import { jfNormalize } from '/@/shared/api/jellyfin/jellyfin-normalize';
+import { getClientType } from '/@/shared/api/utils';
 import { ServerType, Song } from '/@/shared/types/domain-types';
 
 const controller = new JellyfinRemoteController();
@@ -95,6 +98,8 @@ export const useJellyfinRemoteControl = () => {
                 SupportsMediaControl: true,
                 SupportsPersistentIdentifier: true,
             },
+            client: 'Feishin',
+            device: getClientType(),
             deviceId,
             dispatcherDeps: {
                 defaultVolumeStep: volumeStepRef.current,
@@ -103,6 +108,7 @@ export const useJellyfinRemoteControl = () => {
             },
             serverUrl,
             token,
+            version: packageJson.version,
         });
 
         return () => {
