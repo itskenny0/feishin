@@ -938,6 +938,8 @@
         "musicbrainz": "show MusicBrainz links",
         "qobuz_description": "show links to Qobuz on artist/album pages",
         "qobuz": "show Qobuz links",
+        "queueInPlaybackOrder_description": "when shuffle is enabled, show the queue in the order songs will play in instead of the original playlist order",
+        "queueInPlaybackOrder": "show queue in playback order",
         "spotify_description": "show links to Spotify on artist/album pages",
         "spotify": "show Spotify links",
         "nativeSpotify_description": "open in the Spotify app instead of your browser",
