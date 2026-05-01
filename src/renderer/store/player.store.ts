@@ -47,6 +47,7 @@ interface Actions {
         groups: { count: number; name: string }[];
         items: QueueSong[];
     };
+    getVisibleQueue: () => GroupedQueue;
     increaseVolume: (value: number) => void;
     isFirstTrackInQueue: () => boolean;
     isLastTrackInQueue: () => boolean;
@@ -858,6 +859,31 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                         items: defaultQueue,
                     };
                 },
+                getVisibleQueue: () => {
+                    const state = get();
+                    const showInPlaybackOrder =
+                        useSettingsStore.getState().general.queueInPlaybackOrder;
+
+                    if (!showInPlaybackOrder || !isShuffleEnabled(state)) {
+                        return state.getQueue();
+                    }
+
+                    // Render items in shuffle order: each entry of state.queue.shuffled is
+                    // an index into state.queue.default. Look up each via state.queue.songs.
+                    const songs = state.queue.songs;
+                    const defaultIds = state.queue.default;
+                    const items: QueueSong[] = [];
+                    for (const idx of state.queue.shuffled) {
+                        const id = defaultIds[idx];
+                        const song = id ? songs[id] : undefined;
+                        if (song) items.push(song);
+                    }
+
+                    return {
+                        groups: [{ count: items.length, name: 'All' }],
+                        items,
+                    };
+                },
                 increaseVolume: (value: number) => {
                     set((state) => {
                         state.player.volume = Math.min(100, state.player.volume + value);
@@ -1611,6 +1637,7 @@ export const usePlayerActions = () => {
             clearSelected: state.clearSelected,
             decreaseVolume: state.decreaseVolume,
             getQueue: state.getQueue,
+            getVisibleQueue: state.getVisibleQueue,
             increaseVolume: state.increaseVolume,
             isFirstTrackInQueue: state.isFirstTrackInQueue,
             isLastTrackInQueue: state.isLastTrackInQueue,
