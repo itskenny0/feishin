@@ -492,6 +492,7 @@ export const GeneralSettingsSchema = z.object({
     playlistTarget: PlaylistTargetSchema,
     primaryShade: z.number().min(0).max(9),
     qobuz: z.boolean(),
+    queueInPlaybackOrder: z.boolean(),
     resume: z.boolean(),
     showLyricsInSidebar: z.boolean(),
     showRatings: z.boolean(),
@@ -1162,6 +1163,7 @@ const initialState: SettingsState = {
         playlistTarget: PlaylistTarget.TRACK,
         primaryShade: 6,
         qobuz: true,
+        queueInPlaybackOrder: true,
         resume: true,
         showLyricsInSidebar: true,
         showRatings: true,
@@ -2417,10 +2419,17 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
+                if (version <= 29) {
+                    if (state.general.queueInPlaybackOrder === undefined) {
+                        state.general.queueInPlaybackOrder =
+                            initialState.general.queueInPlaybackOrder;
+                    }
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 28,
+            version: 29,
         },
     ),
 );
@@ -2528,6 +2537,9 @@ export const useVolumeWidth = () => useSettingsStore((state) => state.general.vo
 
 export const useFollowCurrentSong = () =>
     useSettingsStore((state) => state.general.followCurrentSong, shallow);
+
+export const useQueueInPlaybackOrder = () =>
+    useSettingsStore((state) => state.general.queueInPlaybackOrder, shallow);
 
 export const useThemeSettings = () =>
     useSettingsStore(

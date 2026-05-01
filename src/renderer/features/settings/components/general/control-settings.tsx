@@ -210,6 +210,28 @@ export const ControlSettings = memo(() => {
         },
         {
             control: (
+                <Switch
+                    aria-label="Show queue in playback order"
+                    defaultChecked={settings.queueInPlaybackOrder}
+                    onChange={(e) =>
+                        setSettings({
+                            general: {
+                                ...settings,
+                                queueInPlaybackOrder: e.currentTarget.checked,
+                            },
+                        })
+                    }
+                />
+            ),
+            description: t('setting.queueInPlaybackOrder', {
+                context: 'description',
+                postProcess: 'sentenceCase',
+            }),
+            isHidden: false,
+            title: t('setting.queueInPlaybackOrder', { postProcess: 'sentenceCase' }),
+        },
+        {
+            control: (
                 <NumberInput
                     defaultValue={settings.artistRadioCount}
                     max={200}
