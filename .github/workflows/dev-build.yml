@@ -1,0 +1,94 @@
+name: Dev Build (auto)
+
+on:
+    push:
+        branches: [development]
+    workflow_dispatch:
+
+concurrency:
+    group: dev-build-${{ github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    linux:
+        name: Linux (x64 + arm64)
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v6
+            - uses: pnpm/action-setup@v4
+              with:
+                  version: 10
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: pnpm
+            - name: Install dependencies
+              run: pnpm install
+            - name: Package x64
+              run: pnpm run package:linux:pr
+            - name: Package arm64
+              run: pnpm run package:linux-arm64:pr
+            - name: Upload artifacts
+              uses: actions/upload-artifact@v4
+              with:
+                  name: linux-${{ github.sha }}
+                  path: |
+                      dist/*.AppImage
+                      dist/*.deb
+                      dist/*.tar.xz
+                  if-no-files-found: error
+                  retention-days: 30
+
+    windows:
+        name: Windows (x64)
+        runs-on: windows-latest
+        steps:
+            - uses: actions/checkout@v6
+            - uses: pnpm/action-setup@v4
+              with:
+                  version: 10
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: pnpm
+            - name: Install dependencies
+              run: pnpm install
+            - name: Package x64
+              run: pnpm run package:win:pr
+            - name: Upload artifacts
+              uses: actions/upload-artifact@v4
+              with:
+                  name: windows-${{ github.sha }}
+                  path: |
+                      dist/*.exe
+                      dist/*.zip
+                  if-no-files-found: error
+                  retention-days: 30
+
+    macos:
+        name: macOS (x64 + arm64)
+        runs-on: macos-latest
+        steps:
+            - uses: actions/checkout@v6
+            - uses: pnpm/action-setup@v4
+              with:
+                  version: 10
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: pnpm
+            - name: Install dependencies
+              run: pnpm install
+            - name: Package
+              env:
+                  NODE_OPTIONS: --max-old-space-size=4096
+              run: pnpm run package:mac:pr
+            - name: Upload artifacts
+              uses: actions/upload-artifact@v4
+              with:
+                  name: macos-${{ github.sha }}
+                  path: |
+                      dist/*.dmg
+                      dist/*.zip
+                  if-no-files-found: error
+                  retention-days: 30
