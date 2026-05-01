@@ -6,6 +6,7 @@ import { z } from 'zod';
 
 import { createAuthHeader, jfApiClient } from '/@/renderer/api/jellyfin/jellyfin-api';
 import { useRadioStore } from '/@/renderer/features/radio/store/radio-store';
+import { isShuffleEnabled, usePlayerStoreBase } from '/@/renderer/store/player.store';
 import { getServerUrl } from '/@/renderer/utils/normalize-server-url';
 import { jfNormalize } from '/@/shared/api/jellyfin/jellyfin-normalize';
 import { JFSongListSort, JFSortOrder, jfType } from '/@/shared/api/jellyfin/jellyfin-types';
@@ -1621,6 +1622,26 @@ export const JellyfinController: InternalControllerEndpoint = {
 
         const position = query.position && Math.round(query.position);
 
+        // Build NowPlayingQueue + PlaylistItemId so other Jellyfin clients can
+        // see Feishin's upcoming tracks (in playback order, respecting shuffle).
+        const playerState = usePlayerStoreBase.getState();
+        const songsById = playerState.queue.songs;
+        const defaultIds = playerState.queue.default;
+        const orderedUniqueIds = isShuffleEnabled(playerState)
+            ? playerState.queue.shuffled
+                  .map((idx) => defaultIds[idx])
+                  .filter((id): id is string => Boolean(id))
+            : defaultIds;
+        const nowPlayingQueue = orderedUniqueIds
+            .map((uid) => songsById[uid])
+            .filter((s): s is NonNullable<typeof s> => Boolean(s))
+            .map((song) => ({ Id: song.id, PlaylistItemId: song._uniqueId }));
+        const currentSong = playerState.getCurrentSong();
+        const queueFields = {
+            NowPlayingQueue: nowPlayingQueue,
+            PlaylistItemId: currentSong?._uniqueId,
+        };
+
         if (query.submission) {
             // Checked by jellyfin-plugin-lastfm for whether or not to send the "finished" scrobble (uses PositionTicks)
             jfApiClient(apiClientProps).scrobbleStopped({
@@ -1628,6 +1649,7 @@ export const JellyfinController: InternalControllerEndpoint = {
                     IsPaused: true,
                     ItemId: query.id,
                     PositionTicks: position,
+                    ...queueFields,
                 },
             });
 
@@ -1639,6 +1661,7 @@ export const JellyfinController: InternalControllerEndpoint = {
                 body: {
                     ItemId: query.id,
                     PositionTicks: position,
+                    ...queueFields,
                 },
             });
 
@@ -1652,6 +1675,7 @@ export const JellyfinController: InternalControllerEndpoint = {
                     IsPaused: true,
                     ItemId: query.id,
                     PositionTicks: position,
+                    ...queueFields,
                 },
             });
 
@@ -1665,6 +1689,7 @@ export const JellyfinController: InternalControllerEndpoint = {
                     IsPaused: false,
                     ItemId: query.id,
                     PositionTicks: position,
+                    ...queueFields,
                 },
             });
 
@@ -1675,6 +1700,7 @@ export const JellyfinController: InternalControllerEndpoint = {
             body: {
                 ItemId: query.id,
                 PositionTicks: position,
+                ...queueFields,
             },
         });
 
