@@ -723,6 +723,7 @@ const deletePlaylistParameters = z.object({
 
 const scrobbleParameters = z.object({
     EventName: z.string().optional(),
+    IsMuted: z.boolean().optional(),
     IsPaused: z.boolean().optional(),
     ItemId: z.string(),
     NowPlayingQueue: z
@@ -730,6 +731,7 @@ const scrobbleParameters = z.object({
         .optional(),
     PlaylistItemId: z.string().optional(),
     PositionTicks: z.number().optional(),
+    VolumeLevel: z.number().optional(),
 });
 
 const scrobble = z.any();

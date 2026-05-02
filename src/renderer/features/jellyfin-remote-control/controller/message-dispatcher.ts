@@ -4,7 +4,11 @@ import {
     JellyfinIncomingMessage,
     JellyfinPlayCommand,
 } from '/@/renderer/features/jellyfin-remote-control/types';
-import { addToQueueByData, usePlayerStoreBase } from '/@/renderer/store/player.store';
+import {
+    addToQueueByData,
+    isShuffleEnabled,
+    usePlayerStoreBase,
+} from '/@/renderer/store/player.store';
 import { toast } from '/@/shared/components/toast/toast';
 import { Song } from '/@/shared/types/domain-types';
 import { Play } from '/@/shared/types/types';
@@ -132,6 +136,39 @@ export async function dispatchJellyfinMessage(
         if (!playType) return;
         const ids = data.ItemIds ?? [];
         if (ids.length === 0) return;
+        const startIndex = data.StartIndex ?? 0;
+
+        // Fast path: if the requested ItemIds match the current playback-order
+        // queue exactly, the user clicked an item already in our queue from the
+        // remote — just jump to that position rather than re-fetching and
+        // replacing.
+        if (playType === Play.NOW) {
+            const state = usePlayerStoreBase.getState();
+            const songsById = state.queue.songs;
+            const defaultIds = state.queue.default;
+            const orderedUids = isShuffleEnabled(state)
+                ? state.queue.shuffled
+                      .map((idx) => defaultIds[idx])
+                      .filter((id): id is string => Boolean(id))
+                : defaultIds;
+            const orderedItemIds = orderedUids
+                .map((uid) => songsById[uid]?.id)
+                .filter((id): id is string => Boolean(id));
+
+            const matchesCurrentQueue =
+                orderedItemIds.length === ids.length &&
+                orderedItemIds.every((id, i) => id === ids[i]);
+
+            if (matchesCurrentQueue && startIndex >= 0 && startIndex < orderedItemIds.length) {
+                // mediaPlayByIndex takes a default-queue index; map back from the
+                // shuffled position the remote sent us.
+                const defaultIndex = isShuffleEnabled(state)
+                    ? (state.queue.shuffled[startIndex] ?? startIndex)
+                    : startIndex;
+                state.mediaPlayByIndex(defaultIndex);
+                return;
+            }
+        }
 
         let songs: Song[];
         try {
