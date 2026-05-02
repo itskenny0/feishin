@@ -14,6 +14,7 @@ env:
 
 jobs:
     build-and-push-image:
+        if: github.repository == 'jeffvli/feishin'
         runs-on: ubuntu-latest
         permissions:
             contents: read
