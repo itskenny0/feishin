@@ -68,8 +68,9 @@ export async function dispatchJellyfinMessage(
                 return;
             case 'Seek': {
                 const ticks = data.SeekPositionTicks ?? 0;
-                // Jellyfin "ticks" = 100-ns units; ms = ticks / 10_000.
-                playerActions.mediaSeekToTimestamp(Math.round(ticks / 10000));
+                // Jellyfin "ticks" = 100-ns units; seconds = ticks / 10_000_000.
+                // mediaSeekToTimestamp expects seconds.
+                playerActions.mediaSeekToTimestamp(ticks / 10_000_000);
                 return;
             }
             case 'Stop':
