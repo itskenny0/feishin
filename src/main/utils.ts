@@ -1,4 +1,5 @@
 import log from 'electron-log/main';
+import os from 'os';
 import path from 'path';
 import process from 'process';
 import { URL } from 'url';
@@ -32,6 +33,14 @@ export const isWindows = () => {
 
 export const isLinux = () => {
     return process.platform === 'linux';
+};
+
+export const getHostname = (): string => {
+    try {
+        return os.hostname();
+    } catch {
+        return '';
+    }
 };
 
 export const hotkeyToElectronAccelerator = (hotkey: string) => {

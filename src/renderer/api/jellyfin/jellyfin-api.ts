@@ -406,8 +406,19 @@ const parsePath = (fullPath: string) => {
     };
 };
 
+export const getDeviceLabel = (): string => {
+    const base = getClientType();
+    // In Electron, append the system hostname so the device shows up in
+    // Jellyfin's "Play On" picker as e.g. "Desktop Client (laptop)".
+    const hostname =
+        typeof window !== 'undefined' && window.api?.utils?.getHostname
+            ? window.api.utils.getHostname()
+            : '';
+    return hostname ? `${base} (${hostname})` : base;
+};
+
 export const createAuthHeader = (): string => {
-    return `MediaBrowser Client="Feishin", Device="${getClientType()}", DeviceId="${
+    return `MediaBrowser Client="Feishin", Device="${getDeviceLabel()}", DeviceId="${
         useAuthStore.getState().deviceId
     }", Version="${packageJson.version}"`;
 };

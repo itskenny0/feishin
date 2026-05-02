@@ -47,6 +47,7 @@ export async function dispatchJellyfinMessage(
 
     if (msg.MessageType === 'Playstate') {
         const data = (msg as Extract<JellyfinIncomingMessage, { MessageType: 'Playstate' }>).Data;
+        console.log('[jellyfin-remote] Playstate', data.Command, data);
         switch (data.Command) {
             case 'FastForward':
                 playerActions.mediaSkipForward();

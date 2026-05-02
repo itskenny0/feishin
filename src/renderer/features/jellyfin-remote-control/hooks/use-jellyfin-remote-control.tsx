@@ -3,7 +3,11 @@ import { shallow } from 'zustand/shallow';
 
 import packageJson from '../../../../../package.json';
 
-import { createAuthHeader, jfApiClient } from '/@/renderer/api/jellyfin/jellyfin-api';
+import {
+    createAuthHeader,
+    getDeviceLabel,
+    jfApiClient,
+} from '/@/renderer/api/jellyfin/jellyfin-api';
 import { JF_FIELDS } from '/@/renderer/api/jellyfin/jellyfin-controller';
 import { JellyfinRemoteController } from '/@/renderer/features/jellyfin-remote-control/controller/jellyfin-remote-controller';
 import { useAuthStore } from '/@/renderer/store/auth.store';
@@ -11,7 +15,6 @@ import { usePlayerActions } from '/@/renderer/store/player.store';
 import { usePlaybackSettings, useVolumeWheelStep } from '/@/renderer/store/settings.store';
 import { getServerUrl } from '/@/renderer/utils/normalize-server-url';
 import { jfNormalize } from '/@/shared/api/jellyfin/jellyfin-normalize';
-import { getClientType } from '/@/shared/api/utils';
 import { ServerType, Song } from '/@/shared/types/domain-types';
 
 const controller = new JellyfinRemoteController();
@@ -96,7 +99,7 @@ export const useJellyfinRemoteControl = () => {
                 SupportsPersistentIdentifier: true,
             },
             client: 'Feishin',
-            device: getClientType(),
+            device: getDeviceLabel(),
             deviceId,
             dispatcherDeps: {
                 defaultVolumeStep: volumeStepRef.current,
