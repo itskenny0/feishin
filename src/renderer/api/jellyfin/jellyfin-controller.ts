@@ -1632,8 +1632,10 @@ export const JellyfinController: InternalControllerEndpoint = {
             .map((song) => ({ Id: song.id, PlaylistItemId: song._uniqueId }));
         const currentSong = playerState.getCurrentSong();
         const queueFields = {
+            IsMuted: playerState.player.muted,
             NowPlayingQueue: nowPlayingQueue,
             PlaylistItemId: currentSong?._uniqueId,
+            VolumeLevel: playerState.player.volume,
         };
 
         if (query.submission) {
