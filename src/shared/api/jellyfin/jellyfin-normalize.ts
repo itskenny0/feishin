@@ -492,6 +492,8 @@ const normalizeGenre = (
 const normalizeFolder = (
     item: z.infer<typeof jfType._response.folder>,
     server: null | ServerListItem,
+    pathReplace?: string,
+    pathReplaceWith?: string,
 ): Folder => {
     return {
         _itemType: LibraryItem.FOLDER,
@@ -501,6 +503,7 @@ const normalizeFolder = (
         id: item.Id,
         name: item.Name || 'Unknown folder',
         parentId: item.ParentId,
+        path: item.Path ? replacePathPrefix(item.Path, pathReplace, pathReplaceWith) : null,
     };
 };
 

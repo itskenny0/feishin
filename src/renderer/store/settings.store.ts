@@ -2435,10 +2435,46 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
+                if (version <= 31) {
+                    // Add FOLDER_NAME column option to existing song-style tables.
+                    // Users won't see it enabled by default but it'll be available
+                    // in the column picker.
+                    const listKeysToUpdate: ItemListKey[] = [
+                        ItemListKey.SONG,
+                        ItemListKey.FOLDER,
+                        ItemListKey.PLAYLIST_SONG,
+                        ItemListKey.ALBUM_ARTIST_SONG,
+                        ItemListKey.GENRE_SONG,
+                        ItemListKey.QUEUE_SONG,
+                        ItemListKey.FULL_SCREEN,
+                        ItemListKey.SIDE_QUEUE,
+                    ];
+
+                    listKeysToUpdate.forEach((listKey) => {
+                        const listConfig = state.lists[listKey as keyof typeof state.lists];
+                        if (listConfig?.table?.columns) {
+                            const columns = listConfig.table.columns;
+                            const hasFolderName = columns.some(
+                                (col) => col.id === TableColumn.FOLDER_NAME,
+                            );
+                            if (!hasFolderName) {
+                                columns.push({
+                                    align: 'start',
+                                    autoSize: false,
+                                    id: TableColumn.FOLDER_NAME,
+                                    isEnabled: false,
+                                    pinned: null,
+                                    width: 200,
+                                });
+                            }
+                        }
+                    });
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 30,
+            version: 31,
         },
     ),
 );
