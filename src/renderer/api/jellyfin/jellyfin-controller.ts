@@ -96,7 +96,7 @@ export const JF_FIELDS = {
     ],
     ALBUM_DETAIL: ['Genres', 'DateCreated', 'ChildCount', 'People', 'Tags', 'ProviderIds'],
     ALBUM_LIST: ['People', 'Tags', 'Studios', 'SortName', 'ProviderIds', 'ChildCount'],
-    FOLDER: ['Genres', 'DateCreated', 'MediaSources', 'ParentId'],
+    FOLDER: ['Genres', 'DateCreated', 'MediaSources', 'ParentId', 'Path'],
     GENRE: ['ItemCounts'],
     PLAYLIST_DETAIL: [
         'Genres',
@@ -623,7 +623,14 @@ export const JellyfinController: InternalControllerEndpoint = {
 
                 const folders = items
                     .filter((item) => item.Type !== 'Audio')
-                    .map((item) => jfNormalize.folder(item, apiClientProps.server));
+                    .map((item) =>
+                        jfNormalize.folder(
+                            item,
+                            apiClientProps.server,
+                            args.context?.pathReplace,
+                            args.context?.pathReplaceWith,
+                        ),
+                    );
 
                 const sortedFolders = orderBy(folders, [(v) => v.name.toLowerCase()], [sortOrder]);
 
@@ -665,6 +672,8 @@ export const JellyfinController: InternalControllerEndpoint = {
                         jfNormalize.folder(
                             item as unknown as z.infer<typeof jfType._response.folder>,
                             apiClientProps.server,
+                            args.context?.pathReplace,
+                            args.context?.pathReplaceWith,
                         ),
                     );
 
@@ -740,7 +749,14 @@ export const JellyfinController: InternalControllerEndpoint = {
 
         let filteredFolders = items
             .filter((item) => item.Type !== 'Audio')
-            .map((item) => jfNormalize.folder(item, apiClientProps.server));
+            .map((item) =>
+                jfNormalize.folder(
+                    item,
+                    apiClientProps.server,
+                    args.context?.pathReplace,
+                    args.context?.pathReplaceWith,
+                ),
+            );
         let filteredSongs = items
             .filter(
                 (item) =>

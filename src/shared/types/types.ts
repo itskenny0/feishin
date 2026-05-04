@@ -179,6 +179,7 @@ export enum TableColumn {
     DATE_ADDED = 'createdAt',
     DISC_NUMBER = 'discNumber',
     DURATION = 'duration',
+    FOLDER_NAME = 'folderName',
     GENRE = 'genres',
     GENRE_BADGE = 'genreBadge',
     ID = 'id',

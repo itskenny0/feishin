@@ -41,6 +41,7 @@ import {
 import { DefaultColumn } from '/@/renderer/components/item-list/item-table-list/columns/default-column';
 import { DurationColumn } from '/@/renderer/components/item-list/item-table-list/columns/duration-column';
 import { FavoriteColumn } from '/@/renderer/components/item-list/item-table-list/columns/favorite-column';
+import { FolderNameColumn } from '/@/renderer/components/item-list/item-table-list/columns/folder-name-column';
 import { GenreBadgeColumn } from '/@/renderer/components/item-list/item-table-list/columns/genre-badge-column';
 import { GenreColumn } from '/@/renderer/components/item-list/item-table-list/columns/genre-column';
 import { ImageColumn } from '/@/renderer/components/item-list/item-table-list/columns/image-column';
@@ -250,6 +251,11 @@ const ItemTableListColumnBase = (props: ItemTableListColumn) => {
 
             case TableColumn.DURATION:
                 return <DurationColumn {...props} {...dragProps} controls={controls} type={type} />;
+
+            case TableColumn.FOLDER_NAME:
+                return (
+                    <FolderNameColumn {...props} {...dragProps} controls={controls} type={type} />
+                );
 
             case TableColumn.GENRE:
                 return <GenreColumn {...props} {...dragProps} controls={controls} type={type} />;
@@ -1014,6 +1020,9 @@ export const columnLabelMap: Record<TableColumn, ReactNode | string> = {
             <Icon icon="duration" />
         </Flex>
     ),
+    [TableColumn.FOLDER_NAME]: i18n.t('table.column.folderName', {
+        postProcess: 'upperCase',
+    }) as string,
     [TableColumn.GENRE]: i18n.t('table.column.genre', { postProcess: 'upperCase' }) as string,
     [TableColumn.GENRE_BADGE]: i18n.t('table.column.genre', {
         postProcess: 'upperCase',

@@ -809,6 +809,7 @@ const folder = z.object({
     MediaType: z.string(),
     Name: z.string(),
     ParentId: z.string().optional(),
+    Path: z.string().optional(),
     ServerId: z.string(),
     Type: z.string(),
     UserData: userData.optional(),
