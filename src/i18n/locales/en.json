@@ -946,6 +946,8 @@
         "nativeSpotify": "use Spotify app",
         "neteaseTranslation_description": "When enabled, fetches and displays translated lyrics from NetEase if available",
         "neteaseTranslation": "Enable NetEase translations",
+        "skipNeteasePlaceholders_description": "Discard NetEase responses that look like placeholders — single-line returns, or any line containing CJK characters (e.g. \"纯音乐，请欣赏\"). Disable this if you listen to Asian-language music via NetEase.",
+        "skipNeteasePlaceholders": "Skip NetEase placeholder lyrics",
         "notify": "enable song notifications",
         "notify_description": "show notifications when changing the current song",
         "pathReplace": "file path replacement",

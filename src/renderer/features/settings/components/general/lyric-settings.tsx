@@ -118,6 +118,25 @@ export const LyricSettings = memo(() => {
         },
         {
             control: (
+                <Switch
+                    aria-label="Skip NetEase placeholder lyrics"
+                    defaultChecked={settings.skipNeteasePlaceholders}
+                    onChange={(e) => {
+                        const isChecked = e.currentTarget.checked;
+                        updateSetting({ skipNeteasePlaceholders: isChecked });
+                        localSettings?.set('skipNeteasePlaceholders', isChecked);
+                    }}
+                />
+            ),
+            description: t('setting.skipNeteasePlaceholders', {
+                context: 'description',
+                postProcess: 'sentenceCase',
+            }),
+            isHidden: !isElectron(),
+            title: t('setting.skipNeteasePlaceholders', { postProcess: 'sentenceCase' }),
+        },
+        {
+            control: (
                 <NumberInput
                     defaultValue={settings.delayMs}
                     onBlur={(e) => {
