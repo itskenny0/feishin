@@ -103,19 +103,6 @@ export async function getLyricsBySongId(songId: string): Promise<null | string> 
     return mergeLyrics(originalLrc, translatedLrc);
 }
 
-const CJK_REGEX = /[぀-ヿ一-鿿가-힯]/;
-
-function hasUsableLyricContent(lrc: string): boolean {
-    let contentLineCount = 0;
-    for (const line of lrc.split('\n')) {
-        const stripped = line.replace(/\[[^\]]*\]/g, '').trim();
-        if (stripped.length === 0) continue;
-        if (CJK_REGEX.test(stripped)) return false;
-        contentLineCount++;
-    }
-    return contentLineCount > 1;
-}
-
 export async function getSearchResults(
     params: LyricSearchQuery,
 ): Promise<InternetProviderLyricSearchResponse[] | null> {
@@ -243,4 +230,17 @@ function mergeLyrics(original: string | undefined, translated: string | undefine
     });
 
     return finalLines.join('\n');
+}
+
+const CJK_REGEX = /[぀-ヿ一-鿿가-힯]/;
+
+function hasUsableLyricContent(lrc: string): boolean {
+    let contentLineCount = 0;
+    for (const line of lrc.split('\n')) {
+        const stripped = line.replace(/\[[^\]]*\]/g, '').trim();
+        if (stripped.length === 0) continue;
+        if (CJK_REGEX.test(stripped)) return false;
+        contentLineCount++;
+    }
+    return contentLineCount > 1;
 }
