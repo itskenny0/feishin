@@ -271,6 +271,7 @@ export type Folder = {
     imageUrl?: null | string;
     name: string;
     parentId?: string;
+    path?: null | string;
 };
 
 export type FolderArgs = BaseEndpointArgs & { query: FolderQuery };

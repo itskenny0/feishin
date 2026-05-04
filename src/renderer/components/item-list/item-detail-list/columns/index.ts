@@ -18,6 +18,7 @@ import { DefaultColumn } from './default-column';
 import { DiscNumberColumn } from './disc-number-column';
 import { DurationColumn } from './duration-column';
 import { FavoriteColumn } from './favorite-column';
+import { FolderNameColumn } from './folder-name-column';
 import { GenreBadgeColumn } from './genre-badge-column';
 import { GenreColumn } from './genre-column';
 import { ImageColumn } from './image-column';
@@ -54,6 +55,7 @@ const COLUMN_MAP: Partial<Record<TableColumn, CellComponent>> = {
     [TableColumn.DATE_ADDED]: DateAddedColumn,
     [TableColumn.DISC_NUMBER]: DiscNumberColumn,
     [TableColumn.DURATION]: DurationColumn,
+    [TableColumn.FOLDER_NAME]: FolderNameColumn,
     [TableColumn.GENRE]: GenreColumn,
     [TableColumn.GENRE_BADGE]: GenreBadgeColumn,
     [TableColumn.IMAGE]: ImageColumn,
@@ -108,6 +110,7 @@ export {
     DiscNumberColumn,
     DurationColumn,
     FavoriteColumn,
+    FolderNameColumn,
     GenreBadgeColumn,
     GenreColumn,
     ImageColumn,

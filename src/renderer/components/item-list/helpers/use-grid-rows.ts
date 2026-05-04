@@ -62,6 +62,7 @@ const getRowIdFromTableColumn = (tableColumn: TableColumn): null | string => {
         [TableColumn.DATE_ADDED]: 'createdAt',
         [TableColumn.DISC_NUMBER]: null,
         [TableColumn.DURATION]: 'duration',
+        [TableColumn.FOLDER_NAME]: null,
         [TableColumn.GENRE]: 'genres',
         [TableColumn.GENRE_BADGE]: null,
         [TableColumn.ID]: null,

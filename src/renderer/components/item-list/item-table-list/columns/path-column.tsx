@@ -7,6 +7,11 @@ import {
 
 export const PathColumn = (props: ItemTableListInnerColumn) => {
     const rowItem = props.getRowItem?.(props.rowIndex) ?? (props.data as any[])[props.rowIndex];
+
+    if (!rowItem) {
+        return <ColumnSkeletonVariable {...props} />;
+    }
+
     const row: string | undefined = (rowItem as any)?.[props.columns[props.columnIndex].id];
 
     if (typeof row === 'string' && row) {
@@ -17,9 +22,5 @@ export const PathColumn = (props: ItemTableListInnerColumn) => {
         );
     }
 
-    if (row === null) {
-        return <ColumnNullFallback {...props} />;
-    }
-
-    return <ColumnSkeletonVariable {...props} />;
+    return <ColumnNullFallback {...props} />;
 };

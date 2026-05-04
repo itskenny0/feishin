@@ -257,6 +257,15 @@ export const SONG_TABLE_COLUMNS: DefaultTableColumn[] = [
         width: 300,
     },
     {
+        align: 'start',
+        autoSize: false,
+        isEnabled: false,
+        label: i18n.t('table.config.label.folderName', { postProcess: 'titleCase' }),
+        pinned: null,
+        value: TableColumn.FOLDER_NAME,
+        width: 200,
+    },
+    {
         align: 'center',
         autoSize: false,
         isEnabled: false,
