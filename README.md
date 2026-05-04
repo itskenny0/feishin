@@ -29,6 +29,8 @@
 
 ---
 
+> **About this fork** — this is [@itskenny0](https://github.com/itskenny0)'s fork of [@jeffvli](https://github.com/jeffvli)'s excellent [Feishin](https://github.com/jeffvli/feishin), maintained for a few personal additions: Jellyfin remote-control (so it shows up in "Play On" / Home Assistant / etc.), an in-playback-order queue view when shuffling, a NetEase placeholder-lyric filter, opt-in analytics, and date-tagged auto-builds for Linux / macOS / Windows. All credit for the project goes to **[@jeffvli](https://github.com/jeffvli)** — please ⭐ the [upstream repo](https://github.com/jeffvli/feishin) if you enjoy Feishin.
+
 Rewrite of [Sonixd](https://github.com/jeffvli/sonixd).
 
 ## Features
