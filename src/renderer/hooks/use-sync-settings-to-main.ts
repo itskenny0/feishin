@@ -101,6 +101,10 @@ export const useSyncSettingsToMain = () => {
                     mainStoreKey: 'enableNeteaseTranslation',
                     rendererValue: settings.lyrics.enableNeteaseTranslation,
                 },
+                {
+                    mainStoreKey: 'skipNeteasePlaceholders',
+                    rendererValue: settings.lyrics.skipNeteasePlaceholders,
+                },
             ];
 
             // Compare and sync each setting

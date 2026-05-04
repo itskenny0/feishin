@@ -563,6 +563,7 @@ const LyricsSettingsSchema = z.object({
     preferLocalLyrics: z.boolean(),
     showMatch: z.boolean(),
     showProvider: z.boolean(),
+    skipNeteasePlaceholders: z.boolean(),
     sources: z.array(z.nativeEnum(LyricSource)),
     translationApiKey: z.string(),
     translationApiProvider: z.string().nullable(),
@@ -1810,6 +1811,7 @@ const initialState: SettingsState = {
         preferLocalLyrics: true,
         showMatch: true,
         showProvider: true,
+        skipNeteasePlaceholders: true,
         sources: [LyricSource.NETEASE, LyricSource.LRCLIB],
         translationApiKey: '',
         translationApiProvider: '',
@@ -2445,10 +2447,17 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
+                if (version <= 30) {
+                    if (state.lyrics.skipNeteasePlaceholders === undefined) {
+                        state.lyrics.skipNeteasePlaceholders =
+                            initialState.lyrics.skipNeteasePlaceholders;
+                    }
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 29,
+            version: 30,
         },
     ),
 );

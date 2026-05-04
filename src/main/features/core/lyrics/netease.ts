@@ -85,12 +85,35 @@ export async function getLyricsBySongId(songId: string): Promise<null | string> 
         return null;
     }
     const enableTranslation = store.get('enableNeteaseTranslation', false) as boolean;
+    const skipPlaceholders = store.get('skipNeteasePlaceholders', true) as boolean;
     const originalLrc = result.data.lrc?.lyric;
+    if (!originalLrc) {
+        return null;
+    }
+    if (skipPlaceholders && !hasUsableLyricContent(originalLrc)) {
+        // NetEase returns Chinese placeholders (e.g. "纯音乐，请欣赏") as a single
+        // LRC line for songs it has no real lyrics for. Reject responses that are
+        // either single-line or contain any CJK characters.
+        return null;
+    }
     if (!enableTranslation) {
-        return originalLrc || null;
+        return originalLrc;
     }
     const translatedLrc = result.data.tlyric?.lyric;
     return mergeLyrics(originalLrc, translatedLrc);
+}
+
+const CJK_REGEX = /[぀-ヿ一-鿿가-힯]/;
+
+function hasUsableLyricContent(lrc: string): boolean {
+    let contentLineCount = 0;
+    for (const line of lrc.split('\n')) {
+        const stripped = line.replace(/\[[^\]]*\]/g, '').trim();
+        if (stripped.length === 0) continue;
+        if (CJK_REGEX.test(stripped)) return false;
+        contentLineCount++;
+    }
+    return contentLineCount > 1;
 }
 
 export async function getSearchResults(

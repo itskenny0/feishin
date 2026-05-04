@@ -82,6 +82,7 @@ type SettingsProperties = {
     'settings.lyrics.enableAutoTranslation': boolean;
     'settings.lyrics.enableNeteaseTranslation': boolean;
     'settings.lyrics.fetch': boolean;
+    'settings.lyrics.skipNeteasePlaceholders': boolean;
     'settings.lyrics.sources.genius': boolean;
     'settings.lyrics.sources.lrclib': boolean;
     'settings.lyrics.sources.netease': boolean;
@@ -158,6 +159,9 @@ const getSettingsProperties = (): SettingsProperties => {
             settings.lyrics.enableNeteaseTranslation,
         ),
         'settings.lyrics.fetch': ignoreWeb(settings.lyrics.fetch),
+        'settings.lyrics.skipNeteasePlaceholders': ignoreWeb(
+            settings.lyrics.skipNeteasePlaceholders,
+        ),
         'settings.lyrics.sources.genius': ignoreWeb(
             settings.lyrics.sources.includes(LyricSource.GENIUS),
         ),

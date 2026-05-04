@@ -311,6 +311,25 @@ export const LyricsSettingsForm = ({ settingsKey }: LyricsSettingsFormProps) => 
         },
         {
             control: (
+                <Switch
+                    aria-label="Skip NetEase placeholder lyrics"
+                    defaultChecked={lyricsSettings.skipNeteasePlaceholders}
+                    onChange={(e) => {
+                        const isChecked = e.currentTarget.checked;
+                        updateLyricsSetting({ skipNeteasePlaceholders: isChecked });
+                        localSettings?.set('skipNeteasePlaceholders', isChecked);
+                    }}
+                />
+            ),
+            description: t('setting.skipNeteasePlaceholders', {
+                context: 'description',
+                postProcess: 'sentenceCase',
+            }),
+            isHidden: !isElectron(),
+            title: t('setting.skipNeteasePlaceholders', { postProcess: 'sentenceCase' }),
+        },
+        {
+            control: (
                 <NumberInput
                     defaultValue={lyricsSettings.delayMs}
                     onBlur={(e) => {
