@@ -77,35 +77,37 @@ export const JellyfinAlbumFilters = ({
         }));
     }, [genreListQuery.data]);
 
-    const yesNoFilter = useMemo(() => {
-        const filters = [
-            {
-                label: t('filter.isFavorited'),
-                onChange: (favoriteValue?: boolean) => {
-                    setFavorite(favoriteValue ?? null);
-                },
-                value: query.favorite,
-            },
-        ];
+    const booleanToSegmentValue = (value: boolean | null | undefined): string => {
+        if (value === true) return 'true';
+        if (value === false) return 'false';
+        return 'none';
+    };
 
-        if (query.artistIds?.length) {
-            filters.push({
-                label: t('filter.isCompilation'),
-                onChange: (compilationValue?: boolean) => {
-                    setCompilation(compilationValue ?? null);
-                },
-                value: query.compilation,
-            });
-        }
-        return filters;
-    }, [
-        t,
-        query.favorite,
-        query.artistIds?.length,
-        query.compilation,
-        setFavorite,
-        setCompilation,
-    ]);
+    const segmentValueToBoolean = (value: string): boolean | null => {
+        if (value === 'true') return true;
+        if (value === 'false') return false;
+        return null;
+    };
+
+    const segmentedControlData = useMemo(
+        () => [
+            { label: t('common.none', { postProcess: 'titleCase' }), value: 'none' },
+            { label: t('common.yes', { postProcess: 'titleCase' }), value: 'true' },
+            { label: t('common.no', { postProcess: 'titleCase' }), value: 'false' },
+        ],
+        [t],
+    );
+
+    const compilationFilter = useMemo(() => {
+        if (!query.artistIds?.length) return null;
+        return {
+            label: t('filter.isCompilation', { postProcess: 'sentenceCase' }),
+            onChange: (compilationValue?: boolean) => {
+                setCompilation(compilationValue ?? null);
+            },
+            value: query.compilation,
+        };
+    }, [t, query.artistIds?.length, query.compilation, setCompilation]);
 
     const handleMinYearFilter = useMemo(
         () => (e: number | string) => {
@@ -276,14 +278,25 @@ export const JellyfinAlbumFilters = ({
 
     return (
         <Stack px="md" py="md">
-            {yesNoFilter.map((filter) => (
-                <YesNoSelect
-                    key={`jf-filter-${filter.label}`}
-                    label={filter.label}
-                    onChange={(e) => filter.onChange(e ? e === 'true' : undefined)}
-                    value={filter.value ? filter.value.toString() : undefined}
+            <Stack gap="xs">
+                <Text fw={500} size="sm">
+                    {t('filter.isFavorited', { postProcess: 'sentenceCase' })}
+                </Text>
+                <SegmentedControl
+                    data={segmentedControlData}
+                    onChange={(value) => setFavorite(segmentValueToBoolean(value))}
+                    size="sm"
+                    value={booleanToSegmentValue(query.favorite)}
+                    w="100%"
                 />
-            ))}
+            </Stack>
+            {compilationFilter && (
+                <YesNoSelect
+                    label={compilationFilter.label}
+                    onChange={(e) => compilationFilter.onChange(e ? e === 'true' : undefined)}
+                    value={compilationFilter.value ? compilationFilter.value.toString() : undefined}
+                />
+            )}
             {!disableArtistFilter && (
                 <>
                     <Divider my="md" />
