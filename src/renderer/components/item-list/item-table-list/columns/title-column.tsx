@@ -12,9 +12,29 @@ import {
     TableColumnContainer,
 } from '/@/renderer/components/item-list/item-table-list/item-table-list-column';
 import { useIsActiveRow } from '/@/renderer/components/item-list/item-table-list/item-table-list-context';
+import {
+    useShowFilesystemNameForAlbums,
+    useShowFilesystemNameForFolders,
+} from '/@/renderer/store/settings.store';
 import { ExplicitIndicator } from '/@/shared/components/explicit-indicator/explicit-indicator';
 import { Text } from '/@/shared/components/text/text';
 import { LibraryItem, QueueSong } from '/@/shared/types/domain-types';
+
+const filesystemNameFromPath = (path: string): string => {
+    const segments = path.split(/[/\\]/).filter(Boolean);
+    return segments[segments.length - 1] || '';
+};
+
+const useFilesystemDisplayName = (item: any, fallback: string): string => {
+    const useFsForFolders = useShowFilesystemNameForFolders();
+    const useFsForAlbums = useShowFilesystemNameForAlbums();
+    if (!item?.path) return fallback;
+    const apply =
+        (item._itemType === LibraryItem.FOLDER && useFsForFolders) ||
+        (item._itemType === LibraryItem.ALBUM && useFsForAlbums);
+    if (!apply) return fallback;
+    return filesystemNameFromPath(item.path) || fallback;
+};
 
 const TitleColumnBase = (props: ItemTableListInnerColumn) => {
     const { itemType } = props;
@@ -41,6 +61,8 @@ function DefaultTitleColumn(props: ItemTableListInnerColumn) {
         return getTitlePath(props.itemType, (rowItem as any).id as string);
     }, [props.itemType, row, rowItem]);
 
+    const displayName = useFilesystemDisplayName(rowItem, typeof row === 'string' ? row : '');
+
     if (typeof row === 'string') {
         const item = rowItem as any;
 
@@ -65,7 +87,7 @@ function DefaultTitleColumn(props: ItemTableListInnerColumn) {
                     {...titleLinkProps}
                 >
                     <ExplicitIndicator explicitStatus={item?.explicitStatus} />
-                    {row}
+                    {displayName}
                 </Text>
             </TableColumnContainer>
         );
@@ -89,6 +111,8 @@ function QueueSongTitleColumn(props: ItemTableListInnerColumn) {
         if (typeof row !== 'string' || !rowItem || !(rowItem as any).id) return undefined;
         return getTitlePath(props.itemType, (rowItem as any).id as string);
     }, [props.itemType, row, rowItem]);
+
+    const displayName = useFilesystemDisplayName(rowItem, typeof row === 'string' ? row : '');
 
     if (typeof row === 'string') {
         const item = rowItem as any;
@@ -115,7 +139,7 @@ function QueueSongTitleColumn(props: ItemTableListInnerColumn) {
                     {...titleLinkProps}
                 >
                     <ExplicitIndicator explicitStatus={song?.explicitStatus} />
-                    {row}
+                    {displayName}
                     {song?.trackSubtitle && props.itemType !== LibraryItem.QUEUE_SONG && (
                         <Text
                             className={clsx({

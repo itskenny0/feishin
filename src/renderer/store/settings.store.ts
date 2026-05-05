@@ -494,6 +494,8 @@ export const GeneralSettingsSchema = z.object({
     qobuz: z.boolean(),
     queueInPlaybackOrder: z.boolean(),
     resume: z.boolean(),
+    showFilesystemNameForAlbums: z.boolean(),
+    showFilesystemNameForFolders: z.boolean(),
     showLyricsInSidebar: z.boolean(),
     showRatings: z.boolean(),
     showVisualizerInSidebar: z.boolean(),
@@ -1166,6 +1168,8 @@ const initialState: SettingsState = {
         qobuz: true,
         queueInPlaybackOrder: true,
         resume: true,
+        showFilesystemNameForAlbums: false,
+        showFilesystemNameForFolders: true,
         showLyricsInSidebar: true,
         showRatings: true,
         showVisualizerInSidebar: true,
@@ -1823,7 +1827,7 @@ const initialState: SettingsState = {
             gaplessAudio: 'weak',
             replayGainClip: true,
             replayGainFallbackDB: undefined,
-            replayGainMode: 'no',
+            replayGainMode: 'track',
             replayGainPreampDB: 0,
         },
         preservePitch: true,
@@ -2471,10 +2475,26 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     });
                 }
 
+                if (version <= 32) {
+                    if (state.general.showFilesystemNameForFolders === undefined) {
+                        state.general.showFilesystemNameForFolders =
+                            initialState.general.showFilesystemNameForFolders;
+                    }
+                    if (state.general.showFilesystemNameForAlbums === undefined) {
+                        state.general.showFilesystemNameForAlbums =
+                            initialState.general.showFilesystemNameForAlbums;
+                    }
+                    // Default audio normalization to 'track' for existing users
+                    // who never customized it (i.e. were on the previous default 'no').
+                    if (state.playback.mpvProperties?.replayGainMode === 'no') {
+                        state.playback.mpvProperties.replayGainMode = 'track';
+                    }
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 31,
+            version: 32,
         },
     ),
 );
@@ -2585,6 +2605,12 @@ export const useFollowCurrentSong = () =>
 
 export const useQueueInPlaybackOrder = () =>
     useSettingsStore((state) => state.general.queueInPlaybackOrder, shallow);
+
+export const useShowFilesystemNameForFolders = () =>
+    useSettingsStore((state) => state.general.showFilesystemNameForFolders, shallow);
+
+export const useShowFilesystemNameForAlbums = () =>
+    useSettingsStore((state) => state.general.showFilesystemNameForAlbums, shallow);
 
 export const useThemeSettings = () =>
     useSettingsStore(

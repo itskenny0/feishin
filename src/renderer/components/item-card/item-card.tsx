@@ -19,7 +19,7 @@ import { ItemControls } from '/@/renderer/components/item-list/types';
 import { JoinedArtists } from '/@/renderer/features/albums/components/joined-artists';
 import { useDragDrop } from '/@/renderer/hooks/use-drag-drop';
 import { AppRoute } from '/@/renderer/router/routes';
-import { useShowRatings } from '/@/renderer/store';
+import { useShowFilesystemNameForAlbums, useShowRatings } from '/@/renderer/store';
 import {
     formatDateAbsolute,
     formatDateRelative,
@@ -1066,6 +1066,26 @@ MemoizedCompactItemCard.displayName = 'MemoizedCompactItemCard';
 const MemoizedDefaultItemCard = memo(DefaultItemCard);
 MemoizedDefaultItemCard.displayName = 'MemoizedDefaultItemCard';
 
+const filesystemNameFromAlbumPath = (path: string): string => {
+    const segments = path.split(/[/\\]/).filter(Boolean);
+    return segments[segments.length - 1] || '';
+};
+
+const AlbumCardName = ({ data }: { data: Album }) => {
+    const useFs = useShowFilesystemNameForAlbums();
+    const displayName =
+        useFs && data.path ? filesystemNameFromAlbumPath(data.path) || data.name : data.name;
+    return (
+        <Link
+            state={{ item: data }}
+            to={generatePath(AppRoute.LIBRARY_ALBUMS_DETAIL, { albumId: data.id })}
+        >
+            <ExplicitIndicator explicitStatus={data.explicitStatus} />
+            {displayName}
+        </Link>
+    );
+};
+
 export const getDataRows = (type?: 'compact' | 'default' | 'poster'): DataRow[] => {
     return [
         {
@@ -1076,17 +1096,7 @@ export const getDataRows = (type?: 'compact' | 'default' | 'poster'): DataRow[] 
                         if ('_itemType' in data) {
                             switch (data._itemType) {
                                 case LibraryItem.ALBUM:
-                                    return (
-                                        <Link
-                                            state={{ item: data }}
-                                            to={generatePath(AppRoute.LIBRARY_ALBUMS_DETAIL, {
-                                                albumId: data.id,
-                                            })}
-                                        >
-                                            <ExplicitIndicator explicitStatus={explicitStatus} />
-                                            {data.name}
-                                        </Link>
-                                    );
+                                    return <AlbumCardName data={data as Album} />;
                                 case LibraryItem.ALBUM_ARTIST:
                                     return (
                                         <Link
