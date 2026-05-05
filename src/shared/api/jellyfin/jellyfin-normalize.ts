@@ -496,6 +496,18 @@ const normalizeFolder = (
     pathReplace?: string,
     pathReplaceWith?: string,
 ): Folder => {
+    // Read raw Path off the JSON object regardless of zod-inferred type, in
+    // case the schema-derived type strips or narrows the field.
+    const rawPath = (item as { Path?: null | string }).Path;
+    const path = rawPath ? replacePathPrefix(rawPath, pathReplace, pathReplaceWith) : null;
+    if (typeof window !== 'undefined') {
+        // Temporary debug log so we can confirm Path is being received.
+        console.debug('[jf-normalize-folder]', {
+            name: item.Name,
+            normalizedPath: path,
+            rawPath,
+        });
+    }
     return {
         _itemType: LibraryItem.FOLDER,
         _serverId: server?.id || 'unknown',
@@ -504,7 +516,7 @@ const normalizeFolder = (
         id: item.Id,
         name: item.Name || 'Unknown folder',
         parentId: item.ParentId,
-        path: item.Path ? replacePathPrefix(item.Path, pathReplace, pathReplaceWith) : null,
+        path,
     };
 };
 
