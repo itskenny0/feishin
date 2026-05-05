@@ -556,6 +556,7 @@ const album = z.object({
     Name: z.string(),
     ParentLogoImageTag: z.string(),
     ParentLogoItemId: z.string(),
+    Path: z.string().optional(),
     People: participant.array().optional(),
     PremiereDate: z.string().optional(),
     ProductionYear: z.number(),

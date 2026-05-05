@@ -334,6 +334,7 @@ const normalizeAlbum = (
         originalDate: releaseDate,
         originalYear,
         participants: getPeople(item),
+        path: item.Path ? replacePathPrefix(item.Path, pathReplace, pathReplaceWith) : null,
         playCount: item.UserData?.PlayCount || 0,
         recordLabels: item.Studios?.map((entry) => entry.Name) || [],
         releaseDate,

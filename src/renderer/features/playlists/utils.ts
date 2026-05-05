@@ -38,6 +38,7 @@ export function playlistSongsToAlbums(songs: Song[]): PlaylistAlbumRow[] {
             originalDate: null,
             originalYear: 0,
             participants: song.participants,
+            path: song.path ?? null,
             playCount: null,
             recordLabels: [],
             releaseDate: song.releaseDate,
