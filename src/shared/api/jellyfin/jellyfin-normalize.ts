@@ -502,7 +502,7 @@ const normalizeFolder = (
     const path = rawPath ? replacePathPrefix(rawPath, pathReplace, pathReplaceWith) : null;
     if (typeof window !== 'undefined') {
         // Temporary debug log so we can confirm Path is being received.
-        console.debug('[jf-normalize-folder]', {
+        console.log('[jf-normalize-folder]', {
             name: item.Name,
             normalizedPath: path,
             rawPath,
