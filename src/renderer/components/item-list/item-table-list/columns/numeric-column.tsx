@@ -13,7 +13,10 @@ export const NumericColumn = (props: ItemTableListInnerColumn) => {
         return <TableColumnTextContainer {...props}>{row}</TableColumnTextContainer>;
     }
 
-    if (row === null) {
+    // No skeleton when the row is loaded but the field is genuinely missing
+    // (e.g. Jellyfin omits IndexNumber/ParentIndexNumber for songs without
+    // track tags). Skeleton only when the row itself hasn't loaded yet.
+    if (rowItem != null) {
         return <ColumnNullFallback {...props} />;
     }
 

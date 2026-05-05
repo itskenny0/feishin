@@ -53,7 +53,7 @@ const GenreBadgeColumn = (props: ItemTableListInnerColumn) => {
         );
     }
 
-    if (row === null) {
+    if (rowItem != null) {
         return <ColumnNullFallback {...props} />;
     }
 

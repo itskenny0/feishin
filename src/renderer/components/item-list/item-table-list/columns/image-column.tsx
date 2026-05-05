@@ -130,6 +130,13 @@ const ImageColumnBase = (props: ItemTableListInnerColumn) => {
         );
     }
 
+    // No id/imageId resolvable for this row (group header rows, transient
+    // virtualization states with stale memoized row data, etc.). Render an
+    // empty cell rather than a skeleton that never finishes loading.
+    if (rowItem != null) {
+        return <TableColumnContainer {...props}>&nbsp;</TableColumnContainer>;
+    }
+
     return (
         <TableColumnContainer {...props}>
             <div

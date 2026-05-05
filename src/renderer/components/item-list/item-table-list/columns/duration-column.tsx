@@ -20,7 +20,7 @@ const DurationColumnBase = (props: ItemTableListInnerColumn) => {
         return <TableColumnTextContainer {...props}>{formattedDuration}</TableColumnTextContainer>;
     }
 
-    if (row === null) {
+    if (rowItem != null) {
         return <ColumnNullFallback {...props} />;
     }
 
