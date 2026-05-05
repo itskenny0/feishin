@@ -712,6 +712,13 @@ export const JellyfinController: InternalControllerEndpoint = {
             throw new Error('Failed to get folder');
         }
 
+        console.log('[jf-getFolder] non-root path', {
+            FieldsRequested: JF_FIELDS.FOLDER,
+            firstItem: folderDetailRes.body.Items?.[0],
+            itemCount: folderDetailRes.body.Items?.length,
+            queryId: query.id,
+        });
+
         // Get parent folder info - we'll use the first child's ParentId to infer the folder's parentId
         // The folder name will be inferred from the query.id or we can try to get it from a parent query
         let parentId: string | undefined;
