@@ -344,6 +344,7 @@ const normalizeAlbum = (
         originalDate: releaseDate,
         originalYear: releaseYear ?? 0,
         participants: getParticipants(item),
+        path: null,
         playCount: null,
         recordLabels: item.recordLabels?.map((item) => item.name) || [],
         releaseDate,

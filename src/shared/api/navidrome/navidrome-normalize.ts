@@ -380,6 +380,7 @@ const normalizeAlbum = (
         name: item.name,
         originalDate: originalDate.date,
         originalYear: originalDate.year,
+        path: null,
         playCount: item.playCount || 0,
         releaseDate: releaseDate.date,
         releaseType: item.mbzAlbumType || null,

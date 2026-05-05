@@ -191,6 +191,7 @@ export type Album = {
     originalDate: null | PartialIsoDateString;
     originalYear: number;
     participants: null | Record<string, RelatedArtist[]>;
+    path: null | string;
     playCount: null | number;
     recordLabels: string[];
     releaseDate: null | PartialIsoDateString;

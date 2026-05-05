@@ -232,6 +232,50 @@ export const ControlSettings = memo(() => {
         },
         {
             control: (
+                <Switch
+                    aria-label="Show filesystem folder name in folders view"
+                    defaultChecked={settings.showFilesystemNameForFolders}
+                    onChange={(e) =>
+                        setSettings({
+                            general: {
+                                ...settings,
+                                showFilesystemNameForFolders: e.currentTarget.checked,
+                            },
+                        })
+                    }
+                />
+            ),
+            description: t('setting.showFilesystemNameForFolders', {
+                context: 'description',
+                postProcess: 'sentenceCase',
+            }),
+            isHidden: false,
+            title: t('setting.showFilesystemNameForFolders', { postProcess: 'sentenceCase' }),
+        },
+        {
+            control: (
+                <Switch
+                    aria-label="Show filesystem folder name in albums view"
+                    defaultChecked={settings.showFilesystemNameForAlbums}
+                    onChange={(e) =>
+                        setSettings({
+                            general: {
+                                ...settings,
+                                showFilesystemNameForAlbums: e.currentTarget.checked,
+                            },
+                        })
+                    }
+                />
+            ),
+            description: t('setting.showFilesystemNameForAlbums', {
+                context: 'description',
+                postProcess: 'sentenceCase',
+            }),
+            isHidden: false,
+            title: t('setting.showFilesystemNameForAlbums', { postProcess: 'sentenceCase' }),
+        },
+        {
+            control: (
                 <NumberInput
                     defaultValue={settings.artistRadioCount}
                     max={200}
