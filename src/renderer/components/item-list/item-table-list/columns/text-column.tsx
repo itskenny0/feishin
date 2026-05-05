@@ -27,7 +27,7 @@ export const TextColumn = (props: ItemTableListInnerColumn) => {
         );
     }
 
-    if (row === null) {
+    if (rowItem != null) {
         return <ColumnNullFallback {...props} />;
     }
 

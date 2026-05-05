@@ -31,7 +31,7 @@ const DateColumnBase = (props: ItemTableListInnerColumn) => {
         );
     }
 
-    if (row === null) {
+    if (rowItem != null) {
         return <ColumnNullFallback {...props} />;
     }
 
@@ -90,7 +90,7 @@ const AbsoluteDateColumnBase = (props: ItemTableListInnerColumn) => {
             );
         }
 
-        if (row === null) {
+        if (rowItem != null) {
             return <ColumnNullFallback {...props} />;
         }
 
@@ -119,7 +119,7 @@ const RelativeDateColumnBase = (props: ItemTableListInnerColumn) => {
         );
     }
 
-    if (row === null) {
+    if (rowItem != null) {
         return <ColumnNullFallback {...props} />;
     }
 

@@ -93,7 +93,7 @@ function DefaultTitleColumn(props: ItemTableListInnerColumn) {
         );
     }
 
-    if (row === null) {
+    if (rowItem != null) {
         return <ColumnNullFallback {...props} />;
     }
 
@@ -159,7 +159,7 @@ function QueueSongTitleColumn(props: ItemTableListInnerColumn) {
         );
     }
 
-    if (row === null) {
+    if (rowItem != null) {
         return <ColumnNullFallback {...props} />;
     }
 

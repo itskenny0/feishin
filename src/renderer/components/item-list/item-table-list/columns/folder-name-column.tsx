@@ -1,6 +1,5 @@
 import {
     ColumnNullFallback,
-    ColumnSkeletonVariable,
     ItemTableListInnerColumn,
     TableColumnTextContainer,
 } from '/@/renderer/components/item-list/item-table-list/item-table-list-column';
@@ -23,7 +22,7 @@ export const FolderNameColumn = (props: ItemTableListInnerColumn) => {
     const rowItem = props.getRowItem?.(props.rowIndex) ?? (props.data as any[])[props.rowIndex];
 
     if (!rowItem) {
-        return <ColumnSkeletonVariable {...props} />;
+        return <ColumnNullFallback {...props} />;
     }
 
     const name = folderNameFromPath(rowItem);

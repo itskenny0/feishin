@@ -28,7 +28,6 @@ import { Play } from '/@/shared/types/types';
 
 export const DefaultTitleCombinedColumn = (props: ItemTableListInnerColumn) => {
     const rowItem = props.getRowItem?.(props.rowIndex) ?? (props.data as any[])[props.rowIndex];
-    const row: object | undefined = (rowItem as any)?.id;
     const item = rowItem as any;
     const internalState = (props as any).internalState;
     const playButtonBehavior = usePlayButtonBehavior();
@@ -167,7 +166,7 @@ export const DefaultTitleCombinedColumn = (props: ItemTableListInnerColumn) => {
         );
     }
 
-    if (row === null) {
+    if (rowItem != null) {
         return <ColumnNullFallback {...props} />;
     }
 
@@ -379,7 +378,7 @@ export const QueueSongTitleCombinedColumn = (props: ItemTableListInnerColumn) =>
         );
     }
 
-    if (row === null) {
+    if (rowItem != null) {
         return <ColumnNullFallback {...props} />;
     }
 

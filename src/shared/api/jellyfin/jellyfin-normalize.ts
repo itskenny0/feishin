@@ -500,14 +500,6 @@ const normalizeFolder = (
     // case the schema-derived type strips or narrows the field.
     const rawPath = (item as { Path?: null | string }).Path;
     const path = rawPath ? replacePathPrefix(rawPath, pathReplace, pathReplaceWith) : null;
-    if (typeof window !== 'undefined') {
-        // Temporary debug log so we can confirm Path is being received.
-        console.log('[jf-normalize-folder]', {
-            name: item.Name,
-            normalizedPath: path,
-            rawPath,
-        });
-    }
     return {
         _itemType: LibraryItem.FOLDER,
         _serverId: server?.id || 'unknown',

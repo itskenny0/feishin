@@ -20,7 +20,7 @@ const SizeColumnBase = (props: ItemTableListInnerColumn) => {
         return <TableColumnTextContainer {...props}>{formattedSize}</TableColumnTextContainer>;
     }
 
-    if (row === null) {
+    if (rowItem != null) {
         return <ColumnNullFallback {...props} />;
     }
 

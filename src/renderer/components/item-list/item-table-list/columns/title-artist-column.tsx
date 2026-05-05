@@ -20,7 +20,6 @@ import { Folder, LibraryItem, QueueSong } from '/@/shared/types/domain-types';
 
 export const DefaultTitleArtistColumn = (props: ItemTableListInnerColumn) => {
     const rowItem = props.getRowItem?.(props.rowIndex) ?? (props.data as any[])[props.rowIndex];
-    const row: object | undefined = (rowItem as any)?.id;
     const item = rowItem as any;
     const align = props.columns[props.columnIndex]?.align || 'start';
 
@@ -69,7 +68,7 @@ export const DefaultTitleArtistColumn = (props: ItemTableListInnerColumn) => {
         );
     }
 
-    if (row === null) {
+    if (rowItem != null) {
         return <ColumnNullFallback {...props} />;
     }
 
@@ -190,7 +189,7 @@ export const QueueSongTitleArtistColumn = (props: ItemTableListInnerColumn) => {
         );
     }
 
-    if (row === null) {
+    if (rowItem != null) {
         return <ColumnNullFallback {...props} />;
     }
 

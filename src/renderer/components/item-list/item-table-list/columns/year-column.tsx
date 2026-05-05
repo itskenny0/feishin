@@ -33,9 +33,7 @@ const YearColumnBase = (props: ItemTableListInnerColumn) => {
         return <TableColumnTextContainer {...props}>{yearDisplay}</TableColumnTextContainer>;
     }
 
-    const row: number | undefined = (rowItem as any)?.[props.columns[props.columnIndex].id];
-
-    if (row === null) {
+    if (rowItem != null) {
         return <ColumnNullFallback {...props} />;
     }
 
