@@ -449,7 +449,6 @@ export const GeneralSettingsSchema = z.object({
         ),
     albumBackground: z.boolean(),
     albumBackgroundBlur: z.number(),
-    albumFavoriteFilter: z.boolean().nullable(),
     artistBackground: z.boolean(),
     artistBackgroundBlur: z.number(),
     artistItems: z.array(SortableItemSchema(ArtistItemSchema)),
@@ -1113,7 +1112,6 @@ const initialState: SettingsState = {
         accent: 'rgb(53, 116, 252)',
         albumBackground: false,
         albumBackgroundBlur: 3,
-        albumFavoriteFilter: null,
         artistBackground: true,
         artistBackgroundBlur: 3,
         artistItems,
@@ -2493,17 +2491,10 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
-                if (version <= 33) {
-                    if (state.general.albumFavoriteFilter === undefined) {
-                        state.general.albumFavoriteFilter =
-                            initialState.general.albumFavoriteFilter;
-                    }
-                }
-
                 return persistedState;
             },
             name: 'store_settings',
-            version: 33,
+            version: 32,
         },
     ),
 );
@@ -2620,15 +2611,6 @@ export const useShowFilesystemNameForFolders = () =>
 
 export const useShowFilesystemNameForAlbums = () =>
     useSettingsStore((state) => state.general.showFilesystemNameForAlbums, shallow);
-
-export const useAlbumFavoriteFilter = () =>
-    useSettingsStore((state) => state.general.albumFavoriteFilter, shallow);
-
-export const setAlbumFavoriteFilter = (value: boolean | null) => {
-    useSettingsStore.setState((state) => {
-        state.general.albumFavoriteFilter = value;
-    });
-};
 
 export const useThemeSettings = () =>
     useSettingsStore(
