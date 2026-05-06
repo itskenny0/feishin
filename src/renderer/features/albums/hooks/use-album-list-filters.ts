@@ -5,7 +5,6 @@ import { useSearchTermFilter } from '/@/renderer/features/shared/hooks/use-searc
 import { useSortByFilter } from '/@/renderer/features/shared/hooks/use-sort-by-filter';
 import { useSortOrderFilter } from '/@/renderer/features/shared/hooks/use-sort-order-filter';
 import { FILTER_KEYS } from '/@/renderer/features/shared/utils';
-import { setAlbumFavoriteFilter, useSettingsStore } from '/@/renderer/store/settings.store';
 import {
     parseArrayParam,
     parseBooleanParam,
@@ -20,7 +19,6 @@ import { ItemListKey } from '/@/shared/types/types';
 
 export const useAlbumListFilters = (listKey?: ItemListKey) => {
     const resolvedListKey = listKey ?? ItemListKey.ALBUM;
-    const isMainAlbumView = resolvedListKey === ItemListKey.ALBUM;
 
     const { sortBy } = useSortByFilter<AlbumListSort>(AlbumListSort.NAME, resolvedListKey);
 
@@ -50,19 +48,10 @@ export const useAlbumListFilters = (listKey?: ItemListKey) => {
         [searchParams],
     );
 
-    const persistedAlbumFavoriteFilter = useSettingsStore(
-        (state) => state.general.albumFavoriteFilter,
+    const favorite = useMemo(
+        () => parseBooleanParam(searchParams, FILTER_KEYS.ALBUM.FAVORITE),
+        [searchParams],
     );
-
-    const favorite = useMemo(() => {
-        if (searchParams.has(FILTER_KEYS.ALBUM.FAVORITE)) {
-            return parseBooleanParam(searchParams, FILTER_KEYS.ALBUM.FAVORITE);
-        }
-        if (isMainAlbumView) {
-            return persistedAlbumFavoriteFilter;
-        }
-        return null;
-    }, [searchParams, isMainAlbumView, persistedAlbumFavoriteFilter]);
 
     const compilation = useMemo(
         () => parseBooleanParam(searchParams, FILTER_KEYS.ALBUM.COMPILATION),
@@ -133,16 +122,13 @@ export const useAlbumListFilters = (listKey?: ItemListKey) => {
 
     const setFavorite = useCallback(
         (value: boolean | null) => {
-            if (isMainAlbumView) {
-                setAlbumFavoriteFilter(value);
-            }
             runInUrlTransition(() => {
                 setSearchParams((prev) => setSearchParam(prev, FILTER_KEYS.ALBUM.FAVORITE, value), {
                     replace: true,
                 });
             });
         },
-        [isMainAlbumView, setSearchParams],
+        [setSearchParams],
     );
 
     const setCompilation = useCallback(
@@ -218,9 +204,6 @@ export const useAlbumListFilters = (listKey?: ItemListKey) => {
     );
 
     const clear = useCallback(() => {
-        if (isMainAlbumView) {
-            setAlbumFavoriteFilter(null);
-        }
         runInUrlTransition(() => {
             setSearchParams(
                 (prev) =>
@@ -243,7 +226,7 @@ export const useAlbumListFilters = (listKey?: ItemListKey) => {
                 { replace: true },
             );
         });
-    }, [isMainAlbumView, setSearchParams]);
+    }, [setSearchParams]);
 
     const query = useMemo(
         () => ({
