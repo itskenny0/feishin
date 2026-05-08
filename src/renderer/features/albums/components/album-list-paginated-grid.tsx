@@ -23,11 +23,11 @@ interface AlbumListPaginatedGridProps extends ItemListGridComponentProps<AlbumLi
 
 export const AlbumListPaginatedGrid = ({
     gap = 'md',
-    itemsPerPage = 100,
+    itemsPerPage = 50,
     itemsPerRow,
     query = {
-        sortBy: AlbumListSort.NAME,
-        sortOrder: SortOrder.ASC,
+        sortBy: AlbumListSort.RECENTLY_ADDED,
+        sortOrder: SortOrder.DESC,
     },
     saveScrollOffset = true,
     serverId,

@@ -22,10 +22,10 @@ interface AlbumListInfiniteDetailProps extends ItemListComponentProps<AlbumListQ
 
 export const AlbumListInfiniteDetail = ({
     enableHeader = true,
-    itemsPerPage = 100,
+    itemsPerPage = 50,
     query = {
-        sortBy: AlbumListSort.NAME,
-        sortOrder: SortOrder.ASC,
+        sortBy: AlbumListSort.RECENTLY_ADDED,
+        sortOrder: SortOrder.DESC,
     },
     serverId,
 }: AlbumListInfiniteDetailProps) => {

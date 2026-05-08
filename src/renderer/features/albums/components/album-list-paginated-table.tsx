@@ -31,10 +31,10 @@ export const AlbumListPaginatedTable = ({
     enableRowHoverHighlight = true,
     enableSelection = true,
     enableVerticalBorders = false,
-    itemsPerPage = 100,
+    itemsPerPage = 50,
     query = {
-        sortBy: AlbumListSort.NAME,
-        sortOrder: SortOrder.ASC,
+        sortBy: AlbumListSort.RECENTLY_ADDED,
+        sortOrder: SortOrder.DESC,
     },
     saveScrollOffset = true,
     serverId,
