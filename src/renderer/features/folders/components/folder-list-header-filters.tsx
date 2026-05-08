@@ -11,6 +11,7 @@ import { ListRefreshButton } from '/@/renderer/features/shared/components/list-r
 import { ListSortByDropdown } from '/@/renderer/features/shared/components/list-sort-by-dropdown';
 import { ListSortOrderToggleButton } from '/@/renderer/features/shared/components/list-sort-order-toggle-button';
 import { useContainerQuery } from '/@/renderer/hooks';
+import { useShowFilesystemNameForFolders } from '/@/renderer/store/settings.store';
 import { truncateMiddle } from '/@/renderer/utils';
 import { Breadcrumb } from '/@/shared/components/breadcrumb/breadcrumb';
 import { Button } from '/@/shared/components/button/button';
@@ -25,9 +26,17 @@ import { ItemListKey, ListDisplayType } from '/@/shared/types/types';
 
 const MAX_BREADCRUMB_TEXT_LENGTH = 26;
 
+const filesystemNameFromPath = (path?: null | string): null | string => {
+    if (!path) return null;
+    const segments = path.split(/[/\\]/).filter(Boolean);
+    if (segments.length === 0) return null;
+    return segments[segments.length - 1];
+};
+
 export const FolderListHeaderFilters = () => {
     const { t } = useTranslation();
     const { folderPath, navigateToPathIndex, setFolderPath } = useFolderListFilters();
+    const useFsName = useShowFilesystemNameForFolders();
     const {
         is2xl,
         isLg,
@@ -67,16 +76,18 @@ export const FolderListHeaderFilters = () => {
         });
 
         folderPath.forEach((folder, index) => {
+            const displayName =
+                (useFsName ? filesystemNameFromPath(folder.path) : null) || folder.name;
             items.push({
-                fullLabel: folder.name,
+                fullLabel: displayName,
                 id: `folder-${folder.id}`,
-                label: truncateMiddle(folder.name, MAX_BREADCRUMB_TEXT_LENGTH),
+                label: truncateMiddle(displayName, MAX_BREADCRUMB_TEXT_LENGTH),
                 onClick: () => navigateToPathIndex(index),
             });
         });
 
         return items;
-    }, [folderPath, navigateToPathIndex, setFolderPath, t]);
+    }, [folderPath, navigateToPathIndex, setFolderPath, t, useFsName]);
 
     const visibleItems = useMemo(() => {
         const firstItem = allBreadcrumbItems[0];

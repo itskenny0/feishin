@@ -18,6 +18,14 @@ import {
     usePlayerStatus,
     useSetFullScreenPlayerStore,
 } from '/@/renderer/store';
+import { useShowFilesystemNameForAlbums } from '/@/renderer/store/settings.store';
+
+const albumFolderNameFromSongPath = (path?: null | string): null | string => {
+    if (!path) return null;
+    const segments = path.split(/[/\\]/).filter(Boolean);
+    if (segments.length < 2) return null;
+    return segments[segments.length - 2] ?? null;
+};
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Group } from '/@/shared/components/group/group';
 import { Icon } from '/@/shared/components/icon/icon';
@@ -39,6 +47,11 @@ export const MobilePlayerbar = () => {
     const title = currentSong?.name;
     const artists = currentSong?.artists;
     const isSongDefined = Boolean(currentSong?.id);
+    const useFsAlbumName = useShowFilesystemNameForAlbums();
+    const albumDisplayName =
+        (useFsAlbumName ? albumFolderNameFromSongPath(currentSong?.path) : null) ||
+        currentSong?.album ||
+        '—';
 
     const handleToggleFullScreenPlayer = (e?: KeyboardEvent | MouseEvent<HTMLDivElement>) => {
         e?.stopPropagation();
@@ -194,7 +207,7 @@ export const MobilePlayerbar = () => {
                                         : ''
                                 }
                             >
-                                {currentSong?.album || '—'}
+                                {albumDisplayName}
                             </Text>
                         </div>
                     </motion.div>

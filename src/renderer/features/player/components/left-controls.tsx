@@ -28,6 +28,14 @@ import {
     usePlayerSong,
     useSetFullScreenPlayerStore,
 } from '/@/renderer/store';
+import { useShowFilesystemNameForAlbums } from '/@/renderer/store/settings.store';
+
+const albumFolderNameFromSongPath = (path?: null | string): null | string => {
+    if (!path) return null;
+    const segments = path.split(/[/\\]/).filter(Boolean);
+    if (segments.length < 2) return null;
+    return segments[segments.length - 2] ?? null;
+};
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Center } from '/@/shared/components/center/center';
 import { Group } from '/@/shared/components/group/group';
@@ -58,6 +66,11 @@ export const LeftControls = () => {
     const isRadioActive = useIsRadioActive();
     const { currentStationArt } = useRadioPlayer();
     const { bindings } = useHotkeySettings();
+    const useFsAlbumName = useShowFilesystemNameForAlbums();
+    const albumDisplayName =
+        (useFsAlbumName ? albumFolderNameFromSongPath(currentSong?.path) : null) ||
+        currentSong?.album ||
+        '—';
 
     const isRadioMode = isRadioActive;
     const hasRadioStationImage = Boolean(currentStationArt?.imageId || currentStationArt?.imageUrl);
@@ -301,7 +314,7 @@ export const LeftControls = () => {
                                             : ''
                                     }
                                 >
-                                    {currentSong?.album || '—'}
+                                    {albumDisplayName}
                                 </Text>
                             </div>
                         </>

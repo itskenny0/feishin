@@ -11,8 +11,18 @@ import {
     PlayTooltip,
 } from '/@/renderer/features/shared/components/play-button-group';
 import { usePlayButtonBehavior } from '/@/renderer/store';
+import { useShowFilesystemNameForAlbums } from '/@/renderer/store/settings.store';
 import { LibraryItem, Song } from '/@/shared/types/domain-types';
 import { Play } from '/@/shared/types/types';
+
+const albumFolderNameFromSongPath = (path?: null | string): null | string => {
+    if (!path) return null;
+    const segments = path.split(/[/\\]/).filter(Boolean);
+    // Song paths end with the audio filename, so the album folder is the
+    // segment immediately before that.
+    if (segments.length < 2) return null;
+    return segments[segments.length - 2] ?? null;
+};
 
 interface AlbumGroupHeaderProps {
     groupRowCount?: number;
@@ -29,6 +39,9 @@ export const AlbumGroupHeader = ({
 }: AlbumGroupHeaderProps): ReactElement => {
     const [isHovered, setIsHovered] = useState(false);
     const playButtonBehavior = usePlayButtonBehavior();
+    const useFsName = useShowFilesystemNameForAlbums();
+    const albumDisplayName =
+        (useFsName ? albumFolderNameFromSongPath(song?.path) : null) ?? song?.album ?? '';
     const rowHeight = {
         compact: TableItemSize.COMPACT,
         large: TableItemSize.LARGE,
@@ -71,7 +84,7 @@ export const AlbumGroupHeader = ({
                 )}
             </div>
             <div className={styles.info} style={{ height: infoHeight }}>
-                <div className={styles.albumName}>{song?.album ?? ''}</div>
+                <div className={styles.albumName}>{albumDisplayName}</div>
                 <div className={styles.artistName}>{song?.albumArtistName ?? ''}</div>
             </div>
         </div>

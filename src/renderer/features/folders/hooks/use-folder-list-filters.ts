@@ -13,6 +13,7 @@ import { ItemListKey } from '/@/shared/types/types';
 export type FolderPathItem = {
     id: string;
     name: string;
+    path?: null | string;
 };
 
 export const useFolderListFilters = () => {
@@ -46,8 +47,15 @@ export const useFolderListFilters = () => {
     };
 
     // Navigate to a folder (adds to path)
-    const navigateToFolder = (folderId: string, folderName: string) => {
-        setFolderPath([...folderPath, { id: folderId, name: folderName }]);
+    const navigateToFolder = (
+        folderId: string,
+        folderName: string,
+        folderFsPath?: null | string,
+    ) => {
+        setFolderPath([
+            ...folderPath,
+            { id: folderId, name: folderName, path: folderFsPath ?? null },
+        ]);
     };
 
     // Navigate back to a specific folder in the path (truncates path)

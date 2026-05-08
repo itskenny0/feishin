@@ -11,8 +11,16 @@ import {
     TableColumnContainer,
 } from '/@/renderer/components/item-list/item-table-list/item-table-list-column';
 import { AppRoute } from '/@/renderer/router/routes';
+import { useShowFilesystemNameForAlbums } from '/@/renderer/store/settings.store';
 import { Text } from '/@/shared/components/text/text';
 import { Song } from '/@/shared/types/domain-types';
+
+const albumFolderNameFromSongPath = (path?: null | string): null | string => {
+    if (!path) return null;
+    const segments = path.split(/[/\\]/).filter(Boolean);
+    if (segments.length < 2) return null;
+    return segments[segments.length - 2] ?? null;
+};
 
 const AlbumColumn = (props: ItemTableListInnerColumn) => {
     const rowItem = props.getRowItem?.(props.rowIndex) ?? (props.data as any[])[props.rowIndex];
@@ -20,11 +28,18 @@ const AlbumColumn = (props: ItemTableListInnerColumn) => {
 
     const song = rowItem as Song | undefined;
     const albumId = song?.albumId;
+    const useFsName = useShowFilesystemNameForAlbums();
 
     const albumPath = useMemo(() => {
         if (!albumId) return null;
         return generatePath(AppRoute.LIBRARY_ALBUMS_DETAIL, { albumId });
     }, [albumId]);
+
+    const displayValue = useFsName
+        ? (albumFolderNameFromSongPath(song?.path) ?? (typeof row === 'string' ? row : null))
+        : typeof row === 'string'
+          ? row
+          : null;
 
     if (typeof row === 'string') {
         if (albumId && albumPath) {
@@ -45,7 +60,7 @@ const AlbumColumn = (props: ItemTableListInnerColumn) => {
                             state={{ item: song }}
                             to={albumPath}
                         >
-                            {row}
+                            {displayValue}
                         </Text>
                     </div>
                 </TableColumnContainer>
@@ -62,7 +77,7 @@ const AlbumColumn = (props: ItemTableListInnerColumn) => {
                     isMuted
                     isNoSelect
                 >
-                    {row}
+                    {displayValue}
                 </Text>
             </TableColumnContainer>
         );
