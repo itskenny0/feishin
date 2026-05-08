@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { forwardRef, Fragment, useMemo } from 'react';
+import { forwardRef, Fragment, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router';
 
@@ -19,7 +19,11 @@ import { useSetRating } from '/@/renderer/features/shared/hooks/use-set-rating';
 import { songsQueries } from '/@/renderer/features/songs/api/songs-api';
 import { AppRoute } from '/@/renderer/router/routes';
 import { useCurrentServer, useShowRatings } from '/@/renderer/store';
-import { useArtistRadioCount, usePlayButtonBehavior } from '/@/renderer/store/settings.store';
+import {
+    useArtistRadioCount,
+    usePlayButtonBehavior,
+    useShowFilesystemNameForAlbums,
+} from '/@/renderer/store/settings.store';
 import { formatDurationString, formatPartialIsoDateUTC, formatSizeString } from '/@/renderer/utils';
 import { normalizeReleaseTypes } from '/@/renderer/utils/normalize-release-types';
 import { Group } from '/@/shared/components/group/group';
@@ -29,13 +33,24 @@ import { Text } from '/@/shared/components/text/text';
 import { LibraryItem, ServerType } from '/@/shared/types/domain-types';
 import { Play } from '/@/shared/types/types';
 
+const ARTIST_COLLAPSE_THRESHOLD = 7;
+
+const filesystemNameFromPath = (path?: null | string): null | string => {
+    if (!path) return null;
+    const segments = path.split(/[/\\]/).filter(Boolean);
+    if (segments.length === 0) return null;
+    return segments[segments.length - 1];
+};
+
 export const AlbumDetailHeader = forwardRef<HTMLDivElement>((_props, ref) => {
     const { albumId } = useParams() as { albumId: string };
     const { t } = useTranslation();
     const server = useCurrentServer();
     const showRatings = useShowRatings();
+    const useFilesystemName = useShowFilesystemNameForAlbums();
     const queryClient = useQueryClient();
     const albumRadioCount = useArtistRadioCount();
+    const [artistsExpanded, setArtistsExpanded] = useState(false);
     const detailQuery = useQuery(
         albumQueries.detail({ query: { id: albumId }, serverId: server?.id }),
     );
@@ -258,6 +273,19 @@ export const AlbumDetailHeader = forwardRef<HTMLDivElement>((_props, ref) => {
         return null;
     }, [detailQuery?.data, t]);
 
+    const album = detailQuery?.data;
+    const albumArtists = album?.albumArtists ?? [];
+    const albumArtistName = album?.albumArtistName ?? '';
+    const shouldCollapseArtists =
+        !artistsExpanded && albumArtists.length > ARTIST_COLLAPSE_THRESHOLD;
+    const visibleArtists = shouldCollapseArtists
+        ? albumArtists.slice(0, ARTIST_COLLAPSE_THRESHOLD)
+        : albumArtists;
+    const hiddenArtistCount = albumArtists.length - ARTIST_COLLAPSE_THRESHOLD;
+
+    const filesystemTitle = useFilesystemName ? filesystemNameFromPath(album?.path) : null;
+    const displayTitle = filesystemTitle || album?.name || '';
+
     return (
         <Stack ref={ref}>
             <LibraryHeader
@@ -269,7 +297,7 @@ export const AlbumDetailHeader = forwardRef<HTMLDivElement>((_props, ref) => {
                     route: AppRoute.LIBRARY_ALBUMS,
                     type: LibraryItem.ALBUM,
                 }}
-                title={detailQuery?.data?.name || ''}
+                title={displayTitle}
             >
                 <Stack gap="md" w="100%">
                     <Group className={styles.metadataGroup} gap="xs">
@@ -284,11 +312,51 @@ export const AlbumDetailHeader = forwardRef<HTMLDivElement>((_props, ref) => {
                             </Fragment>
                         ))}
                     </Group>
-                    <Group className={styles.metadataGroup}>
+                    <Group className={styles.metadataGroup} gap="xs">
                         <JoinedArtists
-                            artistName={detailQuery?.data?.albumArtistName || ''}
-                            artists={detailQuery?.data?.albumArtists || []}
+                            artistName={shouldCollapseArtists ? '' : albumArtistName}
+                            artists={visibleArtists}
                         />
+                        {shouldCollapseArtists && (
+                            <Text
+                                component="span"
+                                fw={500}
+                                isLink
+                                onClick={() => setArtistsExpanded(true)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                        e.preventDefault();
+                                        setArtistsExpanded(true);
+                                    }
+                                }}
+                                role="button"
+                                tabIndex={0}
+                            >
+                                {`… ${t('common.showMore', {
+                                    postProcess: 'sentenceCase',
+                                })} (${hiddenArtistCount})`}
+                            </Text>
+                        )}
+                        {!shouldCollapseArtists &&
+                            artistsExpanded &&
+                            albumArtists.length > ARTIST_COLLAPSE_THRESHOLD && (
+                                <Text
+                                    component="span"
+                                    fw={500}
+                                    isLink
+                                    onClick={() => setArtistsExpanded(false)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' || e.key === ' ') {
+                                            e.preventDefault();
+                                            setArtistsExpanded(false);
+                                        }
+                                    }}
+                                    role="button"
+                                    tabIndex={0}
+                                >
+                                    {t('common.showLess', { postProcess: 'sentenceCase' })}
+                                </Text>
+                            )}
                     </Group>
                     <LibraryHeaderMenu
                         favorite={detailQuery?.data?.userFavorite}
