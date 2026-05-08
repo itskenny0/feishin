@@ -34,7 +34,12 @@ import { FILTER_KEYS, searchLibraryItems } from '/@/renderer/features/shared/uti
 import { useHotkeys } from '/@/renderer/hooks/use-hotkeys';
 import { AppRoute } from '/@/renderer/router/routes';
 import { useCurrentServer, usePlayerSong } from '/@/renderer/store';
-import { useExternalLinks, useSettingsStore } from '/@/renderer/store/settings.store';
+import {
+    useDetailSectionCollapsed,
+    useExternalLinks,
+    useSetDetailSectionCollapsed,
+    useSettingsStore,
+} from '/@/renderer/store/settings.store';
 import { sentenceCase, titleCase } from '/@/renderer/utils';
 import { replaceURLWithHTMLLinks } from '/@/renderer/utils/linkify';
 import { normalizeReleaseTypes } from '/@/renderer/utils/normalize-release-types';
@@ -61,6 +66,38 @@ import {
     SortOrder,
 } from '/@/shared/types/domain-types';
 import { ItemListKey, ListDisplayType, Play } from '/@/shared/types/types';
+
+const CollapsibleSectionHeader = ({
+    collapsed,
+    onToggle,
+    title,
+}: {
+    collapsed: boolean;
+    onToggle: () => void;
+    title: string;
+}) => {
+    return (
+        <Group
+            gap="xs"
+            onClick={onToggle}
+            onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onToggle();
+                }
+            }}
+            role="button"
+            style={{ cursor: 'pointer', userSelect: 'none' }}
+            tabIndex={0}
+            wrap="nowrap"
+        >
+            <Icon icon={collapsed ? 'arrowRightS' : 'arrowDownS'} size="md" />
+            <Text fw={600} isNoSelect size="sm" tt="uppercase">
+                {title}
+            </Text>
+        </Group>
+    );
+};
 
 const MetadataPillGroup = ({
     items,
@@ -271,29 +308,35 @@ interface AlbumMetadataGenresProps {
 
 const AlbumMetadataGenres = ({ genres }: AlbumMetadataGenresProps) => {
     const { t } = useTranslation();
+    const collapsed = useDetailSectionCollapsed('album.genres');
+    const setCollapsed = useSetDetailSectionCollapsed();
 
     if (!genres || genres.length === 0) return null;
 
+    const title = t('entity.genre', { count: genres.length });
+
     return (
         <Stack gap="xs">
-            <Text fw={600} isNoSelect size="sm" tt="uppercase">
-                {t('entity.genre', {
-                    count: genres.length,
-                })}
-            </Text>
-            <Pill.Group>
-                {genres.map((genre) => (
-                    <PillLink
-                        key={`genre-${genre.id}`}
-                        size="md"
-                        to={generatePath(AppRoute.LIBRARY_GENRES_DETAIL, {
-                            genreId: genre.id,
-                        })}
-                    >
-                        {genre.name}
-                    </PillLink>
-                ))}
-            </Pill.Group>
+            <CollapsibleSectionHeader
+                collapsed={collapsed}
+                onToggle={() => setCollapsed('album.genres', !collapsed)}
+                title={title}
+            />
+            {!collapsed && (
+                <Pill.Group>
+                    {genres.map((genre) => (
+                        <PillLink
+                            key={`genre-${genre.id}`}
+                            size="md"
+                            to={generatePath(AppRoute.LIBRARY_GENRES_DETAIL, {
+                                genreId: genre.id,
+                            })}
+                        >
+                            {genre.name}
+                        </PillLink>
+                    ))}
+                </Pill.Group>
+            )}
         </Stack>
     );
 };
@@ -382,8 +425,6 @@ const AlbumMetadataExternalLinks = ({
     qobuz,
     spotify,
 }: AlbumMetadataExternalLinksProps) => {
-    const { t } = useTranslation();
-
     const listenBrainzUrl = getListenBrainzUrl(mbzReleaseGroupId || null, albumArtist, albumName);
     const qobuzUrl = getQobuzUrl(albumArtist, albumName);
 
@@ -392,103 +433,155 @@ const AlbumMetadataExternalLinks = ({
     }
 
     return (
+        <ExternalLinksContent
+            {...{
+                albumArtist,
+                albumName,
+                lastFM,
+                listenBrainz,
+                listenBrainzUrl,
+                mbzId,
+                musicBrainz,
+                nativeSpotify,
+                qobuz,
+                qobuzUrl,
+                spotify,
+            }}
+        />
+    );
+};
+
+const ExternalLinksContent = ({
+    albumArtist,
+    albumName,
+    lastFM,
+    listenBrainz,
+    listenBrainzUrl,
+    mbzId,
+    musicBrainz,
+    nativeSpotify,
+    qobuz,
+    qobuzUrl,
+    spotify,
+}: {
+    albumArtist?: string;
+    albumName?: string;
+    lastFM: boolean;
+    listenBrainz: boolean;
+    listenBrainzUrl: null | string;
+    mbzId?: null | string;
+    musicBrainz: boolean;
+    nativeSpotify: boolean;
+    qobuz: boolean;
+    qobuzUrl: null | string;
+    spotify: boolean;
+}) => {
+    const { t } = useTranslation();
+    const collapsed = useDetailSectionCollapsed('album.externalLinks');
+    const setCollapsed = useSetDetailSectionCollapsed();
+
+    return (
         <Stack gap="xs">
-            <Text fw={600} isNoSelect size="sm" tt="uppercase">
-                {t('common.externalLinks')}
-            </Text>
-            <Group className={styles.externalLinksGroup} gap="xs">
-                {lastFM && (
-                    <ActionIcon
-                        component="a"
-                        href={`https://www.last.fm/music/${encodeURIComponent(
-                            albumArtist || '',
-                        )}/${encodeURIComponent(albumName || '')}`}
-                        icon="brandLastfm"
-                        iconProps={{
-                            size: '2xl',
-                        }}
-                        radius="md"
-                        rel="noopener noreferrer"
-                        target="_blank"
-                        tooltip={{
-                            label: t('action.openIn.lastfm'),
-                        }}
-                        variant="subtle"
-                    />
-                )}
-                {mbzId && musicBrainz ? (
-                    <ActionIcon
-                        component="a"
-                        href={`https://musicbrainz.org/release/${mbzId}`}
-                        icon="brandMusicBrainz"
-                        iconProps={{
-                            size: '2xl',
-                        }}
-                        radius="md"
-                        rel="noopener noreferrer"
-                        target="_blank"
-                        tooltip={{
-                            label: t('action.openIn.musicbrainz'),
-                        }}
-                        variant="subtle"
-                    />
-                ) : null}
-                {listenBrainz && listenBrainzUrl && (
-                    <ActionIcon
-                        component="a"
-                        href={listenBrainzUrl}
-                        icon="brandListenBrainz"
-                        iconProps={{
-                            size: '2xl',
-                        }}
-                        radius="md"
-                        rel="noopener noreferrer"
-                        target="_blank"
-                        tooltip={{
-                            label: t('action.openIn.listenbrainz'),
-                        }}
-                        variant="subtle"
-                    />
-                )}
-                {qobuz && qobuzUrl && (
-                    <ActionIcon
-                        component="a"
-                        href={qobuzUrl}
-                        icon="brandQobuz"
-                        iconProps={{
-                            size: '2xl',
-                        }}
-                        radius="md"
-                        rel="noopener noreferrer"
-                        target="_blank"
-                        tooltip={{
-                            label: t('action.openIn.qobuz'),
-                        }}
-                        variant="subtle"
-                    />
-                )}
-                {spotify && (
-                    <ActionIcon
-                        component="a"
-                        href={
-                            nativeSpotify
-                                ? `spotify:search:${encodeURIComponent(albumArtist || '')}%20${encodeURIComponent(albumName || '')}`
-                                : `https://open.spotify.com/search/${encodeURIComponent(albumArtist || '')}%20${encodeURIComponent(albumName || '')}`
-                        }
-                        icon="brandSpotify"
-                        iconProps={{
-                            size: '2xl',
-                        }}
-                        radius="md"
-                        rel="noopener noreferrer"
-                        target={nativeSpotify ? undefined : '_blank'}
-                        tooltip={{
-                            label: t('action.openIn.spotify'),
-                        }}
-                        variant="subtle"
-                    />
-                )}
-            </Group>
+            <CollapsibleSectionHeader
+                collapsed={collapsed}
+                onToggle={() => setCollapsed('album.externalLinks', !collapsed)}
+                title={t('common.externalLinks', { postProcess: 'sentenceCase' })}
+            />
+            {!collapsed && (
+                <Group className={styles.externalLinksGroup} gap="xs">
+                    {lastFM && (
+                        <ActionIcon
+                            component="a"
+                            href={`https://www.last.fm/music/${encodeURIComponent(
+                                albumArtist || '',
+                            )}/${encodeURIComponent(albumName || '')}`}
+                            icon="brandLastfm"
+                            iconProps={{
+                                size: '2xl',
+                            }}
+                            radius="md"
+                            rel="noopener noreferrer"
+                            target="_blank"
+                            tooltip={{
+                                label: t('action.openIn.lastfm'),
+                            }}
+                            variant="subtle"
+                        />
+                    )}
+                    {mbzId && musicBrainz ? (
+                        <ActionIcon
+                            component="a"
+                            href={`https://musicbrainz.org/release/${mbzId}`}
+                            icon="brandMusicBrainz"
+                            iconProps={{
+                                size: '2xl',
+                            }}
+                            radius="md"
+                            rel="noopener noreferrer"
+                            target="_blank"
+                            tooltip={{
+                                label: t('action.openIn.musicbrainz'),
+                            }}
+                            variant="subtle"
+                        />
+                    ) : null}
+                    {listenBrainz && listenBrainzUrl && (
+                        <ActionIcon
+                            component="a"
+                            href={listenBrainzUrl}
+                            icon="brandListenBrainz"
+                            iconProps={{
+                                size: '2xl',
+                            }}
+                            radius="md"
+                            rel="noopener noreferrer"
+                            target="_blank"
+                            tooltip={{
+                                label: t('action.openIn.listenbrainz'),
+                            }}
+                            variant="subtle"
+                        />
+                    )}
+                    {qobuz && qobuzUrl && (
+                        <ActionIcon
+                            component="a"
+                            href={qobuzUrl}
+                            icon="brandQobuz"
+                            iconProps={{
+                                size: '2xl',
+                            }}
+                            radius="md"
+                            rel="noopener noreferrer"
+                            target="_blank"
+                            tooltip={{
+                                label: t('action.openIn.qobuz'),
+                            }}
+                            variant="subtle"
+                        />
+                    )}
+                    {spotify && (
+                        <ActionIcon
+                            component="a"
+                            href={
+                                nativeSpotify
+                                    ? `spotify:search:${encodeURIComponent(albumArtist || '')}%20${encodeURIComponent(albumName || '')}`
+                                    : `https://open.spotify.com/search/${encodeURIComponent(albumArtist || '')}%20${encodeURIComponent(albumName || '')}`
+                            }
+                            icon="brandSpotify"
+                            iconProps={{
+                                size: '2xl',
+                            }}
+                            radius="md"
+                            rel="noopener noreferrer"
+                            target={nativeSpotify ? undefined : '_blank'}
+                            tooltip={{
+                                label: t('action.openIn.spotify'),
+                            }}
+                            variant="subtle"
+                        />
+                    )}
+                </Group>
+            )}
         </Stack>
     );
 };

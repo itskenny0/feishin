@@ -462,6 +462,7 @@ export const GeneralSettingsSchema = z.object({
     autoSave: AutoSaveSchema,
     blurExplicitImages: z.boolean(),
     buttonSize: z.number(),
+    collapsedDetailSections: z.record(z.string(), z.boolean()),
     collections: z.array(CollectionSchema),
     combinedLyricsAndVisualizer: z.boolean(),
     disabledContextMenu: z.record(z.string(), z.boolean()),
@@ -1136,6 +1137,7 @@ const initialState: SettingsState = {
         },
         blurExplicitImages: false,
         buttonSize: 15,
+        collapsedDetailSections: {},
         collections: [],
         combinedLyricsAndVisualizer: false,
         disabledContextMenu: {},
@@ -1272,7 +1274,7 @@ const initialState: SettingsState = {
                 rows: [],
                 size: 'default',
             },
-            itemsPerPage: 100,
+            itemsPerPage: 50,
             pagination: ListPaginationType.INFINITE,
             table: {
                 autoFitColumns: true,
@@ -1309,7 +1311,7 @@ const initialState: SettingsState = {
                 rows: [],
                 size: 'default',
             },
-            itemsPerPage: 100,
+            itemsPerPage: 50,
             pagination: ListPaginationType.INFINITE,
             table: {
                 autoFitColumns: true,
@@ -1386,7 +1388,7 @@ const initialState: SettingsState = {
                 }),
                 size: 'default',
             },
-            itemsPerPage: 100,
+            itemsPerPage: 50,
             pagination: ListPaginationType.INFINITE,
             table: {
                 autoFitColumns: true,
@@ -1463,7 +1465,7 @@ const initialState: SettingsState = {
                 }),
                 size: 'default',
             },
-            itemsPerPage: 100,
+            itemsPerPage: 50,
             pagination: ListPaginationType.INFINITE,
             table: {
                 autoFitColumns: true,
@@ -1502,7 +1504,7 @@ const initialState: SettingsState = {
                 }),
                 size: 'default',
             },
-            itemsPerPage: 100,
+            itemsPerPage: 50,
             pagination: ListPaginationType.INFINITE,
             table: {
                 autoFitColumns: true,
@@ -1543,7 +1545,7 @@ const initialState: SettingsState = {
                 }),
                 size: 'default',
             },
-            itemsPerPage: 100,
+            itemsPerPage: 50,
             pagination: ListPaginationType.INFINITE,
             table: {
                 autoFitColumns: true,
@@ -1596,7 +1598,7 @@ const initialState: SettingsState = {
                 }),
                 size: 'default',
             },
-            itemsPerPage: 100,
+            itemsPerPage: 50,
             pagination: ListPaginationType.INFINITE,
             table: {
                 autoFitColumns: false,
@@ -1630,7 +1632,7 @@ const initialState: SettingsState = {
                 }),
                 size: 'default',
             },
-            itemsPerPage: 100,
+            itemsPerPage: 50,
             pagination: ListPaginationType.INFINITE,
             table: {
                 autoFitColumns: true,
@@ -1679,7 +1681,7 @@ const initialState: SettingsState = {
                 }),
                 size: 'default',
             },
-            itemsPerPage: 100,
+            itemsPerPage: 50,
             pagination: ListPaginationType.INFINITE,
             table: {
                 autoFitColumns: true,
@@ -1708,7 +1710,7 @@ const initialState: SettingsState = {
                 rows: [],
                 size: 'default',
             },
-            itemsPerPage: 100,
+            itemsPerPage: 50,
             pagination: ListPaginationType.INFINITE,
             table: {
                 autoFitColumns: true,
@@ -1755,7 +1757,7 @@ const initialState: SettingsState = {
                 }),
                 size: 'default',
             },
-            itemsPerPage: 100,
+            itemsPerPage: 50,
             pagination: ListPaginationType.PAGINATED,
             table: {
                 autoFitColumns: true,
@@ -1784,7 +1786,7 @@ const initialState: SettingsState = {
                 rows: [],
                 size: 'default',
             },
-            itemsPerPage: 100,
+            itemsPerPage: 50,
             pagination: ListPaginationType.INFINITE,
             table: {
                 autoFitColumns: true,
@@ -2735,6 +2737,20 @@ export const useSidebarPlaylistList = () =>
 
 export const useSidebarBottomSection = () =>
     useSettingsStore((state) => state.general.sidebarBottomSection, shallow);
+
+export const useDetailSectionCollapsed = (key: string): boolean =>
+    useSettingsStore((state) => Boolean(state.general.collapsedDetailSections?.[key]));
+
+export const useSetDetailSectionCollapsed = () => {
+    const { setSettings } = useSettingsStoreActions();
+    return (key: string, collapsed: boolean) => {
+        setSettings({
+            general: {
+                collapsedDetailSections: { [key]: collapsed },
+            },
+        });
+    };
+};
 
 export const useSidebarPlaylistSorting = () =>
     useSettingsStore((state) => state.general.sidebarPlaylistSorting, shallow);
