@@ -6,8 +6,8 @@ import {
     GeneralSettingsSchema,
     getServerById,
     useAuthStore,
+    useBlurExplicitImages,
     useCurrentServerId,
-    useGeneralSettings,
     useImageRes,
     useSettingsStore,
 } from '/@/renderer/store';
@@ -44,7 +44,7 @@ const BaseItemImage = (
     },
 ) => {
     const { explicitStatus, serverId, src, ...rest } = props;
-    const { blurExplicitImages } = useGeneralSettings();
+    const blurExplicitImages = useBlurExplicitImages();
 
     const imageUrl = useItemImageUrl({
         id: props.id,

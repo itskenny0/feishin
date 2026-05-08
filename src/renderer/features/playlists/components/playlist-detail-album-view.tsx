@@ -19,7 +19,7 @@ import { applyClientSideSongFilters } from '/@/renderer/features/playlists/hooks
 import { type PlaylistAlbumRow, playlistSongsToAlbums } from '/@/renderer/features/playlists/utils';
 import { useSearchTermFilter } from '/@/renderer/features/shared/hooks/use-search-term-filter';
 import { searchLibraryItems } from '/@/renderer/features/shared/utils';
-import { useGeneralSettings, useListSettings } from '/@/renderer/store';
+import { useEnableGridMultiSelect, useListSettings } from '/@/renderer/store';
 import { sortSongList } from '/@/shared/api/utils';
 import {
     LibraryItem,
@@ -42,7 +42,7 @@ export const PlaylistDetailAlbumView = ({ data }: { data: PlaylistSongListRespon
     const { detail, display, grid, itemsPerPage, pagination, table } = useListSettings(
         ItemListKey.PLAYLIST_ALBUM,
     );
-    const { enableGridMultiSelect } = useGeneralSettings();
+    const enableGridMultiSelect = useEnableGridMultiSelect();
     const { currentPage, onChange: onPageChange } = useItemListPagination();
     const { searchTerm } = useSearchTermFilter();
     const { query } = usePlaylistSongListFilters();

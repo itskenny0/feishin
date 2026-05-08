@@ -7,7 +7,7 @@ import { useItemListScrollPersist } from '/@/renderer/components/item-list/helpe
 import { ItemGridList } from '/@/renderer/components/item-list/item-grid-list/item-grid-list';
 import { ItemListGridComponentProps } from '/@/renderer/components/item-list/types';
 import { artistsQueries } from '/@/renderer/features/artists/api/artists-api';
-import { useGeneralSettings } from '/@/renderer/store';
+import { useEnableGridMultiSelect } from '/@/renderer/store';
 import {
     ArtistListQuery,
     ArtistListSort,
@@ -53,7 +53,7 @@ export const ArtistListInfiniteGrid = ({
     });
 
     const rows = useGridRows(LibraryItem.ARTIST, ItemListKey.ARTIST, size);
-    const { enableGridMultiSelect } = useGeneralSettings();
+    const enableGridMultiSelect = useEnableGridMultiSelect();
 
     return (
         <ItemGridList

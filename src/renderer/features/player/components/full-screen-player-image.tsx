@@ -13,9 +13,10 @@ import {
 } from '/@/renderer/features/radio/hooks/use-radio-player';
 import { AppRoute } from '/@/renderer/router/routes';
 import {
-    useGeneralSettings,
+    useBlurExplicitImages,
     useNativeAspectRatio,
     usePlayerData,
+    usePlayerItems,
     usePlayerSong,
 } from '/@/renderer/store';
 import { useShowFilesystemNameForAlbums } from '/@/renderer/store/settings.store';
@@ -110,7 +111,8 @@ export const FullScreenPlayerImage = () => {
 
     const currentSong = usePlayerSong();
     const { nextSong } = usePlayerData();
-    const { blurExplicitImages, playerItems } = useGeneralSettings();
+    const blurExplicitImages = useBlurExplicitImages();
+    const playerItems = usePlayerItems();
     const useFsAlbumName = useShowFilesystemNameForAlbums();
     const albumDisplayName =
         (useFsAlbumName ? albumFolderNameFromSongPath(currentSong?.path) : null) ||

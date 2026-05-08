@@ -23,8 +23,8 @@ import {
 import {
     useAppStore,
     useAppStoreActions,
+    useBlurExplicitImages,
     useFullScreenPlayerStore,
-    useGeneralSettings,
     usePlayerSong,
     useSetFullScreenPlayerStore,
 } from '/@/renderer/store';
@@ -163,7 +163,7 @@ const SidebarImage = () => {
     const currentSong = usePlayerSong();
     const isRadioActive = useIsRadioActive();
     const { currentStationArt, isPlaying: isRadioPlaying } = useRadioPlayer();
-    const { blurExplicitImages } = useGeneralSettings();
+    const blurExplicitImages = useBlurExplicitImages();
 
     const imageUrl = useItemImageUrl({
         id: currentSong?.imageId || undefined,
