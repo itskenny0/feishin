@@ -2737,6 +2737,12 @@ export const usePlayerbarOpenDrawer = () =>
 
 export const useShowRatings = () => useSettingsStore((state) => state.general.showRatings, shallow);
 
+export const useBlurExplicitImages = () =>
+    useSettingsStore((state) => state.general.blurExplicitImages, shallow);
+
+export const useEnableGridMultiSelect = () =>
+    useSettingsStore((state) => state.general.enableGridMultiSelect, shallow);
+
 export const useArtistRadioCount = () =>
     useSettingsStore((state) => state.general.artistRadioCount, shallow);
 
