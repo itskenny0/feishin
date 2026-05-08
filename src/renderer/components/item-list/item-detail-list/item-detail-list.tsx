@@ -1318,11 +1318,26 @@ export const ItemDetailList = ({
 
     const internalState = useItemListState(getDataFn, extractRowIdSong);
 
-    const tableConfig = useSettingsStore((state) => state.lists[listKey]?.detail);
+    const rawColumns = useSettingsStore((state) => state.lists[listKey]?.detail?.columns);
+    const trackTableSize = useSettingsStore(
+        (state) => state.lists[listKey]?.detail?.size ?? 'default',
+    );
+    const enableRowHoverHighlight = useSettingsStore(
+        (state) => state.lists[listKey]?.detail?.enableRowHoverHighlight ?? true,
+    );
+    const enableAlternateRowColors = useSettingsStore(
+        (state) => state.lists[listKey]?.detail?.enableAlternateRowColors ?? false,
+    );
+    const enableHorizontalBorders = useSettingsStore(
+        (state) => state.lists[listKey]?.detail?.enableHorizontalBorders ?? false,
+    );
+    const enableVerticalBorders = useSettingsStore(
+        (state) => state.lists[listKey]?.detail?.enableVerticalBorders ?? false,
+    );
+
     const trackColumns = useMemo((): ItemTableListColumnConfig[] => {
-        const raw = tableConfig?.columns;
-        if (raw && raw.length > 0) {
-            return parseTableColumns(raw);
+        if (rawColumns && rawColumns.length > 0) {
+            return parseTableColumns(rawColumns);
         }
         return pickTableColumns({
             columns: SONG_TABLE_COLUMNS,
@@ -1334,12 +1349,7 @@ export const ItemDetailList = ({
                 TableColumn.USER_RATING,
             ],
         });
-    }, [tableConfig?.columns]);
-    const trackTableSize = tableConfig?.size ?? 'default';
-    const enableRowHoverHighlight = tableConfig?.enableRowHoverHighlight ?? true;
-    const enableAlternateRowColors = tableConfig?.enableAlternateRowColors ?? false;
-    const enableHorizontalBorders = tableConfig?.enableHorizontalBorders ?? false;
-    const enableVerticalBorders = tableConfig?.enableVerticalBorders ?? false;
+    }, [rawColumns]);
 
     const columnWidthPercents = useMemo(() => {
         const total = trackColumns.reduce((sum, c) => sum + c.width, 0);
