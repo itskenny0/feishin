@@ -504,6 +504,7 @@ export const GeneralSettingsSchema = z.object({
     showLyricsInSidebar: z.boolean(),
     showRatings: z.boolean(),
     showVisualizerInSidebar: z.boolean(),
+    sidebarBottomSection: z.enum(['playlists', 'favoriteAlbums', 'none']),
     sidebarCollapsedNavigation: z.boolean(),
     sidebarCollapseShared: z.boolean(),
     sidebarItems: z.array(SidebarItemTypeSchema),
@@ -1185,6 +1186,7 @@ const initialState: SettingsState = {
         showLyricsInSidebar: true,
         showRatings: true,
         showVisualizerInSidebar: true,
+        sidebarBottomSection: 'playlists',
         sidebarCollapsedNavigation: true,
         sidebarCollapseShared: false,
         sidebarItems,
@@ -2549,10 +2551,21 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
+                if (version <= 34) {
+                    // Convert the legacy boolean toggle for the playlist sidebar
+                    // section into the new enum that lets users pick what the
+                    // bottom section shows. Existing users who had it disabled
+                    // get 'none' so the section stays hidden.
+                    if (state.general.sidebarBottomSection === undefined) {
+                        state.general.sidebarBottomSection =
+                            state.general.sidebarPlaylistList === false ? 'none' : 'playlists';
+                    }
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 33,
+            version: 34,
         },
     ),
 );
@@ -2720,8 +2733,8 @@ export const useSidebarPlaylistFolderTreeLineColor = () =>
 export const useSidebarPlaylistList = () =>
     useSettingsStore((state) => state.general.sidebarPlaylistList, shallow);
 
-export const useSidebarPlaylistMode = () =>
-    useSettingsStore((state) => state.general.sidebarPlaylistMode, shallow);
+export const useSidebarBottomSection = () =>
+    useSettingsStore((state) => state.general.sidebarBottomSection, shallow);
 
 export const useSidebarPlaylistSorting = () =>
     useSettingsStore((state) => state.general.sidebarPlaylistSorting, shallow);

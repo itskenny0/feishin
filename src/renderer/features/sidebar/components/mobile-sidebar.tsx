@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import styles from './mobile-sidebar.module.css';
 
 import { ActionBar } from '/@/renderer/features/sidebar/components/action-bar';
+import { SidebarFavoriteAlbumsList } from '/@/renderer/features/sidebar/components/sidebar-favorite-albums-list';
 import { SidebarIcon } from '/@/renderer/features/sidebar/components/sidebar-icon';
 import { SidebarItem } from '/@/renderer/features/sidebar/components/sidebar-item';
 import {
@@ -12,8 +13,8 @@ import {
 } from '/@/renderer/features/sidebar/components/sidebar-playlist-list';
 import {
     SidebarItemType,
+    useSidebarBottomSection,
     useSidebarItems,
-    useSidebarPlaylistList,
 } from '/@/renderer/store/settings.store';
 import { Accordion } from '/@/shared/components/accordion/accordion';
 import { Group } from '/@/shared/components/group/group';
@@ -22,7 +23,7 @@ import { Text } from '/@/shared/components/text/text';
 
 export const MobileSidebar = () => {
     const { t } = useTranslation();
-    const sidebarPlaylistList = useSidebarPlaylistList();
+    const sidebarBottomSection = useSidebarBottomSection();
 
     const translatedSidebarItemMap = useMemo(
         () => ({
@@ -93,12 +94,13 @@ export const MobileSidebar = () => {
                             })}
                         </Accordion.Panel>
                     </Accordion.Item>
-                    {sidebarPlaylistList && (
+                    {sidebarBottomSection === 'playlists' && (
                         <>
                             <SidebarPlaylistList />
                             <SidebarSharedPlaylistList />
                         </>
                     )}
+                    {sidebarBottomSection === 'favoriteAlbums' && <SidebarFavoriteAlbumsList />}
                 </Accordion>
             </ScrollArea>
         </div>

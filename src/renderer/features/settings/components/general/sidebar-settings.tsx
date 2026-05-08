@@ -7,8 +7,6 @@ import {
     SettingsSection,
 } from '/@/renderer/features/settings/components/settings-section';
 import { useGeneralSettings, useSettingsStoreActions } from '/@/renderer/store';
-import { ColorInput } from '/@/shared/components/color-input/color-input';
-import { NumberInput } from '/@/shared/components/number-input/number-input';
 import { Select } from '/@/shared/components/select/select';
 import { Switch } from '/@/shared/components/switch/switch';
 import { TextInput } from '/@/shared/components/text-input/text-input';
@@ -22,18 +20,16 @@ export const SidebarSettings = memo(() => {
     const settings = useGeneralSettings();
     const { setSettings } = useSettingsStoreActions();
 
-    const handleSetSidebarPlaylistFolders = (e: ChangeEvent<HTMLInputElement>) => {
+    const handleSetSidebarBottomSection = (value: null | string) => {
+        if (value !== 'playlists' && value !== 'favoriteAlbums' && value !== 'none') {
+            return;
+        }
         setSettings({
             general: {
-                sidebarPlaylistFolders: e.target.checked,
-            },
-        });
-    };
-
-    const handleSetSidebarPlaylistList = (e: ChangeEvent<HTMLInputElement>) => {
-        setSettings({
-            general: {
-                sidebarPlaylistList: e.target.checked,
+                sidebarBottomSection: value,
+                // Keep the legacy boolean in sync so older code paths and the
+                // mobile sidebar that still read it stay consistent.
+                sidebarPlaylistList: value === 'playlists',
             },
         });
     };
@@ -127,15 +123,35 @@ export const SidebarSettings = memo(() => {
     const options: SettingOption[] = [
         {
             control: (
-                <Switch
-                    checked={settings.sidebarPlaylistList}
-                    onChange={handleSetSidebarPlaylistList}
+                <Select
+                    data={[
+                        {
+                            label: t('setting.sidebarBottomSection_playlists', {
+                                postProcess: 'sentenceCase',
+                            }),
+                            value: 'playlists',
+                        },
+                        {
+                            label: t('setting.sidebarBottomSection_favoriteAlbums', {
+                                postProcess: 'sentenceCase',
+                            }),
+                            value: 'favoriteAlbums',
+                        },
+                        {
+                            label: t('setting.sidebarBottomSection_none', {
+                                postProcess: 'sentenceCase',
+                            }),
+                            value: 'none',
+                        },
+                    ]}
+                    onChange={handleSetSidebarBottomSection}
+                    value={settings.sidebarBottomSection}
                 />
             ),
-            description: t('setting.sidebarPlaylistList', {
+            description: t('setting.sidebarBottomSection', {
                 context: 'description',
             }),
-            title: t('setting.sidebarPlaylistList'),
+            title: t('setting.sidebarBottomSection', { postProcess: 'sentenceCase' }),
         },
         {
             control: (
