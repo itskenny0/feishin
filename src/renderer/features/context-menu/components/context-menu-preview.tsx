@@ -3,6 +3,10 @@ import { useTranslation } from 'react-i18next';
 import styles from './context-menu-preview.module.css';
 
 import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
+import {
+    useShowFilesystemNameForAlbums,
+    useShowFilesystemNameForFolders,
+} from '/@/renderer/store/settings.store';
 import { Icon } from '/@/shared/components/icon/icon';
 import { Text } from '/@/shared/components/text/text';
 import { LibraryItem } from '/@/shared/types/domain-types';
@@ -12,7 +16,7 @@ interface ContextMenuPreviewProps {
     itemType?: LibraryItem;
 }
 
-const getItemName = (item: unknown): string => {
+const getItemMetadataName = (item: unknown): string => {
     if (item && typeof item === 'object') {
         if ('name' in item && typeof item.name === 'string') {
             return item.name;
@@ -22,6 +26,30 @@ const getItemName = (item: unknown): string => {
         }
     }
     return 'Item';
+};
+
+const getItemPath = (item: unknown): null | string => {
+    if (
+        item &&
+        typeof item === 'object' &&
+        'path' in item &&
+        typeof item.path === 'string' &&
+        item.path
+    ) {
+        return item.path;
+    }
+    return null;
+};
+
+const filesystemNameFromPath = (path: string, isFolderItem: boolean): null | string => {
+    const segments = path.split(/[/\\]/).filter(Boolean);
+    if (segments.length === 0) return null;
+    // Songs end with the audio filename, so the containing folder is the
+    // segment before that. Albums and folders already point at the folder.
+    if (isFolderItem) {
+        return segments[segments.length - 1];
+    }
+    return segments[segments.length - 2] ?? null;
 };
 
 const getItemImage = (item: unknown): null | string => {
@@ -39,9 +67,20 @@ const getItemImage = (item: unknown): null | string => {
 
 export const ContextMenuPreview = ({ items, itemType }: ContextMenuPreviewProps) => {
     const { t } = useTranslation();
+    const useFsForAlbums = useShowFilesystemNameForAlbums();
+    const useFsForFolders = useShowFilesystemNameForFolders();
     const itemCount = items.length;
     const firstItem = items[0];
-    const itemName = firstItem ? getItemName(firstItem) : 'Item';
+
+    const metadataName = firstItem ? getItemMetadataName(firstItem) : 'Item';
+    const path = firstItem ? getItemPath(firstItem) : null;
+    const useFsName =
+        (itemType === LibraryItem.ALBUM && useFsForAlbums) ||
+        (itemType === LibraryItem.FOLDER && useFsForFolders);
+    const isFolderItem = itemType === LibraryItem.ALBUM || itemType === LibraryItem.FOLDER;
+    const filesystemName = useFsName && path ? filesystemNameFromPath(path, isFolderItem) : null;
+    const itemName = filesystemName || metadataName;
+
     const itemImage = firstItem ? getItemImage(firstItem) : null;
     const isMultiple = itemCount > 1;
 
