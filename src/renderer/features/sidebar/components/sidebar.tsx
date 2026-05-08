@@ -13,6 +13,7 @@ import {
 } from '/@/renderer/features/radio/hooks/use-radio-player';
 import { ActionBar } from '/@/renderer/features/sidebar/components/action-bar';
 import { SidebarCollectionList } from '/@/renderer/features/sidebar/components/sidebar-collection-list';
+import { SidebarFavoriteAlbumsList } from '/@/renderer/features/sidebar/components/sidebar-favorite-albums-list';
 import { SidebarIcon } from '/@/renderer/features/sidebar/components/sidebar-icon';
 import { SidebarItem } from '/@/renderer/features/sidebar/components/sidebar-item';
 import {
@@ -29,8 +30,8 @@ import {
 } from '/@/renderer/store';
 import {
     SidebarItemType,
+    useSidebarBottomSection,
     useSidebarItems,
-    useSidebarPlaylistList,
     useWindowSettings,
 } from '/@/renderer/store/settings.store';
 import { Accordion } from '/@/shared/components/accordion/accordion';
@@ -48,7 +49,7 @@ import { Platform } from '/@/shared/types/types';
 export const Sidebar = () => {
     const { t } = useTranslation();
 
-    const sidebarPlaylistList = useSidebarPlaylistList();
+    const sidebarBottomSection = useSidebarBottomSection();
 
     const translatedSidebarItemMap = useMemo(
         () => ({
@@ -117,7 +118,7 @@ export const Sidebar = () => {
                         item: styles.accordionItem,
                         root: styles.accordionRoot,
                     }}
-                    defaultValue={['library', 'collections', 'playlists']}
+                    defaultValue={['library', 'collections', 'playlists', 'favorite-albums']}
                     multiple
                 >
                     <Accordion.Item value="library">
@@ -142,12 +143,13 @@ export const Sidebar = () => {
                         </Accordion.Panel>
                     </Accordion.Item>
                     <SidebarCollectionList />
-                    {sidebarPlaylistList && (
+                    {sidebarBottomSection === 'playlists' && (
                         <>
                             <SidebarPlaylistList />
                             <SidebarSharedPlaylistList />
                         </>
                     )}
+                    {sidebarBottomSection === 'favoriteAlbums' && <SidebarFavoriteAlbumsList />}
                 </Accordion>
             </ScrollArea>
             <AnimatePresence initial={false} mode="popLayout">
