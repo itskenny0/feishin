@@ -9,18 +9,26 @@ import styles from './folder-tree-browser.module.css';
 import { ContextMenuController } from '/@/renderer/features/context-menu/context-menu-controller';
 import { useFolderListFilters } from '/@/renderer/features/folders/hooks/use-folder-list-filters';
 import { useDragDrop } from '/@/renderer/hooks/use-drag-drop';
+import { useShowFilesystemNameForFolders } from '/@/renderer/store/settings.store';
 import { Icon } from '/@/shared/components/icon/icon';
 import { Tooltip } from '/@/shared/components/tooltip/tooltip';
 import { useMergedRef } from '/@/shared/hooks/use-merged-ref';
 import { Folder, LibraryItem } from '/@/shared/types/domain-types';
 import { DragOperation, DragTarget } from '/@/shared/types/drag-and-drop';
 
+const folderFilesystemName = (path?: null | string): null | string => {
+    if (!path) return null;
+    const segments = path.split(/[/\\]/).filter(Boolean);
+    if (segments.length === 0) return null;
+    return segments[segments.length - 1];
+};
+
 interface FlattenedNode {
     depth: number;
     folder: Folder;
     hasChildren: boolean;
     isExpanded: boolean;
-    path: Array<{ id: string; name: string }>;
+    path: Array<{ id: string; name: string; path?: null | string }>;
 }
 
 interface TreeNode {
@@ -143,10 +151,13 @@ export const FolderTreeBrowser = ({ fetchFolder, rootFolderQuery }: FolderTreeBr
         const traverse = (
             folder: Folder,
             depth: number,
-            path: Array<{ id: string; name: string }> = [],
+            path: Array<{ id: string; name: string; path?: null | string }> = [],
         ) => {
             const node = buildTree(folder, depth);
-            const currentPath = [...path, { id: folder.id, name: folder.name }];
+            const currentPath = [
+                ...path,
+                { id: folder.id, name: folder.name, path: folder.path ?? null },
+            ];
             const isRoot = folder.id === '0';
 
             // Skip the root folder (id: '0')
@@ -234,7 +245,7 @@ export const FolderTreeBrowser = ({ fetchFolder, rootFolderQuery }: FolderTreeBr
     const handleNodeClick = useCallback(
         (
             folder: Folder,
-            path: Array<{ id: string; name: string }>,
+            path: Array<{ id: string; name: string; path?: null | string }>,
             isExpanded: boolean,
             isCurrentFolder: boolean,
         ) => {
@@ -444,13 +455,14 @@ const RowComponent = ({
     data: FlattenedNode[];
     handleNodeClick: (
         folder: Folder,
-        path: Array<{ id: string; name: string }>,
+        path: Array<{ id: string; name: string; path?: null | string }>,
         isExpanded: boolean,
         isCurrentFolder: boolean,
     ) => void;
     toggleNode: (folderId: string, hasChildren: boolean, folder?: Folder) => void;
 }>) => {
     const item = data[index];
+    const useFsName = useShowFilesystemNameForFolders();
     const folderNameRef = useRef<HTMLSpanElement>(null);
     const folderIconRef = useRef<HTMLDivElement>(null);
     const expandIconRef = useRef<HTMLDivElement | null>(null);
@@ -540,12 +552,16 @@ const RowComponent = ({
         });
     };
 
+    const displayName = useFsName
+        ? folderFilesystemName(item.folder.path) || item.folder.name
+        : item.folder.name;
+
     return (
         <Tooltip
             classNames={{
                 tooltip: styles.tooltip,
             }}
-            label={item.folder.name}
+            label={displayName}
             offset={tooltipOffset}
             openDelay={0}
             position="right"
@@ -583,7 +599,7 @@ const RowComponent = ({
                         <Icon className={styles.folderIcon} icon="folder" size="md" />
                     </div>
                     <span className={styles.folderName} ref={folderNameRef}>
-                        {item.folder.name}
+                        {displayName}
                     </span>
                 </div>
             </div>

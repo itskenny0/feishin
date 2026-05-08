@@ -23,6 +23,14 @@ import { PlayButtonGroup } from '/@/renderer/features/shared/components/play-but
 import { useFastAverageColor } from '/@/renderer/hooks';
 import { useDragDrop } from '/@/renderer/hooks/use-drag-drop';
 import { useSetGlobalExpanded } from '/@/renderer/store';
+import { useShowFilesystemNameForAlbums } from '/@/renderer/store/settings.store';
+
+const filesystemNameFromAlbumPath = (path?: null | string): null | string => {
+    if (!path) return null;
+    const segments = path.split(/[/\\]/).filter(Boolean);
+    if (segments.length === 0) return null;
+    return segments[segments.length - 1];
+};
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Group } from '/@/shared/components/group/group';
 import { ScrollArea } from '/@/shared/components/scroll-area/scroll-area';
@@ -41,6 +49,7 @@ export interface ExpandedAlbumData {
     id: string;
     imageId: null | string;
     name: string;
+    path?: null | string;
     songs?: null | Song[];
 }
 
@@ -221,6 +230,9 @@ interface ExpandedAlbumListItemContentProps {
 
 const ExpandedAlbumListItemContent = ({ albumData }: ExpandedAlbumListItemContentProps) => {
     const player = usePlayer();
+    const useFsName = useShowFilesystemNameForAlbums();
+    const albumDisplayName =
+        (useFsName ? filesystemNameFromAlbumPath(albumData.path) : null) || albumData.name;
 
     const imageUrl = useItemImageUrl({
         id: albumData.imageId || undefined,
@@ -267,7 +279,7 @@ const ExpandedAlbumListItemContent = ({ albumData }: ExpandedAlbumListItemConten
                                 fw={700}
                                 order={4}
                             >
-                                {albumData.name}
+                                {albumDisplayName}
                             </TextTitle>
                             <CloseExpandedButton />
                         </div>
@@ -330,6 +342,7 @@ const ExpandedAlbumListItemWithFetch = ({ item }: { item: ItemListStateItem }) =
         id: item.id,
         imageId: item.imageId ?? data?.imageId ?? null,
         name: data?.name ?? '',
+        path: data?.path ?? null,
         songs: data?.songs ?? null,
     };
 
@@ -341,6 +354,7 @@ function itemToExpandedAlbumData(
         _playlistSongs?: Song[];
         albumArtists?: RelatedArtist[];
         name?: string;
+        path?: null | string;
     },
 ): ExpandedAlbumData | null {
     const songs =
@@ -352,6 +366,7 @@ function itemToExpandedAlbumData(
         id: item.id,
         imageId: (item as { imageId?: null | string }).imageId ?? null,
         name: (item as { name?: string }).name ?? '',
+        path: (item as { path?: null | string }).path ?? null,
         songs,
     };
 }

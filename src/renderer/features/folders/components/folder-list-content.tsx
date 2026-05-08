@@ -126,7 +126,7 @@ export const FolderListView = ({ folderQuery }: FolderListViewProps) => {
 
                 if ((item as unknown as Folder)._itemType === LibraryItem.FOLDER) {
                     const folder = item as unknown as Folder;
-                    return navigateToFolder(folder.id, folder.name);
+                    return navigateToFolder(folder.id, folder.name, folder.path);
                 }
 
                 const playType = (meta?.playType as Play) || Play.NOW;

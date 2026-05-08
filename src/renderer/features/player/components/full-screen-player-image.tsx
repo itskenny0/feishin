@@ -18,6 +18,14 @@ import {
     usePlayerData,
     usePlayerSong,
 } from '/@/renderer/store';
+import { useShowFilesystemNameForAlbums } from '/@/renderer/store/settings.store';
+
+const albumFolderNameFromSongPath = (path?: null | string): null | string => {
+    if (!path) return null;
+    const segments = path.split(/[/\\]/).filter(Boolean);
+    if (segments.length < 2) return null;
+    return segments[segments.length - 2] ?? null;
+};
 import { Badge } from '/@/shared/components/badge/badge';
 import { Center } from '/@/shared/components/center/center';
 import { Flex } from '/@/shared/components/flex/flex';
@@ -103,6 +111,10 @@ export const FullScreenPlayerImage = () => {
     const currentSong = usePlayerSong();
     const { nextSong } = usePlayerData();
     const { blurExplicitImages, playerItems } = useGeneralSettings();
+    const useFsAlbumName = useShowFilesystemNameForAlbums();
+    const albumDisplayName =
+        (useFsAlbumName ? albumFolderNameFromSongPath(currentSong?.path) : null) ||
+        currentSong?.album;
 
     const isPlayingRadio = isRadioActive && isRadioPlaying;
 
@@ -311,7 +323,7 @@ export const FullScreenPlayerImage = () => {
                         })}
                         w="100%"
                     >
-                        {currentSong?.album}
+                        {albumDisplayName}
                     </Text>
                 )}
                 {!isPlayingRadio && (
