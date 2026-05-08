@@ -24,10 +24,10 @@ interface AlbumListPaginatedDetailProps extends ItemListComponentProps<AlbumList
 
 export const AlbumListPaginatedDetail = ({
     enableHeader = true,
-    itemsPerPage = 100,
+    itemsPerPage = 50,
     query = {
-        sortBy: AlbumListSort.NAME,
-        sortOrder: SortOrder.ASC,
+        sortBy: AlbumListSort.RECENTLY_ADDED,
+        sortOrder: SortOrder.DESC,
     },
     serverId,
 }: AlbumListPaginatedDetailProps) => {
