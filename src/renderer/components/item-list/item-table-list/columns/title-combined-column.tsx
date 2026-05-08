@@ -20,11 +20,19 @@ import {
     PlayTooltip,
 } from '/@/renderer/features/shared/components/play-button-group';
 import { usePlayButtonBehavior } from '/@/renderer/store';
+import { useShowFilesystemNameForFolders } from '/@/renderer/store/settings.store';
 import { ExplicitIndicator } from '/@/shared/components/explicit-indicator/explicit-indicator';
 import { Icon } from '/@/shared/components/icon/icon';
 import { Text } from '/@/shared/components/text/text';
 import { Folder, LibraryItem, QueueSong } from '/@/shared/types/domain-types';
 import { Play } from '/@/shared/types/types';
+
+const folderFilesystemName = (path?: null | string): null | string => {
+    if (!path) return null;
+    const segments = path.split(/[/\\]/).filter(Boolean);
+    if (segments.length === 0) return null;
+    return segments[segments.length - 1];
+};
 
 export const DefaultTitleCombinedColumn = (props: ItemTableListInnerColumn) => {
     const rowItem = props.getRowItem?.(props.rowIndex) ?? (props.data as any[])[props.rowIndex];
@@ -183,6 +191,7 @@ export const QueueSongTitleCombinedColumn = (props: ItemTableListInnerColumn) =>
     const playButtonBehavior = usePlayButtonBehavior();
     const [isHovered, setIsHovered] = useState(false);
     const isActive = useIsActiveRow(song?.id, song?._uniqueId);
+    const useFsForFolders = useShowFilesystemNameForFolders();
 
     const handlePlay = (playType: Play, event: React.MouseEvent<HTMLButtonElement>) => {
         if (!item) {
@@ -356,7 +365,9 @@ export const QueueSongTitleCombinedColumn = (props: ItemTableListInnerColumn) =>
               }
             : {};
 
-        const title = (rowItem as unknown as Folder)?.name;
+        const folderItem = rowItem as unknown as Folder;
+        const fsName = useFsForFolders ? folderFilesystemName(folderItem?.path) : null;
+        const title = fsName || folderItem?.name;
 
         return (
             <TableColumnContainer
