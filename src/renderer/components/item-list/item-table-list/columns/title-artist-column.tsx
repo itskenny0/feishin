@@ -13,10 +13,18 @@ import {
 } from '/@/renderer/components/item-list/item-table-list/item-table-list-column';
 import { useIsActiveRow } from '/@/renderer/components/item-list/item-table-list/item-table-list-context';
 import { JoinedArtists } from '/@/renderer/features/albums/components/joined-artists';
+import { useShowFilesystemNameForFolders } from '/@/renderer/store/settings.store';
 import { ExplicitIndicator } from '/@/shared/components/explicit-indicator/explicit-indicator';
 import { Icon } from '/@/shared/components/icon/icon';
 import { Text } from '/@/shared/components/text/text';
 import { Folder, LibraryItem, QueueSong } from '/@/shared/types/domain-types';
+
+const folderFilesystemName = (path?: null | string): null | string => {
+    if (!path) return null;
+    const segments = path.split(/[/\\]/).filter(Boolean);
+    if (segments.length === 0) return null;
+    return segments[segments.length - 1];
+};
 
 export const DefaultTitleArtistColumn = (props: ItemTableListInnerColumn) => {
     const rowItem = props.getRowItem?.(props.rowIndex) ?? (props.data as any[])[props.rowIndex];
@@ -84,6 +92,7 @@ export const QueueSongTitleArtistColumn = (props: ItemTableListInnerColumn) => {
     const align = props.columns[props.columnIndex]?.align || 'start';
     const alignClass =
         align === 'center' ? 'align-center' : align === 'end' ? 'align-right' : 'align-left';
+    const useFsForFolders = useShowFilesystemNameForFolders();
 
     if (row && 'name' in row && 'artists' in row) {
         const rowHeight = props.getRowHeight(props.rowIndex, props);
@@ -167,7 +176,9 @@ export const QueueSongTitleArtistColumn = (props: ItemTableListInnerColumn) => {
               }
             : {};
 
-        const title = (rowItem as unknown as Folder)?.name;
+        const folderItem = rowItem as unknown as Folder;
+        const fsName = useFsForFolders ? folderFilesystemName(folderItem?.path) : null;
+        const title = fsName || folderItem?.name;
 
         return (
             <TableColumnContainer
