@@ -1279,12 +1279,12 @@ const initialState: SettingsState = {
                     columns: SONG_TABLE_COLUMNS,
                     columnWidths: {
                         [TableColumn.DURATION]: 100,
+                        [TableColumn.IMAGE]: 50,
                         [TableColumn.TITLE]: 400,
-                        [TableColumn.TRACK_NUMBER]: 50,
                         [TableColumn.USER_FAVORITE]: 60,
                     },
                     enabledColumns: [
-                        TableColumn.TRACK_NUMBER,
+                        TableColumn.IMAGE,
                         TableColumn.TITLE,
                         TableColumn.DURATION,
                         TableColumn.USER_FAVORITE,
@@ -2510,10 +2510,49 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
+                if (version <= 33) {
+                    // Replace Track # with Image as the leading column for the
+                    // album detail song table. Jellyfin libraries that lack
+                    // track-number tags would otherwise leave a column rendering
+                    // an endless skeleton.
+                    const albumDetailColumns =
+                        state.lists?.[ItemListKey.ALBUM_DETAIL]?.table?.columns;
+                    if (Array.isArray(albumDetailColumns)) {
+                        const existingTrackIdx = albumDetailColumns.findIndex(
+                            (c) => c.id === TableColumn.TRACK_NUMBER,
+                        );
+                        if (existingTrackIdx !== -1) {
+                            albumDetailColumns[existingTrackIdx].isEnabled = false;
+                        }
+                        const existingImageIdx = albumDetailColumns.findIndex(
+                            (c) => c.id === TableColumn.IMAGE,
+                        );
+                        const imageColumn =
+                            existingImageIdx !== -1
+                                ? {
+                                      ...albumDetailColumns[existingImageIdx],
+                                      isEnabled: true,
+                                      width: 50,
+                                  }
+                                : {
+                                      align: 'center' as const,
+                                      autoSize: false,
+                                      id: TableColumn.IMAGE,
+                                      isEnabled: true,
+                                      pinned: null,
+                                      width: 50,
+                                  };
+                        if (existingImageIdx !== -1) {
+                            albumDetailColumns.splice(existingImageIdx, 1);
+                        }
+                        albumDetailColumns.unshift(imageColumn);
+                    }
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 32,
+            version: 33,
         },
     ),
 );
