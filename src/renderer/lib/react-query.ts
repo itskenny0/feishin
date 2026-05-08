@@ -24,10 +24,13 @@ const queryConfig: DefaultOptions = {
         retry: process.env.NODE_ENV === 'production' ? 3 : false,
     },
     queries: {
-        gcTime: 1000 * 20, // 20 seconds
+        // Cache list/detail responses long enough that re-entering a view
+        // doesn't refetch. Real-time queries (e.g. now-playing) override
+        // staleTime locally where shorter freshness is required.
+        gcTime: 1000 * 60 * 30, // 30 minutes
         refetchOnWindowFocus: false,
         retry: process.env.NODE_ENV === 'production',
-        staleTime: 1000 * 10, // 10 seconds
+        staleTime: 1000 * 60 * 5, // 5 minutes
         throwOnError: (error: any) => {
             return error?.response?.status >= 500;
         },
