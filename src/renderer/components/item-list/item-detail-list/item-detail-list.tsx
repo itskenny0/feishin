@@ -15,6 +15,7 @@ import throttle from 'lodash/throttle';
 import { AnimatePresence } from 'motion/react';
 import { useOverlayScrollbars } from 'overlayscrollbars-react';
 import {
+    createElement,
     Fragment,
     memo,
     type ReactElement,
@@ -158,6 +159,86 @@ interface TrackRowProps {
 
 const textAlignFromAlign = (align: ItemTableListColumnConfig['align']) =>
     align === 'start' ? 'left' : align === 'end' ? 'right' : 'center';
+
+interface TrackCellProps {
+    col: ItemTableListColumnConfig;
+    colIndex: number;
+    columnsLength: number;
+    columnWidthPercent: number;
+    controls?: ItemControls;
+    enableVerticalBorders: boolean;
+    internalState: ItemListStateActions;
+    isMutatingFavorite: boolean;
+    isRowHovered: boolean;
+    isSongsLoading?: boolean;
+    rowIndex: number;
+    size: 'compact' | 'default' | 'large';
+    song: Song;
+}
+
+const TrackCell = memo(
+    ({
+        col,
+        colIndex,
+        columnsLength,
+        columnWidthPercent,
+        controls,
+        enableVerticalBorders,
+        internalState,
+        isMutatingFavorite,
+        isRowHovered,
+        isSongsLoading,
+        rowIndex,
+        size,
+        song,
+    }: TrackCellProps) => {
+        const { fixedWidth, isFixedColumn } = getTrackColumnFixed(col.id);
+        const style: React.CSSProperties = {
+            flex: isFixedColumn ? `0 0 ${fixedWidth}px` : `${columnWidthPercent} 1 0`,
+            minWidth: isFixedColumn ? fixedWidth : 0,
+            textAlign: textAlignFromAlign(col.align),
+        };
+        const isTitleColumn = col.id === TableColumn.TITLE;
+        const isImageColumn = col.id === TableColumn.IMAGE;
+        const isIconActionColumn = isNoHorizontalPaddingColumn(col.id);
+        const showHoverContent = shouldShowHoverOnlyColumnContent(col.id, isRowHovered, song);
+
+        const content = isSongsLoading
+            ? null
+            : showHoverContent
+              ? createElement(getDetailListCellComponent(col.id), {
+                    columnId: col.id,
+                    controls,
+                    internalState,
+                    isMutatingFavorite,
+                    isRowHovered,
+                    rowIndex,
+                    size,
+                    song,
+                })
+              : ' ';
+
+        const isLastColumn = colIndex === columnsLength - 1;
+
+        return (
+            <div
+                className={clsx(styles.trackCell, {
+                    [styles.trackCellImage]: isImageColumn,
+                    [styles.trackCellMuted]: !isTitleColumn,
+                    [styles.trackCellNoHPadding]: isIconActionColumn,
+                    [styles.trackCellVerticalBorderVisible]: enableVerticalBorders && !isLastColumn,
+                    [styles.trackCellWithVerticalBorder]: !isLastColumn,
+                })}
+                role="cell"
+                style={style}
+            >
+                {content}
+            </div>
+        );
+    },
+);
+
+TrackCell.displayName = 'TrackCell';
 
 const TrackRow = memo(
     ({
@@ -353,58 +434,24 @@ const TrackRow = memo(
                 ref={dragRef ?? undefined}
                 role="row"
             >
-                {columns.map((col, colIndex) => {
-                    const percent = columnWidthPercents[colIndex] ?? 0;
-                    const { fixedWidth, isFixedColumn } = getTrackColumnFixed(col.id);
-                    const style: React.CSSProperties = {
-                        flex: isFixedColumn ? `0 0 ${fixedWidth}px` : `${percent} 1 0`,
-                        minWidth: isFixedColumn ? fixedWidth : 0,
-                        textAlign: textAlignFromAlign(col.align),
-                    };
-                    const CellComponent = getDetailListCellComponent(col.id);
-                    const isTitleColumn = col.id === TableColumn.TITLE;
-                    const isImageColumn = col.id === TableColumn.IMAGE;
-                    const isIconActionColumn = isNoHorizontalPaddingColumn(col.id);
-                    const showHoverContent = shouldShowHoverOnlyColumnContent(
-                        col.id,
-                        isRowHovered,
-                        song,
-                    );
-
-                    const content = isSongsLoading ? null : showHoverContent ? (
-                        <CellComponent
-                            columnId={col.id}
-                            controls={controls}
-                            internalState={internalState}
-                            isMutatingFavorite={isMutatingFavorite}
-                            isRowHovered={isRowHovered}
-                            rowIndex={rowIndex}
-                            size={size}
-                            song={song}
-                        />
-                    ) : (
-                        '\u00A0'
-                    );
-
-                    const isLastColumn = colIndex === columns.length - 1;
-                    return (
-                        <div
-                            className={clsx(styles.trackCell, {
-                                [styles.trackCellImage]: isImageColumn,
-                                [styles.trackCellMuted]: !isTitleColumn,
-                                [styles.trackCellNoHPadding]: isIconActionColumn,
-                                [styles.trackCellVerticalBorderVisible]:
-                                    enableVerticalBorders && !isLastColumn,
-                                [styles.trackCellWithVerticalBorder]: !isLastColumn,
-                            })}
-                            key={col.id}
-                            role="cell"
-                            style={style}
-                        >
-                            {content}
-                        </div>
-                    );
-                })}
+                {columns.map((col, colIndex) => (
+                    <TrackCell
+                        col={col}
+                        colIndex={colIndex}
+                        columnsLength={columns.length}
+                        columnWidthPercent={columnWidthPercents[colIndex] ?? 0}
+                        controls={controls}
+                        enableVerticalBorders={enableVerticalBorders}
+                        internalState={internalState}
+                        isMutatingFavorite={isMutatingFavorite}
+                        isRowHovered={isRowHovered}
+                        isSongsLoading={isSongsLoading}
+                        key={col.id}
+                        rowIndex={rowIndex}
+                        size={size}
+                        song={song}
+                    />
+                ))}
             </div>
         );
     },
