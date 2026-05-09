@@ -396,10 +396,15 @@ export const JellyfinController: InternalControllerEndpoint = {
                 userId: apiClientProps.server.userId,
             },
             query: {
+                AlbumIds: query.id,
+                EnableUserData: true,
                 Fields: JF_FIELDS.SONG,
                 IncludeItemTypes: 'Audio',
-                ParentId: query.id,
+                Recursive: true,
                 SortBy: 'ParentIndexNumber,IndexNumber,SortName',
+                SortOrder: JFSortOrder.ASC,
+                StartIndex: 0,
+                UserId: apiClientProps.server.userId,
             },
         });
 
@@ -945,6 +950,7 @@ export const JellyfinController: InternalControllerEndpoint = {
                 Fields: JF_FIELDS.PLAYLIST_LIST,
                 IncludeItemTypes: 'Playlist',
                 Limit: query.limit,
+                MediaTypes: 'Audio',
                 Recursive: true,
                 SearchTerm: query.searchTerm,
                 SortBy: playlistListSortMap.jellyfin[query.sortBy],
