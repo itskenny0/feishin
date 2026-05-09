@@ -68,6 +68,7 @@ import { songsQueries } from '/@/renderer/features/songs/api/songs-api';
 import { useDragDrop } from '/@/renderer/hooks/use-drag-drop';
 import { AppRoute } from '/@/renderer/router/routes';
 import { useSettingsStore, useShowRatings } from '/@/renderer/store';
+import { useShowFilesystemNameForAlbums } from '/@/renderer/store/settings.store';
 import { formatDurationString, formatPartialIsoDateUTC } from '/@/renderer/utils';
 import { SEPARATOR_STRING } from '/@/shared/api/utils';
 import { ExplicitIndicator } from '/@/shared/components/explicit-indicator/explicit-indicator';
@@ -82,6 +83,13 @@ import { ItemListKey, Play, TableColumn } from '/@/shared/types/types';
 const DEFAULT_ROW_HEIGHT = 300;
 
 const SKELETON_TRACK_ROW_COUNT = 6;
+
+const albumFolderNameFromPath = (path?: null | string): null | string => {
+    if (!path) return null;
+    const segments = path.split(/[/\\]/).filter(Boolean);
+    if (segments.length === 0) return null;
+    return segments[segments.length - 1];
+};
 
 interface ItemDetailListProps {
     currentPage?: number;
@@ -1414,13 +1422,20 @@ export const ItemDetailList = ({
     const headerRafRef = useRef<null | number>(null);
     const pendingHeaderNameRef = useRef<null | string>(null);
 
+    const useFilesystemNameForAlbums = useShowFilesystemNameForAlbums();
+    const useFilesystemNameRef = useRef(useFilesystemNameForAlbums);
+    useFilesystemNameRef.current = useFilesystemNameForAlbums;
+
     const handleRowsRendered = useCallback(
         (range: { startIndex: number; stopIndex: number }) => {
             lastVisibleStartIndexRef.current = range.startIndex;
             const album = (
                 getItem ? getItem(range.startIndex) : dataSourceRef.current[range.startIndex]
             ) as Album | undefined;
-            const name = album?.name ?? '';
+            const fsName = useFilesystemNameRef.current
+                ? albumFolderNameFromPath(album?.path)
+                : null;
+            const name = fsName || album?.name || '';
             const nameToShow = name || lastHeaderNameRef.current;
             if (name) {
                 lastHeaderNameRef.current = name;
