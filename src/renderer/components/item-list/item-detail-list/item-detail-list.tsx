@@ -1411,24 +1411,36 @@ export const ItemDetailList = ({
     dataSourceRef.current = dataSource;
     const lastHeaderNameRef = useRef('');
 
+    const headerRafRef = useRef<null | number>(null);
+    const pendingHeaderNameRef = useRef<null | string>(null);
+
     const handleRowsRendered = useCallback(
         (range: { startIndex: number; stopIndex: number }) => {
             lastVisibleStartIndexRef.current = range.startIndex;
-            const el = headerLeftRef.current;
-            if (el) {
-                const album = (
-                    getItem ? getItem(range.startIndex) : dataSourceRef.current[range.startIndex]
-                ) as Album | undefined;
-                const name = album?.name ?? '';
-                if (name) {
-                    lastHeaderNameRef.current = name;
-                    el.textContent = name;
-                    el.setAttribute('data-title', name);
-                    el.title = name;
-                } else {
-                    el.textContent = lastHeaderNameRef.current;
-                    el.setAttribute('data-title', lastHeaderNameRef.current);
-                    el.title = lastHeaderNameRef.current;
+            const album = (
+                getItem ? getItem(range.startIndex) : dataSourceRef.current[range.startIndex]
+            ) as Album | undefined;
+            const name = album?.name ?? '';
+            const nameToShow = name || lastHeaderNameRef.current;
+            if (name) {
+                lastHeaderNameRef.current = name;
+            }
+            // Coalesce DOM writes onto the next paint frame: scroll events
+            // can fire many times per frame and we only need the latest
+            // header value to land before the browser paints.
+            if (pendingHeaderNameRef.current !== nameToShow) {
+                pendingHeaderNameRef.current = nameToShow;
+                if (headerRafRef.current === null) {
+                    headerRafRef.current = requestAnimationFrame(() => {
+                        headerRafRef.current = null;
+                        const el = headerLeftRef.current;
+                        const nextName = pendingHeaderNameRef.current ?? '';
+                        if (el) {
+                            el.textContent = nextName;
+                            el.setAttribute('data-title', nextName);
+                            el.title = nextName;
+                        }
+                    });
                 }
             }
             if (onRangeChanged) {
@@ -1450,6 +1462,10 @@ export const ItemDetailList = ({
     useEffect(() => {
         return () => {
             throttledHandleRowsRendered.cancel();
+            if (headerRafRef.current !== null) {
+                cancelAnimationFrame(headerRafRef.current);
+                headerRafRef.current = null;
+            }
         };
     }, [throttledHandleRowsRendered]);
 
