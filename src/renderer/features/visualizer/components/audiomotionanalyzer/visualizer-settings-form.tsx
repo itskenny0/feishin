@@ -1,6 +1,8 @@
+import type { TFunction } from 'i18next';
+
 import { nanoid } from 'nanoid';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { type TFunction, useTranslation } from 'react-i18next';
+import { useTranslation } from 'react-i18next';
 
 import styles from './visualizer-settings-form.module.css';
 
