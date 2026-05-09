@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { createElement, useEffect, useRef } from 'react';
 
+import { queryKeys } from '/@/renderer/api/query-keys';
 import { lyricsQueries } from '/@/renderer/features/lyrics/api/lyrics-api';
 import {
     usePlayerStoreBase,
@@ -15,6 +16,7 @@ const useUpcomingLyricsPrefetch = () => {
     const enabled = usePrefetchUpcomingLyrics();
     const count = usePrefetchUpcomingLyricsCount();
     const inflightRef = useRef<Set<string>>(new Set());
+    const prefetchedRef = useRef<Set<string>>(new Set());
 
     useEffect(() => {
         if (!enabled || count <= 0) return;
@@ -24,6 +26,20 @@ const useUpcomingLyricsPrefetch = () => {
                 if (!song?.id || !song?._serverId) continue;
                 const cacheKey = `${song._serverId}:${song.id}`;
                 if (inflightRef.current.has(cacheKey)) continue;
+                if (prefetchedRef.current.has(cacheKey)) continue;
+
+                // Skip when tanstack-query already has data for this song.
+                // prefetchQuery is supposed to be a no-op when the data is
+                // fresh, but we want to be defensive: even the call costs
+                // a microtask and a cache lookup, and if the song has no
+                // lyrics the queryFn runs against a 404 every time.
+                const existing = queryClient.getQueryData(
+                    queryKeys.songs.lyrics(song._serverId, { songId: song.id }),
+                );
+                if (existing !== undefined) {
+                    prefetchedRef.current.add(cacheKey);
+                    continue;
+                }
 
                 inflightRef.current.add(cacheKey);
                 queryClient
@@ -36,7 +52,10 @@ const useUpcomingLyricsPrefetch = () => {
                             song,
                         ),
                     )
-                    .finally(() => inflightRef.current.delete(cacheKey));
+                    .finally(() => {
+                        inflightRef.current.delete(cacheKey);
+                        prefetchedRef.current.add(cacheKey);
+                    });
             }
         };
 

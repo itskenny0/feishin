@@ -157,20 +157,27 @@ export async function fetchLocalLyrics(params: {
     if (!server) throw new Error('Server not found');
 
     if (hasFeature(server, ServerFeature.LYRICS_MULTIPLE_STRUCTURED)) {
+        // Same rationale as the Jellyfin path below: missing-lyrics 404s are
+        // expected and the user can't do anything with them. Silently fall
+        // through to the empty-lyrics result.
         const subsonicLyrics = await api.controller
             .getStructuredLyrics({
                 apiClientProps: { serverId, signal },
                 query: { songId: song.id },
             })
-            .catch(console.error);
+            .catch(() => undefined);
         if (subsonicLyrics?.length) return subsonicLyrics;
     } else if (hasFeature(server, ServerFeature.LYRICS_SINGLE_STRUCTURED)) {
+        // Songs without lyrics return 404 from Jellyfin - that's expected and
+        // there's nothing actionable about it, so swallow the rejection
+        // without logging. The browser still surfaces the network 404 in the
+        // devtools network panel for anyone debugging on purpose.
         const jfLyrics = await api.controller
             .getLyrics({
                 apiClientProps: { serverId, signal },
                 query: { songId: song.id },
             })
-            .catch((err) => console.error(err));
+            .catch(() => undefined);
         if (jfLyrics) {
             return {
                 artist: song.artists?.[0]?.name,

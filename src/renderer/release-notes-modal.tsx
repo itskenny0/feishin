@@ -19,8 +19,17 @@ import { Stack } from '/@/shared/components/stack/stack';
 import { Text } from '/@/shared/components/text/text';
 import { useLocalStorage } from '/@/shared/hooks/use-local-storage';
 
-const GITHUB_RELEASES_URL = 'https://api.github.com/repos/jeffvli/feishin/releases';
-const GITHUB_COMPARE_URL = 'https://api.github.com/repos/jeffvli/feishin/compare';
+// Fork-tagged builds (e.g. v1.11.0-itskenny0-2026-05-09g) only exist in the
+// fork's repo, not in the upstream jeffvli/feishin one. Detect that prefix
+// in package.json's version and route GitHub API calls to the right repo
+// so the release-notes modal doesn't 404 on every launch.
+const FORK_TAG_PATTERN = /-itskenny0?-/;
+const FORK_REPO = 'itskenny0/feishin';
+const UPSTREAM_REPO = 'jeffvli/feishin';
+const GITHUB_REPO = FORK_TAG_PATTERN.test(packageJson.version) ? FORK_REPO : UPSTREAM_REPO;
+
+const GITHUB_RELEASES_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases`;
+const GITHUB_COMPARE_URL = `https://api.github.com/repos/${GITHUB_REPO}/compare`;
 const RELEASES_TO_FETCH = 30;
 
 interface GitHubCompareCommit {
@@ -215,8 +224,8 @@ const ReleaseNotesContent = ({ onDismiss, version }: ReleaseNotesContentProps) =
                         component="a"
                         href={
                             showCompareError
-                                ? `https://github.com/jeffvli/feishin/compare/${latestStableRelease.tag_name}...${toTag(selectedVersion)}`
-                                : `https://github.com/jeffvli/feishin/releases/tag/${toTag(selectedVersion)}`
+                                ? `https://github.com/${GITHUB_REPO}/compare/${latestStableRelease.tag_name}...${toTag(selectedVersion)}`
+                                : `https://github.com/${GITHUB_REPO}/releases/tag/${toTag(selectedVersion)}`
                         }
                         onClick={onDismiss}
                         rightSection={<Icon icon="externalLink" />}
@@ -249,7 +258,7 @@ const ReleaseNotesContent = ({ onDismiss, version }: ReleaseNotesContentProps) =
                 <Group justify="flex-end">
                     <Button
                         component="a"
-                        href={`https://github.com/jeffvli/feishin/releases/tag/${toTag(selectedVersion)}`}
+                        href={`https://github.com/${GITHUB_REPO}/releases/tag/${toTag(selectedVersion)}`}
                         onClick={onDismiss}
                         rightSection={<Icon icon="externalLink" />}
                         target="_blank"
@@ -267,7 +276,7 @@ const ReleaseNotesContent = ({ onDismiss, version }: ReleaseNotesContentProps) =
 
     if (isAlpha && compareData) {
         const commits = compareData.commits ?? [];
-        const compareUrl = `https://github.com/jeffvli/feishin/compare/${latestStableRelease?.tag_name}...development`;
+        const compareUrl = `https://github.com/${GITHUB_REPO}/compare/${latestStableRelease?.tag_name}...development`;
         return (
             <Stack gap="md">
                 {releaseOptions.length > 1 && (
@@ -374,7 +383,7 @@ const ReleaseNotesContent = ({ onDismiss, version }: ReleaseNotesContentProps) =
             <Group justify="flex-end">
                 <Button
                     component="a"
-                    href={`https://github.com/jeffvli/feishin/releases/tag/${toTag(selectedVersion)}`}
+                    href={`https://github.com/${GITHUB_REPO}/releases/tag/${toTag(selectedVersion)}`}
                     onClick={onDismiss}
                     rightSection={<Icon icon="externalLink" />}
                     target="_blank"
