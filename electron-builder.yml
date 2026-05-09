@@ -67,7 +67,7 @@ linux:
         - tar.xz
     category: AudioVideo;Audio;Player
     icon: assets/icons/icon.png
-    artifactName: ${productName}-${os}-${arch}.${ext}
+    artifactName: ${productName}-${version}-${os}-${arch}.${ext}
 
 toolsets:
     appimage: '1.0.2'
