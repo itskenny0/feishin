@@ -14,6 +14,7 @@ import { PlayButtonGroup } from '/@/renderer/features/shared/components/play-but
 import { useContainerQuery, useFastAverageColor } from '/@/renderer/hooks';
 import { AppRoute } from '/@/renderer/router/routes';
 import { useCurrentServer } from '/@/renderer/store';
+import { useShowFilesystemNameForAlbums } from '/@/renderer/store/settings.store';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Group } from '/@/shared/components/group/group';
 import { Separator } from '/@/shared/components/separator/separator';
@@ -22,6 +23,13 @@ import { TextTitle } from '/@/shared/components/text-title/text-title';
 import { Text } from '/@/shared/components/text/text';
 import { Album, LibraryItem } from '/@/shared/types/domain-types';
 import { Play } from '/@/shared/types/types';
+
+const folderNameFromPath = (path?: null | string): null | string => {
+    if (!path) return null;
+    const segments = path.split(/[/\\]/).filter(Boolean);
+    if (segments.length === 0) return null;
+    return segments[segments.length - 1];
+};
 
 const containerVariants = {
     animate: {},
@@ -79,6 +87,7 @@ const CarouselItem = ({ album }: CarouselItemProps) => {
 
     const server = useCurrentServer();
     const { addToQueueByFetch } = usePlayer();
+    const useFsForAlbums = useShowFilesystemNameForAlbums();
 
     const handlePlay = (type: Play) => {
         if (!server?.id) return;
@@ -91,6 +100,9 @@ const CarouselItem = ({ album }: CarouselItemProps) => {
             album.releaseYear ? album.releaseYear.toString() : null,
         ].filter(Boolean);
     }, [album]);
+
+    const albumFsName = useFsForAlbums ? folderNameFromPath(album.path) : null;
+    const displayName = albumFsName || album.name;
 
     return (
         <div className={styles.carouselItem}>
@@ -136,10 +148,10 @@ const CarouselItem = ({ album }: CarouselItemProps) => {
                                 fw={900}
                                 lh={1.1}
                                 order={1}
-                                style={{ fontSize: calculateTitleSize(album.name) }}
+                                style={{ fontSize: calculateTitleSize(displayName) }}
                                 ta="left"
                             >
-                                {album.name}
+                                {displayName}
                             </TextTitle>
                             {album.albumArtistName && (
                                 <TextTitle

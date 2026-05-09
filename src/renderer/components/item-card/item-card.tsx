@@ -1066,6 +1066,37 @@ MemoizedCompactItemCard.displayName = 'MemoizedCompactItemCard';
 const MemoizedDefaultItemCard = memo(DefaultItemCard);
 MemoizedDefaultItemCard.displayName = 'MemoizedDefaultItemCard';
 
+const folderNameFromSongPath = (path?: null | string): null | string => {
+    if (!path) return null;
+    const segments = path.split(/[/\\]/).filter(Boolean);
+    if (segments.length < 2) return null;
+    return segments[segments.length - 2] ?? null;
+};
+
+const SongAlbumName = ({ song }: { song: Song }) => {
+    const useFs = useShowFilesystemNameForAlbums();
+    const fsName = useFs ? folderNameFromSongPath(song.path) : null;
+    const display = fsName || song.album || '';
+    if (song.albumId) {
+        const albumData = {
+            id: song.albumId,
+            imageUrl: song.imageUrl,
+            name: display,
+        };
+        return (
+            <Link
+                state={{ item: albumData }}
+                to={generatePath(AppRoute.LIBRARY_ALBUMS_DETAIL, {
+                    albumId: song.albumId,
+                })}
+            >
+                {display}
+            </Link>
+        );
+    }
+    return <>{display}</>;
+};
+
 const filesystemNameFromAlbumPath = (path: string): string => {
     const segments = path.split(/[/\\]/).filter(Boolean);
     return segments[segments.length - 1] || '';
@@ -1288,25 +1319,7 @@ export const getDataRows = (type?: 'compact' | 'default' | 'poster'): DataRow[] 
         {
             format: (data) => {
                 if ('album' in data && data.album) {
-                    const song = data as Song;
-                    if ('albumId' in song && song.albumId) {
-                        const albumData = {
-                            id: song.albumId,
-                            imageUrl: song.imageUrl,
-                            name: song.album,
-                        };
-                        return (
-                            <Link
-                                state={{ item: albumData }}
-                                to={generatePath(AppRoute.LIBRARY_ALBUMS_DETAIL, {
-                                    albumId: song.albumId,
-                                })}
-                            >
-                                {song.album}
-                            </Link>
-                        );
-                    }
-                    return song.album;
+                    return <SongAlbumName song={data as Song} />;
                 }
                 return '';
             },

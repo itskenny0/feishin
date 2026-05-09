@@ -6,6 +6,16 @@ import { QueryBuilderGroup } from '/@/shared/types/types';
 
 export type PlaylistAlbumRow = Album & { _playlistSongs?: Song[] };
 
+// Strip the song filename off the end of song.path so it points at the
+// containing folder. The album-list FS-name override expects album.path
+// to be the album folder, not a track file inside it.
+const albumFolderPathFromSongPath = (path?: null | string): null | string => {
+    if (!path) return null;
+    const segments = path.split(/[/\\]/);
+    if (segments.length < 2) return null;
+    return segments.slice(0, -1).join('/');
+};
+
 export function playlistSongsToAlbums(songs: Song[]): PlaylistAlbumRow[] {
     if (songs.length === 0) return [];
 
@@ -38,7 +48,7 @@ export function playlistSongsToAlbums(songs: Song[]): PlaylistAlbumRow[] {
             originalDate: null,
             originalYear: 0,
             participants: song.participants,
-            path: song.path ?? null,
+            path: albumFolderPathFromSongPath(song.path),
             playCount: null,
             recordLabels: [],
             releaseDate: song.releaseDate,
