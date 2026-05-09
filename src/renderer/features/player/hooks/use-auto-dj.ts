@@ -47,7 +47,12 @@ export const useAutoDJ = () => {
                     remaining = queue.items.slice(index + 1).length;
                 }
 
-                return { index, remaining, song: queue.items[index] };
+                return {
+                    index,
+                    queueLength: queue.items.length,
+                    remaining,
+                    song: queue.items[index],
+                };
             },
             async (properties) => {
                 if (!settings.enabled) {
@@ -60,6 +65,17 @@ export const useAutoDJ = () => {
                 }
 
                 if (properties.remaining >= settings.timing) {
+                    return;
+                }
+
+                // Don't fire on a one-song queue at index 0. That state is
+                // almost always "user just clicked play on a small or
+                // freshly-replaced selection", and the previous behaviour
+                // (immediately appending random/similar songs because there's
+                // nothing left) makes the source look like it has "one song
+                // then random rest". Once the user navigates somewhere else
+                // in the queue, normal auto-DJ behaviour resumes.
+                if (properties.queueLength <= 1 && properties.index === 0) {
                     return;
                 }
 

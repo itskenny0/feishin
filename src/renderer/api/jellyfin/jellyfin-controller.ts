@@ -975,6 +975,11 @@ export const JellyfinController: InternalControllerEndpoint = {
             throw new Error('No userId found');
         }
 
+        // Pass an explicit large Limit so we always get the whole playlist
+        // back. Jellyfin's documented default is "no limit" for this endpoint,
+        // but some server configurations cap responses to a small page size,
+        // which would leave the queue with only the first few tracks of the
+        // playlist after a user clicks "play" on it.
         const res = await jfApiClient(apiClientProps).getPlaylistSongList({
             params: {
                 id: query.id,
@@ -982,6 +987,8 @@ export const JellyfinController: InternalControllerEndpoint = {
             query: {
                 Fields: JF_FIELDS.SONG,
                 IncludeItemTypes: 'Audio',
+                Limit: 5000,
+                StartIndex: 0,
                 UserId: apiClientProps.server?.userId,
             },
         });
