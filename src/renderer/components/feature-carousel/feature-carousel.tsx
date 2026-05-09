@@ -13,6 +13,7 @@ import { PlayButtonGroup } from '/@/renderer/features/shared/components/play-but
 import { useContainerQuery, useFastAverageColor } from '/@/renderer/hooks';
 import { AppRoute } from '/@/renderer/router/routes';
 import { useCurrentServer } from '/@/renderer/store';
+import { useShowFilesystemNameForAlbums } from '/@/renderer/store/settings.store';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Badge } from '/@/shared/components/badge/badge';
 import { Group } from '/@/shared/components/group/group';
@@ -20,6 +21,13 @@ import { Stack } from '/@/shared/components/stack/stack';
 import { Text } from '/@/shared/components/text/text';
 import { Album, LibraryItem } from '/@/shared/types/domain-types';
 import { Play } from '/@/shared/types/types';
+
+const folderNameFromPath = (path?: null | string): null | string => {
+    if (!path) return null;
+    const segments = path.split(/[/\\]/).filter(Boolean);
+    if (segments.length === 0) return null;
+    return segments[segments.length - 1];
+};
 
 const containerVariants = {
     animate: {},
@@ -92,6 +100,9 @@ const CarouselItem = ({ album }: CarouselItemProps) => {
 
     const server = useCurrentServer();
     const { addToQueueByFetch } = usePlayer();
+    const useFsForAlbums = useShowFilesystemNameForAlbums();
+    const albumFsName = useFsForAlbums ? folderNameFromPath(album.path) : null;
+    const displayName = albumFsName || album.name;
 
     const handlePlay = (type: Play) => {
         if (!server?.id) return;
@@ -111,7 +122,7 @@ const CarouselItem = ({ album }: CarouselItemProps) => {
                 <div className={styles.content}>
                     <div className={styles.titleSection}>
                         <Text className={styles.title} fw={700} lineClamp={2} size="lg" ta="center">
-                            {album.name}
+                            {displayName}
                         </Text>
                     </div>
 

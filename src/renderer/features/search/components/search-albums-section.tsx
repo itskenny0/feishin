@@ -11,11 +11,19 @@ import { LibraryCommandItem } from '/@/renderer/features/search/components/libra
 import { FILTER_KEYS } from '/@/renderer/features/shared/utils';
 import { AppRoute } from '/@/renderer/router/routes';
 import { useCurrentServer } from '/@/renderer/store';
+import { useShowFilesystemNameForAlbums } from '/@/renderer/store/settings.store';
 import { Box } from '/@/shared/components/box/box';
 import { Button } from '/@/shared/components/button/button';
 import { Spinner } from '/@/shared/components/spinner/spinner';
 import { Text } from '/@/shared/components/text/text';
 import { LibraryItem } from '/@/shared/types/domain-types';
+
+const folderNameFromAlbumPath = (path?: null | string): null | string => {
+    if (!path) return null;
+    const segments = path.split(/[/\\]/).filter(Boolean);
+    if (segments.length === 0) return null;
+    return segments[segments.length - 1];
+};
 
 interface SearchAlbumsSectionProps {
     debouncedQuery: string;
@@ -37,6 +45,7 @@ export function SearchAlbumsSection({
     const navigate = useNavigate();
     const server = useCurrentServer();
     const { t } = useTranslation();
+    const useFsForAlbums = useShowFilesystemNameForAlbums();
 
     const { data, fetchNextPage, hasNextPage, isFetched, isFetchingNextPage, isLoading } =
         useInfiniteQuery(
@@ -126,7 +135,11 @@ export function SearchAlbumsSection({
                                     subtitle={album.albumArtists
                                         .map((artist) => artist.name)
                                         .join(', ')}
-                                    title={album.name}
+                                    title={
+                                        (useFsForAlbums
+                                            ? folderNameFromAlbumPath(album.path)
+                                            : null) || album.name
+                                    }
                                 />
                             )}
                         </CommandItemSelectable>

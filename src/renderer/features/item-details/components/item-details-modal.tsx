@@ -5,6 +5,7 @@ import { generatePath, Link } from 'react-router';
 
 import { SongPath } from '/@/renderer/features/item-details/components/song-path';
 import { AppRoute } from '/@/renderer/router/routes';
+import { useShowFilesystemNameForAlbums } from '/@/renderer/store/settings.store';
 import { formatDurationString, formatSizeString } from '/@/renderer/utils';
 import { formatDateRelative, formatRating } from '/@/renderer/utils/format';
 import { replaceURLWithHTMLLinks } from '/@/renderer/utils/linkify';
@@ -136,6 +137,37 @@ const FormatGenre = (item: Album | AlbumArtist | Playlist | Song) => {
 
 const BoolField = (key: boolean) =>
     key ? <Icon color="success" icon="check" /> : <Icon color="error" icon="x" />;
+
+const folderNameFromSongPath = (path?: null | string): null | string => {
+    if (!path) return null;
+    const segments = path.split(/[/\\]/).filter(Boolean);
+    if (segments.length < 2) return null;
+    return segments[segments.length - 2] ?? null;
+};
+
+const SongAlbumLink = ({ song }: { song: Song }) => {
+    const useFs = useShowFilesystemNameForAlbums();
+    const fsName = useFs ? folderNameFromSongPath(song.path) : null;
+    const display = fsName || song.album || '';
+    return (
+        <Text
+            component={Link}
+            fw={600}
+            isLink
+            overflow="visible"
+            size="md"
+            to={
+                song.albumId
+                    ? generatePath(AppRoute.LIBRARY_ALBUMS_DETAIL, {
+                          albumId: song.albumId,
+                      })
+                    : ''
+            }
+        >
+            {display}
+        </Text>
+    );
+};
 
 const AlbumPropertyMapping: ItemDetailRow<Album>[] = [
     { key: 'name', label: 'common.title' },
@@ -281,26 +313,7 @@ const SongPropertyMapping: ItemDetailRow<Song>[] = [
         count: 1,
         key: 'album',
         label: 'entity.album',
-        render: (song) =>
-            song.albumId &&
-            song.album && (
-                <Text
-                    component={Link}
-                    fw={600}
-                    isLink
-                    overflow="visible"
-                    size="md"
-                    to={
-                        song.albumId
-                            ? generatePath(AppRoute.LIBRARY_ALBUMS_DETAIL, {
-                                  albumId: song.albumId,
-                              })
-                            : ''
-                    }
-                >
-                    {song.album}
-                </Text>
-            ),
+        render: (song) => song.albumId && song.album && <SongAlbumLink song={song} />,
     },
     { key: 'discNumber', label: 'common.disc' },
     { key: 'trackNumber', label: 'common.trackNumber' },
