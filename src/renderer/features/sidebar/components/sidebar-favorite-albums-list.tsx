@@ -207,7 +207,10 @@ export const SidebarFavoriteAlbumsList = () => {
     // resolves from cache instantly. tanstack-query dedupes against any
     // existing fetch and respects the configured staleTime, so this is a
     // no-op for albums we've recently loaded. Defer with rIC so it never
-    // competes with whatever the user is doing right now.
+    // competes with whatever the user is doing right now, and throttle
+    // concurrency to a small window so a sidebar with dozens of favorited
+    // albums doesn't flood the server with simultaneous detail requests
+    // (each detail call hits two Jellyfin endpoints).
     useEffect(() => {
         if (!prefetchEnabled || !server?.id || items.length === 0) return;
 
@@ -218,18 +221,35 @@ export const SidebarFavoriteAlbumsList = () => {
         const schedule = win.requestIdleCallback ?? ((cb) => window.setTimeout(cb, 200));
         const cancel = win.cancelIdleCallback ?? window.clearTimeout;
 
-        const handle = schedule(() => {
-            for (const album of items) {
-                queryClient.prefetchQuery(
-                    albumQueries.detail({
-                        query: { id: album.id },
-                        serverId: server.id,
-                    }),
-                );
-            }
+        let cancelled = false;
+        const handle = schedule(async () => {
+            const concurrency = 3;
+            let cursor = 0;
+            const worker = async () => {
+                while (!cancelled) {
+                    const next = cursor++;
+                    if (next >= items.length) return;
+                    const album = items[next];
+                    try {
+                        await queryClient.prefetchQuery(
+                            albumQueries.detail({
+                                query: { id: album.id },
+                                serverId: server.id,
+                            }),
+                        );
+                    } catch {
+                        // ignore individual failures; the user-driven fetch
+                        // will retry on click.
+                    }
+                }
+            };
+            await Promise.all(Array.from({ length: concurrency }, worker));
         });
 
-        return () => cancel(handle as number);
+        return () => {
+            cancelled = true;
+            cancel(handle as number);
+        };
     }, [items, prefetchEnabled, queryClient, server?.id]);
 
     return (
