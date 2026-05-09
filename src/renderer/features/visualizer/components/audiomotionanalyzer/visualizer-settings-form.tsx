@@ -1,10 +1,9 @@
 import { nanoid } from 'nanoid';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useTranslation } from 'react-i18next';
+import { type TFunction, useTranslation } from 'react-i18next';
 
 import styles from './visualizer-settings-form.module.css';
 
-import i18n from '/@/i18n/i18n';
 import { getButterchurnPresetOptions } from '/@/renderer/features/visualizer/components/butternchurn/visualizer';
 import { useSettingsStoreActions, useVisualizerSettings } from '/@/renderer/store/settings.store';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
@@ -57,48 +56,61 @@ const useButterchurnPresetOptions = () => {
     return options;
 };
 
-const modeOptions: { label: string; value: string }[] = [
-    { label: i18n.t('visualizer.options.mode.0') as string, value: '0' },
-    { label: i18n.t('visualizer.options.mode.1') as string, value: '1' },
-    { label: i18n.t('visualizer.options.mode.2') as string, value: '2' },
-    { label: i18n.t('visualizer.options.mode.3') as string, value: '3' },
-    { label: i18n.t('visualizer.options.mode.4') as string, value: '4' },
-    { label: i18n.t('visualizer.options.mode.5') as string, value: '5' },
-    { label: i18n.t('visualizer.options.mode.6') as string, value: '6' },
-    { label: i18n.t('visualizer.options.mode.7') as string, value: '7' },
-    { label: i18n.t('visualizer.options.mode.8') as string, value: '8' },
-    { label: i18n.t('visualizer.options.mode.10') as string, value: '10' },
-];
-
-const colorModeOptions: { label: string; value: string }[] = [
-    { label: i18n.t('visualizer.options.colorMode.gradient') as string, value: 'gradient' },
-    { label: i18n.t('visualizer.options.colorMode.barIndex') as string, value: 'bar-index' },
-    { label: i18n.t('visualizer.options.colorMode.barLevel') as string, value: 'bar-level' },
-];
-
-const gradientOptions: { label: string; value: string }[] = [
-    { label: i18n.t('visualizer.options.gradient.classic') as string, value: 'classic' },
-    { label: i18n.t('visualizer.options.gradient.prism') as string, value: 'prism' },
-    { label: i18n.t('visualizer.options.gradient.rainbow') as string, value: 'rainbow' },
-    { label: i18n.t('visualizer.options.gradient.steelblue') as string, value: 'steelblue' },
-    { label: i18n.t('visualizer.options.gradient.orangered') as string, value: 'orangered' },
-];
-
-const channelLayoutOptions: { label: string; value: string }[] = [
-    { label: i18n.t('visualizer.options.channelLayout.single') as string, value: 'single' },
-    {
-        label: i18n.t('visualizer.options.channelLayout.dualCombined') as string,
-        value: 'dual-combined',
-    },
-    {
-        label: i18n.t('visualizer.options.channelLayout.dualHorizontal') as string,
-        value: 'dual-horizontal',
-    },
-    {
-        label: i18n.t('visualizer.options.channelLayout.dualVertical') as string,
-        value: 'dual-vertical',
-    },
-];
+const buildTranslatedOptions = (t: TFunction) => ({
+    channelLayoutOptions: [
+        { label: t('visualizer.options.channelLayout.single') as string, value: 'single' },
+        {
+            label: t('visualizer.options.channelLayout.dualCombined') as string,
+            value: 'dual-combined',
+        },
+        {
+            label: t('visualizer.options.channelLayout.dualHorizontal') as string,
+            value: 'dual-horizontal',
+        },
+        {
+            label: t('visualizer.options.channelLayout.dualVertical') as string,
+            value: 'dual-vertical',
+        },
+    ],
+    colorModeOptions: [
+        { label: t('visualizer.options.colorMode.gradient') as string, value: 'gradient' },
+        { label: t('visualizer.options.colorMode.barIndex') as string, value: 'bar-index' },
+        { label: t('visualizer.options.colorMode.barLevel') as string, value: 'bar-level' },
+    ],
+    frequencyScaleOptions: [
+        { label: t('visualizer.options.frequencyScale.bark') as string, value: 'bark' },
+        { label: t('visualizer.options.frequencyScale.linear') as string, value: 'linear' },
+        { label: t('visualizer.options.frequencyScale.log') as string, value: 'log' },
+        { label: t('visualizer.options.frequencyScale.mel') as string, value: 'mel' },
+    ],
+    gradientOptions: [
+        { label: t('visualizer.options.gradient.classic') as string, value: 'classic' },
+        { label: t('visualizer.options.gradient.prism') as string, value: 'prism' },
+        { label: t('visualizer.options.gradient.rainbow') as string, value: 'rainbow' },
+        { label: t('visualizer.options.gradient.steelblue') as string, value: 'steelblue' },
+        { label: t('visualizer.options.gradient.orangered') as string, value: 'orangered' },
+    ],
+    modeOptions: [
+        { label: t('visualizer.options.mode.0') as string, value: '0' },
+        { label: t('visualizer.options.mode.1') as string, value: '1' },
+        { label: t('visualizer.options.mode.2') as string, value: '2' },
+        { label: t('visualizer.options.mode.3') as string, value: '3' },
+        { label: t('visualizer.options.mode.4') as string, value: '4' },
+        { label: t('visualizer.options.mode.5') as string, value: '5' },
+        { label: t('visualizer.options.mode.6') as string, value: '6' },
+        { label: t('visualizer.options.mode.7') as string, value: '7' },
+        { label: t('visualizer.options.mode.8') as string, value: '8' },
+        { label: t('visualizer.options.mode.10') as string, value: '10' },
+    ],
+    weightingFilterOptions: [
+        { label: t('visualizer.options.weightingFilter.none') as string, value: '' },
+        { label: t('visualizer.options.weightingFilter.a') as string, value: 'A' },
+        { label: t('visualizer.options.weightingFilter.b') as string, value: 'B' },
+        { label: t('visualizer.options.weightingFilter.C') as string, value: 'C' },
+        { label: t('visualizer.options.weightingFilter.D') as string, value: 'D' },
+        { label: t('visualizer.options.weightingFilter.z') as string, value: 'Z' },
+    ],
+});
 
 const fftSizeOptions: { label: string; value: string }[] = [
     { label: '1024', value: '1024' },
@@ -107,22 +119,6 @@ const fftSizeOptions: { label: string; value: string }[] = [
     { label: '8192', value: '8192' },
     { label: '16384', value: '16384' },
     { label: '32768', value: '32768' },
-];
-
-const frequencyScaleOptions: { label: string; value: string }[] = [
-    { label: i18n.t('visualizer.options.frequencyScale.bark') as string, value: 'bark' },
-    { label: i18n.t('visualizer.options.frequencyScale.linear') as string, value: 'linear' },
-    { label: i18n.t('visualizer.options.frequencyScale.log') as string, value: 'log' },
-    { label: i18n.t('visualizer.options.frequencyScale.mel') as string, value: 'mel' },
-];
-
-const weightingFilterOptions = [
-    { label: i18n.t('visualizer.options.weightingFilter.none') as string, value: '' },
-    { label: i18n.t('visualizer.options.weightingFilter.a') as string, value: 'A' },
-    { label: i18n.t('visualizer.options.weightingFilter.b') as string, value: 'B' },
-    { label: i18n.t('visualizer.options.weightingFilter.C') as string, value: 'C' },
-    { label: i18n.t('visualizer.options.weightingFilter.D') as string, value: 'D' },
-    { label: i18n.t('visualizer.options.weightingFilter.z') as string, value: 'Z' },
 ];
 
 const minFreqOptions = [
@@ -987,6 +983,7 @@ const PresetSettings = () => {
 const GeneralSettings = () => {
     const { t } = useTranslation();
     const { updateProperty, visualizer } = useUpdateAudioMotionAnalyzer();
+    const { channelLayoutOptions, modeOptions } = useMemo(() => buildTranslatedOptions(t), [t]);
 
     const isMode18Disabled = visualizer.audiomotionanalyzer.mode > 8;
     const isMode10Disabled = visualizer.audiomotionanalyzer.mode !== 10;
@@ -1010,7 +1007,7 @@ const GeneralSettings = () => {
                     value: value as string,
                 };
             }),
-        [t],
+        [channelLayoutOptions, t],
     );
 
     return (
@@ -1626,6 +1623,7 @@ const CustomGradientsManager = () => {
 const ColorSettings = () => {
     const { t } = useTranslation();
     const { updateProperty, visualizer } = useUpdateAudioMotionAnalyzer();
+    const { colorModeOptions, gradientOptions } = useMemo(() => buildTranslatedOptions(t), [t]);
 
     const isGradientDisabled = visualizer.audiomotionanalyzer.channelLayout !== 'single';
     const isGradientLeftDisabled = visualizer.audiomotionanalyzer.channelLayout === 'single';
@@ -1645,7 +1643,7 @@ const ColorSettings = () => {
                 items: gradientOptions,
             },
         ],
-        [t, visualizer.audiomotionanalyzer.customGradients],
+        [gradientOptions, t, visualizer.audiomotionanalyzer.customGradients],
     );
 
     return (
@@ -1742,6 +1740,7 @@ const FFTSettings = () => {
 const FrequencySettings = () => {
     const { t } = useTranslation();
     const { updateProperty, visualizer } = useUpdateAudioMotionAnalyzer();
+    const { frequencyScaleOptions } = useMemo(() => buildTranslatedOptions(t), [t]);
 
     const translatedFrequencyScaleOptions = useMemo(
         () =>
@@ -1749,7 +1748,7 @@ const FrequencySettings = () => {
                 label: t(`visualizer.options.frequencyScale.${option.value}`),
                 value: option.value as string,
             })),
-        [t],
+        [frequencyScaleOptions, t],
     );
 
     return (
@@ -1792,6 +1791,7 @@ const FrequencySettings = () => {
 const SensitivitySettings = () => {
     const { t } = useTranslation();
     const { updateProperty, visualizer } = useUpdateAudioMotionAnalyzer();
+    const { weightingFilterOptions } = useMemo(() => buildTranslatedOptions(t), [t]);
 
     const getWeightingFilterKey = (value: string) => {
         return value === '' ? 'none' : value.toLowerCase();
@@ -1805,7 +1805,7 @@ const SensitivitySettings = () => {
                 ),
                 value: option.value as string,
             })),
-        [t],
+        [t, weightingFilterOptions],
     );
 
     return (
