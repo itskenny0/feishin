@@ -732,6 +732,13 @@
     "setting": {
         "autoDJ": "auto DJ",
         "autoDJ_description": "automatically add similar songs to the queue",
+        "prefetch": "prefetching",
+        "prefetchSidebarAlbums": "prefetch albums shown in the sidebar",
+        "prefetchSidebarAlbums_description": "warm the cache for every album visible in the sidebar's 'favorited albums' list, so opening one is instant",
+        "prefetchUpcomingLyrics": "prefetch lyrics for upcoming songs",
+        "prefetchUpcomingLyrics_description": "fetch lyrics in the background for the next songs in your play queue, so they're already loaded when each track starts",
+        "prefetchUpcomingLyricsCount": "upcoming songs to prefetch lyrics for",
+        "prefetchUpcomingLyricsCount_description": "how many of the next songs in the queue should have their lyrics prefetched",
         "autoDJ_itemCount": "item count",
         "autoDJ_itemCount_description": "the number of items attempted to be added to the queue when auto DJ is enabled",
         "autoDJ_timing": "timing",
