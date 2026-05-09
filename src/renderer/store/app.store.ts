@@ -271,15 +271,15 @@ export const useAppStore = createWithEqualityFn<AppSlice>()(
 
 export const useAppStoreActions = () => useAppStore((state) => state.actions);
 
-export const useSidebarStore = () => useAppStore((state) => state.sidebar);
+export const useSidebarStore = () => useAppStore((state) => state.sidebar, shallow);
 
 export const useSidebarRightExpanded = () => useAppStore((state) => state.sidebar.rightExpanded);
 
 export const useSetTitlebar = () => useAppStore((state) => state.actions.setTitleBar);
 
-export const useTitlebarStore = () => useAppStore((state) => state.titlebar);
+export const useTitlebarStore = () => useAppStore((state) => state.titlebar, shallow);
 
-export const useCommandPalette = () => useAppStore((state) => state.commandPalette);
+export const useCommandPalette = () => useAppStore((state) => state.commandPalette, shallow);
 
 export const useCommandPaletteState = () =>
     useAppStore(

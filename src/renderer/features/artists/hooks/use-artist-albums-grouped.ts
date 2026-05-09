@@ -354,8 +354,7 @@ export const getArtistAlbumsGrouped = (
 export const useArtistAlbumsGrouped = (albums: Album[], routeId: string) => {
     const { t } = useTranslation();
     const artistReleaseTypeItems = useArtistReleaseTypeItems();
-    const albumArtistDetailSort = useAppStore((state) => state.albumArtistDetailSort);
-    const groupingType = albumArtistDetailSort.groupingType;
+    const groupingType = useAppStore((state) => state.albumArtistDetailSort.groupingType);
 
     return useMemo(() => {
         return getArtistAlbumsGrouped(albums, routeId, groupingType, artistReleaseTypeItems, t);

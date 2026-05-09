@@ -145,10 +145,9 @@ export const AlbumArtistDetailHeader = forwardRef<HTMLDivElement, AlbumArtistDet
         const setRating = useSetRating();
         const uploadArtistImageMutation = useUploadArtistImage({});
 
-        const albumArtistDetailSort = useAppStore((state) => state.albumArtistDetailSort);
-        const sortBy = albumArtistDetailSort.sortBy;
-        const sortOrder = albumArtistDetailSort.sortOrder;
-        const groupingType = albumArtistDetailSort.groupingType;
+        const sortBy = useAppStore((state) => state.albumArtistDetailSort.sortBy);
+        const sortOrder = useAppStore((state) => state.albumArtistDetailSort.sortOrder);
+        const groupingType = useAppStore((state) => state.albumArtistDetailSort.groupingType);
         const artistReleaseTypeItems = useArtistReleaseTypeItems();
 
         const handlePlay = useCallback(
