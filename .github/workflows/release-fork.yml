@@ -1,13 +1,16 @@
-# Builds Linux/macOS/Windows packages for a `v*-itskenny-*` tag and uploads
-# every individual artifact to a GitHub Release for that tag.
+# Builds Linux/macOS/Windows packages for a `v*-itskenny0-*` tag and uploads
+# every individual artifact to a GitHub Release for that tag. Older tags
+# using the legacy `v*-itskenny-*` prefix still trigger the workflow so
+# historical builds remain reproducible.
 #
-# Trigger: push a tag like `v1.11.0-itskenny-2026.05.05` to this fork.
+# Trigger: push a tag like `v1.11.0-itskenny0-2026.05.10a` to this fork.
 # Re-trigger via the Actions UI ("Run workflow") with an existing tag name.
 name: Release (fork)
 
 on:
     push:
         tags:
+            - 'v*-itskenny0-*'
             - 'v*-itskenny-*'
     workflow_dispatch:
         inputs:
@@ -34,15 +37,39 @@ jobs:
         runs-on: ubuntu-latest
         outputs:
             tag: ${{ steps.tag.outputs.tag }}
+            packageVersion: ${{ steps.tag.outputs.packageVersion }}
         steps:
-            - name: Resolve tag
+            - uses: actions/checkout@v6
+              with:
+                  fetch-depth: 0
+            - name: Resolve tag and derive artifact version
               id: tag
               run: |
                   if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-                      echo "tag=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+                      tag="${{ github.event.inputs.tag }}"
                   else
-                      echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+                      tag="${GITHUB_REF#refs/tags/}"
                   fi
+                  echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+
+                  # Strip the leading semver (e.g. v1.11.0-) so we are left
+                  # with the fork-specific suffix (e.g. itskenny0-2026.05.10a).
+                  rawSuffix="${tag#v*.*.*-}"
+
+                  # Replace dots in the suffix with dashes so the final string
+                  # is a valid semver prerelease (numeric segments cannot have
+                  # leading zeros, but alphanumeric-with-dashes identifiers can
+                  # contain anything in [0-9A-Za-z-]). 2026.05.10a → 2026-05-10a.
+                  sanitizedSuffix="${rawSuffix//./-}"
+
+                  baseVersion="$(node -p "require('./package.json').version")"
+                  if [ "${rawSuffix}" != "${tag}" ] && [ -n "${rawSuffix}" ]; then
+                      packageVersion="${baseVersion}-${sanitizedSuffix}"
+                  else
+                      packageVersion="${baseVersion}"
+                  fi
+                  echo "packageVersion=${packageVersion}" >> "$GITHUB_OUTPUT"
+                  echo "Using artifact version: ${packageVersion}"
 
     create-release:
         needs: prepare
@@ -88,6 +115,8 @@ jobs:
                   cache: pnpm
             - name: Install dependencies
               run: pnpm install
+            - name: Set artifact version
+              run: npm pkg set version="${{ needs.prepare.outputs.packageVersion }}"
             - name: Package x64
               run: pnpm run package:linux:pr
             - name: Package arm64
@@ -119,6 +148,9 @@ jobs:
                   cache: pnpm
             - name: Install dependencies
               run: pnpm install
+            - name: Set artifact version
+              shell: bash
+              run: npm pkg set version="${{ needs.prepare.outputs.packageVersion }}"
             - name: Package x64
               run: pnpm run package:win:pr
             - name: Upload artifacts to release
@@ -148,6 +180,8 @@ jobs:
                   cache: pnpm
             - name: Install dependencies
               run: pnpm install
+            - name: Set artifact version
+              run: npm pkg set version="${{ needs.prepare.outputs.packageVersion }}"
             - name: Package
               env:
                   NODE_OPTIONS: --max-old-space-size=4096
