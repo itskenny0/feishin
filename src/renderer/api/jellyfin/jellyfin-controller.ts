@@ -400,6 +400,11 @@ export const JellyfinController: InternalControllerEndpoint = {
                 EnableUserData: true,
                 Fields: JF_FIELDS.SONG,
                 IncludeItemTypes: 'Audio',
+                // Pin a large explicit Limit so albums with > the server's
+                // default page size still come back in full. Without this,
+                // Jellyfin instances that cap default responses return a
+                // small subset and the album detail page renders incomplete.
+                Limit: 5000,
                 Recursive: true,
                 SortBy: 'ParentIndexNumber,IndexNumber,SortName',
                 SortOrder: JFSortOrder.ASC,
@@ -412,8 +417,19 @@ export const JellyfinController: InternalControllerEndpoint = {
             throw new Error('Failed to get album detail');
         }
 
+        // Recursive: true paired with AlbumIds occasionally returns the same
+        // song twice on certain Jellyfin configurations (typically when a
+        // track is referenced from a compilation as well as its source
+        // album). De-dupe by id so the detail view never repeats a track.
+        const seenSongIds = new Set<string>();
+        const uniqueSongs = songsRes.body.Items.filter((song) => {
+            if (seenSongIds.has(song.Id)) return false;
+            seenSongIds.add(song.Id);
+            return true;
+        });
+
         return jfNormalize.album(
-            { ...res.body, Songs: songsRes.body.Items },
+            { ...res.body, Songs: uniqueSongs },
             apiClientProps.server,
             args.context?.pathReplace,
             args.context?.pathReplaceWith,
