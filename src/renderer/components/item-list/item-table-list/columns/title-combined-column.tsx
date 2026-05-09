@@ -20,7 +20,10 @@ import {
     PlayTooltip,
 } from '/@/renderer/features/shared/components/play-button-group';
 import { usePlayButtonBehavior } from '/@/renderer/store';
-import { useShowFilesystemNameForFolders } from '/@/renderer/store/settings.store';
+import {
+    useShowFilesystemNameForAlbums,
+    useShowFilesystemNameForFolders,
+} from '/@/renderer/store/settings.store';
 import { ExplicitIndicator } from '/@/shared/components/explicit-indicator/explicit-indicator';
 import { Icon } from '/@/shared/components/icon/icon';
 import { Text } from '/@/shared/components/text/text';
@@ -40,6 +43,12 @@ export const DefaultTitleCombinedColumn = (props: ItemTableListInnerColumn) => {
     const internalState = (props as any).internalState;
     const playButtonBehavior = usePlayButtonBehavior();
     const [isHovered, setIsHovered] = useState(false);
+    const useFsForAlbums = useShowFilesystemNameForAlbums();
+    const albumFsName =
+        useFsForAlbums && item?._itemType === LibraryItem.ALBUM
+            ? folderFilesystemName(item?.path)
+            : null;
+    const displayName = albumFsName || (item?.name as string | undefined) || '';
 
     const handlePlay = (playType: Play, event: React.MouseEvent<HTMLButtonElement>) => {
         if (!item) {
@@ -159,7 +168,7 @@ export const DefaultTitleCombinedColumn = (props: ItemTableListInnerColumn) => {
                 >
                     <Text className={styles.title} isNoSelect size="md" {...titleLinkProps}>
                         <ExplicitIndicator explicitStatus={item?.explicitStatus} />
-                        {item.name as string}
+                        {displayName}
                     </Text>
                     <div className={styles.artists}>
                         <JoinedArtists
