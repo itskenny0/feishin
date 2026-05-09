@@ -47,24 +47,35 @@ type DeepPartial<T> = {
     [P in keyof T]?: T[P] extends object ? DeepPartial<T[P]> : T[P];
 };
 
+const isPlainObject = (value: unknown): value is Record<string, unknown> => {
+    if (value === null || typeof value !== 'object') return false;
+    const proto = Object.getPrototypeOf(value);
+    return proto === null || proto === Object.prototype;
+};
+
 const deepMergeIntoState = <T extends Record<string, any>>(
     state: T,
     updates: DeepPartial<T>,
 ): void => {
-    // Skip 'actions' property
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { actions, ...updatesWithoutActions } = updates as any;
+    // Walk only the keys present in `updates`. Arrays in source replace the
+    // target entirely; plain objects recurse; everything else assigns. This
+    // mirrors the previous lodash mergeWith customizer but avoids walking the
+    // unrelated parts of the state tree on each settings write.
+    for (const key in updates) {
+        if (!Object.prototype.hasOwnProperty.call(updates, key)) continue;
+        if (key === 'actions') continue;
 
-    // Use mergeWith to replace arrays instead of merging them by index
-    mergeWith(state, updatesWithoutActions, (_objValue, srcValue) => {
-        // If source value is an array, replace the entire array instead of merging
+        const srcValue = (updates as any)[key];
+        const targetValue = (state as any)[key];
+
         if (Array.isArray(srcValue)) {
-            return srcValue;
+            (state as any)[key] = srcValue;
+        } else if (isPlainObject(srcValue) && isPlainObject(targetValue)) {
+            deepMergeIntoState(targetValue, srcValue);
+        } else if (srcValue !== undefined) {
+            (state as any)[key] = srcValue;
         }
-
-        // Default merge behavior
-        return undefined;
-    });
+    }
 };
 
 const HomeItemSchema = z.enum([
