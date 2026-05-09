@@ -1427,10 +1427,9 @@ const ArtistAlbums = ({ albumsQuery, order }: ArtistAlbumsProps) => {
     const { t } = useTranslation();
     const [searchTerm, setSearchTerm] = useState('');
     const [debouncedSearchTerm] = useDebouncedValue(searchTerm, 300);
-    const albumArtistDetailSort = useAppStore((state) => state.albumArtistDetailSort);
+    const sortBy = useAppStore((state) => state.albumArtistDetailSort.sortBy);
+    const sortOrder = useAppStore((state) => state.albumArtistDetailSort.sortOrder);
     const setAlbumArtistDetailSort = useAppStore((state) => state.actions.setAlbumArtistDetailSort);
-    const sortBy = albumArtistDetailSort.sortBy;
-    const sortOrder = albumArtistDetailSort.sortOrder;
 
     const { albumArtistId, artistId } = useParams() as {
         albumArtistId?: string;

@@ -16,6 +16,7 @@ import {
     usePlayerRepeat,
     usePlayerShuffle,
     usePlayerStatus,
+    useSidebarStore,
 } from '/@/renderer/store';
 import { PlayerShuffle } from '/@/shared/types/types';
 
@@ -24,7 +25,7 @@ const ipc = isElectron() ? window.api.ipc : null;
 export const useNativeMenuSync = () => {
     const { t } = useTranslation();
     const privateMode = useAppStore((state) => state.privateMode);
-    const sidebar = useAppStore((state) => state.sidebar);
+    const sidebar = useSidebarStore();
     const { setPrivateMode, setSideBar } = useAppStoreActions();
     const { open: openCommandPalette } = useCommandPalette();
     const playerHydrated = usePlayerHydrated();
