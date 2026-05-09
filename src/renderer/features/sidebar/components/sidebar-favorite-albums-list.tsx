@@ -1,6 +1,6 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
-import { memo, MouseEvent, useCallback, useState } from 'react';
+import { memo, MouseEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { generatePath, Link } from 'react-router';
 
@@ -17,7 +17,10 @@ import {
 import { usePlayButtonClick } from '/@/renderer/features/shared/hooks/use-play-button-click';
 import { AppRoute } from '/@/renderer/router/routes';
 import { useCurrentServer } from '/@/renderer/store';
-import { useShowFilesystemNameForAlbums } from '/@/renderer/store/settings.store';
+import {
+    usePrefetchSidebarAlbums,
+    useShowFilesystemNameForAlbums,
+} from '/@/renderer/store/settings.store';
 import { Accordion } from '/@/shared/components/accordion/accordion';
 import { ActionIcon, ActionIconGroup } from '/@/shared/components/action-icon/action-icon';
 import { ButtonProps } from '/@/shared/components/button/button';
@@ -174,6 +177,8 @@ export const SidebarFavoriteAlbumsList = () => {
     const { t } = useTranslation();
     const server = useCurrentServer();
     const useFsName = useShowFilesystemNameForAlbums();
+    const prefetchEnabled = usePrefetchSidebarAlbums();
+    const queryClient = useQueryClient();
 
     const albumsQuery = useQuery(
         albumQueries.list({
@@ -196,7 +201,36 @@ export const SidebarFavoriteAlbumsList = () => {
         });
     }, []);
 
-    const items = albumsQuery.data?.items ?? [];
+    const items = useMemo(() => albumsQuery.data?.items ?? [], [albumsQuery.data]);
+
+    // Background-prefetch each visible album's detail so clicking a row
+    // resolves from cache instantly. tanstack-query dedupes against any
+    // existing fetch and respects the configured staleTime, so this is a
+    // no-op for albums we've recently loaded. Defer with rIC so it never
+    // competes with whatever the user is doing right now.
+    useEffect(() => {
+        if (!prefetchEnabled || !server?.id || items.length === 0) return;
+
+        const win = window as typeof window & {
+            cancelIdleCallback?: (id: number) => void;
+            requestIdleCallback?: (cb: () => void, opts?: { timeout?: number }) => number;
+        };
+        const schedule = win.requestIdleCallback ?? ((cb) => window.setTimeout(cb, 200));
+        const cancel = win.cancelIdleCallback ?? window.clearTimeout;
+
+        const handle = schedule(() => {
+            for (const album of items) {
+                queryClient.prefetchQuery(
+                    albumQueries.detail({
+                        query: { id: album.id },
+                        serverId: server.id,
+                    }),
+                );
+            }
+        });
+
+        return () => cancel(handle as number);
+    }, [items, prefetchEnabled, queryClient, server?.id]);
 
     return (
         <Accordion.Item value="favorite-albums">

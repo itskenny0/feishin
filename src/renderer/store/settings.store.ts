@@ -507,6 +507,9 @@ export const GeneralSettingsSchema = z.object({
     playerbarSlider: PlayerbarSliderSchema,
     playerItems: z.array(SortableItemSchema(PlayerItemSchema)),
     playlistTarget: PlaylistTargetSchema,
+    prefetchSidebarAlbums: z.boolean(),
+    prefetchUpcomingLyrics: z.boolean(),
+    prefetchUpcomingLyricsCount: z.number().min(0).max(50),
     primaryShade: z.number().min(0).max(9),
     qobuz: z.boolean(),
     queueInPlaybackOrder: z.boolean(),
@@ -1190,6 +1193,9 @@ const initialState: SettingsState = {
         },
         playerItems,
         playlistTarget: PlaylistTarget.TRACK,
+        prefetchSidebarAlbums: true,
+        prefetchUpcomingLyrics: true,
+        prefetchUpcomingLyricsCount: 8,
         primaryShade: 6,
         qobuz: true,
         queueInPlaybackOrder: true,
@@ -2787,6 +2793,15 @@ export const useBlurExplicitImages = () =>
 
 export const useEnableGridMultiSelect = () =>
     useSettingsStore((state) => state.general.enableGridMultiSelect, shallow);
+
+export const usePrefetchSidebarAlbums = () =>
+    useSettingsStore((state) => state.general.prefetchSidebarAlbums, shallow);
+
+export const usePrefetchUpcomingLyrics = () =>
+    useSettingsStore((state) => state.general.prefetchUpcomingLyrics, shallow);
+
+export const usePrefetchUpcomingLyricsCount = () =>
+    useSettingsStore((state) => state.general.prefetchUpcomingLyricsCount, shallow);
 
 export const useArtistRadioCount = () =>
     useSettingsStore((state) => state.general.artistRadioCount, shallow);

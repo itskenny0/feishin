@@ -5,6 +5,7 @@ import { eventEmitter } from '/@/renderer/events/event-emitter';
 import { UserFavoriteEventPayload, UserRatingEventPayload } from '/@/renderer/events/events';
 import { DiscordRpcHook } from '/@/renderer/features/discord-rpc/use-discord-rpc';
 import { JellyfinRemoteControlHook } from '/@/renderer/features/jellyfin-remote-control';
+import { UpcomingLyricsPrefetch } from '/@/renderer/features/lyrics/hooks/use-prefetch-upcoming-lyrics';
 import { MainPlayerListenerHook } from '/@/renderer/features/player/audio-player/hooks/use-main-player-listener';
 import { MpvPlayer } from '/@/renderer/features/player/audio-player/mpv-player';
 import { WebPlayer } from '/@/renderer/features/player/audio-player/web-player';
@@ -135,6 +136,7 @@ export const AudioPlayers = () => {
             <RemoteHook />
             <JellyfinRemoteControlHook />
             <AutoDJHook />
+            <UpcomingLyricsPrefetch />
             <QueueRestoreTimestampHook />
             <UpdateCurrentSongHook />
             <RadioAudioInstanceHook />
