@@ -44,11 +44,16 @@ createRoot(document.getElementById('root')!).render(
             hydrateOptions: {
                 defaultOptions: {
                     queries: {
-                        gcTime: Infinity,
+                        // Cache lyrics for a week so a song you played a few
+                        // days ago still loads instantly, but the IndexedDB
+                        // store doesn't grow without bound.
+                        gcTime: 1000 * 60 * 60 * 24 * 7,
                     },
                 },
             },
-            maxAge: Infinity,
+            // Discard the persisted lyric cache after 30 days so the hydration
+            // payload stays small over years of use.
+            maxAge: 1000 * 60 * 60 * 24 * 30,
             persister: indexedDbPersister,
         }}
     >
