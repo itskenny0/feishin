@@ -477,8 +477,16 @@ const MetadataSection = memo(
     ({ controls, internalState, item }: MetadataSectionProps) => {
         const { t } = useTranslation();
         const showRatings = useShowRatings();
+        const useFsForAlbums = useShowFilesystemNameForAlbums();
         const [isImageHovered, setIsImageHovered] = useState(false);
         const [isMetadataHovered, setIsMetadataHovered] = useState(false);
+
+        const displayName =
+            (useFsForAlbums && item?._itemType === LibraryItem.ALBUM
+                ? albumFolderNameFromPath(item?.path)
+                : null) ||
+            item?.name ||
+            '';
 
         const getId = useCallback(() => {
             const draggedItems = getDraggedItems(item, internalState, false);
@@ -646,7 +654,7 @@ const MetadataSection = memo(
                     })}
                 >
                     <ExplicitIndicator explicitStatus={item.explicitStatus} />
-                    {item.name}
+                    {displayName}
                 </Link>
                 <div className={styles.artist}>
                     {!hasArtist ? (

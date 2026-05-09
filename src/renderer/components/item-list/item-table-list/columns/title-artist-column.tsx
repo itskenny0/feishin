@@ -13,7 +13,10 @@ import {
 } from '/@/renderer/components/item-list/item-table-list/item-table-list-column';
 import { useIsActiveRow } from '/@/renderer/components/item-list/item-table-list/item-table-list-context';
 import { JoinedArtists } from '/@/renderer/features/albums/components/joined-artists';
-import { useShowFilesystemNameForFolders } from '/@/renderer/store/settings.store';
+import {
+    useShowFilesystemNameForAlbums,
+    useShowFilesystemNameForFolders,
+} from '/@/renderer/store/settings.store';
 import { ExplicitIndicator } from '/@/shared/components/explicit-indicator/explicit-indicator';
 import { Icon } from '/@/shared/components/icon/icon';
 import { Text } from '/@/shared/components/text/text';
@@ -30,6 +33,12 @@ export const DefaultTitleArtistColumn = (props: ItemTableListInnerColumn) => {
     const rowItem = props.getRowItem?.(props.rowIndex) ?? (props.data as any[])[props.rowIndex];
     const item = rowItem as any;
     const align = props.columns[props.columnIndex]?.align || 'start';
+    const useFsForAlbums = useShowFilesystemNameForAlbums();
+    const albumFsName =
+        useFsForAlbums && item?._itemType === LibraryItem.ALBUM
+            ? folderFilesystemName(item?.path)
+            : null;
+    const displayName = albumFsName || (item?.name as string | undefined) || '';
 
     if (item && 'name' in item && 'artists' in item) {
         const rowHeight = props.getRowHeight(props.rowIndex, props);
@@ -61,7 +70,7 @@ export const DefaultTitleArtistColumn = (props: ItemTableListInnerColumn) => {
                 >
                     <Text className={styles.title} isNoSelect size="md" {...titleLinkProps}>
                         <ExplicitIndicator explicitStatus={item?.explicitStatus} />
-                        {item.name as string}
+                        {displayName}
                     </Text>
                     <div className={styles.artists}>
                         <JoinedArtists
