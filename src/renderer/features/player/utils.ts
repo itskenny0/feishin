@@ -2,6 +2,7 @@ import { QueryClient } from '@tanstack/react-query';
 
 import { api } from '/@/renderer/api';
 import { queryKeys } from '/@/renderer/api/query-keys';
+import { albumQueries } from '/@/renderer/features/albums/api/album-api';
 import { folderQueries } from '/@/renderer/features/folders/api/folder-api';
 import { PlayerFilter, useSettingsStore } from '/@/renderer/store';
 import { LogCategory, logFn } from '/@/renderer/utils/logger';
@@ -63,34 +64,36 @@ export const getAlbumSongsById = async (args: {
     query?: Partial<SongListQuery>;
     queryClient: QueryClient;
     serverId: string;
-}) => {
-    const { id, query, queryClient, serverId } = args;
+}): Promise<SongListResponse> => {
+    const { id, queryClient, serverId } = args;
 
-    const queryFilter: SongListQuery = {
-        albumIds: id,
-        sortBy: SongListSort.ALBUM,
-        sortOrder: SortOrder.ASC,
-        startIndex: 0,
-        ...query,
-    };
+    // Route through the album-detail endpoint per album rather than
+    // getSongList({ albumIds }). The Jellyfin getSongList path uses
+    // AlbumIds + Recursive, which is unreliable on some libraries and
+    // can return only a fraction of an album's tracks. The album-detail
+    // endpoint uses ParentId, which gives the album's direct audio
+    // children consistently. Reusing albumQueries.detail also lets us
+    // share its cache with the album-detail page.
+    const items: Song[] = [];
 
-    const queryKey = queryKeys.songs.list(serverId, queryFilter);
-
-    const res = await queryClient.fetchQuery({
-        gcTime: 1000 * 60,
-        queryFn: async ({ signal }) =>
-            api.controller.getSongList({
-                apiClientProps: {
-                    serverId,
-                    signal,
-                },
-                query: queryFilter,
+    for (const albumId of id) {
+        const album = await queryClient.fetchQuery({
+            ...albumQueries.detail({
+                query: { id: albumId },
+                serverId,
             }),
-        queryKey,
-        staleTime: 1000 * 60,
-    });
+        });
 
-    return res;
+        if (album?.songs?.length) {
+            items.push(...album.songs);
+        }
+    }
+
+    return {
+        items,
+        startIndex: 0,
+        totalRecordCount: items.length,
+    };
 };
 
 export const getGenreSongsById = async (args: {
