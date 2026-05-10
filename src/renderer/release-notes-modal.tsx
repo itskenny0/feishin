@@ -2,7 +2,7 @@ import { closeAllModals, openModal } from '@mantine/modals';
 import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
 import DOMPurify from 'dompurify';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import packageJson from '../../package.json';
@@ -399,8 +399,6 @@ const ReleaseNotesContent = ({ onDismiss, version }: ReleaseNotesContentProps) =
     );
 };
 
-const WAIT_FOR_LOCAL_STORAGE = 1000 * 2;
-
 interface ReleaseNotesModalContentWrapperProps {
     setDismissRef?: (fn: (() => void) | undefined) => void;
 }
@@ -441,37 +439,8 @@ export const openReleaseNotesModal = (title: string) => {
     });
 };
 
-export const ReleaseNotesModal = () => {
-    const { version } = packageJson;
-    const { t } = useTranslation();
-    const dismissRef = useRef<(() => void) | null>(null);
-
-    useEffect(() => {
-        const timeoutId = setTimeout(() => {
-            const valueFromLocalStorage = localStorage.getItem('version');
-            const versionString = `"${version}"`;
-
-            // Only show modal if the stored version is different from current version
-            if (valueFromLocalStorage !== versionString) {
-                openModal({
-                    children: (
-                        <ReleaseNotesModalContentWrapper
-                            setDismissRef={(fn) => {
-                                dismissRef.current = fn ?? null;
-                            }}
-                        />
-                    ),
-                    onClose: () => dismissRef.current?.(),
-                    size: 'xl',
-                    title: t('common.newVersion', { version }) as string,
-                });
-            }
-        }, WAIT_FOR_LOCAL_STORAGE);
-
-        return () => {
-            clearTimeout(timeoutId);
-        };
-    }, [t, version]);
-
-    return null;
-};
+// The auto-on-update <ReleaseNotesModal /> component used to live here and
+// pop up automatically whenever the installed version differed from the
+// last-seen one. That popup interrupted launch on every fork build (we tag
+// frequently), so the auto-open is removed. The release notes are still
+// reachable on-demand via openReleaseNotesModal() from the app menu.
