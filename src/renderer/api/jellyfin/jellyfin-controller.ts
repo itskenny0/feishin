@@ -391,21 +391,28 @@ export const JellyfinController: InternalControllerEndpoint = {
             },
         });
 
+        // Use ParentId to enumerate the album's direct audio children.
+        //
+        // Upstream commit f190626c switched this to AlbumIds + Recursive to
+        // make play counts come through, but on certain Jellyfin libraries
+        // that combination returns only a tiny subset of the album (we saw
+        // a 368-track album come back as one song repeated twice). Going
+        // back to ParentId restores the original "give me the children of
+        // this album" semantics, and we add EnableUserData + UserId
+        // explicitly so the play-count fix from the upstream commit still
+        // applies.
         const songsRes = await jfApiClient(apiClientProps).getSongList({
             params: {
                 userId: apiClientProps.server.userId,
             },
             query: {
-                AlbumIds: query.id,
                 EnableUserData: true,
                 Fields: JF_FIELDS.SONG,
                 IncludeItemTypes: 'Audio',
                 // Pin a large explicit Limit so albums with > the server's
-                // default page size still come back in full. Without this,
-                // Jellyfin instances that cap default responses return a
-                // small subset and the album detail page renders incomplete.
+                // default page size still come back in full.
                 Limit: 5000,
-                Recursive: true,
+                ParentId: query.id,
                 SortBy: 'ParentIndexNumber,IndexNumber,SortName',
                 SortOrder: JFSortOrder.ASC,
                 StartIndex: 0,
@@ -417,10 +424,9 @@ export const JellyfinController: InternalControllerEndpoint = {
             throw new Error('Failed to get album detail');
         }
 
-        // Recursive: true paired with AlbumIds occasionally returns the same
-        // song twice on certain Jellyfin configurations (typically when a
-        // track is referenced from a compilation as well as its source
-        // album). De-dupe by id so the detail view never repeats a track.
+        // Defensive de-dup. ParentId-children responses don't normally
+        // duplicate, but keeping this is cheap insurance for any edge case
+        // where a song surfaces twice in the same album listing.
         const seenSongIds = new Set<string>();
         const uniqueSongs = songsRes.body.Items.filter((song) => {
             if (seenSongIds.has(song.Id)) return false;
