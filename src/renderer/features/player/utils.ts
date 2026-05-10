@@ -58,6 +58,40 @@ export const getPlaylistSongsById = async (args: {
     return res;
 };
 
+/**
+ * Fetch a single batch of playlist songs by index range. Used by the
+ * streaming play-playlist path that starts playback after a small first
+ * batch lands and fetches the remainder in the background.
+ */
+export const fetchPlaylistSongsBatch = async (args: {
+    limit: number;
+    playlistId: string;
+    queryClient: QueryClient;
+    serverId: string;
+    startIndex: number;
+}) => {
+    const { limit, playlistId, queryClient, serverId, startIndex } = args;
+    const res = await queryClient.fetchQuery({
+        gcTime: 1000 * 60,
+        queryFn: ({ signal }) =>
+            api.controller.getPlaylistSongList({
+                apiClientProps: { serverId, signal },
+                query: { id: playlistId, limit, startIndex },
+            }),
+        // Distinct from the whole-playlist cache key so a streamed-batch
+        // result doesn't satisfy a later full-playlist fetch with partial
+        // data, and vice versa.
+        queryKey: [
+            ...queryKeys.playlists.songList(serverId, playlistId),
+            'batch',
+            startIndex,
+            limit,
+        ],
+        staleTime: 1000 * 60,
+    });
+    return res;
+};
+
 export const getAlbumSongsById = async (args: {
     id: string[];
     orderByIds?: boolean;

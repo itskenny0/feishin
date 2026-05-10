@@ -8,6 +8,7 @@ import { queryKeys } from '/@/renderer/api/query-keys';
 import { albumQueries } from '/@/renderer/features/albums/api/album-api';
 import { artistsQueries } from '/@/renderer/features/artists/api/artists-api';
 import {
+    fetchPlaylistSongsBatch,
     filterSongsByPlayerFilters,
     getAlbumArtistSongsById,
     getAlbumSongsById,
@@ -250,6 +251,71 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
                     category: LogCategory.PLAYER,
                     meta: { ids: id, itemType, serverId, type },
                 });
+
+                // Streaming start for a single playlist with Play.NOW: fetch
+                // a small first batch so playback can begin immediately, then
+                // append the remainder in the background. Avoids the 5-60s
+                // wait users see on large playlists where the full fetch has
+                // to complete before song 1 starts.
+                if (itemType === LibraryItem.PLAYLIST && type === Play.NOW && id.length === 1) {
+                    const STREAM_FIRST_BATCH = 50;
+                    const STREAM_TAIL_BATCH = 5000;
+
+                    const firstBatch = await fetchPlaylistSongsBatch({
+                        limit: STREAM_FIRST_BATCH,
+                        playlistId: id[0],
+                        queryClient,
+                        serverId,
+                        startIndex: 0,
+                    });
+
+                    clearTimeout(timeoutIds.current[fetchId] as ReturnType<typeof setTimeout>);
+                    delete timeoutIds.current[fetchId];
+                    if (toastId) {
+                        toast.hide(toastId);
+                    }
+
+                    const filters = useSettingsStore.getState().playback.filters;
+                    const filteredFirst = filterSongsByPlayerFilters(firstBatch.items, filters);
+
+                    // Start playback immediately with batch 1.
+                    storeActions.addToQueueByType(filteredFirst, Play.NOW);
+
+                    // If the playlist is larger than the first batch, fetch
+                    // the rest in the background and append it. We don't
+                    // await so the caller's "play" click is acknowledged
+                    // the moment song 1 starts.
+                    const total = firstBatch.totalRecordCount ?? 0;
+                    if (total > firstBatch.items.length) {
+                        void fetchPlaylistSongsBatch({
+                            limit: STREAM_TAIL_BATCH,
+                            playlistId: id[0],
+                            queryClient,
+                            serverId,
+                            startIndex: firstBatch.items.length,
+                        })
+                            .then((tail) => {
+                                const filteredTail = filterSongsByPlayerFilters(
+                                    tail.items,
+                                    filters,
+                                );
+                                if (filteredTail.length > 0) {
+                                    storeActions.addToQueueByType(filteredTail, Play.LAST);
+                                }
+                            })
+                            .catch((err) => {
+                                if (instanceOfCancellationError(err)) return;
+                                logFn.error(logMsg[LogCategory.PLAYER].addToQueueByFetch, {
+                                    category: LogCategory.PLAYER,
+                                    meta: {
+                                        error: (err as Error).message,
+                                        phase: 'streaming-tail',
+                                    },
+                                });
+                            });
+                    }
+                    return;
+                }
 
                 const songs = await queryClient.fetchQuery({
                     gcTime: 0,
