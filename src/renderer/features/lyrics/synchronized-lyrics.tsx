@@ -169,10 +169,25 @@ export const SynchronizedLyrics = ({
     }, []);
 
     // Reset state when the lyric set changes so we don't carry an active index
-    // that points into the old array.
+    // that points into the old array. Crucially, scrub the .active class off
+    // any node that still carries it - the <LyricLine> elements are keyed by
+    // index, so React reuses the same DOM nodes for the new song and only
+    // replaces text content. Without this, the previously-highlit line stays
+    // highlit at its old index until the first timecode of the new song fires,
+    // which the user notices as a random line glowing on every track change.
     useEffect(() => {
         activeIndexRef.current = NO_ACTIVE_INDEX;
-        activeElementRef.current = null;
+        if (activeElementRef.current) {
+            activeElementRef.current.classList.remove('active');
+            activeElementRef.current = null;
+        }
+        // Belt-and-suspenders: clear any stray .active inside the container in
+        // case the tracked ref got out of sync (e.g. the lyrics view unmounted
+        // and remounted while the ref was still pointing at a detached node).
+        const container = containerRef.current;
+        if (container) {
+            container.querySelectorAll('.active').forEach((el) => el.classList.remove('active'));
+        }
     }, [sortedLyrics]);
 
     // Single source of truth for advancing through the lyric timeline. Re-runs
