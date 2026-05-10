@@ -622,7 +622,8 @@
             "transcoding": "transcoding",
             "discord": "discord",
             "logger": "logger",
-            "playerFilters": "player filters"
+            "playerFilters": "player filters",
+            "visualizer": "visualizer settings"
         },
         "sidebar": {
             "albumArtists": "$t(entity.albumArtist, {\"count\": 2})",

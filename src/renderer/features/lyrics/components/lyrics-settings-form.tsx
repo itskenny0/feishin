@@ -1,7 +1,9 @@
+import { closeAllModals } from '@mantine/modals';
 import isElectron from 'is-electron';
 import { useTranslation } from 'react-i18next';
 
 import { languages } from '/@/i18n/i18n';
+import { openVisualizerSettingsModal } from '/@/renderer/features/player/utils/open-visualizer-settings-modal';
 import {
     SettingOption,
     SettingsSection,
@@ -12,7 +14,10 @@ import {
     useSettingsStore,
     useSettingsStoreActions,
 } from '/@/renderer/store';
+import { Button } from '/@/shared/components/button/button';
 import { Fieldset } from '/@/shared/components/fieldset/fieldset';
+import { Group } from '/@/shared/components/group/group';
+import { Icon } from '/@/shared/components/icon/icon';
 import { MultiSelect } from '/@/shared/components/multi-select/multi-select';
 import { NumberInput } from '/@/shared/components/number-input/number-input';
 import { SegmentedControl } from '/@/shared/components/segmented-control/segmented-control';
@@ -437,8 +442,24 @@ export const LyricsSettingsForm = ({ settingsKey }: LyricsSettingsFormProps) => 
         },
     ];
 
+    const handleOpenVisualizerSettings = () => {
+        // Close every open modal first so the lyrics modal doesn't sit
+        // behind the visualizer one when both are open at once.
+        closeAllModals();
+        openVisualizerSettingsModal();
+    };
+
     return (
         <Stack gap="md" p="md">
+            <Group justify="flex-end">
+                <Button
+                    leftSection={<Icon icon="mediaSettings" />}
+                    onClick={handleOpenVisualizerSettings}
+                    variant="subtle"
+                >
+                    {t('page.setting.visualizer', { postProcess: 'sentenceCase' })}
+                </Button>
+            </Group>
             <Fieldset legend={t('page.setting.lyricsDisplay', { postProcess: 'sentenceCase' })}>
                 <SettingsSection options={displayOptions} />
             </Fieldset>
