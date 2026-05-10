@@ -29,7 +29,31 @@
 
 ---
 
-> **About this fork** — this is [@itskenny0](https://github.com/itskenny0)'s fork of [@jeffvli](https://github.com/jeffvli)'s excellent [Feishin](https://github.com/jeffvli/feishin), maintained for a few personal additions: Jellyfin remote-control (so it shows up in "Play On" / Home Assistant / etc.), an in-playback-order queue view when shuffling, a NetEase placeholder-lyric filter, opt-in analytics, and date-tagged auto-builds for Linux / macOS / Windows. All credit for the project goes to **[@jeffvli](https://github.com/jeffvli)** — please ⭐ the [upstream repo](https://github.com/jeffvli/feishin) if you enjoy Feishin.
+> **About this fork** — this is [@itskenny0](https://github.com/itskenny0)'s fork of [@jeffvli](https://github.com/jeffvli)'s excellent [Feishin](https://github.com/jeffvli/feishin). It tracks upstream and adds a handful of personal additions, grouped below. All credit for the project goes to **[@jeffvli](https://github.com/jeffvli)** — please ⭐ the [upstream repo](https://github.com/jeffvli/feishin) if you enjoy Feishin.
+>
+> **Library / display**
+> - Show the on-disk folder name for albums and folders instead of the Jellyfin metadata title (toggleable per type). Applied across the album list, album detail header, sticky scroll header, breadcrumbs, sidebar, search results, context menu, and player bar.
+> - Configurable sidebar bottom section: Playlists, Favorited Albums, or hidden.
+> - Album-detail "Genres" and "External Links" sections are collapsible, with state persisted between launches.
+> - Default sort on the Albums view is "Recently added" (descending) for new users.
+> - "Is Favorited" filter on the Albums view is persisted across restarts and gets a 3-state None/Yes/No toggle.
+>
+> **Player / playback**
+> - Jellyfin remote-control: the app shows up in "Play On" / Home Assistant / etc. and accepts play/pause/queue from other Jellyfin clients.
+> - In-playback-order queue view when shuffling, so the queue keeps showing the upcoming order rather than the underlying list.
+> - Synchronized-lyric advancement smoothed: handles gaps, overlaps and out-of-order timestamps gracefully.
+> - NetEase placeholder-lyric filter — strips the "纯音乐, 请欣赏" filler when a song has no real lyrics.
+> - Auto-DJ no longer fires immediately on a freshly-replaced one-track queue.
+>
+> **Performance**
+> - Albums and playlists open near-instantly: the sidebar's favorited-albums list pre-warms the album-detail cache in the background, and the player pre-warms lyrics for the next N tracks in the queue (both configurable).
+> - Smaller initial album/playlist fetch + raised query stale time so navigating between lists doesn't refetch on every visit.
+> - Targeted Zustand selector splits across the heaviest list components.
+>
+> **UX / build**
+> - Opt-in analytics.
+> - Date-tagged auto-builds for Linux / macOS / Windows; the version suffix is baked into every produced artifact (zip, exe, dmg, deb, AppImage) so unzipped binaries identify themselves.
+> - The "what's new" changelog modal no longer pops up on launch — still reachable from the app menu.
 
 Rewrite of [Sonixd](https://github.com/jeffvli/sonixd).
 
