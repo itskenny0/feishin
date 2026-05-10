@@ -1015,8 +1015,8 @@ export const JellyfinController: InternalControllerEndpoint = {
             query: {
                 Fields: JF_FIELDS.SONG,
                 IncludeItemTypes: 'Audio',
-                Limit: 5000,
-                StartIndex: 0,
+                Limit: query.limit ?? 5000,
+                StartIndex: query.startIndex ?? 0,
                 UserId: apiClientProps.server?.userId,
             },
         });

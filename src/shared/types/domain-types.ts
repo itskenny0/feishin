@@ -1252,6 +1252,11 @@ export type PlaylistSongListCountArgs = BaseEndpointArgs & {
 
 export type PlaylistSongListQuery = {
     id: string;
+    // Optional pagination - used by the streaming play-playlist path that
+    // fetches a small first batch to start playback, then the remainder in
+    // the background. Defaults: startIndex 0, limit 5000.
+    limit?: number;
+    startIndex?: number;
 };
 
 export type PlaylistSongListQueryClientSide = {
