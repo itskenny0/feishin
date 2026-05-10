@@ -1155,7 +1155,7 @@ const initialState: SettingsState = {
         buttonSize: 15,
         collapsedDetailSections: {},
         collections: [],
-        combinedLyricsAndVisualizer: false,
+        combinedLyricsAndVisualizer: true,
         disabledContextMenu: {},
         enableGridMultiSelect: false,
         externalLinks: true,
@@ -1950,8 +1950,8 @@ const initialState: SettingsState = {
         },
         butterchurn: {
             blendTime: 2.5,
-            currentPreset: undefined,
-            cyclePresets: true,
+            currentPreset: '_Geiss - untitled',
+            cyclePresets: false,
             cycleTime: 30,
             ignoredPresets: [],
             includeAllPresets: true,
@@ -1960,7 +1960,7 @@ const initialState: SettingsState = {
             randomizeNextPreset: true,
             selectedPresets: [],
         },
-        type: 'audiomotionanalyzer',
+        type: 'butterchurn',
     },
     window: {
         disableAutoUpdate: false,
