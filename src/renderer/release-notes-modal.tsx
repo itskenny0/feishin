@@ -218,7 +218,7 @@ const ReleaseNotesContent = ({ onDismiss, version }: ReleaseNotesContentProps) =
                         value={selectedVersion}
                     />
                 )}
-                <Text size="sm">{t('error.genericError', { postProcess: 'sentenceCase' })}</Text>
+                <Text size="sm">{t('error.genericError')}</Text>
                 <Group justify="flex-end">
                     <Button
                         component="a"
@@ -232,10 +232,10 @@ const ReleaseNotesContent = ({ onDismiss, version }: ReleaseNotesContentProps) =
                         target="_blank"
                         variant="filled"
                     >
-                        {t('common.viewReleaseNotes', { postProcess: 'sentenceCase' })}
+                        {t('common.viewReleaseNotes')}
                     </Button>
                     <Button onClick={onDismiss} variant="default">
-                        {t('common.dismiss', { postProcess: 'titleCase' })}
+                        {t('common.dismiss')}
                     </Button>
                 </Group>
             </Stack>
@@ -253,9 +253,7 @@ const ReleaseNotesContent = ({ onDismiss, version }: ReleaseNotesContentProps) =
                     />
                 )}
                 <Text isMuted size="sm">
-                    {t('page.releasenotes.noStableReleaseToCompare', {
-                        postProcess: 'sentenceCase',
-                    })}
+                    {t('page.releasenotes.noStableReleaseToCompare')}
                 </Text>
                 <Group justify="flex-end">
                     <Button
@@ -266,10 +264,10 @@ const ReleaseNotesContent = ({ onDismiss, version }: ReleaseNotesContentProps) =
                         target="_blank"
                         variant="subtle"
                     >
-                        {t('action.viewMore', { postProcess: 'sentenceCase' })}
+                        {t('action.viewMore')}
                     </Button>
                     <Button onClick={onDismiss} variant="filled">
-                        {t('common.dismiss', { postProcess: 'titleCase' })}
+                        {t('common.dismiss')}
                     </Button>
                 </Group>
             </Stack>
@@ -290,7 +288,6 @@ const ReleaseNotesContent = ({ onDismiss, version }: ReleaseNotesContentProps) =
                 )}
                 <Text isMuted size="sm">
                     {t('page.releasenotes.commitsSinceStable', {
-                        postProcess: 'sentenceCase',
                         stable: latestStableRelease
                             ? parseVersionFromTag(latestStableRelease.tag_name)
                             : '',
@@ -304,9 +301,7 @@ const ReleaseNotesContent = ({ onDismiss, version }: ReleaseNotesContentProps) =
                     <Stack gap="xs">
                         {commits.length === 0 ? (
                             <Text isMuted size="sm">
-                                {t('page.releasenotes.noNewCommits', {
-                                    postProcess: 'sentenceCase',
-                                })}
+                                {t('page.releasenotes.noNewCommits')}
                             </Text>
                         ) : (
                             commits.map((c) => {
@@ -337,7 +332,7 @@ const ReleaseNotesContent = ({ onDismiss, version }: ReleaseNotesContentProps) =
                                             target="_blank"
                                             variant="subtle"
                                         >
-                                            {t('common.view', { postProcess: 'sentenceCase' })}
+                                            {t('common.view')}
                                         </Button>
                                     </Group>
                                 );
@@ -354,10 +349,10 @@ const ReleaseNotesContent = ({ onDismiss, version }: ReleaseNotesContentProps) =
                         target="_blank"
                         variant="subtle"
                     >
-                        {t('action.viewMore', { postProcess: 'sentenceCase' })}
+                        {t('action.viewMore')}
                     </Button>
                     <Button onClick={onDismiss} variant="filled">
-                        {t('common.dismiss', { postProcess: 'titleCase' })}
+                        {t('common.dismiss')}
                     </Button>
                 </Group>
             </Stack>
@@ -394,10 +389,10 @@ const ReleaseNotesContent = ({ onDismiss, version }: ReleaseNotesContentProps) =
                     target="_blank"
                     variant="subtle"
                 >
-                    {t('action.viewMore', { postProcess: 'sentenceCase' })}
+                    {t('action.viewMore')}
                 </Button>
                 <Button onClick={onDismiss} variant="filled">
-                    {t('common.dismiss', { postProcess: 'titleCase' })}
+                    {t('common.dismiss')}
                 </Button>
             </Group>
         </Stack>

@@ -69,21 +69,15 @@ export const SidebarSettings = memo(() => {
                 <Select
                     data={[
                         {
-                            label: t('setting.sidebarBottomSection_playlists', {
-                                postProcess: 'sentenceCase',
-                            }),
+                            label: t('setting.sidebarBottomSection_playlists'),
                             value: 'playlists',
                         },
                         {
-                            label: t('setting.sidebarBottomSection_favoriteAlbums', {
-                                postProcess: 'sentenceCase',
-                            }),
+                            label: t('setting.sidebarBottomSection_favoriteAlbums'),
                             value: 'favoriteAlbums',
                         },
                         {
-                            label: t('setting.sidebarBottomSection_none', {
-                                postProcess: 'sentenceCase',
-                            }),
+                            label: t('setting.sidebarBottomSection_none'),
                             value: 'none',
                         },
                     ]}
@@ -93,9 +87,8 @@ export const SidebarSettings = memo(() => {
             ),
             description: t('setting.sidebarBottomSection', {
                 context: 'description',
-                postProcess: 'sentenceCase',
             }),
-            title: t('setting.sidebarBottomSection', { postProcess: 'sentenceCase' }),
+            title: t('setting.sidebarBottomSection'),
         },
         {
             control: (
@@ -105,17 +98,14 @@ export const SidebarSettings = memo(() => {
                         setLocalFilterRegex(value);
                         debouncedSetFilterRegex(value);
                     }}
-                    placeholder={t('setting.sidebarPlaylistListFilterRegex_placeholder', {
-                        postProcess: 'sentenceCase',
-                    })}
+                    placeholder={t('setting.sidebarPlaylistListFilterRegex_placeholder')}
                     value={localFilterRegex}
                 />
             ),
             description: t('setting.sidebarPlaylistListFilterRegex', {
                 context: 'description',
-                postProcess: 'sentenceCase',
             }),
-            title: t('setting.sidebarPlaylistListFilterRegex', { postProcess: 'sentenceCase' }),
+            title: t('setting.sidebarPlaylistListFilterRegex'),
         },
         {
             control: (
@@ -126,9 +116,8 @@ export const SidebarSettings = memo(() => {
             ),
             description: t('setting.sidebarPlaylistSorting', {
                 context: 'description',
-                postProcess: 'sentenceCase',
             }),
-            title: t('setting.sidebarPlaylistSorting', { postProcess: 'sentenceCase' }),
+            title: t('setting.sidebarPlaylistSorting'),
         },
         {
             control: (
@@ -139,9 +128,8 @@ export const SidebarSettings = memo(() => {
             ),
             description: t('setting.sidebarCollapsedNavigation', {
                 context: 'description',
-                postProcess: 'sentenceCase',
             }),
-            title: t('setting.sidebarCollapsedNavigation', { postProcess: 'sentenceCase' }),
+            title: t('setting.sidebarCollapsedNavigation'),
         },
         {
             control: (
@@ -159,9 +147,8 @@ export const SidebarSettings = memo(() => {
             ),
             description: t('setting.showLyricsInSidebar', {
                 context: 'description',
-                postProcess: 'sentenceCase',
             }),
-            title: t('setting.showLyricsInSidebar', { postProcess: 'sentenceCase' }),
+            title: t('setting.showLyricsInSidebar'),
         },
         {
             control: (
@@ -179,9 +166,8 @@ export const SidebarSettings = memo(() => {
             ),
             description: t('setting.showVisualizerInSidebar', {
                 context: 'description',
-                postProcess: 'sentenceCase',
             }),
-            title: t('setting.showVisualizerInSidebar', { postProcess: 'sentenceCase' }),
+            title: t('setting.showVisualizerInSidebar'),
         },
         {
             control: (
@@ -199,9 +185,8 @@ export const SidebarSettings = memo(() => {
             ),
             description: t('setting.combinedLyricsAndVisualizer', {
                 context: 'description',
-                postProcess: 'sentenceCase',
             }),
-            title: t('setting.combinedLyricsAndVisualizer', { postProcess: 'sentenceCase' }),
+            title: t('setting.combinedLyricsAndVisualizer'),
         },
     ];
 
@@ -209,7 +194,7 @@ export const SidebarSettings = memo(() => {
         <SettingsSection
             extra={<SidebarReorder />}
             options={options}
-            title={t('page.setting.sidebar', { postProcess: 'sentenceCase' })}
+            title={t('page.setting.sidebar')}
         />
     );
 });
