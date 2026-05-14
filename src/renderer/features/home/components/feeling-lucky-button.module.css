@@ -1,0 +1,112 @@
+.luckyButton {
+    /* The magic gradient. Diagonal so the sweep animation reads as a sheen. */
+    --lucky-gradient: linear-gradient(
+        110deg,
+        #a855f7 0%,
+        #ec4899 40%,
+        #f59e0b 75%,
+        #a855f7 100%
+    );
+
+    align-items: center;
+    background: var(--lucky-gradient);
+    background-size: 200% 100%;
+    background-position: 0% 50%;
+    border: none;
+    border-radius: 12px;
+    box-shadow:
+        0 2px 8px rgba(168, 85, 247, 0.25),
+        0 8px 24px rgba(236, 72, 153, 0.15);
+    color: white;
+    cursor: pointer;
+    display: inline-flex;
+    font-size: 0.95rem;
+    font-weight: 600;
+    gap: 0.625rem;
+    justify-content: center;
+    letter-spacing: 0.01em;
+    overflow: hidden;
+    padding: 0.7rem 1.4rem;
+    position: relative;
+    transition:
+        transform 120ms ease-out,
+        box-shadow 180ms ease-out,
+        background-position 600ms ease-out;
+    user-select: none;
+    white-space: nowrap;
+}
+
+.luckyButton:hover:not(:disabled) {
+    background-position: 100% 50%;
+    box-shadow:
+        0 4px 14px rgba(168, 85, 247, 0.4),
+        0 12px 32px rgba(236, 72, 153, 0.25);
+    transform: translateY(-1px);
+}
+
+.luckyButton:active:not(:disabled) {
+    transform: translateY(0);
+    transition-duration: 60ms;
+}
+
+.luckyButton:disabled {
+    cursor: progress;
+    opacity: 0.8;
+}
+
+/* A faint diagonal sheen that sweeps across the button continuously, very subtle. */
+.luckyButton::after {
+    background: linear-gradient(
+        110deg,
+        transparent 30%,
+        rgba(255, 255, 255, 0.18) 50%,
+        transparent 70%
+    );
+    content: '';
+    inset: 0;
+    pointer-events: none;
+    position: absolute;
+    transform: translateX(-100%);
+    transition: transform 700ms ease-out;
+}
+
+.luckyButton:hover::after {
+    transform: translateX(100%);
+}
+
+.luckyIcon {
+    display: inline-flex;
+    /* Slow gentle drift so the sparkles feel alive without being distracting. */
+    animation: luckyDrift 3.4s ease-in-out infinite;
+}
+
+@keyframes luckyDrift {
+    0%, 100% {
+        transform: rotate(-4deg) scale(1);
+    }
+    50% {
+        transform: rotate(4deg) scale(1.08);
+    }
+}
+
+.luckyButton.loading .luckyIcon {
+    /* During the loading state, spin instead of drift to signal work. */
+    animation: luckySpin 0.9s linear infinite;
+}
+
+@keyframes luckySpin {
+    from {
+        transform: rotate(0);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .luckyButton::after,
+    .luckyIcon {
+        animation: none;
+        transition: none;
+    }
+}

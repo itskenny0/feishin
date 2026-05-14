@@ -480,6 +480,7 @@ export const GeneralSettingsSchema = z.object({
     genreTarget: GenreTargetSchema,
     homeFeature: z.boolean(),
     homeFeatureStyle: z.nativeEnum(HomeFeatureStyle),
+    homeFeelingLucky: z.boolean(),
     homeItems: z.array(SortableItemSchema(HomeItemSchema)),
     imageRes: z.object({
         fullScreenPlayer: z.number(),
@@ -1152,6 +1153,7 @@ const initialState: SettingsState = {
         genreTarget: GenreTarget.TRACK,
         homeFeature: true,
         homeFeatureStyle: HomeFeatureStyle.SINGLE,
+        homeFeelingLucky: true,
         homeItems,
         imageRes: {
             fullScreenPlayer: 0,
@@ -2564,10 +2566,16 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
+                if (version <= 35) {
+                    if (state.general.homeFeelingLucky === undefined) {
+                        state.general.homeFeelingLucky = initialState.general.homeFeelingLucky;
+                    }
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 34,
+            version: 36,
         },
     ),
 );
@@ -2819,6 +2827,9 @@ export const useHomeFeature = () => useSettingsStore((state) => state.general.ho
 
 export const useHomeFeatureStyle = () =>
     useSettingsStore((state) => state.general.homeFeatureStyle);
+
+export const useHomeFeelingLucky = () =>
+    useSettingsStore((state) => state.general.homeFeelingLucky);
 
 export const useHomeItems = () => useSettingsStore((state) => state.general.homeItems, shallow);
 

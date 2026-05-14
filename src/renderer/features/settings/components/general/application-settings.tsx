@@ -402,6 +402,25 @@ export const ApplicationSettings = memo(() => {
         {
             control: (
                 <Switch
+                    aria-label={t('setting.homeFeelingLucky')}
+                    defaultChecked={settings.homeFeelingLucky}
+                    onChange={(e) =>
+                        setSettings({
+                            general: {
+                                ...settings,
+                                homeFeelingLucky: e.currentTarget.checked,
+                            },
+                        })
+                    }
+                />
+            ),
+            description: t('setting.homeFeelingLucky', { context: 'description' }),
+            isHidden: false,
+            title: t('setting.homeFeelingLucky'),
+        },
+        {
+            control: (
+                <Switch
                     aria-label={t('setting.albumBackground')}
                     defaultChecked={settings.albumBackground}
                     onChange={(e) =>
