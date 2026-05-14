@@ -153,7 +153,9 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
      */
     const getRemoteCtx = useCallback(() => {
         const target = useRemoteTargetStore.getState();
-        if (!target.targetDeviceId || !target.sessionId) return null;
+        if (!target.targetDeviceId || !target.sessionId || target.sessionId === '__pending__') {
+            return null;
+        }
         const server = useAuthStore.getState().currentServer;
         if (!server?.credential) return null;
         return { sessionId: target.sessionId, server };
