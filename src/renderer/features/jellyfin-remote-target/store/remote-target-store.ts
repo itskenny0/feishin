@@ -11,11 +11,13 @@ interface RemoteTargetState {
         clearTarget: () => void;
         setDeviceList: (devices: RemoteDevice[]) => void;
         setMirrored: (mirrored: Partial<RemoteMirrored>) => void;
+        setPickerOpen: (open: boolean) => void;
         setStatus: (status: RemoteTargetStatus) => void;
         setTarget: (target: { capabilities: string[]; deviceId: string; deviceName: string; sessionId: string }) => void;
     };
     deviceList: RemoteDevice[];
     mirrored: RemoteMirrored;
+    pickerOpen: boolean;
     sessionId: null | string;          // re-resolved each Sessions tick from targetDeviceId
     status: RemoteTargetStatus;
     targetDeviceId: null | string;
@@ -43,6 +45,7 @@ export const useRemoteTargetStore = create<RemoteTargetState>((set) => ({
         setDeviceList: (devices) => set({ deviceList: devices }),
         setMirrored: (partial) =>
             set((s) => ({ mirrored: { ...s.mirrored, ...partial } })),
+        setPickerOpen: (open) => set({ pickerOpen: open }),
         setStatus: (status) => set({ status }),
         setTarget: ({ capabilities, deviceId, deviceName, sessionId }) =>
             set(() => ({
@@ -55,6 +58,7 @@ export const useRemoteTargetStore = create<RemoteTargetState>((set) => ({
     },
     deviceList: [],
     mirrored: emptyMirrored,
+    pickerOpen: false,
     sessionId: null,
     status: 'idle',
     targetDeviceId: null,
