@@ -401,6 +401,50 @@ export const ApplicationSettings = memo(() => {
         },
         {
             control: (
+                <Select
+                    allowDeselect={false}
+                    aria-label={t('setting.homeFeatureContent')}
+                    data={[
+                        { label: t('page.home.featureVariant_artist'), value: 'artist' },
+                        { label: t('page.home.featureVariant_genre'), value: 'genre' },
+                        {
+                            label: t('page.home.featureVariant_recentlyPlayed'),
+                            value: 'recentlyPlayed',
+                        },
+                        { label: t('page.home.featureVariant_topPlayed'), value: 'topPlayed' },
+                        { label: t('page.home.featureVariant_favorites'), value: 'favorites' },
+                        { label: t('page.home.featureVariant_unplayed'), value: 'unplayed' },
+                        {
+                            label: t('page.home.featureVariant_forgottenFavorites'),
+                            value: 'forgottenFavorites',
+                        },
+                        { label: t('page.home.featureVariant_timeMachine'), value: 'timeMachine' },
+                        { label: t('page.home.featureVariant_decade'), value: 'decade' },
+                        {
+                            label: t('page.home.featureVariant_albumOfTheDay'),
+                            value: 'albumOfTheDay',
+                        },
+                        { label: t('page.home.featureVariant_album'), value: 'album' },
+                        { label: t('page.home.featureVariant_surpriseMe'), value: 'surpriseMe' },
+                    ]}
+                    onChange={(next) => {
+                        if (!next) return;
+                        setSettings({
+                            general: {
+                                ...settings,
+                                homeFeatureContent: next as (typeof settings)['homeFeatureContent'],
+                            },
+                        });
+                    }}
+                    value={settings.homeFeatureContent}
+                />
+            ),
+            description: t('setting.homeFeatureContent', { context: 'description' }),
+            isHidden: false,
+            title: t('setting.homeFeatureContent'),
+        },
+        {
+            control: (
                 <Switch
                     aria-label={t('setting.homeFeelingLucky')}
                     defaultChecked={settings.homeFeelingLucky}

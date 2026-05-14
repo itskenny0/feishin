@@ -1,0 +1,18 @@
+.picker-row {
+    display: flex;
+    gap: var(--theme-spacing-sm);
+    align-items: center;
+    margin-bottom: var(--theme-spacing-xs);
+}
+
+.picker-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--theme-colors-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.picker-select {
+    min-width: 220px;
+}

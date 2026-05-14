@@ -1,0 +1,516 @@
+import { useQuery } from '@tanstack/react-query';
+import { TFunction } from 'i18next';
+import { useMemo } from 'react';
+import { generatePath } from 'react-router';
+
+import { api } from '/@/renderer/api';
+import {
+    FeatureCardData,
+    SONGS_PER_CARD,
+} from '/@/renderer/features/home/components/feature-card/feature-card-shell';
+import { usePoolRotation } from '/@/renderer/features/home/components/feature-card/use-pool-rotation';
+import { AppRoute } from '/@/renderer/router/routes';
+import {
+    AlbumArtist,
+    AlbumArtistListSort,
+    Genre,
+    GenreListSort,
+    Played,
+    Song,
+    SongListSort,
+    SortOrder,
+} from '/@/shared/types/domain-types';
+
+// ============================================================================
+// Common constants
+// ============================================================================
+
+const MIN_SONG_COUNT = 30;
+const FALLBACK_MIN_SONG_COUNT = 10;
+const CANDIDATE_FETCH_LIMIT = 200;
+const YEAR_POOL_RANGE: [number, number] = [1960, new Date().getFullYear()];
+
+// ============================================================================
+// Featured Artist
+// ============================================================================
+
+interface ArtistCandidate {
+    id: string;
+    name: string;
+    songCount: null | number;
+}
+
+const useArtistCandidates = (serverId: string | undefined) =>
+    useQuery({
+        enabled: Boolean(serverId),
+        gcTime: 1000 * 60 * 60,
+        queryFn: async ({ signal }) => {
+            if (!serverId) return [] as ArtistCandidate[];
+            const res = await api.controller.getAlbumArtistList({
+                apiClientProps: { serverId, signal },
+                query: {
+                    limit: CANDIDATE_FETCH_LIMIT,
+                    sortBy: AlbumArtistListSort.RANDOM,
+                    sortOrder: SortOrder.DESC,
+                    startIndex: 0,
+                },
+            });
+            const all: ArtistCandidate[] = (res?.items ?? []).map((a: AlbumArtist) => ({
+                id: a.id,
+                name: a.name,
+                songCount: a.songCount ?? null,
+            }));
+            const primary = all.filter((a) => (a.songCount ?? 0) >= MIN_SONG_COUNT);
+            if (primary.length >= 3) return primary;
+            const fallback = all.filter((a) => (a.songCount ?? 0) >= FALLBACK_MIN_SONG_COUNT);
+            if (fallback.length >= 3) return fallback;
+            return all;
+        },
+        queryKey: ['feature-card-artists', serverId ?? ''] as const,
+        staleTime: 1000 * 60 * 60,
+    });
+
+const useArtistSongs = (artistId: null | string, serverId: string | undefined) =>
+    useQuery({
+        enabled: Boolean(artistId && serverId),
+        gcTime: 1000 * 60 * 30,
+        queryFn: async ({ signal }) => {
+            if (!artistId || !serverId) return [] as Song[];
+            const res = await api.controller.getSongList({
+                apiClientProps: { serverId, signal },
+                query: {
+                    albumArtistIds: [artistId],
+                    limit: SONGS_PER_CARD,
+                    sortBy: SongListSort.RANDOM,
+                    sortOrder: SortOrder.DESC,
+                    startIndex: 0,
+                },
+            });
+            return (res?.items ?? []) as Song[];
+        },
+        queryKey: ['feature-card-artist-songs', serverId ?? '', artistId ?? ''] as const,
+        staleTime: 1000 * 60 * 5,
+    });
+
+export const useArtistFeatureData = (
+    serverId: string | undefined,
+    t: TFunction,
+): FeatureCardData => {
+    const { data: candidates, isLoading } = useArtistCandidates(serverId);
+    const pool = candidates ?? [];
+    const { index, reshuffle } = usePoolRotation(pool.length);
+    const current = pool[index % Math.max(pool.length, 1)] as ArtistCandidate | undefined;
+    const { data: songs, isFetching } = useArtistSongs(current?.id ?? null, serverId);
+
+    return {
+        eyebrow: t('page.home.featureArtist_eyebrow'),
+        isLoading: isLoading || (Boolean(current) && isFetching && (songs ?? []).length === 0),
+        onReshuffle: reshuffle,
+        rotationCount: pool.length,
+        rotationIndex: index,
+        songs: songs ?? [],
+        subtitle: current?.songCount
+            ? t('page.home.featureArtist_trackCount', { count: current.songCount })
+            : t('page.home.featureArtist_trackCount_unknown'),
+        title: current?.name ?? '…',
+        titleHref: current
+            ? generatePath(AppRoute.LIBRARY_ALBUM_ARTISTS_DETAIL, { albumArtistId: current.id })
+            : undefined,
+    };
+};
+
+// ============================================================================
+// Featured Genre
+// ============================================================================
+
+interface GenreCandidate {
+    albumCount: null | number;
+    id: string;
+    name: string;
+    songCount: null | number;
+}
+
+const useGenreCandidates = (serverId: string | undefined) =>
+    useQuery({
+        enabled: Boolean(serverId),
+        gcTime: 1000 * 60 * 60,
+        queryFn: async ({ signal }) => {
+            if (!serverId) return [] as GenreCandidate[];
+            const res = await api.controller.getGenreList({
+                apiClientProps: { serverId, signal },
+                query: {
+                    limit: CANDIDATE_FETCH_LIMIT,
+                    sortBy: GenreListSort.NAME,
+                    sortOrder: SortOrder.ASC,
+                    startIndex: 0,
+                },
+            });
+            return (res?.items ?? []).map((g: Genre) => ({
+                albumCount: g.albumCount ?? null,
+                id: g.id,
+                name: g.name,
+                songCount: g.songCount ?? null,
+            }));
+        },
+        queryKey: ['feature-card-genres', serverId ?? ''] as const,
+        staleTime: 1000 * 60 * 60,
+    });
+
+const useGenreSongs = (
+    genreId: null | string,
+    serverType: string | undefined,
+    genreName: string,
+    serverId: string | undefined,
+) =>
+    useQuery({
+        enabled: Boolean(genreId && serverId),
+        gcTime: 1000 * 60 * 30,
+        queryFn: async ({ signal }) => {
+            if (!genreId || !serverId) return [] as Song[];
+            // Jellyfin uses genre id; navidrome/subsonic use genre name. Pass the
+            // form that matches the server (mirrors the shuffle-all modal logic).
+            const genreParam = serverType === 'jellyfin' ? genreId : genreName;
+            const res = await api.controller.getRandomSongList({
+                apiClientProps: { serverId, signal },
+                query: { genre: genreParam, limit: SONGS_PER_CARD, played: Played.All },
+            });
+            return (res?.items ?? []) as Song[];
+        },
+        queryKey: ['feature-card-genre-songs', serverId ?? '', genreId ?? ''] as const,
+        staleTime: 1000 * 60 * 5,
+    });
+
+export const useGenreFeatureData = (
+    serverId: string | undefined,
+    serverType: string | undefined,
+    t: TFunction,
+): FeatureCardData => {
+    const { data: candidates, isLoading } = useGenreCandidates(serverId);
+    const pool = useMemo(
+        () => (candidates ?? []).filter((g) => (g.albumCount ?? 0) > 0),
+        [candidates],
+    );
+    const { index, reshuffle } = usePoolRotation(pool.length);
+    const current = pool[index % Math.max(pool.length, 1)] as GenreCandidate | undefined;
+    const { data: songs, isFetching } = useGenreSongs(
+        current?.id ?? null,
+        serverType,
+        current?.name ?? '',
+        serverId,
+    );
+
+    return {
+        eyebrow: t('page.home.featureGenre_eyebrow'),
+        isLoading: isLoading || (Boolean(current) && isFetching && (songs ?? []).length === 0),
+        onReshuffle: reshuffle,
+        rotationCount: pool.length,
+        rotationIndex: index,
+        songs: songs ?? [],
+        subtitle: current?.albumCount
+            ? t('page.home.featureGenre_albumCount', { count: current.albumCount })
+            : undefined,
+        title: current?.name ?? '…',
+        titleHref: current
+            ? generatePath(AppRoute.LIBRARY_GENRES_DETAIL, { genreId: current.id })
+            : undefined,
+    };
+};
+
+// ============================================================================
+// Recently Played
+// ============================================================================
+
+const useRecentlyPlayedSongs = (serverId: string | undefined) =>
+    useQuery({
+        enabled: Boolean(serverId),
+        queryFn: async ({ signal }) => {
+            if (!serverId) return [] as Song[];
+            const res = await api.controller.getSongList({
+                apiClientProps: { serverId, signal },
+                query: {
+                    limit: SONGS_PER_CARD,
+                    sortBy: SongListSort.RECENTLY_PLAYED,
+                    sortOrder: SortOrder.DESC,
+                    startIndex: 0,
+                },
+            });
+            return (res?.items ?? []) as Song[];
+        },
+        queryKey: ['feature-card-recently-played', serverId ?? ''] as const,
+        staleTime: 1000 * 60 * 2,
+    });
+
+export const useRecentlyPlayedFeatureData = (
+    serverId: string | undefined,
+    t: TFunction,
+): FeatureCardData => {
+    const { data: songs, isLoading, refetch } = useRecentlyPlayedSongs(serverId);
+    return {
+        eyebrow: t('page.home.featureRecentlyPlayed_eyebrow'),
+        isLoading,
+        onReshuffle: () => void refetch(),
+        songs: songs ?? [],
+        subtitle: t('page.home.featureRecentlyPlayed_subtitle'),
+        title: t('page.home.featureRecentlyPlayed_title'),
+    };
+};
+
+// ============================================================================
+// Top Played
+// ============================================================================
+
+const useTopPlayedSongs = (serverId: string | undefined) =>
+    useQuery({
+        enabled: Boolean(serverId),
+        queryFn: async ({ signal }) => {
+            if (!serverId) return [] as Song[];
+            const res = await api.controller.getSongList({
+                apiClientProps: { serverId, signal },
+                query: {
+                    limit: SONGS_PER_CARD,
+                    sortBy: SongListSort.PLAY_COUNT,
+                    sortOrder: SortOrder.DESC,
+                    startIndex: 0,
+                },
+            });
+            return (res?.items ?? []) as Song[];
+        },
+        queryKey: ['feature-card-top-played', serverId ?? ''] as const,
+        staleTime: 1000 * 60 * 10,
+    });
+
+export const useTopPlayedFeatureData = (
+    serverId: string | undefined,
+    t: TFunction,
+): FeatureCardData => {
+    const { data: songs, isLoading, refetch } = useTopPlayedSongs(serverId);
+    return {
+        eyebrow: t('page.home.featureTopPlayed_eyebrow'),
+        isLoading,
+        onReshuffle: () => void refetch(),
+        songs: songs ?? [],
+        subtitle: t('page.home.featureTopPlayed_subtitle'),
+        title: t('page.home.featureTopPlayed_title'),
+    };
+};
+
+// ============================================================================
+// Favorites Mix
+// ============================================================================
+
+const useFavoritesSongs = (serverId: string | undefined) =>
+    useQuery({
+        enabled: Boolean(serverId),
+        queryFn: async ({ signal }) => {
+            if (!serverId) return [] as Song[];
+            const res = await api.controller.getSongList({
+                apiClientProps: { serverId, signal },
+                query: {
+                    favorite: true,
+                    limit: SONGS_PER_CARD,
+                    sortBy: SongListSort.RANDOM,
+                    sortOrder: SortOrder.DESC,
+                    startIndex: 0,
+                },
+            });
+            return (res?.items ?? []) as Song[];
+        },
+        // staleTime 0 so reshuffle truly re-randomises rather than serving cached
+        queryKey: ['feature-card-favorites', serverId ?? ''] as const,
+        staleTime: 0,
+    });
+
+export const useFavoritesFeatureData = (
+    serverId: string | undefined,
+    t: TFunction,
+): FeatureCardData => {
+    const { data: songs, isLoading, refetch } = useFavoritesSongs(serverId);
+    return {
+        eyebrow: t('page.home.featureFavorites_eyebrow'),
+        isLoading,
+        onReshuffle: () => void refetch(),
+        songs: songs ?? [],
+        subtitle: t('page.home.featureFavorites_subtitle'),
+        title: t('page.home.featureFavorites_title'),
+    };
+};
+
+// ============================================================================
+// Unplayed Discoveries
+// ============================================================================
+
+const useUnplayedSongs = (serverId: string | undefined, reseedCounter: number) =>
+    useQuery({
+        enabled: Boolean(serverId),
+        queryFn: async ({ signal }) => {
+            if (!serverId) return [] as Song[];
+            const res = await api.controller.getRandomSongList({
+                apiClientProps: { serverId, signal },
+                query: { limit: SONGS_PER_CARD, played: Played.Never },
+            });
+            return (res?.items ?? []) as Song[];
+        },
+        // The reseed counter is part of the queryKey so reshuffle gets a fresh
+        // server-side random sample instead of the cached set.
+        queryKey: ['feature-card-unplayed', serverId ?? '', reseedCounter] as const,
+        staleTime: 0,
+    });
+
+export const useUnplayedFeatureData = (
+    serverId: string | undefined,
+    t: TFunction,
+): FeatureCardData => {
+    // Use the rotation index as a reseed nonce; pool size of 100 is arbitrary —
+    // we never have 100 different samples but each reshuffle just increments.
+    const { index, reshuffle } = usePoolRotation(100);
+    const { data: songs, isLoading } = useUnplayedSongs(serverId, index);
+    return {
+        eyebrow: t('page.home.featureUnplayed_eyebrow'),
+        isLoading,
+        onReshuffle: reshuffle,
+        songs: songs ?? [],
+        subtitle: t('page.home.featureUnplayed_subtitle'),
+        title: t('page.home.featureUnplayed_title'),
+    };
+};
+
+// ============================================================================
+// Forgotten Favorites
+// ============================================================================
+
+const useForgottenFavoritesSongs = (serverId: string | undefined) =>
+    useQuery({
+        enabled: Boolean(serverId),
+        queryFn: async ({ signal }) => {
+            if (!serverId) return [] as Song[];
+            // Favorites sorted by least-recently-played first. Result is
+            // approximate: "favorites you haven't touched in a while" without
+            // needing an absolute date filter.
+            const res = await api.controller.getSongList({
+                apiClientProps: { serverId, signal },
+                query: {
+                    favorite: true,
+                    limit: SONGS_PER_CARD,
+                    sortBy: SongListSort.RECENTLY_PLAYED,
+                    sortOrder: SortOrder.ASC,
+                    startIndex: 0,
+                },
+            });
+            return (res?.items ?? []) as Song[];
+        },
+        queryKey: ['feature-card-forgotten', serverId ?? ''] as const,
+        staleTime: 1000 * 60 * 30,
+    });
+
+export const useForgottenFavoritesFeatureData = (
+    serverId: string | undefined,
+    t: TFunction,
+): FeatureCardData => {
+    const { data: songs, isLoading, refetch } = useForgottenFavoritesSongs(serverId);
+    return {
+        eyebrow: t('page.home.featureForgotten_eyebrow'),
+        isLoading,
+        onReshuffle: () => void refetch(),
+        songs: songs ?? [],
+        subtitle: t('page.home.featureForgotten_subtitle'),
+        title: t('page.home.featureForgotten_title'),
+    };
+};
+
+// ============================================================================
+// Time Machine — single year
+// ============================================================================
+
+const useTimeMachineSongs = (year: null | number, serverId: string | undefined) =>
+    useQuery({
+        enabled: Boolean(year && serverId),
+        queryFn: async ({ signal }) => {
+            if (!year || !serverId) return [] as Song[];
+            const res = await api.controller.getRandomSongList({
+                apiClientProps: { serverId, signal },
+                query: { limit: SONGS_PER_CARD, maxYear: year, minYear: year, played: Played.All },
+            });
+            return (res?.items ?? []) as Song[];
+        },
+        queryKey: ['feature-card-time-machine', serverId ?? '', year ?? 0] as const,
+        staleTime: 1000 * 60 * 5,
+    });
+
+export const useTimeMachineFeatureData = (
+    serverId: string | undefined,
+    t: TFunction,
+): FeatureCardData => {
+    const [minYear, maxYear] = YEAR_POOL_RANGE;
+    const yearPool = useMemo(() => {
+        const arr: number[] = [];
+        for (let y = minYear; y <= maxYear; y += 1) arr.push(y);
+        return arr;
+    }, [minYear, maxYear]);
+
+    const { index, reshuffle } = usePoolRotation(yearPool.length);
+    const year = yearPool[index % yearPool.length];
+    const { data: songs, isLoading } = useTimeMachineSongs(year, serverId);
+
+    return {
+        eyebrow: t('page.home.featureTimeMachine_eyebrow'),
+        isLoading,
+        onReshuffle: reshuffle,
+        rotationCount: yearPool.length,
+        rotationIndex: index,
+        songs: songs ?? [],
+        subtitle: songs && songs.length === 0 ? t('page.home.featureTimeMachine_empty') : undefined,
+        title: String(year),
+    };
+};
+
+// ============================================================================
+// Decade Dive
+// ============================================================================
+
+const useDecadeSongs = (decadeStart: null | number, serverId: string | undefined) =>
+    useQuery({
+        enabled: Boolean(decadeStart !== null && serverId),
+        queryFn: async ({ signal }) => {
+            if (decadeStart === null || !serverId) return [] as Song[];
+            const res = await api.controller.getRandomSongList({
+                apiClientProps: { serverId, signal },
+                query: {
+                    limit: SONGS_PER_CARD,
+                    maxYear: decadeStart + 9,
+                    minYear: decadeStart,
+                    played: Played.All,
+                },
+            });
+            return (res?.items ?? []) as Song[];
+        },
+        queryKey: ['feature-card-decade', serverId ?? '', decadeStart ?? -1] as const,
+        staleTime: 1000 * 60 * 5,
+    });
+
+export const useDecadeDiveFeatureData = (
+    serverId: string | undefined,
+    t: TFunction,
+): FeatureCardData => {
+    const [minYear, maxYear] = YEAR_POOL_RANGE;
+    const decades = useMemo(() => {
+        const arr: number[] = [];
+        const firstDecade = Math.floor(minYear / 10) * 10;
+        for (let d = firstDecade; d <= maxYear; d += 10) arr.push(d);
+        return arr;
+    }, [minYear, maxYear]);
+
+    const { index, reshuffle } = usePoolRotation(decades.length);
+    const decade = decades[index % decades.length];
+    const { data: songs, isLoading } = useDecadeSongs(decade, serverId);
+
+    return {
+        eyebrow: t('page.home.featureDecade_eyebrow'),
+        isLoading,
+        onReshuffle: reshuffle,
+        rotationCount: decades.length,
+        rotationIndex: index,
+        songs: songs ?? [],
+        subtitle: t('page.home.featureDecade_subtitle'),
+        title: `${decade}s`,
+    };
+};
