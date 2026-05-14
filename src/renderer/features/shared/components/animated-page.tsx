@@ -17,7 +17,11 @@ export const AnimatedPage = forwardRef(
             <motion.main
                 className={styles.animatedPage}
                 ref={ref}
-                {...{ ...animationProps.fadeIn, transition: { duration: 0.5, ease: 'anticipate' } }}
+                // 0.5s with `anticipate` easing was visibly slow for what is
+                // effectively a same-app route change — felt like a page
+                // transition rather than a tab swap. Shorten to 0.18s with a
+                // plain easeOut so navigation snaps.
+                {...{ ...animationProps.fadeIn, transition: { duration: 0.18, ease: 'easeOut' } }}
             >
                 {children}
             </motion.main>
