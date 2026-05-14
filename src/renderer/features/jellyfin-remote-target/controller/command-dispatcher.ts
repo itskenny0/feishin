@@ -1,10 +1,11 @@
-import { remoteTargetApi } from '/@/renderer/features/jellyfin-remote-target/api/remote-target-api';
 import type { RemotePlayCommand } from '/@/renderer/features/jellyfin-remote-target/types';
 import type { ServerListItemWithCredential } from '/@/shared/types/domain-types';
 
+import { remoteTargetApi } from '/@/renderer/features/jellyfin-remote-target/api/remote-target-api';
+
 interface DispatcherCtx {
-    sessionId: string;
     server: ServerListItemWithCredential;
+    sessionId: string;
 }
 
 const log = (label: string, payload: unknown) => {
@@ -63,16 +64,6 @@ export const commandDispatcher = {
         });
     },
 
-    skipToIndex: async (ctx: DispatcherCtx, index: number): Promise<void> => {
-        log('PlaylistIndex', { index, sessionId: ctx.sessionId });
-        await remoteTargetApi.sendPlaystate({
-            command: 'PlaylistIndex',
-            playlistIndex: index,
-            server: ctx.server,
-            sessionId: ctx.sessionId,
-        });
-    },
-
     setMute: async (ctx: DispatcherCtx, mute: boolean): Promise<void> => {
         log(mute ? 'Mute' : 'Unmute', { sessionId: ctx.sessionId });
         await remoteTargetApi.sendGeneralCommand({
@@ -88,6 +79,16 @@ export const commandDispatcher = {
         await remoteTargetApi.sendGeneralCommand({
             arguments: { Volume: String(clamped) },
             name: 'SetVolume',
+            server: ctx.server,
+            sessionId: ctx.sessionId,
+        });
+    },
+
+    skipToIndex: async (ctx: DispatcherCtx, index: number): Promise<void> => {
+        log('PlaylistIndex', { index, sessionId: ctx.sessionId });
+        await remoteTargetApi.sendPlaystate({
+            command: 'PlaylistIndex',
+            playlistIndex: index,
             server: ctx.server,
             sessionId: ctx.sessionId,
         });

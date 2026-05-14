@@ -745,18 +745,18 @@ const getSessionsParameters = z.object({
 const postPlayingParameters = z.object({
     ItemIds: z.string(),
     PlayCommand: z.enum(['PlayNow', 'PlayNext', 'PlayLast']),
-    StartPositionTicks: z.number().optional(),
     StartIndex: z.number().optional(),
+    StartPositionTicks: z.number().optional(),
 });
 
 const postPlayingCommandParameters = z.object({
-    SeekPositionTicks: z.number().optional(),
     PlaylistIndex: z.number().optional(),
+    SeekPositionTicks: z.number().optional(),
 });
 
 const postGeneralCommandBody = z.object({
-    Name: z.string(),
     Arguments: z.record(z.string()).optional(),
+    Name: z.string(),
 });
 
 const remoteCommandResponse = z.any();
@@ -913,11 +913,11 @@ export const jfType = {
         getQueue: getQueueParameters,
         getSessions: getSessionsParameters,
         musicFolderList: musicFolderListParameters,
+        playlistDetail: playlistDetailParameters,
+        playlistList: playlistListParameters,
         postGeneralCommand: postGeneralCommandBody,
         postPlaying: postPlayingParameters,
         postPlayingCommand: postPlayingCommandParameters,
-        playlistDetail: playlistDetailParameters,
-        playlistList: playlistListParameters,
         removeFromPlaylist: removeFromPlaylistParameters,
         saveQueue: saveQueueParameters,
         scrobble: scrobbleParameters,

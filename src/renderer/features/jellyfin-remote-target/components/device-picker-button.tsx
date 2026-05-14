@@ -27,10 +27,7 @@ export const DevicePickerButton = () => {
               : undefined;
 
     return (
-        <DevicePickerPopover
-            onClose={() => setOpened(false)}
-            opened={opened}
-        >
+        <DevicePickerPopover onClose={() => setOpened(false)} opened={opened}>
             <div style={{ alignItems: 'center', display: 'flex', gap: 4 }}>
                 <ActionIcon
                     icon="remoteDevice"

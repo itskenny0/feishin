@@ -1,8 +1,9 @@
+import type { RemoteDevice } from '/@/renderer/features/jellyfin-remote-target/types';
+
 // src/renderer/features/jellyfin-remote-target/hooks/use-remote-devices.tsx
 import { useMemo } from 'react';
 
 import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
-import type { RemoteDevice } from '/@/renderer/features/jellyfin-remote-target/types';
 import { useAuthStore } from '/@/renderer/store/auth.store';
 
 const compareDevices = (a: RemoteDevice, b: RemoteDevice) => {

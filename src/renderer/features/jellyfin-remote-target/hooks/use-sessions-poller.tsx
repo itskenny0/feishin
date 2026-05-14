@@ -47,11 +47,11 @@ export const useSessionsPoller = () => {
             return;
         }
         sessionsPoller.start({
-            server: currentServer,
             onOffline: (deviceName) =>
                 toast.info({
                     message: t('page.remoteTarget.wentOffline', { deviceName }),
                 }),
+            server: currentServer,
         });
         return () => sessionsPoller.stop();
     }, [currentServer, isPickerOpen, t, targetDeviceId]);

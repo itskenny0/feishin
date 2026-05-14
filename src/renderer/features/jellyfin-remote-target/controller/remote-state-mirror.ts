@@ -1,11 +1,12 @@
-import { remoteTargetApi } from '/@/renderer/features/jellyfin-remote-target/api/remote-target-api';
 import type {
     RemoteDevice,
     RemoteMirrored,
     RemoteMirroredPlayState,
 } from '/@/renderer/features/jellyfin-remote-target/types';
-import { jfNormalize } from '/@/shared/api/jellyfin/jellyfin-normalize';
 import type { ServerListItemWithCredential, Song } from '/@/shared/types/domain-types';
+
+import { remoteTargetApi } from '/@/renderer/features/jellyfin-remote-target/api/remote-target-api';
+import { jfNormalize } from '/@/shared/api/jellyfin/jellyfin-normalize';
 
 const MAX_QUEUE_HYDRATE = 200;
 
@@ -18,13 +19,12 @@ const ticksToMs = (ticks: number | undefined): number =>
 export const derivePlayState = (session: any): RemoteMirroredPlayState => ({
     isPaused: Boolean(session?.PlayState?.IsPaused),
     positionMs: ticksToMs(session?.PlayState?.PositionTicks),
-    repeatMode: typeof session?.PlayState?.RepeatMode === 'string'
-        ? session.PlayState.RepeatMode
-        : 'RepeatNone',
+    repeatMode:
+        typeof session?.PlayState?.RepeatMode === 'string'
+            ? session.PlayState.RepeatMode
+            : 'RepeatNone',
     volume:
-        typeof session?.PlayState?.VolumeLevel === 'number'
-            ? session.PlayState.VolumeLevel
-            : 100,
+        typeof session?.PlayState?.VolumeLevel === 'number' ? session.PlayState.VolumeLevel : 100,
 });
 
 export const deriveNowPlayingItem = (
@@ -40,9 +40,9 @@ export const deriveNowPlayingItem = (
 };
 
 interface MirrorResult {
-    mirrored: Partial<RemoteMirrored>;
     /** Run this *after* the synchronous mirror is applied, to fill in the queue. */
-    hydrateQueue: null | (() => Promise<Song[]>);
+    hydrateQueue: (() => Promise<Song[]>) | null;
+    mirrored: Partial<RemoteMirrored>;
     /** Resolved index in the (post-hydrate) queue. -1 if not resolvable. */
     queueIndex: number;
 }
@@ -64,13 +64,9 @@ export const mirrorSession = (
 ): MirrorResult => {
     const playState = derivePlayState(session);
     const nowPlayingItem = deriveNowPlayingItem(session, server);
-    const capabilities = Array.isArray(session?.SupportedCommands)
-        ? session.SupportedCommands
-        : [];
+    const capabilities = Array.isArray(session?.SupportedCommands) ? session.SupportedCommands : [];
 
-    const rawQueue: any[] = Array.isArray(session?.NowPlayingQueue)
-        ? session.NowPlayingQueue
-        : [];
+    const rawQueue: any[] = Array.isArray(session?.NowPlayingQueue) ? session.NowPlayingQueue : [];
     const queueIds = rawQueue
         .map((q) => q?.Id)
         .filter((id): id is string => typeof id === 'string');
@@ -80,8 +76,8 @@ export const mirrorSession = (
         queueIds.some((id, i) => previousQueueIds[i] !== id);
 
     const result: MirrorResult = {
-        mirrored: { capabilities, nowPlayingItem, playState },
         hydrateQueue: null,
+        mirrored: { capabilities, nowPlayingItem, playState },
         queueIndex: -1,
     };
 

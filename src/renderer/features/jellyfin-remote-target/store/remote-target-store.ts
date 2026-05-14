@@ -1,10 +1,10 @@
-import { create } from 'zustand';
-
 import type {
     RemoteDevice,
     RemoteMirrored,
     RemoteTargetStatus,
 } from '/@/renderer/features/jellyfin-remote-target/types';
+
+import { create } from 'zustand';
 
 interface RemoteTargetState {
     actions: {
@@ -13,12 +13,17 @@ interface RemoteTargetState {
         setMirrored: (mirrored: Partial<RemoteMirrored>) => void;
         setPickerOpen: (open: boolean) => void;
         setStatus: (status: RemoteTargetStatus) => void;
-        setTarget: (target: { capabilities: string[]; deviceId: string; deviceName: string; sessionId: string }) => void;
+        setTarget: (target: {
+            capabilities: string[];
+            deviceId: string;
+            deviceName: string;
+            sessionId: string;
+        }) => void;
     };
     deviceList: RemoteDevice[];
     mirrored: RemoteMirrored;
     pickerOpen: boolean;
-    sessionId: null | string;          // re-resolved each Sessions tick from targetDeviceId
+    sessionId: null | string; // re-resolved each Sessions tick from targetDeviceId
     status: RemoteTargetStatus;
     targetDeviceId: null | string;
     targetDeviceName: null | string;
@@ -43,8 +48,7 @@ export const useRemoteTargetStore = create<RemoteTargetState>((set) => ({
                 targetDeviceName: null,
             }),
         setDeviceList: (devices) => set({ deviceList: devices }),
-        setMirrored: (partial) =>
-            set((s) => ({ mirrored: { ...s.mirrored, ...partial } })),
+        setMirrored: (partial) => set((s) => ({ mirrored: { ...s.mirrored, ...partial } })),
         setPickerOpen: (open) => set({ pickerOpen: open }),
         setStatus: (status) => set({ status }),
         setTarget: ({ capabilities, deviceId, deviceName, sessionId }) =>

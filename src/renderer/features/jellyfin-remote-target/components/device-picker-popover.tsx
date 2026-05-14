@@ -1,3 +1,5 @@
+import type { RemoteDevice } from '/@/renderer/features/jellyfin-remote-target/types';
+
 import { UnstyledButton } from '@mantine/core';
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -5,7 +7,6 @@ import { useTranslation } from 'react-i18next';
 import { useRemoteDevices } from '/@/renderer/features/jellyfin-remote-target/hooks/use-remote-devices';
 import { useRemoteTarget } from '/@/renderer/features/jellyfin-remote-target/hooks/use-remote-target';
 import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
-import type { RemoteDevice } from '/@/renderer/features/jellyfin-remote-target/types';
 import { usePlayerActions } from '/@/renderer/store/player.store';
 import { useSettingsStoreActions } from '/@/renderer/store/settings.store';
 import { Icon } from '/@/shared/components/icon/icon';
@@ -98,8 +99,8 @@ export const DevicePickerPopover = ({ children, onClose, opened }: DevicePickerP
                         const subtitle = d.nowPlayingTitle
                             ? `${d.nowPlayingTitle}${d.nowPlayingArtist ? ` — ${d.nowPlayingArtist}` : ''}`
                             : d.isPaused
-                                ? 'paused'
-                                : 'idle';
+                              ? 'paused'
+                              : 'idle';
                         return (
                             <UnstyledButton
                                 key={d.deviceId}

@@ -158,7 +158,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
         }
         const server = useAuthStore.getState().currentServer;
         if (!server?.credential) return null;
-        return { sessionId: target.sessionId, server };
+        return { server, sessionId: target.sessionId };
     }, []);
 
     const timeoutIds = useRef<null | Record<string, ReturnType<typeof setTimeout>>>({});

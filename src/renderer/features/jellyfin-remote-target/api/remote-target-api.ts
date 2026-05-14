@@ -1,12 +1,13 @@
-import { jfApiClient } from '/@/renderer/api/jellyfin/jellyfin-api';
-import { JF_FIELDS } from '/@/renderer/api/jellyfin/jellyfin-controller';
 import type {
     RemoteDevice,
     RemotePlayCommand,
     RemotePlaystateCommand,
 } from '/@/renderer/features/jellyfin-remote-target/types';
-import { jfNormalize } from '/@/shared/api/jellyfin/jellyfin-normalize';
 import type { ServerListItemWithCredential, Song } from '/@/shared/types/domain-types';
+
+import { jfApiClient } from '/@/renderer/api/jellyfin/jellyfin-api';
+import { JF_FIELDS } from '/@/renderer/api/jellyfin/jellyfin-controller';
+import { jfNormalize } from '/@/shared/api/jellyfin/jellyfin-normalize';
 
 type ServerArg = { server: ServerListItemWithCredential };
 
@@ -29,6 +30,31 @@ const safeSessionToDevice = (s: any): null | RemoteDevice => {
 };
 
 export const remoteTargetApi = {
+    /**
+     * Hydrate a list of item IDs into Song objects via the existing /Items
+     * route. Used for the mirrored queue display.
+     */
+    hydrateSongs: async (args: ServerArg & { itemIds: string[] }): Promise<Song[]> => {
+        if (args.itemIds.length === 0) return [];
+        const server = args.server;
+        if (!server.userId) return [];
+        const res = await jfApiClient({ server }).getSongList({
+            params: { userId: server.userId },
+            query: {
+                Fields: JF_FIELDS.SONG,
+                Ids: args.itemIds.join(','),
+                IncludeItemTypes: 'Audio',
+                Limit: args.itemIds.length,
+                Recursive: true,
+            },
+        });
+        if (res.status !== 200) return [];
+        const byId = new Map(
+            res.body.Items.map((item) => [item.Id, jfNormalize.song(item, server)]),
+        );
+        return args.itemIds.map((id) => byId.get(id)).filter((s): s is Song => Boolean(s));
+    },
+
     /**
      * Fetch every session the current user can control. The Jellyfin API
      * returns sessions for the *authenticated* user; ControllableByUserId
@@ -95,6 +121,22 @@ export const remoteTargetApi = {
     },
 
     /**
+     * Send a GeneralCommand (SetVolume, Mute, …).
+     */
+    sendGeneralCommand: async (
+        args: ServerArg & {
+            arguments?: Record<string, string>;
+            name: string;
+            sessionId: string;
+        },
+    ): Promise<void> => {
+        await jfApiClient({ server: args.server }).postGeneralCommand({
+            body: { Arguments: args.arguments, Name: args.name },
+            params: { sessionId: args.sessionId },
+        });
+    },
+
+    /**
      * Send a transport command to a session.
      */
     sendPlaystate: async (
@@ -107,56 +149,11 @@ export const remoteTargetApi = {
     ): Promise<void> => {
         await jfApiClient({ server: args.server }).postPlayingCommand({
             body: null,
-            params: { sessionId: args.sessionId, command: args.command },
+            params: { command: args.command, sessionId: args.sessionId },
             query: {
-                SeekPositionTicks: args.seekPositionTicks,
                 PlaylistIndex: args.playlistIndex,
+                SeekPositionTicks: args.seekPositionTicks,
             },
         });
-    },
-
-    /**
-     * Send a GeneralCommand (SetVolume, Mute, …).
-     */
-    sendGeneralCommand: async (
-        args: ServerArg & {
-            arguments?: Record<string, string>;
-            name: string;
-            sessionId: string;
-        },
-    ): Promise<void> => {
-        await jfApiClient({ server: args.server }).postGeneralCommand({
-            body: { Name: args.name, Arguments: args.arguments },
-            params: { sessionId: args.sessionId },
-        });
-    },
-
-    /**
-     * Hydrate a list of item IDs into Song objects via the existing /Items
-     * route. Used for the mirrored queue display.
-     */
-    hydrateSongs: async (
-        args: ServerArg & { itemIds: string[] },
-    ): Promise<Song[]> => {
-        if (args.itemIds.length === 0) return [];
-        const server = args.server;
-        if (!server.userId) return [];
-        const res = await jfApiClient({ server }).getSongList({
-            params: { userId: server.userId },
-            query: {
-                Fields: JF_FIELDS.SONG,
-                Ids: args.itemIds.join(','),
-                IncludeItemTypes: 'Audio',
-                Limit: args.itemIds.length,
-                Recursive: true,
-            },
-        });
-        if (res.status !== 200) return [];
-        const byId = new Map(
-            res.body.Items.map((item) => [item.Id, jfNormalize.song(item, server)]),
-        );
-        return args.itemIds
-            .map((id) => byId.get(id))
-            .filter((s): s is Song => Boolean(s));
     },
 };
