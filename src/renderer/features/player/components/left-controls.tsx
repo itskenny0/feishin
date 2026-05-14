@@ -19,7 +19,11 @@ import {
     useRadioPlayer,
 } from '/@/renderer/features/radio/hooks/use-radio-player';
 import { useHotkeys } from '/@/renderer/hooks/use-hotkeys';
+import { prefetchAlbumDetail, preloadRoute } from '/@/renderer/router/route-preloaders';
 import { AppRoute } from '/@/renderer/router/routes';
+
+const preloadAlbumDetail = () => preloadRoute(AppRoute.LIBRARY_ALBUMS_DETAIL);
+const preloadNowPlaying = () => preloadRoute(AppRoute.NOW_PLAYING);
 import {
     useAppStore,
     useAppStoreActions,
@@ -225,6 +229,8 @@ export const LeftControls = () => {
                                         fw={500}
                                         isLink
                                         onContextMenu={handleToggleContextMenu}
+                                        onFocus={preloadNowPlaying}
+                                        onMouseEnter={preloadNowPlaying}
                                         overflow="hidden"
                                         to={AppRoute.NOW_PLAYING}
                                     >
@@ -297,6 +303,13 @@ export const LeftControls = () => {
                                     component={Link}
                                     fw={500}
                                     isLink
+                                    onFocus={preloadAlbumDetail}
+                                    onMouseEnter={preloadAlbumDetail}
+                                    onPointerDown={
+                                        currentSong?.albumId
+                                            ? () => prefetchAlbumDetail(currentSong.albumId!)
+                                            : undefined
+                                    }
                                     overflow="hidden"
                                     size="md"
                                     to={
