@@ -23,53 +23,61 @@ const PlayerbarWaveform = lazy(() =>
     })),
 );
 
+/**
+ * Right-side time readout. Subscribes to the playback timestamp only here, so
+ * the rest of `<PlayerbarSlider />` doesn't re-render on every tick.
+ */
+const DurationReadout = ({ songDurationSec }: { songDurationSec: number }) => {
+    const showTimeRemaining = useAppStore((state) => state.showTimeRemaining);
+    const { setShowTimeRemaining } = useAppStoreActions();
+    const currentTime = usePlayerTimestamp();
+
+    const text = showTimeRemaining
+        ? formatDuration((currentTime - songDurationSec) * 1000 || 0)
+        : formatDuration(songDurationSec * 1000 || 0);
+
+    return (
+        <Text
+            className={PlaybackSelectors.totalDuration}
+            fw={600}
+            isMuted
+            isNoSelect
+            onClick={() => setShowTimeRemaining(!showTimeRemaining)}
+            role="button"
+            size="xs"
+            style={{ cursor: 'pointer', userSelect: 'none' }}
+        >
+            {text}
+        </Text>
+    );
+};
+
 export const PlayerbarSlider = () => {
     const currentSong = usePlayerSong();
     const playerbarSlider = usePlayerbarSlider();
 
     const songDuration = currentSong?.duration ? currentSong.duration / 1000 : 0;
-    const currentTime = usePlayerTimestamp();
-
-    const formattedDuration = formatDuration(songDuration * 1000 || 0);
-    const formattedTimeRemaining = formatDuration((currentTime - songDuration) * 1000 || 0);
-    const formattedTime = formatDuration(currentTime * 1000 || 0);
-
-    const showTimeRemaining = useAppStore((state) => state.showTimeRemaining);
-    const { setShowTimeRemaining } = useAppStoreActions();
 
     const isWaveform = playerbarSlider?.type === PlayerbarSliderType.WAVEFORM;
 
     return (
-        <>
-            <div className={styles.sliderContainer}>
-                <div className={styles.sliderValueWrapperElapsed}>
-                    <ScrobbleStatus formattedTime={formattedTime} />
-                </div>
-                <div className={styles.sliderWrapper}>
-                    {isWaveform ? (
-                        <Suspense fallback={<Spinner />}>
-                            <PlayerbarWaveform />
-                        </Suspense>
-                    ) : (
-                        <PlayerbarSeekSlider max={songDuration} min={0} />
-                    )}
-                </div>
-                <div className={styles.sliderValueWrapper}>
-                    <Text
-                        className={PlaybackSelectors.totalDuration}
-                        fw={600}
-                        isMuted
-                        isNoSelect
-                        onClick={() => setShowTimeRemaining(!showTimeRemaining)}
-                        role="button"
-                        size="xs"
-                        style={{ cursor: 'pointer', userSelect: 'none' }}
-                    >
-                        {showTimeRemaining ? formattedTimeRemaining : formattedDuration}
-                    </Text>
-                </div>
+        <div className={styles.sliderContainer}>
+            <div className={styles.sliderValueWrapperElapsed}>
+                <ScrobbleStatus />
             </div>
-        </>
+            <div className={styles.sliderWrapper}>
+                {isWaveform ? (
+                    <Suspense fallback={<Spinner />}>
+                        <PlayerbarWaveform />
+                    </Suspense>
+                ) : (
+                    <PlayerbarSeekSlider max={songDuration} min={0} />
+                )}
+            </div>
+            <div className={styles.sliderValueWrapper}>
+                <DurationReadout songDurationSec={songDuration} />
+            </div>
+        </div>
     );
 };
 
