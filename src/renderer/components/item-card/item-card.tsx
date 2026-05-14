@@ -18,7 +18,7 @@ import {
 import { ItemControls } from '/@/renderer/components/item-list/types';
 import { JoinedArtists } from '/@/renderer/features/albums/components/joined-artists';
 import { useDragDrop } from '/@/renderer/hooks/use-drag-drop';
-import { preloadRoute } from '/@/renderer/router/route-preloaders';
+import { prefetchAlbumDetail, preloadRoute } from '/@/renderer/router/route-preloaders';
 import { AppRoute } from '/@/renderer/router/routes';
 import { useShowFilesystemNameForAlbums, useShowRatings } from '/@/renderer/store';
 import {
@@ -1116,6 +1116,10 @@ const AlbumCardName = ({ data }: { data: Album }) => {
         <Link
             onFocus={preloadAlbumDetail}
             onMouseEnter={preloadAlbumDetail}
+            // Fire data prefetch the moment the user commits to a click, not
+            // on hover — hovers across a long album list would otherwise spawn
+            // dozens of speculative requests.
+            onPointerDown={() => prefetchAlbumDetail(data.id)}
             state={{ item: data }}
             to={generatePath(AppRoute.LIBRARY_ALBUMS_DETAIL, { albumId: data.id })}
         >

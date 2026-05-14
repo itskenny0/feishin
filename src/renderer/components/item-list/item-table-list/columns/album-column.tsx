@@ -10,7 +10,7 @@ import {
     ItemTableListInnerColumn,
     TableColumnContainer,
 } from '/@/renderer/components/item-list/item-table-list/item-table-list-column';
-import { preloadRoute } from '/@/renderer/router/route-preloaders';
+import { prefetchAlbumDetail, preloadRoute } from '/@/renderer/router/route-preloaders';
 import { AppRoute } from '/@/renderer/router/routes';
 import { useShowFilesystemNameForAlbums } from '/@/renderer/store/settings.store';
 
@@ -62,6 +62,7 @@ const AlbumColumn = (props: ItemTableListInnerColumn) => {
                             isNoSelect
                             onFocus={preloadAlbumDetail}
                             onMouseEnter={preloadAlbumDetail}
+                            onPointerDown={albumId ? () => prefetchAlbumDetail(albumId) : undefined}
                             state={{ item: song }}
                             to={albumPath}
                         >

@@ -1,4 +1,7 @@
+import { albumQueries } from '/@/renderer/features/albums/api/album-api';
+import { queryClient } from '/@/renderer/lib/react-query';
 import { AppRoute } from '/@/renderer/router/routes';
+import { useAuthStore } from '/@/renderer/store/auth.store';
 
 /**
  * Maps a route path to its lazy-chunk preload function. The preload functions
@@ -79,4 +82,22 @@ export const preloadRoute = (to: string): void => {
         // the user's next hover can re-trigger the fetch.
         inFlight.delete(route);
     });
+};
+
+/**
+ * Warm the album-detail TanStack-Query cache for the given album id. Idempotent
+ * within tanstack-query (prefetchQuery dedupes by queryKey). Called from album
+ * Link `onPointerDown`, so the fetch starts in the gap between the user
+ * committing to a click and the navigation actually firing — typically saving
+ * 50–300ms of perceived loading on the detail page.
+ */
+export const prefetchAlbumDetail = (albumId: string): void => {
+    const server = useAuthStore.getState().currentServer;
+    if (!server || !server.credential) return;
+    void queryClient
+        .prefetchQuery(albumQueries.detail({ query: { id: albumId }, serverId: server.id }))
+        .catch(() => {
+            // The actual useSuspenseQuery in the route will surface the error
+            // through the normal error boundary if it persists.
+        });
 };
