@@ -1,5 +1,5 @@
 import debounce from 'lodash/debounce';
-import { ChangeEvent } from 'react';
+import { ChangeEvent, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { generatePath, Link, useParams, useSearchParams } from 'react-router';
 
@@ -33,9 +33,28 @@ export const SearchHeader = ({ navigationId }: SearchHeaderProps) => {
     const { itemType } = useParams() as { itemType: LibraryItem };
     const [searchParams, setSearchParams] = useSearchParams();
 
-    const handleSearch = debounce((e: ChangeEvent<HTMLInputElement>) => {
-        setSearchParams({ query: e.target.value }, { replace: true, state: { navigationId } });
-    }, 200);
+    // Memoize the debounced handler so the underlying timer persists across
+    // re-renders. A bare `debounce(...)` in the render body produces a fresh
+    // function each render — its internal pending-call gets dropped when the
+    // URL changes mid-typing, defeating the 200ms buffer.
+    const handleSearch = useMemo(
+        () =>
+            debounce((e: ChangeEvent<HTMLInputElement>) => {
+                setSearchParams(
+                    { query: e.target.value },
+                    { replace: true, state: { navigationId } },
+                );
+            }, 200),
+        [navigationId, setSearchParams],
+    );
+
+    // Flush pending input on unmount so a navigation-away while a search is
+    // queued doesn't silently drop the user's last keystroke.
+    useEffect(() => {
+        return () => {
+            handleSearch.flush();
+        };
+    }, [handleSearch]);
 
     const listConfigMenuProps = {
         [LibraryItem.ALBUM]: {
