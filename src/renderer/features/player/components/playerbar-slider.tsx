@@ -87,10 +87,7 @@ export const PlayerbarSlider = () => {
                 )}
             </div>
             <div className={styles.sliderValueWrapper}>
-                <DurationReadout
-                    currentTimeSec={remoteTimeSec}
-                    songDurationSec={songDuration}
-                />
+                <DurationReadout currentTimeSec={remoteTimeSec} songDurationSec={songDuration} />
             </div>
         </div>
     );
