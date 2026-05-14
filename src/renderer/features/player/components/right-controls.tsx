@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState, WheelEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { DevicePickerButton } from '/@/renderer/features/jellyfin-remote-target/components/device-picker-button';
+import { useActivePlayerSource } from '/@/renderer/features/jellyfin-remote-target/hooks/use-active-player-source';
 import { PopoverPlayQueue } from '/@/renderer/features/now-playing/components/popover-play-queue';
 import { PlayerConfig } from '/@/renderer/features/player/components/player-config';
 import { CustomPlayerbarSlider } from '/@/renderer/features/player/components/playerbar-slider';
@@ -20,8 +21,6 @@ import {
     useHotkeySettings,
     usePlayerData,
     usePlayerMuted,
-    usePlayerSong,
-    usePlayerVolume,
     useSetFullScreenPlayerStore,
     useSettingsStoreActions,
     useShowRatings,
@@ -40,7 +39,7 @@ import { Tooltip } from '/@/shared/components/tooltip/tooltip';
 import { useMediaQuery } from '/@/shared/hooks/use-media-query';
 import { useThrottledCallback } from '/@/shared/hooks/use-throttled-callback';
 import { useThrottledValue } from '/@/shared/hooks/use-throttled-value';
-import { LibraryItem, QueueSong, ServerType } from '/@/shared/types/domain-types';
+import { LibraryItem, QueueSong, ServerType, Song } from '/@/shared/types/domain-types';
 
 const calculateVolumeUp = (volume: number, volumeWheelStep: number) => {
     let volumeToSet: number;
@@ -237,13 +236,13 @@ const LyricsButton = () => {
 };
 
 const FavoriteButton = () => {
-    const currentSong = usePlayerSong();
+    const currentSong = useActivePlayerSource().nowPlayingItem;
     const { bindings } = useHotkeySettings();
 
     const addToFavoritesMutation = useCreateFavorite({});
     const removeFromFavoritesMutation = useDeleteFavorite({});
 
-    const handleAddToFavorites = (song: QueueSong | undefined) => {
+    const handleAddToFavorites = (song: null | QueueSong | Song | undefined) => {
         if (!song?.id) return;
 
         addToFavoritesMutation.mutate({
@@ -255,7 +254,7 @@ const FavoriteButton = () => {
         });
     };
 
-    const handleRemoveFromFavorites = (song: QueueSong | undefined) => {
+    const handleRemoveFromFavorites = (song: null | QueueSong | Song | undefined) => {
         if (!song?.id) return;
 
         removeFromFavoritesMutation.mutate({
@@ -267,7 +266,7 @@ const FavoriteButton = () => {
         });
     };
 
-    const handleToggleFavorite = (song: QueueSong | undefined) => {
+    const handleToggleFavorite = (song: null | QueueSong | Song | undefined) => {
         if (!song?.id) return;
 
         if (song.userFavorite) {
@@ -324,9 +323,9 @@ const useFavoritePreviousSongHotkeys = ({
     handleRemoveFromFavorites,
     handleToggleFavorite,
 }: {
-    handleAddToFavorites: (song: QueueSong | undefined) => void;
-    handleRemoveFromFavorites: (song: QueueSong | undefined) => void;
-    handleToggleFavorite: (song: QueueSong | undefined) => void;
+    handleAddToFavorites: (song: null | QueueSong | Song | undefined) => void;
+    handleRemoveFromFavorites: (song: null | QueueSong | Song | undefined) => void;
+    handleToggleFavorite: (song: null | QueueSong | Song | undefined) => void;
 }) => {
     const { bindings } = useHotkeySettings();
     const { previousSong } = usePlayerData();
@@ -351,7 +350,7 @@ const useFavoritePreviousSongHotkeys = ({
 
 const RatingButton = () => {
     const server = useCurrentServer();
-    const currentSong = usePlayerSong();
+    const currentSong = useActivePlayerSource().nowPlayingItem;
     const setRating = useSetRating();
 
     const isSongDefined = Boolean(currentSong?.id);
@@ -391,8 +390,12 @@ const RatingButton = () => {
 
 const VolumeButton = () => {
     const { bindings } = useHotkeySettings();
-    const volume = usePlayerVolume();
-    const muted = usePlayerMuted();
+    const source = useActivePlayerSource();
+    const localMuted = usePlayerMuted();
+    const volume = source.volume;
+    // In remote mode, volume === 0 is a proxy for muted; in local mode, keep the
+    // dedicated muted store value which can be independent of slider volume.
+    const muted = source.mode === 'remote' ? source.volume === 0 : localMuted;
     const volumeWheelStep = useVolumeWheelStep();
     const volumeWidth = useVolumeWidth();
     const { decreaseVolume, increaseVolume, mediaToggleMute, setVolume } = usePlayer();
