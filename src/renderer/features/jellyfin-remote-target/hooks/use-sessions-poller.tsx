@@ -13,9 +13,7 @@ export const useSessionsPoller = () => {
     const { t } = useTranslation();
     const currentServer = useAuthStore((s) => s.currentServer, shallow);
     const targetDeviceId = useRemoteTargetStore((s) => s.targetDeviceId);
-    // Stub: Task 13 wires up the real pickerOpen flag. For now, run only when a
-    // target is selected.
-    const isPickerOpen = false;
+    const isPickerOpen = useRemoteTargetStore((s) => s.pickerOpen);
 
     useEffect(() => {
         if (!currentServer || currentServer.type !== ServerType.JELLYFIN) {
