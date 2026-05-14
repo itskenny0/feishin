@@ -82,6 +82,15 @@ export const SynchronizedLyrics = ({
         return arr;
     }, [lyrics]);
 
+    // Splitting `translatedLyrics` once per render meant every parent render
+    // ran an O(N) split, and the per-line `translatedLyrics.split('\n')[idx]`
+    // expression below made it O(N²) — a noticeable cost on long songs.
+    // Cache the split so the render path is O(N) total.
+    const translatedLines = useMemo(
+        () => (translatedLyrics ? translatedLyrics.split('\n') : null),
+        [translatedLyrics],
+    );
+
     const handleSeek = useCallback(
         (time: number) => {
             if (playbackType === PlayerType.LOCAL && mpvPlayer) {
@@ -341,10 +350,29 @@ export const SynchronizedLyrics = ({
         doc?.classList.remove('hide-scrollbar');
     };
 
+    // Event delegation: one click handler on the container reads the time
+    // from the nearest [data-lyric-time] element. Passing per-line inline
+    // onClick (the previous shape) created a fresh function per render, which
+    // defeated LyricLine's React.memo and re-rendered all N lines on every
+    // active-line advance — a real cost for long songs.
+    const onContainerClick = useCallback(
+        (e: React.MouseEvent<HTMLDivElement>) => {
+            const target = e.target as HTMLElement;
+            const line = target.closest('[data-lyric-time]') as HTMLElement | null;
+            if (!line) return;
+            const time = Number(line.dataset.lyricTime);
+            if (time > 0 && Number.isFinite(time)) {
+                handleSeek(time / 1000);
+            }
+        },
+        [handleSeek],
+    );
+
     return (
         <div
             className={clsx(styles.container, 'synchronized-lyrics overlay-scrollbar')}
             id={SCROLL_CONTAINER_ID}
+            onClick={onContainerClick}
             onMouseEnter={showScrollbar}
             onMouseLeave={hideScrollbar}
             ref={containerRef}
@@ -381,17 +409,15 @@ export const SynchronizedLyrics = ({
                 <LyricLine
                     alignment={settings.alignment}
                     className="lyric-line synchronized"
+                    data-lyric-time={time}
                     fontSize={settings.fontSize}
                     id={`lyric-${idx}`}
                     key={idx}
-                    onClick={() => {
-                        if (time > 0 && Number.isFinite(time)) {
-                            handleSeek(time / 1000);
-                        }
-                    }}
                     text={
                         text +
-                        (translatedLyrics ? `_BREAK_${translatedLyrics.split('\n')[idx]}` : '')
+                        (translatedLines && translatedLines[idx] !== undefined
+                            ? `_BREAK_${translatedLines[idx]}`
+                            : '')
                     }
                 />
             ))}
