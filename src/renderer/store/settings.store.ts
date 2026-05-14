@@ -2727,10 +2727,13 @@ export const useSettingsStoreActions = () => useSettingsStore((state) => state.a
 export const usePlaybackSettings = () => useSettingsStore((state) => state.playback, shallow);
 
 export const useRemoteTargetSetting = () =>
-    useSettingsStore((state) => ({
-        deviceId: state.playback.remoteTargetDeviceId ?? null,
-        deviceName: state.playback.remoteTargetDeviceName ?? null,
-    }), shallow);
+    useSettingsStore(
+        (state) => ({
+            deviceId: state.playback.remoteTargetDeviceId ?? null,
+            deviceName: state.playback.remoteTargetDeviceName ?? null,
+        }),
+        shallow,
+    );
 
 export const useTableSettings = (type: ItemListKey) =>
     useSettingsStore((state) => state.lists[type as keyof typeof state.lists]);

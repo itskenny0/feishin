@@ -1,24 +1,25 @@
+import type { Song } from '/@/shared/types/domain-types';
+
 // src/renderer/features/jellyfin-remote-target/hooks/use-active-player-source.tsx
 import { useMemo } from 'react';
 
 import { useRemoteTarget } from '/@/renderer/features/jellyfin-remote-target/hooks/use-remote-target';
 import { usePlayerSong, usePlayerStatus, usePlayerVolume } from '/@/renderer/store/player.store';
-import type { Song } from '/@/shared/types/domain-types';
 import { PlayerStatus } from '/@/shared/types/types';
 
-export type PlayerSourceMode = 'local' | 'remote';
-
 export interface ActivePlayerSource {
-    capabilities: string[];        // empty in local mode
-    deviceName: null | string;     // null in local mode
+    capabilities: string[]; // empty in local mode
+    deviceName: null | string; // null in local mode
     isPaused: boolean;
     mode: PlayerSourceMode;
     nowPlayingItem: null | Song;
     positionMs: number;
-    queue: null | Song[];          // null = use local queue store
-    queueIndex: number;            // -1 if unknown
+    queue: null | Song[]; // null = use local queue store
+    queueIndex: number; // -1 if unknown
     volume: number;
 }
+
+export type PlayerSourceMode = 'local' | 'remote';
 
 export const useActivePlayerSource = (): ActivePlayerSource => {
     const remote = useRemoteTarget();
@@ -45,9 +46,9 @@ export const useActivePlayerSource = (): ActivePlayerSource => {
             deviceName: null,
             isPaused: localStatus !== PlayerStatus.PLAYING,
             mode: 'local',
-            nowPlayingItem: (localSong as Song | null) ?? null,
-            positionMs: 0,            // playerbar reads local position via its own slider hook
-            queue: null,              // null = use existing local queue selectors
+            nowPlayingItem: (localSong as null | Song) ?? null,
+            positionMs: 0, // playerbar reads local position via its own slider hook
+            queue: null, // null = use existing local queue selectors
             queueIndex: -1,
             volume: localVolume,
         };

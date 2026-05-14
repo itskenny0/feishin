@@ -25,13 +25,8 @@ export const RemoteStatusBanner = () => {
                 padding: '4px 12px',
             }}
         >
-            <Loader
-                color="white"
-                size="xs"
-            />
-            <span>
-                {t('page.remoteTarget.reconnecting', { deviceName: target.deviceName })}
-            </span>
+            <Loader color="white" size="xs" />
+            <span>{t('page.remoteTarget.reconnecting', { deviceName: target.deviceName })}</span>
         </div>
     );
 };

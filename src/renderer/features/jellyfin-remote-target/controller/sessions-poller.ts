@@ -1,3 +1,6 @@
+import type { RemoteDevice } from '/@/renderer/features/jellyfin-remote-target/types';
+import type { ServerListItemWithCredential } from '/@/shared/types/domain-types';
+
 // src/renderer/features/jellyfin-remote-target/controller/sessions-poller.ts
 import { remoteTargetApi } from '/@/renderer/features/jellyfin-remote-target/api/remote-target-api';
 import {
@@ -5,28 +8,26 @@ import {
     mirrorSession,
 } from '/@/renderer/features/jellyfin-remote-target/controller/remote-state-mirror';
 import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
-import type { RemoteDevice } from '/@/renderer/features/jellyfin-remote-target/types';
-import type { ServerListItemWithCredential } from '/@/shared/types/domain-types';
 
 const POLL_INTERVAL_MS = 3_000;
 const OFFLINE_CUTOFF_MS = 60_000;
 
 export interface PollerStartArgs {
-    onOffline: (deviceName: string) => void;   // toast + fallback to local
+    onOffline: (deviceName: string) => void; // toast + fallback to local
     server: ServerListItemWithCredential;
 }
 
 export class SessionsPoller {
     private isRunning = false;
     private offlineSince = 0;
-    private startArgs: null | PollerStartArgs = null;
-    private timer: null | ReturnType<typeof setInterval> = null;
-
     /** Track previous queue ids per device to avoid redundant hydrate fetches. */
     private prevQueueIdsByDevice: Record<string, string[]> = {};
-
     /** Raw session payloads indexed by deviceId, populated each tick. */
     private rawByDeviceId: Record<string, unknown> = {};
+
+    private startArgs: null | PollerStartArgs = null;
+
+    private timer: null | ReturnType<typeof setInterval> = null;
 
     start(args: PollerStartArgs) {
         this.stop();
@@ -49,9 +50,26 @@ export class SessionsPoller {
         }
     }
 
+    private handleMissingTarget(onOffline: (name: string) => void) {
+        const state = useRemoteTargetStore.getState();
+        const actions = state.actions;
+        if (!state.targetDeviceId) return;
+        if (state.status === 'connected' || state.status === 'idle') {
+            actions.setStatus('reconnecting');
+            this.offlineSince = Date.now();
+            return;
+        }
+        if (Date.now() - this.offlineSince >= OFFLINE_CUTOFF_MS) {
+            const name = state.targetDeviceName ?? 'Remote device';
+            actions.clearTarget();
+            this.offlineSince = 0;
+            onOffline(name);
+        }
+    }
+
     private async tick(): Promise<void> {
         if (!this.isRunning || !this.startArgs) return;
-        const { server, onOffline } = this.startArgs;
+        const { onOffline, server } = this.startArgs;
         const actions = useRemoteTargetStore.getState().actions;
 
         let result: { devices: RemoteDevice[]; raws: Record<string, unknown> };
@@ -94,11 +112,7 @@ export class SessionsPoller {
         }
 
         const raw = this.rawByDeviceId[match.deviceId];
-        const mirror = mirrorSession(
-            raw,
-            server,
-            this.prevQueueIdsByDevice[match.deviceId] ?? [],
-        );
+        const mirror = mirrorSession(raw, server, this.prevQueueIdsByDevice[match.deviceId] ?? []);
         actions.setMirrored(mirror.mirrored);
 
         if (mirror.hydrateQueue) {
@@ -111,23 +125,6 @@ export class SessionsPoller {
             }
         } else if (mirror.queueIndex !== -1) {
             actions.setMirrored({ queueIndex: mirror.queueIndex });
-        }
-    }
-
-    private handleMissingTarget(onOffline: (name: string) => void) {
-        const state = useRemoteTargetStore.getState();
-        const actions = state.actions;
-        if (!state.targetDeviceId) return;
-        if (state.status === 'connected' || state.status === 'idle') {
-            actions.setStatus('reconnecting');
-            this.offlineSince = Date.now();
-            return;
-        }
-        if (Date.now() - this.offlineSince >= OFFLINE_CUTOFF_MS) {
-            const name = state.targetDeviceName ?? 'Remote device';
-            actions.clearTarget();
-            this.offlineSince = 0;
-            onOffline(name);
         }
     }
 }

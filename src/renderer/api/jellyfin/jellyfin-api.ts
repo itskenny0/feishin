@@ -306,8 +306,8 @@ export const contract = c.router({
         method: 'POST',
         path: 'sessions/:sessionId/command',
         responses: {
-            204: jfType._response.remoteCommand,
             200: jfType._response.remoteCommand,
+            204: jfType._response.remoteCommand,
             400: jfType._response.error,
         },
     },
@@ -317,8 +317,8 @@ export const contract = c.router({
         path: 'sessions/:sessionId/playing',
         query: jfType._parameters.postPlaying,
         responses: {
-            204: jfType._response.remoteCommand,
             200: jfType._response.remoteCommand,
+            204: jfType._response.remoteCommand,
             400: jfType._response.error,
         },
     },
@@ -328,8 +328,8 @@ export const contract = c.router({
         path: 'sessions/:sessionId/playing/:command',
         query: jfType._parameters.postPlayingCommand,
         responses: {
-            204: jfType._response.remoteCommand,
             200: jfType._response.remoteCommand,
+            204: jfType._response.remoteCommand,
             400: jfType._response.error,
         },
     },
