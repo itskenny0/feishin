@@ -1,0 +1,51 @@
+.section {
+    width: 100%;
+}
+
+.header {
+    margin-bottom: var(--theme-spacing-md);
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--theme-colors-text-default);
+}
+
+.row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--theme-spacing-sm);
+}
+
+.chip {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    padding: 8px 14px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--theme-colors-text-default);
+    text-decoration: none;
+    cursor: pointer;
+    background: var(--theme-colors-surface);
+    border: 1px solid var(--theme-colors-foreground-muted);
+    border-radius: 999px;
+    transition:
+        transform 140ms ease-out,
+        border-color 140ms ease-out,
+        background-color 140ms ease-out;
+}
+
+.chip:hover {
+    background-color: var(--theme-colors-foreground-muted);
+    border-color: var(--theme-colors-primary);
+    transform: translateY(-1px);
+}
+
+.chip:active {
+    transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .chip {
+        transition: none;
+    }
+}

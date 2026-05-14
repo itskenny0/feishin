@@ -3,7 +3,9 @@ import { Fragment } from 'react/jsx-runtime';
 
 import { AnalyticsSettings } from '/@/renderer/features/settings/components/advanced/analytics-settings';
 import { ExportImportSettings } from '/@/renderer/features/settings/components/advanced/export-import-settings';
+import { JellyfinServerActions } from '/@/renderer/features/settings/components/advanced/jellyfin-server-actions';
 import { LoggerSettings } from '/@/renderer/features/settings/components/advanced/logger-settings';
+import { ServerInfoWidget } from '/@/renderer/features/settings/components/advanced/server-info-widget';
 import { CacheSettings } from '/@/renderer/features/settings/components/window/cache-settngs';
 import { UpdateSettings } from '/@/renderer/features/settings/components/window/update-settings';
 import { Divider } from '/@/shared/components/divider/divider';
@@ -11,6 +13,8 @@ import { Stack } from '/@/shared/components/stack/stack';
 
 const sections = [
     { component: UpdateSettings, key: 'update' },
+    { component: ServerInfoWidget, key: 'server-info' },
+    { component: JellyfinServerActions, key: 'jellyfin-server-actions' },
     { component: AnalyticsSettings, key: 'analytics' },
     { component: ExportImportSettings, key: 'export-import' },
     { component: LoggerSettings, key: 'logger' },
