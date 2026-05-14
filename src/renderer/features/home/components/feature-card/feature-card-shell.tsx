@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 
 import styles from './feature-card-shell.module.css';
 
 import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
+import { setFeatureCardHovered } from '/@/renderer/features/home/components/feature-card/hover-signal';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
 import { Button } from '/@/shared/components/button/button';
 import { Icon } from '/@/shared/components/icon/icon';
@@ -78,10 +79,24 @@ const SongTileSkeleton = () => (
     </div>
 );
 
-export const FeatureCardShell = ({ data }: { data: FeatureCardData }) => {
+interface FeatureCardShellProps {
+    /** Optional pill rendered in the top-right corner — used by Surprise Me to
+     *  show which sub-variant is currently displayed. */
+    cornerBadge?: string;
+    data: FeatureCardData;
+    /** Suppress the rotation dot indicator. Surprise Me passes this so the
+     *  inner variant's dots (counting items in its own pool) don't appear
+     *  alongside the outer "1 of 9 variants" cycle. */
+    hideRotationDots?: boolean;
+}
+
+export const FeatureCardShell = ({
+    cornerBadge,
+    data,
+    hideRotationDots = false,
+}: FeatureCardShellProps) => {
     const { t } = useTranslation();
     const { addToQueueByData } = usePlayer();
-    const isHoveredRef = useRef(false);
 
     const backgroundSong = data.backgroundSong ?? data.songs[0] ?? null;
     const backgroundImageUrl = useItemImageUrl({
@@ -104,19 +119,18 @@ export const FeatureCardShell = ({ data }: { data: FeatureCardData }) => {
         [addToQueueByData, data.songs],
     );
 
-    // Surface hover-paused-state to the shell user via the rotationPaused flag.
-    // We keep our own hovered ref because mouse-enter/leave fire faster than
-    // React state updates would, and rotation can read it synchronously.
-    const onMouseEnter = useCallback(() => {
-        isHoveredRef.current = true;
-    }, []);
-    const onMouseLeave = useCallback(() => {
-        isHoveredRef.current = false;
-    }, []);
+    // Hover state is forwarded to a module-level signal that usePoolRotation
+    // reads on every tick. Avoids prop drilling through every variant and
+    // keeps Surprise Me's outer rotation honoring the same pause.
+    const onMouseEnter = useCallback(() => setFeatureCardHovered(true), []);
+    const onMouseLeave = useCallback(() => setFeatureCardHovered(false), []);
+    const onFocusIn = useCallback(() => setFeatureCardHovered(true), []);
+    const onFocusOut = useCallback(() => setFeatureCardHovered(false), []);
 
+    // Belt-and-suspenders: if the shell unmounts mid-hover, clear the signal
+    // so the next mount doesn't inherit a stale "paused" state.
     useEffect(() => {
-        // No-op: callbacks above are stable. Placeholder hook to keep the
-        // interface symmetrical with future expansion (e.g. focus tracking).
+        return () => setFeatureCardHovered(false);
     }, []);
 
     const showSkeleton = data.isLoading && data.songs.length === 0;
@@ -131,7 +145,13 @@ export const FeatureCardShell = ({ data }: { data: FeatureCardData }) => {
     );
 
     return (
-        <div className={styles.card} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
+        <div
+            className={styles.card}
+            onBlur={onFocusOut}
+            onFocus={onFocusIn}
+            onMouseEnter={onMouseEnter}
+            onMouseLeave={onMouseLeave}
+        >
             <div
                 aria-hidden
                 className={styles.blurredBackground}
@@ -184,7 +204,8 @@ export const FeatureCardShell = ({ data }: { data: FeatureCardData }) => {
                     </div>
                 </div>
             </div>
-            {data.rotationCount && data.rotationCount > 1 && (
+            {cornerBadge && <div className={styles.cornerBadge}>{cornerBadge}</div>}
+            {!hideRotationDots && data.rotationCount && data.rotationCount > 1 && (
                 <div
                     aria-hidden
                     className={styles.dots}

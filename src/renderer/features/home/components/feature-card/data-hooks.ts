@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { TFunction } from 'i18next';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { generatePath } from 'react-router';
 
 import { api } from '/@/renderer/api';
@@ -436,6 +436,8 @@ const useTimeMachineSongs = (year: null | number, serverId: string | undefined) 
         staleTime: 1000 * 60 * 5,
     });
 
+const MAX_AUTO_SKIP_RETRIES = 6;
+
 export const useTimeMachineFeatureData = (
     serverId: string | undefined,
     t: TFunction,
@@ -449,16 +451,40 @@ export const useTimeMachineFeatureData = (
 
     const { index, reshuffle } = usePoolRotation(yearPool.length);
     const year = yearPool[index % yearPool.length];
-    const { data: songs, isLoading } = useTimeMachineSongs(year, serverId);
+    const { data: songs, isFetching, isLoading } = useTimeMachineSongs(year, serverId);
+
+    // The picked year may have zero tracks in this user's library. Auto-skip
+    // up to N times to a different year so the user doesn't have to hammer
+    // reshuffle to find a populated era. After N attempts we give up and
+    // show the empty state so the cycle doesn't burn requests forever on
+    // libraries with very few year tags.
+    const retryCountRef = useRef(0);
+    useEffect(() => {
+        if (isFetching || isLoading) return;
+        if (!songs) return;
+        if (songs.length > 0) {
+            retryCountRef.current = 0;
+            return;
+        }
+        if (retryCountRef.current < MAX_AUTO_SKIP_RETRIES) {
+            retryCountRef.current += 1;
+            reshuffle();
+        }
+    }, [isFetching, isLoading, reshuffle, songs]);
+
+    const empty = !isLoading && !isFetching && (songs?.length ?? 0) === 0;
 
     return {
         eyebrow: t('page.home.featureTimeMachine_eyebrow'),
         isLoading,
-        onReshuffle: reshuffle,
+        onReshuffle: () => {
+            retryCountRef.current = 0;
+            reshuffle();
+        },
         rotationCount: yearPool.length,
         rotationIndex: index,
         songs: songs ?? [],
-        subtitle: songs && songs.length === 0 ? t('page.home.featureTimeMachine_empty') : undefined,
+        subtitle: empty ? t('page.home.featureTimeMachine_empty') : undefined,
         title: String(year),
     };
 };
@@ -501,16 +527,39 @@ export const useDecadeDiveFeatureData = (
 
     const { index, reshuffle } = usePoolRotation(decades.length);
     const decade = decades[index % decades.length];
-    const { data: songs, isLoading } = useDecadeSongs(decade, serverId);
+    const { data: songs, isFetching, isLoading } = useDecadeSongs(decade, serverId);
+
+    // Same auto-skip pattern as time machine: decades with no tracks are
+    // skipped without making the user click reshuffle. Lower retry budget
+    // because there are only ~7 decades.
+    const retryCountRef = useRef(0);
+    useEffect(() => {
+        if (isFetching || isLoading || !songs) return;
+        if (songs.length > 0) {
+            retryCountRef.current = 0;
+            return;
+        }
+        if (retryCountRef.current < 4) {
+            retryCountRef.current += 1;
+            reshuffle();
+        }
+    }, [isFetching, isLoading, reshuffle, songs]);
+
+    const empty = !isLoading && !isFetching && (songs?.length ?? 0) === 0;
 
     return {
         eyebrow: t('page.home.featureDecade_eyebrow'),
         isLoading,
-        onReshuffle: reshuffle,
+        onReshuffle: () => {
+            retryCountRef.current = 0;
+            reshuffle();
+        },
         rotationCount: decades.length,
         rotationIndex: index,
         songs: songs ?? [],
-        subtitle: t('page.home.featureDecade_subtitle'),
+        subtitle: empty
+            ? t('page.home.featureTimeMachine_empty')
+            : t('page.home.featureDecade_subtitle'),
         title: `${decade}s`,
     };
 };
