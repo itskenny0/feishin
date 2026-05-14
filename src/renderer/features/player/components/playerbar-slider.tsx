@@ -4,13 +4,9 @@ import { lazy, Suspense } from 'react';
 import { PlayerbarSeekSlider } from './playerbar-seek-slider';
 import styles from './playerbar-slider.module.css';
 
+import { useActivePlayerSource } from '/@/renderer/features/jellyfin-remote-target/hooks/use-active-player-source';
 import { ScrobbleStatus } from '/@/renderer/features/player/components/scrobble-status';
-import {
-    useAppStore,
-    useAppStoreActions,
-    usePlayerSong,
-    usePlayerTimestamp,
-} from '/@/renderer/store';
+import { useAppStore, useAppStoreActions, usePlayerTimestamp } from '/@/renderer/store';
 import { PlayerbarSliderType, usePlayerbarSlider } from '/@/renderer/store/settings.store';
 import { Slider, SliderProps } from '/@/shared/components/slider/slider';
 import { Spinner } from '/@/shared/components/spinner/spinner';
@@ -26,11 +22,22 @@ const PlayerbarWaveform = lazy(() =>
 /**
  * Right-side time readout. Subscribes to the playback timestamp only here, so
  * the rest of `<PlayerbarSlider />` doesn't re-render on every tick.
+ *
+ * When a remote Jellyfin device is the active target, currentTimeSec is
+ * passed in from the parent (sourced from the mirrored remote state).
+ * Otherwise it falls back to the local player's tick subscription.
  */
-const DurationReadout = ({ songDurationSec }: { songDurationSec: number }) => {
+const DurationReadout = ({
+    currentTimeSec,
+    songDurationSec,
+}: {
+    currentTimeSec?: number;
+    songDurationSec: number;
+}) => {
     const showTimeRemaining = useAppStore((state) => state.showTimeRemaining);
     const { setShowTimeRemaining } = useAppStoreActions();
-    const currentTime = usePlayerTimestamp();
+    const localTime = usePlayerTimestamp();
+    const currentTime = currentTimeSec ?? localTime;
 
     const text = showTimeRemaining
         ? formatDuration((currentTime - songDurationSec) * 1000 || 0)
@@ -53,10 +60,15 @@ const DurationReadout = ({ songDurationSec }: { songDurationSec: number }) => {
 };
 
 export const PlayerbarSlider = () => {
-    const currentSong = usePlayerSong();
+    const source = useActivePlayerSource();
+    const currentSong = source.nowPlayingItem;
     const playerbarSlider = usePlayerbarSlider();
 
     const songDuration = currentSong?.duration ? currentSong.duration / 1000 : 0;
+    // When the active player is a remote Jellyfin device, hand its
+    // mirrored position to the readout. Local mode leaves it undefined so
+    // DurationReadout falls back to its own usePlayerTimestamp subscription.
+    const remoteTimeSec = source.mode === 'remote' ? source.positionMs / 1000 : undefined;
 
     const isWaveform = playerbarSlider?.type === PlayerbarSliderType.WAVEFORM;
 
@@ -75,7 +87,10 @@ export const PlayerbarSlider = () => {
                 )}
             </div>
             <div className={styles.sliderValueWrapper}>
-                <DurationReadout songDurationSec={songDuration} />
+                <DurationReadout
+                    currentTimeSec={remoteTimeSec}
+                    songDurationSec={songDuration}
+                />
             </div>
         </div>
     );

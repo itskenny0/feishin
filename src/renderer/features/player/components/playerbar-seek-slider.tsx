@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { CustomPlayerbarSlider } from './playerbar-slider';
 
+import { useActivePlayerSource } from '/@/renderer/features/jellyfin-remote-target/hooks/use-active-player-source';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
 import { usePlayerTimestamp } from '/@/renderer/store';
 
@@ -14,7 +15,9 @@ interface PlayerbarSeekSliderProps {
 export const PlayerbarSeekSlider = ({ max, min }: PlayerbarSeekSliderProps) => {
     const [isSeeking, setIsSeeking] = useState(false);
     const [seekValue, setSeekValue] = useState(0);
-    const currentTime = usePlayerTimestamp();
+    const source = useActivePlayerSource();
+    const localTime = usePlayerTimestamp();
+    const currentTime = source.mode === 'remote' ? source.positionMs / 1000 : localTime;
     const seekTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const lastSeekValueRef = useRef<null | number>(null);
 

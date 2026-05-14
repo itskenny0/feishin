@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 
 import styles from './center-controls.module.css';
 
+import { useActivePlayerSource } from '/@/renderer/features/jellyfin-remote-target/hooks/use-active-player-source';
 import { MainPlayButton, PlayerButton } from '/@/renderer/features/player/components/player-button';
 import { PlayerbarSlider } from '/@/renderer/features/player/components/playerbar-slider';
 import { openShuffleAllModal } from '/@/renderer/features/player/components/shuffle-all-modal';
@@ -16,12 +17,10 @@ import {
     useButtonSize,
     usePlayerRepeat,
     usePlayerShuffle,
-    usePlayerSongProperties,
-    usePlayerStatus,
     useSkipButtons,
 } from '/@/renderer/store';
 import { Icon } from '/@/shared/components/icon/icon';
-import { PlayerRepeat, PlayerShuffle, PlayerStatus } from '/@/shared/types/types';
+import { PlayerRepeat, PlayerShuffle } from '/@/shared/types/types';
 
 export const CenterControls = () => {
     const skip = useSkipButtons();
@@ -195,15 +194,14 @@ const SkipBackwardButton = ({ disabled }: { disabled?: boolean }) => {
 };
 
 const CenterPlayButton = ({ disabled }: { disabled?: boolean }) => {
-    const { id: currentSongId } = usePlayerSongProperties(['id']) ?? {};
-
-    const status = usePlayerStatus();
+    const source = useActivePlayerSource();
+    const currentSongId = source.nowPlayingItem?.id;
     const { mediaTogglePlayPause } = usePlayer();
 
     return (
         <MainPlayButton
             disabled={disabled || currentSongId === undefined}
-            isPaused={status === PlayerStatus.PAUSED}
+            isPaused={source.isPaused}
             onClick={mediaTogglePlayPause}
         />
     );
