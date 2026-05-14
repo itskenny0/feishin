@@ -3,7 +3,10 @@ import { useCallback, useEffect, useState, WheelEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { DevicePickerButton } from '/@/renderer/features/jellyfin-remote-target/components/device-picker-button';
-import { useActivePlayerSource } from '/@/renderer/features/jellyfin-remote-target/hooks/use-active-player-source';
+import {
+    useActivePlayerSource,
+    useTransportEnabled,
+} from '/@/renderer/features/jellyfin-remote-target/hooks/use-active-player-source';
 import { PopoverPlayQueue } from '/@/renderer/features/now-playing/components/popover-play-queue';
 import { PlayerConfig } from '/@/renderer/features/player/components/player-config';
 import { CustomPlayerbarSlider } from '/@/renderer/features/player/components/playerbar-slider';
@@ -391,6 +394,7 @@ const RatingButton = () => {
 const VolumeButton = () => {
     const { bindings } = useHotkeySettings();
     const source = useActivePlayerSource();
+    const canSetVolume = useTransportEnabled('SetVolume');
     const localMuted = usePlayerMuted();
     const volume = source.volume;
     // In remote mode, volume === 0 is a proxy for muted; in local mode, keep the
@@ -487,6 +491,7 @@ const VolumeButton = () => {
             />
             {!isMinWidth ? (
                 <CustomPlayerbarSlider
+                    disabled={!canSetVolume}
                     max={100}
                     min={0}
                     onChange={handleVolumeSlider}
@@ -495,6 +500,7 @@ const VolumeButton = () => {
                     }}
                     onWheel={handleVolumeWheel}
                     size={6}
+                    style={{ opacity: canSetVolume ? undefined : 0.4 }}
                     value={sliderValue}
                     w={volumeWidth}
                 />

@@ -54,3 +54,9 @@ export const useActivePlayerSource = (): ActivePlayerSource => {
         };
     }, [remote, localSong, localStatus, localVolume]);
 };
+
+export const useTransportEnabled = (capability: string): boolean => {
+    const source = useActivePlayerSource();
+    if (source.mode === 'local') return true;
+    return source.capabilities.includes(capability);
+};
