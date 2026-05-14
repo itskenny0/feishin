@@ -82,6 +82,7 @@ const HomeItemSchema = z.enum([
     'genres',
     'libraryStats',
     'mostPlayed',
+    'quickFilters',
     'random',
     'recentlyAdded',
     'recentlyPlayed',
@@ -860,6 +861,7 @@ export enum HomeItem {
     GENRES = 'genres',
     LIBRARY_STATS = 'libraryStats',
     MOST_PLAYED = 'mostPlayed',
+    QUICK_FILTERS = 'quickFilters',
     RANDOM = 'random',
     RECENTLY_ADDED = 'recentlyAdded',
     RECENTLY_PLAYED = 'recentlyPlayed',
@@ -2648,10 +2650,27 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
+                if (version <= 39) {
+                    // Add the new QUICK_FILTERS home item to existing
+                    // installs. Default disabled — users can enable it
+                    // alongside other home items in Settings.
+                    if (Array.isArray(state.general.homeItems)) {
+                        const hasChips = state.general.homeItems.some(
+                            (i: { id: string }) => i.id === HomeItem.QUICK_FILTERS,
+                        );
+                        if (!hasChips) {
+                            state.general.homeItems = [
+                                ...state.general.homeItems,
+                                { disabled: true, id: HomeItem.QUICK_FILTERS },
+                            ];
+                        }
+                    }
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 39,
+            version: 40,
         },
     ),
 );
