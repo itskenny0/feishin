@@ -6,6 +6,7 @@ import { GetInfoAction } from '/@/renderer/features/context-menu/actions/get-inf
 import { GoToAction } from '/@/renderer/features/context-menu/actions/go-to-action';
 import { PlayAction } from '/@/renderer/features/context-menu/actions/play-action';
 import { PlayArtistRadioAction } from '/@/renderer/features/context-menu/actions/play-artist-radio-action';
+import { RefreshMetadataAction } from '/@/renderer/features/context-menu/actions/refresh-metadata-action';
 import { SetFavoriteAction } from '/@/renderer/features/context-menu/actions/set-favorite-action';
 import { SetRatingAction } from '/@/renderer/features/context-menu/actions/set-rating-action';
 import { ShareAction } from '/@/renderer/features/context-menu/actions/share-action';
@@ -41,6 +42,7 @@ export const ArtistContextMenu = ({ items, type }: ArtistContextMenuProps) => {
             <ContextMenu.Divider />
             <GoToAction items={items} />
             <ContextMenu.Divider />
+            <RefreshMetadataAction disabled={items.length === 0} ids={ids} />
             <GetInfoAction disabled={items.length === 0} items={items} />
         </ContextMenu.Content>
     );
