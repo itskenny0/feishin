@@ -18,6 +18,7 @@ import {
 import { ItemControls } from '/@/renderer/components/item-list/types';
 import { JoinedArtists } from '/@/renderer/features/albums/components/joined-artists';
 import { useDragDrop } from '/@/renderer/hooks/use-drag-drop';
+import { preloadRoute } from '/@/renderer/router/route-preloaders';
 import { AppRoute } from '/@/renderer/router/routes';
 import { useShowFilesystemNameForAlbums, useShowRatings } from '/@/renderer/store';
 import {
@@ -1102,12 +1103,16 @@ const filesystemNameFromAlbumPath = (path: string): string => {
     return segments[segments.length - 1] || '';
 };
 
+const preloadAlbumDetail = () => preloadRoute(AppRoute.LIBRARY_ALBUMS_DETAIL);
+
 const AlbumCardName = ({ data }: { data: Album }) => {
     const useFs = useShowFilesystemNameForAlbums();
     const displayName =
         useFs && data.path ? filesystemNameFromAlbumPath(data.path) || data.name : data.name;
     return (
         <Link
+            onFocus={preloadAlbumDetail}
+            onMouseEnter={preloadAlbumDetail}
             state={{ item: data }}
             to={generatePath(AppRoute.LIBRARY_ALBUMS_DETAIL, { albumId: data.id })}
         >
