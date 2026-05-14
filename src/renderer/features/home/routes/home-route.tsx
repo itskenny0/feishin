@@ -5,7 +5,8 @@ import { useGridCarouselContainerQuery } from '/@/renderer/components/grid-carou
 import { NativeScrollArea } from '/@/renderer/components/native-scroll-area/native-scroll-area';
 import { AlbumInfiniteCarousel } from '/@/renderer/features/albums/components/album-infinite-carousel';
 import { AlbumInfiniteFeatureCarousel } from '/@/renderer/features/home/components/album-infinite-feature-carousel';
-import { AlbumInfiniteSingleFeatureCarousel } from '/@/renderer/features/home/components/album-infinite-single-feature-carousel';
+import { FeatureCard } from '/@/renderer/features/home/components/feature-card/feature-card';
+import { FeatureCardPicker } from '/@/renderer/features/home/components/feature-card/feature-card-picker';
 import { FeaturedGenres } from '/@/renderer/features/home/components/featured-genres';
 import { FeelingLuckyButton } from '/@/renderer/features/home/components/feeling-lucky-button';
 import { AnimatedPage } from '/@/renderer/features/shared/components/animated-page';
@@ -18,6 +19,7 @@ import {
     HomeItem,
     useCurrentServer,
     useHomeFeature,
+    useHomeFeatureContent,
     useHomeFeatureStyle,
     useHomeFeelingLucky,
     useHomeItems,
@@ -40,6 +42,7 @@ const HomeRoute = () => {
     const server = useCurrentServer();
     const { windowBarStyle } = useWindowSettings();
     const homeFeature = useHomeFeature();
+    const homeFeatureContent = useHomeFeatureContent();
     const homeFeatureStyle = useHomeFeatureStyle();
     const homeFeelingLucky = useHomeFeelingLucky();
     const homeItems = useHomeItems();
@@ -117,7 +120,10 @@ const HomeRoute = () => {
                         ref={containerQuery.ref}
                     >
                         {homeFeature && homeFeatureStyle === HomeFeatureStyle.SINGLE && (
-                            <AlbumInfiniteSingleFeatureCarousel />
+                            <>
+                                <FeatureCardPicker />
+                                <FeatureCard variant={homeFeatureContent} />
+                            </>
                         )}
                         {homeFeature && homeFeatureStyle === HomeFeatureStyle.MULTIPLE && (
                             <AlbumInfiniteFeatureCarousel />

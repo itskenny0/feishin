@@ -484,6 +484,20 @@ export const GeneralSettingsSchema = z.object({
     followSystemTheme: z.boolean(),
     genreTarget: GenreTargetSchema,
     homeFeature: z.boolean(),
+    homeFeatureContent: z.enum([
+        'album',
+        'albumOfTheDay',
+        'artist',
+        'decade',
+        'favorites',
+        'forgottenFavorites',
+        'genre',
+        'recentlyPlayed',
+        'surpriseMe',
+        'timeMachine',
+        'topPlayed',
+        'unplayed',
+    ]),
     homeFeatureStyle: z.nativeEnum(HomeFeatureStyle),
     homeFeelingLucky: z.boolean(),
     homeItems: z.array(SortableItemSchema(HomeItemSchema)),
@@ -1164,6 +1178,7 @@ const initialState: SettingsState = {
         followSystemTheme: false,
         genreTarget: GenreTarget.TRACK,
         homeFeature: true,
+        homeFeatureContent: 'artist',
         homeFeatureStyle: HomeFeatureStyle.SINGLE,
         homeFeelingLucky: true,
         homeItems,
@@ -2591,10 +2606,19 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
+                if (version <= 36) {
+                    // Existing installs default to the new featured-artist card,
+                    // matching new-install behaviour. Users who prefer the old
+                    // random-album banner can switch back in Settings.
+                    if (state.general.homeFeatureContent === undefined) {
+                        state.general.homeFeatureContent = initialState.general.homeFeatureContent;
+                    }
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 36,
+            version: 37,
         },
     ),
 );
@@ -2858,6 +2882,9 @@ export const useExternalLinks = () =>
     );
 
 export const useHomeFeature = () => useSettingsStore((state) => state.general.homeFeature, shallow);
+
+export const useHomeFeatureContent = () =>
+    useSettingsStore((state) => state.general.homeFeatureContent);
 
 export const useHomeFeatureStyle = () =>
     useSettingsStore((state) => state.general.homeFeatureStyle);
