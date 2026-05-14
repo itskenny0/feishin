@@ -7,6 +7,8 @@ import { useTranslation } from 'react-i18next';
 import { queryKeys } from '/@/renderer/api/query-keys';
 import { albumQueries } from '/@/renderer/features/albums/api/album-api';
 import { artistsQueries } from '/@/renderer/features/artists/api/artists-api';
+import { commandDispatcher } from '/@/renderer/features/jellyfin-remote-target/controller/command-dispatcher';
+import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
 import {
     fetchPlaylistSongsBatch,
     filterSongsByPlayerFilters,
@@ -19,6 +21,7 @@ import {
 import { playlistsQueries } from '/@/renderer/features/playlists/api/playlists-api';
 import { songsQueries } from '/@/renderer/features/songs/api/songs-api';
 import { AddToQueueType, usePlayerActions, useSettingsStore } from '/@/renderer/store';
+import { useAuthStore } from '/@/renderer/store/auth.store';
 import { LogCategory, logFn } from '/@/renderer/utils/logger';
 import { logMsg } from '/@/renderer/utils/logger-message';
 import { shuffle as shuffleArray } from '/@/renderer/utils/shuffle';
@@ -142,6 +145,20 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
     const { t } = useTranslation();
     const queryClient = useQueryClient();
     const storeActions = usePlayerActions();
+
+    /**
+     * Build a dispatcher context only when we're in remote mode. Used by every
+     * branched method below. Reads at call time so we don't subscribe and
+     * re-render the provider on every Sessions tick.
+     */
+    const getRemoteCtx = useCallback(() => {
+        const target = useRemoteTargetStore.getState();
+        if (!target.targetDeviceId || !target.sessionId) return null;
+        const server = useAuthStore.getState().currentServer;
+        if (!server?.credential) return null;
+        return { sessionId: target.sessionId, server };
+    }, []);
+
     const timeoutIds = useRef<null | Record<string, ReturnType<typeof setTimeout>>>({});
 
     const [doNotShowAgain, setDoNotShowAgain] = useLocalStorage({
@@ -192,6 +209,30 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
             const filters = useSettingsStore.getState().playback.filters;
             const filteredData = filterSongsByPlayerFilters(data, filters);
 
+            const remote = getRemoteCtx();
+            if (remote && type === Play.NOW) {
+                const itemIds = data.map((s) => s.id);
+                void commandDispatcher.play(remote, {
+                    itemIds,
+                    playCommand: 'PlayNow',
+                });
+                return;
+            }
+            if (remote && type === Play.NEXT) {
+                void commandDispatcher.play(remote, {
+                    itemIds: data.map((s) => s.id),
+                    playCommand: 'PlayNext',
+                });
+                return;
+            }
+            if (remote && type === Play.LAST) {
+                void commandDispatcher.play(remote, {
+                    itemIds: data.map((s) => s.id),
+                    playCommand: 'PlayLast',
+                });
+                return;
+            }
+
             if (typeof type === 'object' && 'edge' in type && type.edge !== null) {
                 const edge = type.edge === 'top' ? 'top' : 'bottom';
 
@@ -216,7 +257,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
                 storeActions.addToQueueByType(filteredData, type as Play, playSongId);
             }
         },
-        [storeActions],
+        [getRemoteCtx, storeActions],
     );
 
     const addToQueueByFetch = useCallback(
@@ -604,17 +645,26 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
         logFn.debug(logMsg[LogCategory.PLAYER].mediaNext, {
             category: LogCategory.PLAYER,
         });
-
+        const remote = getRemoteCtx();
+        if (remote) {
+            void commandDispatcher.next(remote);
+            return;
+        }
         storeActions.mediaNext();
-    }, [storeActions]);
+    }, [getRemoteCtx, storeActions]);
 
     const mediaPause = useCallback(() => {
         logFn.debug(logMsg[LogCategory.PLAYER].mediaPause, {
             category: LogCategory.PLAYER,
         });
 
+        const remote = getRemoteCtx();
+        if (remote) {
+            void commandDispatcher.pause(remote);
+            return;
+        }
         storeActions.mediaPause();
-    }, [storeActions]);
+    }, [getRemoteCtx, storeActions]);
 
     const mediaPlay = useCallback(
         (id?: string) => {
@@ -623,9 +673,14 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
                 meta: { id },
             });
 
+            const remote = getRemoteCtx();
+            if (remote) {
+                void commandDispatcher.unpause(remote);
+                return;
+            }
             storeActions.mediaPlay(id);
         },
-        [storeActions],
+        [getRemoteCtx, storeActions],
     );
 
     const mediaPlayByIndex = useCallback(
@@ -644,9 +699,13 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
         logFn.debug(logMsg[LogCategory.PLAYER].mediaPrevious, {
             category: LogCategory.PLAYER,
         });
-
+        const remote = getRemoteCtx();
+        if (remote) {
+            void commandDispatcher.previous(remote);
+            return;
+        }
         storeActions.mediaPrevious();
-    }, [storeActions]);
+    }, [getRemoteCtx, storeActions]);
 
     const mediaStop = useCallback(
         (options?: { reset?: boolean }) => {
@@ -654,10 +713,14 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
                 category: LogCategory.PLAYER,
                 meta: { reset: options?.reset },
             });
-
+            const remote = getRemoteCtx();
+            if (remote) {
+                void commandDispatcher.stop(remote);
+                return;
+            }
             storeActions.mediaStop(options);
         },
-        [storeActions],
+        [getRemoteCtx, storeActions],
     );
 
     const mediaSeekToTimestamp = useCallback(
@@ -666,10 +729,14 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
                 category: LogCategory.PLAYER,
                 meta: { timestamp },
             });
-
+            const remote = getRemoteCtx();
+            if (remote) {
+                void commandDispatcher.seek(remote, timestamp * 1000);
+                return;
+            }
             storeActions.mediaSeekToTimestamp(timestamp);
         },
-        [storeActions],
+        [getRemoteCtx, storeActions],
     );
 
     const mediaSkipBackward = useCallback(() => {
@@ -720,17 +787,27 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
         logFn.debug(logMsg[LogCategory.PLAYER].mediaToggleMute, {
             category: LogCategory.PLAYER,
         });
-
+        const remote = getRemoteCtx();
+        if (remote) {
+            const wasMuted = useRemoteTargetStore.getState().mirrored.playState.volume === 0;
+            void commandDispatcher.setMute(remote, !wasMuted);
+            return;
+        }
         storeActions.mediaToggleMute();
-    }, [storeActions]);
+    }, [getRemoteCtx, storeActions]);
 
     const mediaTogglePlayPause = useCallback(() => {
         logFn.debug(logMsg[LogCategory.PLAYER].mediaTogglePlayPause, {
             category: LogCategory.PLAYER,
         });
 
+        const remote = getRemoteCtx();
+        if (remote) {
+            void commandDispatcher.togglePause(remote);
+            return;
+        }
         storeActions.mediaTogglePlayPause();
-    }, [storeActions]);
+    }, [getRemoteCtx, storeActions]);
 
     const moveSelectedTo = useCallback(
         (items: QueueSong[], edge: 'bottom' | 'top', uniqueId: string) => {
@@ -786,10 +863,14 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
                 category: LogCategory.PLAYER,
                 meta: { volume },
             });
-
+            const remote = getRemoteCtx();
+            if (remote) {
+                void commandDispatcher.setVolume(remote, volume);
+                return;
+            }
             storeActions.setVolume(volume);
         },
-        [storeActions],
+        [getRemoteCtx, storeActions],
     );
 
     const setRepeat = useCallback(
