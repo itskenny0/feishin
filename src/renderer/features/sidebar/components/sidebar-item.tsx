@@ -1,9 +1,10 @@
 import clsx from 'clsx';
-import { memo } from 'react';
+import { memo, useCallback } from 'react';
 import { Link, LinkProps, useLocation } from 'react-router';
 
 import styles from './sidebar-item.module.css';
 
+import { preloadRoute } from '/@/renderer/router/route-preloaders';
 import { Button, ButtonProps } from '/@/shared/components/button/button';
 
 interface SidebarItemProps extends Omit<ButtonProps, 'component' | 'ref'> {
@@ -19,6 +20,10 @@ export const SidebarItem = ({ children, className, to, ...props }: SidebarItemPr
         e.preventDefault();
         e.stopPropagation();
     };
+
+    const handleHoverPreload = useCallback(() => {
+        preloadRoute(toPath);
+    }, [toPath]);
 
     return (
         <Button
@@ -38,6 +43,8 @@ export const SidebarItem = ({ children, className, to, ...props }: SidebarItemPr
             component={Link}
             draggable={false}
             onDragStart={handleLinkDragStart}
+            onFocus={handleHoverPreload}
+            onMouseEnter={handleHoverPreload}
             to={to}
             variant="subtle"
             {...props}
