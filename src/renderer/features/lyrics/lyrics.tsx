@@ -24,17 +24,20 @@ import {
     UnsynchronizedLyricsProps,
 } from '/@/renderer/features/lyrics/unsynchronized-lyrics';
 import { openLyricsSettingsModal } from '/@/renderer/features/lyrics/utils/open-lyrics-settings-modal';
+import { uploadLyricsToServer } from '/@/renderer/features/lyrics/utils/upload-lyrics-to-server';
 import { usePlayerEvents } from '/@/renderer/features/player/audio-player/hooks/use-player-events';
 import { useIsRadioActive } from '/@/renderer/features/radio/hooks/use-radio-player';
 import { ComponentErrorBoundary } from '/@/renderer/features/shared/components/component-error-boundary';
 import { queryClient } from '/@/renderer/lib/react-query';
 import { useLyricsSettings, usePlayerSong } from '/@/renderer/store';
+import { useCurrentServerWithCredential } from '/@/renderer/store/auth.store';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Center } from '/@/shared/components/center/center';
 import { Group } from '/@/shared/components/group/group';
 import { Spinner } from '/@/shared/components/spinner/spinner';
 import { Text } from '/@/shared/components/text/text';
-import { LyricsOverride } from '/@/shared/types/domain-types';
+import { toast } from '/@/shared/components/toast/toast';
+import { LyricsOverride, ServerType } from '/@/shared/types/domain-types';
 
 type LyricsProps = {
     fadeOutNoLyricsMessage?: boolean;
@@ -288,6 +291,34 @@ export const Lyrics = ({ fadeOutNoLyricsMessage = true, settingsKey = 'default' 
         }
     }, [currentOffsetMs, displayLyrics, synced]);
 
+    const credentialedServer = useCurrentServerWithCredential();
+
+    const handleSaveLyricsToServer = async () => {
+        if (
+            !credentialedServer ||
+            credentialedServer.type !== ServerType.JELLYFIN ||
+            !currentSong?.id ||
+            !displayLyrics
+        ) {
+            return;
+        }
+        const ok = await uploadLyricsToServer({
+            itemId: currentSong.id,
+            lyrics: displayLyrics,
+            server: credentialedServer,
+        });
+        if (ok) {
+            toast.info({ message: t('form.lyricsExport.savedToServer') });
+        } else {
+            toast.error({ message: t('form.lyricsExport.saveFailed') });
+        }
+    };
+
+    const canSaveToServer =
+        Boolean(credentialedServer && credentialedServer.type === ServerType.JELLYFIN) &&
+        Boolean(currentSong?.id) &&
+        Boolean(displayLyrics);
+
     const handleOpenSettings = () => {
         openLyricsSettingsModal(settingsKey);
     };
@@ -356,6 +387,9 @@ export const Lyrics = ({ fadeOutNoLyricsMessage = true, settingsKey = 'default' 
                         offsetMs={displayOffsetMs}
                         onExportLyrics={handleExportLyrics}
                         onRemoveLyric={handleOnRemoveLyric}
+                        onSaveLyricsToServer={
+                            canSaveToServer ? handleSaveLyricsToServer : undefined
+                        }
                         onSearchOverride={handleOnSearchOverride}
                         onTranslateLyric={
                             translationApiProvider && translationApiKey
