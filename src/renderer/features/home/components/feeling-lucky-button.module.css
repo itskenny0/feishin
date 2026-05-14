@@ -1,4 +1,4 @@
-.luckyButton {
+.lucky-button {
     /* The magic gradient. Diagonal so the sweep animation reads as a sheen. */
     --lucky-gradient: linear-gradient(
         110deg,
@@ -8,105 +8,108 @@
         #a855f7 100%
     );
 
+    position: relative;
+    display: inline-flex;
+    gap: 0.625rem;
     align-items: center;
+    justify-content: center;
+    padding: 0.7rem 1.4rem;
+    overflow: hidden;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: white;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
     background: var(--lucky-gradient);
-    background-size: 200% 100%;
     background-position: 0% 50%;
+    background-size: 200% 100%;
     border: none;
     border-radius: 12px;
     box-shadow:
-        0 2px 8px rgba(168, 85, 247, 0.25),
-        0 8px 24px rgba(236, 72, 153, 0.15);
-    color: white;
-    cursor: pointer;
-    display: inline-flex;
-    font-size: 0.95rem;
-    font-weight: 600;
-    gap: 0.625rem;
-    justify-content: center;
-    letter-spacing: 0.01em;
-    overflow: hidden;
-    padding: 0.7rem 1.4rem;
-    position: relative;
+        0 2px 8px rgb(168 85 247 / 25%),
+        0 8px 24px rgb(236 72 153 / 15%);
     transition:
         transform 120ms ease-out,
         box-shadow 180ms ease-out,
         background-position 600ms ease-out;
-    user-select: none;
-    white-space: nowrap;
 }
 
-.luckyButton:hover:not(:disabled) {
+.lucky-button:hover:not(:disabled) {
     background-position: 100% 50%;
     box-shadow:
-        0 4px 14px rgba(168, 85, 247, 0.4),
-        0 12px 32px rgba(236, 72, 153, 0.25);
+        0 4px 14px rgb(168 85 247 / 40%),
+        0 12px 32px rgb(236 72 153 / 25%);
     transform: translateY(-1px);
 }
 
-.luckyButton:active:not(:disabled) {
+.lucky-button:active:not(:disabled) {
     transform: translateY(0);
     transition-duration: 60ms;
 }
 
-.luckyButton:disabled {
+.lucky-button:disabled {
     cursor: progress;
     opacity: 0.8;
 }
 
 /* A faint diagonal sheen that sweeps across the button continuously, very subtle. */
-.luckyButton::after {
+.lucky-button::after {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    content: '';
     background: linear-gradient(
         110deg,
         transparent 30%,
-        rgba(255, 255, 255, 0.18) 50%,
+        rgb(255 255 255 / 18%) 50%,
         transparent 70%
     );
-    content: '';
-    inset: 0;
-    pointer-events: none;
-    position: absolute;
     transform: translateX(-100%);
     transition: transform 700ms ease-out;
 }
 
-.luckyButton:hover::after {
+.lucky-button:hover::after {
     transform: translateX(100%);
 }
 
-.luckyIcon {
+.lucky-icon {
     display: inline-flex;
+
     /* Slow gentle drift so the sparkles feel alive without being distracting. */
-    animation: luckyDrift 3.4s ease-in-out infinite;
+    animation: lucky-drift 3.4s ease-in-out infinite;
 }
 
-@keyframes luckyDrift {
+@keyframes lucky-drift {
     0%, 100% {
         transform: rotate(-4deg) scale(1);
     }
+
     50% {
         transform: rotate(4deg) scale(1.08);
     }
 }
 
-.luckyButton.loading .luckyIcon {
+.lucky-button.loading .lucky-icon {
     /* During the loading state, spin instead of drift to signal work. */
-    animation: luckySpin 0.9s linear infinite;
+    animation: lucky-spin 0.9s linear infinite;
 }
 
-@keyframes luckySpin {
+@keyframes lucky-spin {
     from {
         transform: rotate(0);
     }
+
     to {
         transform: rotate(360deg);
     }
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .luckyButton::after,
-    .luckyIcon {
-        animation: none;
+    .lucky-button::after,
+    .lucky-icon {
         transition: none;
+        animation: none;
     }
 }
