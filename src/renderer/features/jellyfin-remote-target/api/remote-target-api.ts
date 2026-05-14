@@ -47,6 +47,30 @@ export const remoteTargetApi = {
     },
 
     /**
+     * Like listSessions but also returns the matching raw session object so
+     * callers can read fields not in RemoteDevice (e.g. NowPlayingQueue).
+     */
+    listSessionsWithRaw: async (
+        args: ServerArg,
+    ): Promise<{ devices: RemoteDevice[]; raws: Record<string, unknown> }> => {
+        const userId = args.server.userId;
+        if (!userId) return { devices: [], raws: {} };
+        const res = await jfApiClient({ server: args.server }).getSessions({
+            query: { ControllableByUserId: userId },
+        });
+        if (res.status !== 200 || !Array.isArray(res.body)) return { devices: [], raws: {} };
+        const raws: Record<string, unknown> = {};
+        const devices: RemoteDevice[] = [];
+        for (const s of res.body) {
+            const device = safeSessionToDevice(s);
+            if (!device) continue;
+            devices.push(device);
+            raws[device.sessionId] = s;
+        }
+        return { devices, raws };
+    },
+
+    /**
      * Push a list of itemIds to a session with PlayNow/PlayNext/PlayLast.
      */
     play: async (

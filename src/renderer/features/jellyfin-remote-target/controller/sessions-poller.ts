@@ -5,6 +5,7 @@ import {
     mirrorSession,
 } from '/@/renderer/features/jellyfin-remote-target/controller/remote-state-mirror';
 import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
+import type { RemoteDevice } from '/@/renderer/features/jellyfin-remote-target/types';
 import type { ServerListItemWithCredential } from '/@/shared/types/domain-types';
 
 const POLL_INTERVAL_MS = 3_000;
@@ -24,6 +25,9 @@ export class SessionsPoller {
     /** Track previous queue ids per device to avoid redundant hydrate fetches. */
     private prevQueueIdsByDevice: Record<string, string[]> = {};
 
+    /** Raw session payloads indexed by deviceId, populated each tick. */
+    private rawByDeviceId: Record<string, unknown> = {};
+
     start(args: PollerStartArgs) {
         this.stop();
         this.isRunning = true;
@@ -38,6 +42,7 @@ export class SessionsPoller {
         this.startArgs = null;
         this.offlineSince = 0;
         this.prevQueueIdsByDevice = {};
+        this.rawByDeviceId = {};
         if (this.timer) {
             clearInterval(this.timer);
             this.timer = null;
@@ -49,39 +54,37 @@ export class SessionsPoller {
         const { server, onOffline } = this.startArgs;
         const actions = useRemoteTargetStore.getState().actions;
 
-        let devices;
+        let result: { devices: RemoteDevice[]; raws: Record<string, unknown> };
         try {
-            devices = await remoteTargetApi.listSessions({ server });
+            result = await remoteTargetApi.listSessionsWithRaw({ server });
         } catch (err) {
             console.warn('[remote-target] poll failed', err);
             this.handleMissingTarget(onOffline);
             return;
         }
 
-        actions.setDeviceList(devices);
+        actions.setDeviceList(result.devices);
+        this.rawByDeviceId = {};
+        for (const d of result.devices) {
+            this.rawByDeviceId[d.deviceId] = result.raws[d.sessionId];
+        }
 
         const state = useRemoteTargetStore.getState();
         if (!state.targetDeviceId) {
-            // No target → status remains 'idle'.
             this.offlineSince = 0;
             return;
         }
 
-        const match = findSessionForDevice(devices, state.targetDeviceId);
+        const match = findSessionForDevice(result.devices, state.targetDeviceId);
         if (!match) {
             this.handleMissingTarget(onOffline);
             return;
         }
 
-        // Found the device. Recover from reconnecting if needed.
-        if (state.status !== 'connected') {
-            actions.setStatus('connected');
-        }
+        if (state.status !== 'connected') actions.setStatus('connected');
         this.offlineSince = 0;
 
         if (state.sessionId !== match.sessionId) {
-            // Session id rotates when the device disconnects/reconnects.
-            // Update without resetting the rest of the target.
             actions.setTarget({
                 capabilities: match.capabilities,
                 deviceId: match.deviceId,
@@ -90,17 +93,14 @@ export class SessionsPoller {
             });
         }
 
-        // For now, build a synthetic "raw" session from the RemoteDevice fields
-        // we have. NowPlayingQueue is not exposed on RemoteDevice in v1.
-        // Task 10 widens the API to pass raw payloads through.
-        const mirrorInput = this.toRawShape(match);
+        const raw = this.rawByDeviceId[match.deviceId];
         const mirror = mirrorSession(
-            mirrorInput,
+            raw,
             server,
             this.prevQueueIdsByDevice[match.deviceId] ?? [],
         );
-
         actions.setMirrored(mirror.mirrored);
+
         if (mirror.hydrateQueue) {
             try {
                 const queue = await mirror.hydrateQueue();
@@ -112,26 +112,6 @@ export class SessionsPoller {
         } else if (mirror.queueIndex !== -1) {
             actions.setMirrored({ queueIndex: mirror.queueIndex });
         }
-    }
-
-    /**
-     * The poller throws away the raw session shape via listSessions. For the
-     * mirror we approximate it from RemoteDevice. NowPlayingQueue isn't
-     * exposed on RemoteDevice in v1 — the poller upgrade in Task 10 will fix
-     * this by adding a raw passthrough.
-     */
-    private toRawShape(d: import('/@/renderer/features/jellyfin-remote-target/types').RemoteDevice) {
-        return {
-            Id: d.sessionId,
-            DeviceId: d.deviceId,
-            DeviceName: d.deviceName,
-            SupportedCommands: d.capabilities,
-            PlayState: { IsPaused: d.isPaused, RepeatMode: 'RepeatNone', VolumeLevel: 100 },
-            NowPlayingItem: d.nowPlayingItemId
-                ? { Id: d.nowPlayingItemId, Name: d.nowPlayingTitle, Artists: d.nowPlayingArtist ? [d.nowPlayingArtist] : [] }
-                : null,
-            NowPlayingQueue: [],
-        };
     }
 
     private handleMissingTarget(onOffline: (name: string) => void) {
