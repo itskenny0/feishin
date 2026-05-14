@@ -12,6 +12,7 @@ import {
 import { ItemTableListColumn } from '/@/renderer/components/item-list/item-table-list/item-table-list-column';
 import { ItemListHandle } from '/@/renderer/components/item-list/types';
 import { eventEmitter } from '/@/renderer/events/event-emitter';
+import { useActivePlayerSource } from '/@/renderer/features/jellyfin-remote-target/hooks/use-active-player-source';
 import { useIsPlayerFetching, usePlayer } from '/@/renderer/features/player/context/player-context';
 import { searchLibraryItems } from '/@/renderer/features/shared/utils';
 import { useDragDrop } from '/@/renderer/hooks/use-drag-drop';
@@ -54,13 +55,33 @@ export const PlayQueue = forwardRef<ItemListHandle, QueueProps>(
         const { getVisibleQueue } = usePlayerActions();
         const followCurrentSong = useFollowCurrentSong();
         const queueInPlaybackOrder = useQueueInPlaybackOrder();
+        const source = useActivePlayerSource();
+        const isRemote = source.mode === 'remote';
 
         const [debouncedSearchTerm] = useDebouncedValue(searchTerm, 200);
 
         const [data, setData] = useState<QueueSong[]>([]);
         const [groups, setGroups] = useState<TableGroupHeader[]>([]);
 
+        // Remote mode: derive a QueueSong[] view from the mirrored Song[].
+        // The mirror exposes Song[] (no _uniqueId); the table key is _uniqueId,
+        // so we synthesize a stable id-based key. Position suffix disambiguates
+        // duplicate tracks within the remote queue.
+        const remoteData: QueueSong[] = useMemo(() => {
+            if (!isRemote || !source.queue) return [];
+            return source.queue.map((song, idx) => ({
+                ...(song as Song),
+                _uniqueId: `remote:${song.id}:${idx}`,
+            })) as QueueSong[];
+        }, [isRemote, source.queue]);
+
         useEffect(() => {
+            // In remote mode the queue comes from the mirror (see remoteData below);
+            // skip the local-store subscriptions entirely so we don't fight the mirror.
+            if (isRemote) {
+                return;
+            }
+
             const setQueue = () => {
                 const queue = getVisibleQueue() || { groups: [], items: [] };
 
@@ -143,16 +164,22 @@ export const PlayQueue = forwardRef<ItemListHandle, QueueProps>(
                 unsubCurrentTrack();
                 eventEmitter.off('AUTODJ_QUEUE_ADDED', handleAutoDJQueueAdded);
             };
-        }, [getVisibleQueue, tableRef, followCurrentSong, queueInPlaybackOrder]);
+        }, [getVisibleQueue, tableRef, followCurrentSong, queueInPlaybackOrder, isRemote]);
+
+        const visibleData = isRemote ? remoteData : data;
 
         const filteredData: QueueSong[] = useMemo(() => {
             if (debouncedSearchTerm) {
-                const searched = searchLibraryItems(data, debouncedSearchTerm, LibraryItem.SONG);
+                const searched = searchLibraryItems(
+                    visibleData,
+                    debouncedSearchTerm,
+                    LibraryItem.SONG,
+                );
                 return searched;
             }
 
-            return data;
-        }, [data, debouncedSearchTerm]);
+            return visibleData;
+        }, [visibleData, debouncedSearchTerm]);
 
         const isEmpty = filteredData.length === 0;
 
@@ -166,7 +193,12 @@ export const PlayQueue = forwardRef<ItemListHandle, QueueProps>(
 
         const currentSong = usePlayerSong();
 
-        const currentSongUniqueId = currentSong?._uniqueId;
+        const localCurrentSongUniqueId = currentSong?._uniqueId;
+        const remoteCurrentSongUniqueId =
+            isRemote && source.queueIndex >= 0
+                ? remoteData[source.queueIndex]?._uniqueId
+                : undefined;
+        const currentSongUniqueId = isRemote ? remoteCurrentSongUniqueId : localCurrentSongUniqueId;
 
         const { focused, ref: containerFocusRef } = useFocusWithin();
         const player = usePlayer();
@@ -199,7 +231,7 @@ export const PlayQueue = forwardRef<ItemListHandle, QueueProps>(
                     columns={table.columns}
                     data={filteredData}
                     enableAlternateRowColors={table.enableAlternateRowColors}
-                    enableDrag
+                    enableDrag={!isRemote}
                     enableExpansion={false}
                     enableHeader={table.enableHeader}
                     enableHorizontalBorders={table.enableHorizontalBorders}
