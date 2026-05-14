@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { ROTATE_INTERVAL_MS } from '/@/renderer/features/home/components/feature-card/feature-card-shell';
+import { isFeatureCardHovered } from '/@/renderer/features/home/components/feature-card/hover-signal';
 
 const pickRandomIndex = (length: number, exclude: null | number = null): number => {
     if (length <= 1) return 0;
@@ -21,7 +22,6 @@ const pickRandomIndex = (length: number, exclude: null | number = null): number 
  */
 export const usePoolRotation = (poolSize: number) => {
     const [index, setIndex] = useState(0);
-    const pausedRef = useRef(false);
 
     // Reset to a random starting point whenever the pool changes size — picking
     // 0 every time would mean the same item shows on every home-page visit.
@@ -33,7 +33,10 @@ export const usePoolRotation = (poolSize: number) => {
     useEffect(() => {
         if (poolSize < 2) return undefined;
         const id = window.setInterval(() => {
-            if (pausedRef.current) return;
+            // Hover-pause is global because the shell mounts at most once per
+            // home-page render and any single hover should freeze the entire
+            // rotation chain (including Surprise Me's outer wrapper).
+            if (isFeatureCardHovered()) return;
             setIndex((prev) => pickRandomIndex(poolSize, prev));
         }, ROTATE_INTERVAL_MS);
         return () => window.clearInterval(id);
@@ -44,9 +47,5 @@ export const usePoolRotation = (poolSize: number) => {
         setIndex((prev) => pickRandomIndex(poolSize, prev));
     }, [poolSize]);
 
-    const setPaused = useCallback((p: boolean) => {
-        pausedRef.current = p;
-    }, []);
-
-    return { index, reshuffle, setPaused };
+    return { index, reshuffle };
 };

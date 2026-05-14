@@ -19,6 +19,7 @@ import {
     FeatureCardShell,
     ROTATE_INTERVAL_MS,
 } from '/@/renderer/features/home/components/feature-card/feature-card-shell';
+import { isFeatureCardHovered } from '/@/renderer/features/home/components/feature-card/hover-signal';
 import { useCurrentServer } from '/@/renderer/store';
 
 export type FeatureCardVariant =
@@ -94,17 +95,51 @@ const useFeatureDataForVariant = (variant: FeatureCardVariant): FeatureCardData 
     }
 };
 
-const ShellFeatureCard = ({ variant }: { variant: FeatureCardVariant }) => {
+const ShellFeatureCard = ({
+    cornerBadge,
+    hideRotationDots,
+    variant,
+}: {
+    cornerBadge?: string;
+    hideRotationDots?: boolean;
+    variant: FeatureCardVariant;
+}) => {
     const data = useFeatureDataForVariant(variant);
     if (!data) return null;
-    return <FeatureCardShell data={data} />;
+    return (
+        <FeatureCardShell
+            cornerBadge={cornerBadge}
+            data={data}
+            hideRotationDots={hideRotationDots}
+        />
+    );
+};
+
+const SURPRISE_BADGE_LABELS: Record<FeatureCardVariant, string> = {
+    album: 'featureVariant_album',
+    albumOfTheDay: 'featureVariant_albumOfTheDay',
+    artist: 'featureVariant_artist',
+    decade: 'featureVariant_decade',
+    favorites: 'featureVariant_favorites',
+    forgottenFavorites: 'featureVariant_forgottenFavorites',
+    genre: 'featureVariant_genre',
+    recentlyPlayed: 'featureVariant_recentlyPlayed',
+    surpriseMe: 'featureVariant_surpriseMe',
+    timeMachine: 'featureVariant_timeMachine',
+    topPlayed: 'featureVariant_topPlayed',
+    unplayed: 'featureVariant_unplayed',
 };
 
 const SurpriseMeFeatureCard = () => {
+    const { t } = useTranslation();
     const [poolIdx, setPoolIdx] = useState(() => Math.floor(Math.random() * SURPRISE_POOL.length));
 
     useEffect(() => {
         const id = window.setInterval(() => {
+            // The shell's hover signal pauses inner-variant rotation, but this
+            // outer cycle is its own loop — check the same signal so hovering
+            // freezes the entire chain.
+            if (isFeatureCardHovered()) return;
             setPoolIdx((prev) => {
                 if (SURPRISE_POOL.length <= 1) return prev;
                 let next = Math.floor(Math.random() * SURPRISE_POOL.length);
@@ -116,7 +151,8 @@ const SurpriseMeFeatureCard = () => {
     }, []);
 
     const subVariant = useMemo(() => SURPRISE_POOL[poolIdx % SURPRISE_POOL.length], [poolIdx]);
-    return <ShellFeatureCard variant={subVariant} />;
+    const badge = `🎲 ${t(`page.home.${SURPRISE_BADGE_LABELS[subVariant]}`)}`;
+    return <ShellFeatureCard cornerBadge={badge} hideRotationDots variant={subVariant} />;
 };
 
 export const FeatureCard = ({ variant }: { variant: FeatureCardVariant }) => {
