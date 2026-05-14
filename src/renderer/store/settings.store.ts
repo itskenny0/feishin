@@ -80,6 +80,7 @@ const deepMergeIntoState = <T extends Record<string, any>>(
 
 const HomeItemSchema = z.enum([
     'genres',
+    'libraryStats',
     'mostPlayed',
     'random',
     'recentlyAdded',
@@ -840,6 +841,7 @@ export enum GenreTarget {
 
 export enum HomeItem {
     GENRES = 'genres',
+    LIBRARY_STATS = 'libraryStats',
     MOST_PLAYED = 'mostPlayed',
     RANDOM = 'random',
     RECENTLY_ADDED = 'recentlyAdded',
@@ -2596,10 +2598,28 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
+                if (version <= 37) {
+                    // Add the new LIBRARY_STATS home item to existing
+                    // users' configurations. Defaults to disabled so the
+                    // widget doesn't displace anything until the user
+                    // opts in from Settings → General → Home.
+                    if (Array.isArray(state.general.homeItems)) {
+                        const hasStats = state.general.homeItems.some(
+                            (i: { id: string }) => i.id === HomeItem.LIBRARY_STATS,
+                        );
+                        if (!hasStats) {
+                            state.general.homeItems = [
+                                ...state.general.homeItems,
+                                { disabled: true, id: HomeItem.LIBRARY_STATS },
+                            ];
+                        }
+                    }
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 37,
+            version: 38,
         },
     ),
 );

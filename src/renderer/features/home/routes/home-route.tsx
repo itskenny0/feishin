@@ -9,6 +9,7 @@ import { FeatureCard } from '/@/renderer/features/home/components/feature-card/f
 import { FeatureCardPicker } from '/@/renderer/features/home/components/feature-card/feature-card-picker';
 import { FeaturedGenres } from '/@/renderer/features/home/components/featured-genres';
 import { FeelingLuckyButton } from '/@/renderer/features/home/components/feeling-lucky-button';
+import { LibraryStats } from '/@/renderer/features/home/components/library-stats';
 import { AnimatedPage } from '/@/renderer/features/shared/components/animated-page';
 import { LibraryContainer } from '/@/renderer/features/shared/components/library-container';
 import { LibraryHeaderBar } from '/@/renderer/features/shared/components/library-header-bar';
@@ -136,6 +137,10 @@ const HomeRoute = () => {
                         {sortedItems.map((item) => {
                             if (item.id === HomeItem.GENRES) {
                                 return <FeaturedGenres key="featured-genres" />;
+                            }
+
+                            if (item.id === HomeItem.LIBRARY_STATS) {
+                                return <LibraryStats key="library-stats" />;
                             }
 
                             const carousel = sortedCarousel.find((c) => c.uniqueId === item.id);
