@@ -1,10 +1,16 @@
+import formatDuration from 'format-duration';
 import { useTranslation } from 'react-i18next';
 
 import {
     invokeScrobbleForceSubmit,
     invokeScrobbleResetListenedState,
 } from '/@/renderer/features/player/hooks/use-scrobble';
-import { useAppStore, useScrobbleDebugStore, useSettingsStore } from '/@/renderer/store';
+import {
+    useAppStore,
+    usePlayerTimestamp,
+    useScrobbleDebugStore,
+    useSettingsStore,
+} from '/@/renderer/store';
 import { Button } from '/@/shared/components/button/button';
 import { Group } from '/@/shared/components/group/group';
 import { HoverCard } from '/@/shared/components/hover-card/hover-card';
@@ -26,7 +32,28 @@ const ScrobbleConditionProgress = ({ value }: { value: number }) => (
     <Progress {...scrobbleProgressProps} value={value} w="100%" />
 );
 
-export const ScrobbleStatus = ({ formattedTime }: { formattedTime: string }) => {
+/**
+ * Renders just the elapsed-time text. Owns its own `usePlayerTimestamp`
+ * subscription so the surrounding ScrobbleStatus doesn't have to re-render
+ * on every playback tick.
+ */
+const ElapsedTimeText = () => {
+    const currentTime = usePlayerTimestamp();
+    return (
+        <Text
+            className={PlaybackSelectors.elapsedTime}
+            fw={600}
+            fz="inherit"
+            isMuted
+            isNoSelect
+            style={{ userSelect: 'none' }}
+        >
+            {formatDuration(currentTime * 1000 || 0)}
+        </Text>
+    );
+};
+
+export const ScrobbleStatus = () => {
     const { t } = useTranslation();
     const scrobbleEnabled = useSettingsStore((state) => state.playback.scrobble.enabled);
     const privateMode = useAppStore((state) => state.privateMode);
@@ -52,7 +79,7 @@ export const ScrobbleStatus = ({ formattedTime }: { formattedTime: string }) => 
             <HoverCard.Target>
                 <Group
                     align="center"
-                    aria-label={`${t('player.scrobble')}, ${formattedTime}`}
+                    aria-label={t('player.scrobble')}
                     fz="xs"
                     gap="sm"
                     justify="center"
@@ -67,16 +94,7 @@ export const ScrobbleStatus = ({ formattedTime }: { formattedTime: string }) => 
                         icon="circle"
                         size="0.375rem"
                     />
-                    <Text
-                        className={PlaybackSelectors.elapsedTime}
-                        fw={600}
-                        fz="inherit"
-                        isMuted
-                        isNoSelect
-                        style={{ userSelect: 'none' }}
-                    >
-                        {formattedTime}
-                    </Text>
+                    <ElapsedTimeText />
                 </Group>
             </HoverCard.Target>
             <HoverCard.Dropdown onClick={(e) => e.stopPropagation()}>
