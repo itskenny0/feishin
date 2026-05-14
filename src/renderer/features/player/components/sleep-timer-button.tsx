@@ -3,7 +3,15 @@ import { useTranslation } from 'react-i18next';
 
 import { usePlayerEvents } from '/@/renderer/features/player/audio-player/hooks/use-player-events';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
-import { usePlayerStatus, usePlayerStoreBase } from '/@/renderer/store/player.store';
+import {
+    usePlayerActions,
+    usePlayerStatus,
+    usePlayerStoreBase,
+} from '/@/renderer/store/player.store';
+import {
+    useSettingsStoreActions,
+    useSleepTimerFadeSeconds,
+} from '/@/renderer/store/settings.store';
 import {
     useSleepTimerActions,
     useSleepTimerActive,
@@ -52,9 +60,47 @@ const useSleepTimer = () => {
     const mode = useSleepTimerMode();
     const { cancelTimer, setRemaining } = useSleepTimerActions();
     const { mediaPause } = usePlayer();
+    const { setVolume } = usePlayerActions();
+    const fadeSeconds = useSleepTimerFadeSeconds();
 
     const mediaPauseRef = useRef(mediaPause);
     mediaPauseRef.current = mediaPause;
+    const setVolumeRef = useRef(setVolume);
+    setVolumeRef.current = setVolume;
+    const fadeSecondsRef = useRef(fadeSeconds);
+    fadeSecondsRef.current = fadeSeconds;
+
+    /**
+     * Smoothly fade volume to 0 over {@link fadeSecondsRef} seconds, then pause
+     * and restore the original volume so the user wakes to the same loudness
+     * next time they hit play. If fade is disabled (0s) just pause hard.
+     */
+    const pauseWithOptionalFade = useCallback(() => {
+        const fade = fadeSecondsRef.current;
+        if (fade <= 0) {
+            mediaPauseRef.current();
+            return;
+        }
+        const startingVolume = usePlayerStoreBase.getState().player.volume;
+        if (startingVolume <= 0) {
+            mediaPauseRef.current();
+            return;
+        }
+        const tickMs = 100;
+        const totalTicks = Math.max(1, Math.round((fade * 1000) / tickMs));
+        let tick = 0;
+        const id = window.setInterval(() => {
+            tick += 1;
+            const remainingFraction = Math.max(0, 1 - tick / totalTicks);
+            setVolumeRef.current(Math.max(0, Math.round(startingVolume * remainingFraction)));
+            if (tick >= totalTicks) {
+                window.clearInterval(id);
+                mediaPauseRef.current();
+                // Give the engine one tick to apply pause, then restore volume.
+                window.setTimeout(() => setVolumeRef.current(startingVolume), tickMs);
+            }
+        }, tickMs);
+    }, []);
 
     const handleOnCurrentSongChange = useCallback(() => {
         if (!active) {
@@ -64,9 +110,9 @@ const useSleepTimer = () => {
         // Cancel and pause on song change in end-of-song mode
         if (mode === 'endOfSong') {
             cancelTimer();
-            mediaPauseRef.current();
+            pauseWithOptionalFade();
         }
-    }, [active, mode, cancelTimer, mediaPauseRef]);
+    }, [active, mode, cancelTimer, pauseWithOptionalFade]);
 
     const status = usePlayerStatus();
 
@@ -85,12 +131,12 @@ const useSleepTimer = () => {
 
             if (remaining <= 0) {
                 cancelTimer();
-                mediaPauseRef.current();
+                pauseWithOptionalFade();
             } else {
                 setRemaining(Math.max(0, remaining - 1));
             }
         }
-    }, [active, cancelTimer, mode, setRemaining, status]);
+    }, [active, cancelTimer, mode, pauseWithOptionalFade, setRemaining, status]);
 
     usePlayerEvents(
         {
@@ -143,6 +189,9 @@ export const SleepTimerButton = () => {
     const [customMinutes, setCustomMinutes] = useState<number>(20);
     const [customSeconds, setCustomSeconds] = useState<number>(0);
     const [opened, setOpened] = useState(false);
+
+    const fadeSeconds = useSleepTimerFadeSeconds();
+    const { setSettings } = useSettingsStoreActions();
 
     const mediaPauseRef = useRef(mediaPause);
     mediaPauseRef.current = mediaPause;
@@ -292,6 +341,27 @@ export const SleepTimerButton = () => {
                     </Grid>
 
                     <Divider my="md" />
+
+                    <Divider my={4} />
+                    <Group align="center" gap="xs" justify="space-between" wrap="nowrap">
+                        <Text c="dimmed" size="xs">
+                            {t('player.sleepTimer_fadeOut')}
+                        </Text>
+                        <NumberInput
+                            max={60}
+                            min={0}
+                            onChange={(val) => {
+                                const n = Math.max(0, Math.min(60, Number(val) || 0));
+                                setSettings({ playback: { sleepTimerFadeSeconds: n } });
+                            }}
+                            placeholder="0"
+                            size="xs"
+                            style={{ width: 80 }}
+                            suffix="s"
+                            value={fadeSeconds}
+                        />
+                    </Group>
+                    <Divider my={4} />
 
                     {!showCustom ? (
                         <Button

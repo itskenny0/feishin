@@ -670,6 +670,11 @@ const PlaybackSettingsSchema = z.object({
     mpvProperties: MpvSettingsSchema,
     preservePitch: z.boolean(),
     scrobble: ScrobbleSettingsSchema,
+    /**
+     * Number of seconds to fade the volume down before the sleep timer
+     * pauses playback. 0 disables the fade (instant pause).
+     */
+    sleepTimerFadeSeconds: z.number().min(0).max(120),
     transcode: TranscodingConfigSchema,
     type: z.nativeEnum(PlayerType),
     webAudio: z.boolean(),
@@ -1898,6 +1903,7 @@ const initialState: SettingsState = {
             scrobbleAtDuration: 240,
             scrobbleAtPercentage: 75,
         },
+        sleepTimerFadeSeconds: 8,
         transcode: {
             enabled: false,
         },
@@ -2635,10 +2641,17 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
+                if (version <= 38) {
+                    if (state.playback.sleepTimerFadeSeconds === undefined) {
+                        state.playback.sleepTimerFadeSeconds =
+                            initialState.playback.sleepTimerFadeSeconds;
+                    }
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 38,
+            version: 39,
         },
     ),
 );
@@ -2911,6 +2924,9 @@ export const useHomeFeatureStyle = () =>
 
 export const useHomeFeelingLucky = () =>
     useSettingsStore((state) => state.general.homeFeelingLucky);
+
+export const useSleepTimerFadeSeconds = () =>
+    useSettingsStore((state) => state.playback.sleepTimerFadeSeconds ?? 0);
 
 export const useHomeItems = () => useSettingsStore((state) => state.general.homeItems, shallow);
 
