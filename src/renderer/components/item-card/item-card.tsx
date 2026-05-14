@@ -1104,6 +1104,9 @@ const filesystemNameFromAlbumPath = (path: string): string => {
 };
 
 const preloadAlbumDetail = () => preloadRoute(AppRoute.LIBRARY_ALBUMS_DETAIL);
+const preloadAlbumArtistDetail = () => preloadRoute(AppRoute.LIBRARY_ALBUM_ARTISTS_DETAIL);
+const preloadGenreDetail = () => preloadRoute(AppRoute.LIBRARY_GENRES_DETAIL);
+const preloadPlaylistDetail = () => preloadRoute(AppRoute.PLAYLISTS_DETAIL_SONGS);
 
 const AlbumCardName = ({ data }: { data: Album }) => {
     const useFs = useShowFilesystemNameForAlbums();
@@ -1136,6 +1139,8 @@ export const getDataRows = (type?: 'compact' | 'default' | 'poster'): DataRow[] 
                                 case LibraryItem.ALBUM_ARTIST:
                                     return (
                                         <Link
+                                            onFocus={preloadAlbumArtistDetail}
+                                            onMouseEnter={preloadAlbumArtistDetail}
                                             state={{ item: data }}
                                             to={generatePath(
                                                 AppRoute.LIBRARY_ALBUM_ARTISTS_DETAIL,
@@ -1151,6 +1156,8 @@ export const getDataRows = (type?: 'compact' | 'default' | 'poster'): DataRow[] 
                                 case LibraryItem.GENRE:
                                     return (
                                         <Link
+                                            onFocus={preloadGenreDetail}
+                                            onMouseEnter={preloadGenreDetail}
                                             state={{ item: data }}
                                             to={generatePath(AppRoute.LIBRARY_GENRES_DETAIL, {
                                                 genreId: data.id,
@@ -1162,6 +1169,8 @@ export const getDataRows = (type?: 'compact' | 'default' | 'poster'): DataRow[] 
                                 case LibraryItem.PLAYLIST:
                                     return (
                                         <Link
+                                            onFocus={preloadPlaylistDetail}
+                                            onMouseEnter={preloadPlaylistDetail}
                                             state={{ item: data }}
                                             to={generatePath(AppRoute.PLAYLISTS_DETAIL_SONGS, {
                                                 playlistId: data.id,
@@ -1218,6 +1227,8 @@ export const getDataRows = (type?: 'compact' | 'default' | 'poster'): DataRow[] 
                     return (data as Album | Song).artists.map((artist, index) => (
                         <Fragment key={artist.id}>
                             <Link
+                                onFocus={preloadAlbumArtistDetail}
+                                onMouseEnter={preloadAlbumArtistDetail}
                                 state={{ item: artist }}
                                 to={generatePath(AppRoute.LIBRARY_ALBUM_ARTISTS_DETAIL, {
                                     albumArtistId: artist.id,
