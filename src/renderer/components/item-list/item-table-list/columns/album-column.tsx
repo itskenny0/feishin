@@ -10,8 +10,11 @@ import {
     ItemTableListInnerColumn,
     TableColumnContainer,
 } from '/@/renderer/components/item-list/item-table-list/item-table-list-column';
+import { preloadRoute } from '/@/renderer/router/route-preloaders';
 import { AppRoute } from '/@/renderer/router/routes';
 import { useShowFilesystemNameForAlbums } from '/@/renderer/store/settings.store';
+
+const preloadAlbumDetail = () => preloadRoute(AppRoute.LIBRARY_ALBUMS_DETAIL);
 import { Text } from '/@/shared/components/text/text';
 import { Song } from '/@/shared/types/domain-types';
 
@@ -57,6 +60,8 @@ const AlbumColumn = (props: ItemTableListInnerColumn) => {
                             isLink
                             isMuted
                             isNoSelect
+                            onFocus={preloadAlbumDetail}
+                            onMouseEnter={preloadAlbumDetail}
                             state={{ item: song }}
                             to={albumPath}
                         >

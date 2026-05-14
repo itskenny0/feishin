@@ -1,9 +1,12 @@
 import { Fragment, memo } from 'react';
 import { generatePath, Link } from 'react-router';
 
+import { preloadRoute } from '/@/renderer/router/route-preloaders';
 import { AppRoute } from '/@/renderer/router/routes';
 import { Text, TextProps } from '/@/shared/components/text/text';
 import { AlbumArtist, RelatedAlbumArtist, RelatedArtist } from '/@/shared/types/domain-types';
+
+const preloadAlbumArtistDetail = () => preloadRoute(AppRoute.LIBRARY_ALBUM_ARTISTS_DETAIL);
 
 export const JOINED_ARTISTS_MUTED_PROPS = {
     linkProps: { fw: 400, isMuted: true },
@@ -123,6 +126,8 @@ const JoinedArtistsComponent = ({
                                 component={Link}
                                 fw={500}
                                 isLink
+                                onFocus={preloadAlbumArtistDetail}
+                                onMouseEnter={preloadAlbumArtistDetail}
                                 to={generatePath(AppRoute.LIBRARY_ALBUM_ARTISTS_DETAIL, {
                                     albumArtistId: artist.id,
                                 })}
@@ -166,6 +171,8 @@ const JoinedArtistsComponent = ({
                             fw={500}
                             isLink
                             key={`${artist.id}-${index}`}
+                            onFocus={preloadAlbumArtistDetail}
+                            onMouseEnter={preloadAlbumArtistDetail}
                             to={generatePath(AppRoute.LIBRARY_ALBUM_ARTISTS_DETAIL, {
                                 albumArtistId: artist.id,
                             })}
