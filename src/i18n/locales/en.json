@@ -384,7 +384,10 @@
         "lyricsExport": {
             "export": "Export lyrics",
             "input_synced": "Export synced lyrics",
-            "input_offset": "$t(setting.lyricOffset)"
+            "input_offset": "$t(setting.lyricOffset)",
+            "saveToServer": "Save to server",
+            "savedToServer": "Lyrics saved to Jellyfin",
+            "saveFailed": "Couldn't save lyrics to the server"
         },
         "lyricSearch": {
             "input_artist": "$t(entity.artist, {\"count\": 1})",

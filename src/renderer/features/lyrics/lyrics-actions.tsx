@@ -19,6 +19,10 @@ interface LyricsActionsProps {
     offsetMs: number;
     onExportLyrics: () => void;
     onRemoveLyric: () => void;
+    /** Optional handler that persists the current lyrics back to the
+     *  Jellyfin server. Hidden when undefined (e.g. non-Jellyfin or no
+     *  current song). */
+    onSaveLyricsToServer?: () => void;
     onSearchOverride: (params: LyricsOverride) => void;
     onTranslateLyric?: () => void;
     onUpdateOffset: (offsetMs: number) => void;
@@ -34,6 +38,7 @@ export const LyricsActions = ({
     offsetMs,
     onExportLyrics,
     onRemoveLyric,
+    onSaveLyricsToServer,
     onSearchOverride,
     onTranslateLyric,
     onUpdateOffset,
@@ -72,6 +77,16 @@ export const LyricsActions = ({
                         >
                             {t('form.lyricsExport.export')}
                         </Button>
+                        {onSaveLyricsToServer && (
+                            <Button
+                                onClick={onSaveLyricsToServer}
+                                size="compact-sm"
+                                uppercase
+                                variant="subtle"
+                            >
+                                {t('form.lyricsExport.saveToServer')}
+                            </Button>
+                        )}
                     </Center>
                 )}
 
