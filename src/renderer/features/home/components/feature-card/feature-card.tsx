@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { AlbumInfiniteSingleFeatureCarousel } from '/@/renderer/features/home/components/album-infinite-single-feature-carousel';
+import { AlbumOfTheDayCard } from '/@/renderer/features/home/components/feature-card/album-of-the-day-card';
 import {
     useArtistFeatureData,
     useDecadeDiveFeatureData,
@@ -120,13 +121,7 @@ const SurpriseMeFeatureCard = () => {
 
 export const FeatureCard = ({ variant }: { variant: FeatureCardVariant }) => {
     if (variant === 'album') return <AlbumInfiniteSingleFeatureCarousel />;
-    if (variant === 'albumOfTheDay') {
-        // Placeholder — albumOfTheDay variant uses a single-cover layout that
-        // doesn't fit the 2×5 grid shell. To be replaced by a dedicated
-        // component (Task #51). For now, fall back to the album banner so the
-        // option doesn't render an empty card if a user picks it.
-        return <AlbumInfiniteSingleFeatureCarousel />;
-    }
+    if (variant === 'albumOfTheDay') return <AlbumOfTheDayCard />;
     if (variant === 'surpriseMe') return <SurpriseMeFeatureCard />;
     return <ShellFeatureCard variant={variant} />;
 };
