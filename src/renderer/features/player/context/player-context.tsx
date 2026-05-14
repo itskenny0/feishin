@@ -692,9 +692,14 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
                 meta: { index },
             });
 
+            const remote = getRemoteCtx();
+            if (remote) {
+                void commandDispatcher.skipToIndex(remote, index);
+                return;
+            }
             storeActions.mediaPlayByIndex(index);
         },
-        [storeActions],
+        [getRemoteCtx, storeActions],
     );
 
     const mediaPrevious = useCallback(() => {
