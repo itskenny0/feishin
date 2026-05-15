@@ -9,6 +9,8 @@ import {
 } from '/@/renderer/store';
 
 const HOME_ITEMS: Array<[string, string]> = [
+    [HomeItem.QUICK_FILTERS, 'page.home.quickFilters_title'],
+    [HomeItem.LIBRARY_STATS, 'page.home.libraryStats_title'],
     [HomeItem.GENRES, 'page.home.genres'],
     [HomeItem.RANDOM, 'page.home.explore'],
     [HomeItem.RECENTLY_PLAYED, 'page.home.recentlyPlayed'],
