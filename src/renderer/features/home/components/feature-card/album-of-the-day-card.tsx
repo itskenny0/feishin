@@ -47,7 +47,13 @@ const useAlbumOfTheDayCandidates = (serverId: string | undefined) =>
                     startIndex: 0,
                 },
             });
-            return (res?.items ?? []).filter((a: Album) => Boolean(a.imageId));
+            const items = (res?.items ?? []) as Album[];
+            // Prefer albums with covers (they look great in the big-cover
+            // layout) but fall back to the full pool if the library doesn't
+            // have any cover art — otherwise the card would stay stuck on
+            // skeleton forever for libraries without images.
+            const withImage = items.filter((a) => Boolean(a.imageId));
+            return withImage.length > 0 ? withImage : items;
         },
         // staleTime 24h so we don't re-roll mid-day; the candidate pool is
         // refreshed on the next calendar day either way (via the queryKey
@@ -119,6 +125,7 @@ export const AlbumOfTheDayCard = ({ compact = false }: AlbumOfTheDayCardProps) =
     }, [featured]);
 
     const showSkeleton = candidatesLoading || (featured && !detail && detailLoading);
+    const isEmpty = !candidatesLoading && (candidates ?? []).length === 0;
 
     return (
         <div className={styles.card}>
@@ -129,7 +136,9 @@ export const AlbumOfTheDayCard = ({ compact = false }: AlbumOfTheDayCardProps) =
             />
             <div aria-hidden className={styles.scrim} />
             <div className={styles.content}>
-                {showSkeleton || !featured ? (
+                {isEmpty ? (
+                    <div className={styles.skeletonCover} />
+                ) : showSkeleton || !featured ? (
                     <div className={styles.skeletonCover} />
                 ) : (
                     <Link
@@ -160,10 +169,16 @@ export const AlbumOfTheDayCard = ({ compact = false }: AlbumOfTheDayCardProps) =
                             {featured.name}
                         </Link>
                     ) : (
-                        <span className={styles.title}>{featured?.name ?? '…'}</span>
+                        <span className={styles.title}>
+                            {isEmpty
+                                ? t('page.home.featureAlbumOfTheDay_empty')
+                                : (featured?.name ?? '…')}
+                        </span>
                     )}
                     <span className={styles.subtitle}>
-                        {featured ? (
+                        {isEmpty ? (
+                            t('page.home.featureAlbumOfTheDay_empty_subtitle')
+                        ) : featured ? (
                             <>
                                 {artistPath ? (
                                     <Link className={styles.subtitleLink} to={artistPath}>

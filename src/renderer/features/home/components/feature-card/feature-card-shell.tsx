@@ -27,6 +27,11 @@ export interface FeatureCardData {
     /** Optional context line above the title — "Featured artist", "Time machine", … */
     eyebrow: string;
     isLoading: boolean;
+    /** Sequential "next" within the candidate pool. When present the shell
+     *  renders a right-arrow navigation overlay. */
+    onNext?: () => void;
+    /** Sequential "previous" within the candidate pool. */
+    onPrev?: () => void;
     /** Optional reshuffle action — hides the button if absent. */
     onReshuffle?: () => void;
     /** Optional rotation dots — shown when count > 1. */
@@ -205,6 +210,26 @@ export const FeatureCardShell = ({
                 </div>
             </div>
             {cornerBadge && <div className={styles.cornerBadge}>{cornerBadge}</div>}
+            {data.onPrev && (
+                <button
+                    aria-label={t('page.home.featureArtist_previous')}
+                    className={`${styles.navArrow} ${styles.navArrowLeft}`}
+                    onClick={data.onPrev}
+                    type="button"
+                >
+                    <Icon icon="arrowLeftS" size="xl" />
+                </button>
+            )}
+            {data.onNext && (
+                <button
+                    aria-label={t('page.home.featureArtist_next')}
+                    className={`${styles.navArrow} ${styles.navArrowRight}`}
+                    onClick={data.onNext}
+                    type="button"
+                >
+                    <Icon icon="arrowRightS" size="xl" />
+                </button>
+            )}
             {!hideRotationDots && data.rotationCount && data.rotationCount > 1 && (
                 <div
                     aria-hidden
