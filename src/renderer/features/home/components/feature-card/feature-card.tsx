@@ -15,7 +15,6 @@ import {
     useUnplayedFeatureData,
 } from '/@/renderer/features/home/components/feature-card/data-hooks';
 import {
-    FeatureCardData,
     FeatureCardShell,
     ROTATE_INTERVAL_MS,
 } from '/@/renderer/features/home/components/feature-card/feature-card-shell';
@@ -53,59 +52,26 @@ const SURPRISE_POOL: FeatureCardVariant[] = [
     'decade',
 ];
 
-const useFeatureDataForVariant = (variant: FeatureCardVariant): FeatureCardData | null => {
-    const { t } = useTranslation();
-    const server = useCurrentServer();
-    const serverId = server?.id;
-    const serverType = server?.type;
-
-    // Every hook is called unconditionally to satisfy the rules of hooks; only
-    // the matching variant's data is returned.
-    const artist = useArtistFeatureData(serverId, t);
-    const genre = useGenreFeatureData(serverId, serverType, t);
-    const recentlyPlayed = useRecentlyPlayedFeatureData(serverId, t);
-    const topPlayed = useTopPlayedFeatureData(serverId, t);
-    const favorites = useFavoritesFeatureData(serverId, t);
-    const unplayed = useUnplayedFeatureData(serverId, t);
-    const forgotten = useForgottenFavoritesFeatureData(serverId, t);
-    const timeMachine = useTimeMachineFeatureData(serverId, t);
-    const decade = useDecadeDiveFeatureData(serverId, t);
-
-    switch (variant) {
-        case 'artist':
-            return artist;
-        case 'decade':
-            return decade;
-        case 'favorites':
-            return favorites;
-        case 'forgottenFavorites':
-            return forgotten;
-        case 'genre':
-            return genre;
-        case 'recentlyPlayed':
-            return recentlyPlayed;
-        case 'timeMachine':
-            return timeMachine;
-        case 'topPlayed':
-            return topPlayed;
-        case 'unplayed':
-            return unplayed;
-        default:
-            return null;
-    }
-};
-
-const ShellFeatureCard = ({
-    cornerBadge,
-    hideRotationDots,
-    variant,
-}: {
+interface ShellWrapperProps {
     cornerBadge?: string;
     hideRotationDots?: boolean;
-    variant: FeatureCardVariant;
-}) => {
-    const data = useFeatureDataForVariant(variant);
-    if (!data) return null;
+}
+
+/*
+ * Per-variant thin wrappers: each calls *exactly one* data hook so that
+ * switching variants tears down the previous variant's queries (good for
+ * memory, query cache discipline, and avoiding "doesn't load" symptoms when
+ * one variant's data path misbehaves).
+ *
+ * Before this split, a single `useFeatureDataForVariant` called all 9 hooks
+ * unconditionally to satisfy the rules of hooks — every home-page mount
+ * kicked off 9 server requests and re-rendered on each of their updates.
+ */
+
+const ArtistVariant = ({ cornerBadge, hideRotationDots }: ShellWrapperProps) => {
+    const { t } = useTranslation();
+    const serverId = useCurrentServer()?.id;
+    const data = useArtistFeatureData(serverId, t);
     return (
         <FeatureCardShell
             cornerBadge={cornerBadge}
@@ -113,6 +79,157 @@ const ShellFeatureCard = ({
             hideRotationDots={hideRotationDots}
         />
     );
+};
+
+const GenreVariant = ({ cornerBadge, hideRotationDots }: ShellWrapperProps) => {
+    const { t } = useTranslation();
+    const server = useCurrentServer();
+    const data = useGenreFeatureData(server?.id, server?.type, t);
+    return (
+        <FeatureCardShell
+            cornerBadge={cornerBadge}
+            data={data}
+            hideRotationDots={hideRotationDots}
+        />
+    );
+};
+
+const RecentlyPlayedVariant = ({ cornerBadge, hideRotationDots }: ShellWrapperProps) => {
+    const { t } = useTranslation();
+    const serverId = useCurrentServer()?.id;
+    const data = useRecentlyPlayedFeatureData(serverId, t);
+    return (
+        <FeatureCardShell
+            cornerBadge={cornerBadge}
+            data={data}
+            hideRotationDots={hideRotationDots}
+        />
+    );
+};
+
+const TopPlayedVariant = ({ cornerBadge, hideRotationDots }: ShellWrapperProps) => {
+    const { t } = useTranslation();
+    const serverId = useCurrentServer()?.id;
+    const data = useTopPlayedFeatureData(serverId, t);
+    return (
+        <FeatureCardShell
+            cornerBadge={cornerBadge}
+            data={data}
+            hideRotationDots={hideRotationDots}
+        />
+    );
+};
+
+const FavoritesVariant = ({ cornerBadge, hideRotationDots }: ShellWrapperProps) => {
+    const { t } = useTranslation();
+    const serverId = useCurrentServer()?.id;
+    const data = useFavoritesFeatureData(serverId, t);
+    return (
+        <FeatureCardShell
+            cornerBadge={cornerBadge}
+            data={data}
+            hideRotationDots={hideRotationDots}
+        />
+    );
+};
+
+const UnplayedVariant = ({ cornerBadge, hideRotationDots }: ShellWrapperProps) => {
+    const { t } = useTranslation();
+    const serverId = useCurrentServer()?.id;
+    const data = useUnplayedFeatureData(serverId, t);
+    return (
+        <FeatureCardShell
+            cornerBadge={cornerBadge}
+            data={data}
+            hideRotationDots={hideRotationDots}
+        />
+    );
+};
+
+const ForgottenFavoritesVariant = ({ cornerBadge, hideRotationDots }: ShellWrapperProps) => {
+    const { t } = useTranslation();
+    const serverId = useCurrentServer()?.id;
+    const data = useForgottenFavoritesFeatureData(serverId, t);
+    return (
+        <FeatureCardShell
+            cornerBadge={cornerBadge}
+            data={data}
+            hideRotationDots={hideRotationDots}
+        />
+    );
+};
+
+const TimeMachineVariant = ({ cornerBadge, hideRotationDots }: ShellWrapperProps) => {
+    const { t } = useTranslation();
+    const serverId = useCurrentServer()?.id;
+    const data = useTimeMachineFeatureData(serverId, t);
+    return (
+        <FeatureCardShell
+            cornerBadge={cornerBadge}
+            data={data}
+            hideRotationDots={hideRotationDots}
+        />
+    );
+};
+
+const DecadeVariant = ({ cornerBadge, hideRotationDots }: ShellWrapperProps) => {
+    const { t } = useTranslation();
+    const serverId = useCurrentServer()?.id;
+    const data = useDecadeDiveFeatureData(serverId, t);
+    return (
+        <FeatureCardShell
+            cornerBadge={cornerBadge}
+            data={data}
+            hideRotationDots={hideRotationDots}
+        />
+    );
+};
+
+const ShellVariantSwitch = ({
+    cornerBadge,
+    hideRotationDots,
+    variant,
+}: ShellWrapperProps & { variant: FeatureCardVariant }) => {
+    switch (variant) {
+        case 'artist':
+            return <ArtistVariant cornerBadge={cornerBadge} hideRotationDots={hideRotationDots} />;
+        case 'decade':
+            return <DecadeVariant cornerBadge={cornerBadge} hideRotationDots={hideRotationDots} />;
+        case 'favorites':
+            return (
+                <FavoritesVariant cornerBadge={cornerBadge} hideRotationDots={hideRotationDots} />
+            );
+        case 'forgottenFavorites':
+            return (
+                <ForgottenFavoritesVariant
+                    cornerBadge={cornerBadge}
+                    hideRotationDots={hideRotationDots}
+                />
+            );
+        case 'genre':
+            return <GenreVariant cornerBadge={cornerBadge} hideRotationDots={hideRotationDots} />;
+        case 'recentlyPlayed':
+            return (
+                <RecentlyPlayedVariant
+                    cornerBadge={cornerBadge}
+                    hideRotationDots={hideRotationDots}
+                />
+            );
+        case 'timeMachine':
+            return (
+                <TimeMachineVariant cornerBadge={cornerBadge} hideRotationDots={hideRotationDots} />
+            );
+        case 'topPlayed':
+            return (
+                <TopPlayedVariant cornerBadge={cornerBadge} hideRotationDots={hideRotationDots} />
+            );
+        case 'unplayed':
+            return (
+                <UnplayedVariant cornerBadge={cornerBadge} hideRotationDots={hideRotationDots} />
+            );
+        default:
+            return null;
+    }
 };
 
 const SURPRISE_BADGE_LABELS: Record<FeatureCardVariant, string> = {
@@ -152,12 +269,12 @@ const SurpriseMeFeatureCard = () => {
 
     const subVariant = useMemo(() => SURPRISE_POOL[poolIdx % SURPRISE_POOL.length], [poolIdx]);
     const badge = `🎲 ${t(`page.home.${SURPRISE_BADGE_LABELS[subVariant]}`)}`;
-    return <ShellFeatureCard cornerBadge={badge} hideRotationDots variant={subVariant} />;
+    return <ShellVariantSwitch cornerBadge={badge} hideRotationDots variant={subVariant} />;
 };
 
 export const FeatureCard = ({ variant }: { variant: FeatureCardVariant }) => {
     if (variant === 'album') return <AlbumInfiniteSingleFeatureCarousel />;
     if (variant === 'albumOfTheDay') return <AlbumOfTheDayCard />;
     if (variant === 'surpriseMe') return <SurpriseMeFeatureCard />;
-    return <ShellFeatureCard variant={variant} />;
+    return <ShellVariantSwitch variant={variant} />;
 };

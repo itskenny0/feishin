@@ -30,22 +30,49 @@ export const usePoolRotation = (poolSize: number) => {
         setIndex(pickRandomIndex(poolSize));
     }, [poolSize]);
 
+    // Re-arm the rotation timer whenever the index changes — either from the
+    // auto-rotation itself or from manual prev/next/reshuffle. This way a
+    // user-driven change resets the 30s budget rather than firing a confusing
+    // auto-rotation moments after the user just navigated.
     useEffect(() => {
         if (poolSize < 2) return undefined;
-        const id = window.setInterval(() => {
-            // Hover-pause is global because the shell mounts at most once per
-            // home-page render and any single hover should freeze the entire
-            // rotation chain (including Surprise Me's outer wrapper).
-            if (isFeatureCardHovered()) return;
+        let cancelled = false;
+        let timer: ReturnType<typeof setTimeout>;
+        const tick = () => {
+            if (cancelled) return;
+            // Hover-pause is global so any single hover freezes the entire
+            // rotation chain (including Surprise Me's outer wrapper). Re-check
+            // shortly rather than skipping a beat outright.
+            if (isFeatureCardHovered()) {
+                timer = setTimeout(tick, 1_000);
+                return;
+            }
             setIndex((prev) => pickRandomIndex(poolSize, prev));
-        }, ROTATE_INTERVAL_MS);
-        return () => window.clearInterval(id);
-    }, [poolSize]);
+        };
+        timer = setTimeout(tick, ROTATE_INTERVAL_MS);
+        return () => {
+            cancelled = true;
+            clearTimeout(timer);
+        };
+    }, [poolSize, index]);
 
     const reshuffle = useCallback(() => {
         if (poolSize === 0) return;
         setIndex((prev) => pickRandomIndex(poolSize, prev));
     }, [poolSize]);
 
-    return { index, reshuffle };
+    // Sequential navigation — used by the prev/next arrows on the shell. Wraps
+    // around at the ends so the user can always advance regardless of the
+    // current position.
+    const goPrev = useCallback(() => {
+        if (poolSize === 0) return;
+        setIndex((prev) => (prev - 1 + poolSize) % poolSize);
+    }, [poolSize]);
+
+    const goNext = useCallback(() => {
+        if (poolSize === 0) return;
+        setIndex((prev) => (prev + 1) % poolSize);
+    }, [poolSize]);
+
+    return { goNext, goPrev, index, reshuffle };
 };

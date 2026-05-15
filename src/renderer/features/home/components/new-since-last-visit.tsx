@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 
@@ -46,7 +46,10 @@ export const NewSinceLastVisit = () => {
     const { t } = useTranslation();
     const server = useCurrentServer();
 
-    const lastVisitRef = useRef<Date>(readLastVisit());
+    // useRef's argument is only used on the first render but is re-evaluated on
+    // every render in React 18, which would re-read localStorage each time. Use
+    // lazy-init via useState for a clean read-once.
+    const [lastVisit] = useState<Date>(() => readLastVisit());
     const [ready, setReady] = useState(false);
 
     useEffect(() => {
@@ -76,13 +79,13 @@ export const NewSinceLastVisit = () => {
 
     const newCount = useMemo(() => {
         if (!probe) return 0;
-        const threshold = lastVisitRef.current.getTime();
+        const threshold = lastVisit.getTime();
         return probe.filter((a) => {
             if (!a.createdAt) return false;
             const ts = new Date(a.createdAt).getTime();
             return Number.isFinite(ts) && ts >= threshold;
         }).length;
-    }, [probe]);
+    }, [probe, lastVisit]);
 
     if (!probe) return null;
     if (newCount === 0) return null;
@@ -96,7 +99,7 @@ export const NewSinceLastVisit = () => {
                 </span>
                 <span className={styles.subtitle}>
                     {t('page.home.newSinceLastVisit_subtitle', {
-                        date: lastVisitRef.current.toLocaleDateString(),
+                        date: lastVisit.toLocaleDateString(),
                     })}
                 </span>
             </div>

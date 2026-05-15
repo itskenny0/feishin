@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { TFunction } from 'i18next';
 import { useEffect, useMemo, useRef } from 'react';
 import { generatePath } from 'react-router';
@@ -74,6 +74,10 @@ const useArtistSongs = (artistId: null | string, serverId: string | undefined) =
     useQuery({
         enabled: Boolean(artistId && serverId),
         gcTime: 1000 * 60 * 30,
+        // Keep the previous artist's songs visible while the next set fetches.
+        // Without this, every rotation tick blanks the grid to skeletons for
+        // a beat, which the user perceives as the card "flashing".
+        placeholderData: keepPreviousData,
         queryFn: async ({ signal }) => {
             if (!artistId || !serverId) return [] as Song[];
             const res = await api.controller.getSongList({
@@ -98,21 +102,26 @@ export const useArtistFeatureData = (
 ): FeatureCardData => {
     const { data: candidates, isLoading } = useArtistCandidates(serverId);
     const pool = candidates ?? [];
-    const { index, reshuffle } = usePoolRotation(pool.length);
+    const { goNext, goPrev, index, reshuffle } = usePoolRotation(pool.length);
     const current = pool[index % Math.max(pool.length, 1)] as ArtistCandidate | undefined;
     const { data: songs, isFetching } = useArtistSongs(current?.id ?? null, serverId);
+    const empty = !isLoading && pool.length === 0;
 
     return {
         eyebrow: t('page.home.featureArtist_eyebrow'),
         isLoading: isLoading || (Boolean(current) && isFetching && (songs ?? []).length === 0),
+        onNext: pool.length > 1 ? goNext : undefined,
+        onPrev: pool.length > 1 ? goPrev : undefined,
         onReshuffle: reshuffle,
         rotationCount: pool.length,
         rotationIndex: index,
         songs: songs ?? [],
-        subtitle: current?.songCount
-            ? t('page.home.featureArtist_trackCount', { count: current.songCount })
-            : t('page.home.featureArtist_trackCount_unknown'),
-        title: current?.name ?? '…',
+        subtitle: empty
+            ? t('page.home.featureVariant_empty_subtitle')
+            : current?.songCount
+              ? t('page.home.featureArtist_trackCount', { count: current.songCount })
+              : t('page.home.featureArtist_trackCount_unknown'),
+        title: empty ? t('page.home.featureVariant_empty_title') : (current?.name ?? '…'),
         titleHref: current
             ? generatePath(AppRoute.LIBRARY_ALBUM_ARTISTS_DETAIL, { albumArtistId: current.id })
             : undefined,
@@ -165,6 +174,7 @@ const useGenreSongs = (
     useQuery({
         enabled: Boolean(genreId && serverId),
         gcTime: 1000 * 60 * 30,
+        placeholderData: keepPreviousData,
         queryFn: async ({ signal }) => {
             if (!genreId || !serverId) return [] as Song[];
             // Jellyfin uses genre id; navidrome/subsonic use genre name. Pass the
@@ -190,7 +200,7 @@ export const useGenreFeatureData = (
         () => (candidates ?? []).filter((g) => (g.albumCount ?? 0) > 0),
         [candidates],
     );
-    const { index, reshuffle } = usePoolRotation(pool.length);
+    const { goNext, goPrev, index, reshuffle } = usePoolRotation(pool.length);
     const current = pool[index % Math.max(pool.length, 1)] as GenreCandidate | undefined;
     const { data: songs, isFetching } = useGenreSongs(
         current?.id ?? null,
@@ -198,18 +208,23 @@ export const useGenreFeatureData = (
         current?.name ?? '',
         serverId,
     );
+    const empty = !isLoading && pool.length === 0;
 
     return {
         eyebrow: t('page.home.featureGenre_eyebrow'),
         isLoading: isLoading || (Boolean(current) && isFetching && (songs ?? []).length === 0),
+        onNext: pool.length > 1 ? goNext : undefined,
+        onPrev: pool.length > 1 ? goPrev : undefined,
         onReshuffle: reshuffle,
         rotationCount: pool.length,
         rotationIndex: index,
         songs: songs ?? [],
-        subtitle: current?.albumCount
-            ? t('page.home.featureGenre_albumCount', { count: current.albumCount })
-            : undefined,
-        title: current?.name ?? '…',
+        subtitle: empty
+            ? t('page.home.featureVariant_empty_subtitle')
+            : current?.albumCount
+              ? t('page.home.featureGenre_albumCount', { count: current.albumCount })
+              : undefined,
+        title: empty ? t('page.home.featureVariant_empty_title') : (current?.name ?? '…'),
         titleHref: current
             ? generatePath(AppRoute.LIBRARY_GENRES_DETAIL, { genreId: current.id })
             : undefined,
@@ -342,6 +357,7 @@ export const useFavoritesFeatureData = (
 const useUnplayedSongs = (serverId: string | undefined, reseedCounter: number) =>
     useQuery({
         enabled: Boolean(serverId),
+        placeholderData: keepPreviousData,
         queryFn: async ({ signal }) => {
             if (!serverId) return [] as Song[];
             const res = await api.controller.getRandomSongList({
@@ -424,6 +440,7 @@ export const useForgottenFavoritesFeatureData = (
 const useTimeMachineSongs = (year: null | number, serverId: string | undefined) =>
     useQuery({
         enabled: Boolean(year && serverId),
+        placeholderData: keepPreviousData,
         queryFn: async ({ signal }) => {
             if (!year || !serverId) return [] as Song[];
             const res = await api.controller.getRandomSongList({
@@ -436,7 +453,11 @@ const useTimeMachineSongs = (year: null | number, serverId: string | undefined) 
         staleTime: 1000 * 60 * 5,
     });
 
-const MAX_AUTO_SKIP_RETRIES = 6;
+// Year pool is wide (~66 years) and most libraries cluster heavily in a few
+// recent decades. Six retries hit a populated year ~62% of the time; thirty
+// retries push that past 99% on even the sparsest libraries while still being
+// O(retries) in network calls, not O(years).
+const MAX_AUTO_SKIP_RETRIES = 30;
 
 export const useTimeMachineFeatureData = (
     serverId: string | undefined,
@@ -449,7 +470,7 @@ export const useTimeMachineFeatureData = (
         return arr;
     }, [minYear, maxYear]);
 
-    const { index, reshuffle } = usePoolRotation(yearPool.length);
+    const { goNext, goPrev, index, reshuffle } = usePoolRotation(yearPool.length);
     const year = yearPool[index % yearPool.length];
     const { data: songs, isFetching, isLoading } = useTimeMachineSongs(year, serverId);
 
@@ -477,6 +498,8 @@ export const useTimeMachineFeatureData = (
     return {
         eyebrow: t('page.home.featureTimeMachine_eyebrow'),
         isLoading,
+        onNext: yearPool.length > 1 ? goNext : undefined,
+        onPrev: yearPool.length > 1 ? goPrev : undefined,
         onReshuffle: () => {
             retryCountRef.current = 0;
             reshuffle();
@@ -496,6 +519,7 @@ export const useTimeMachineFeatureData = (
 const useDecadeSongs = (decadeStart: null | number, serverId: string | undefined) =>
     useQuery({
         enabled: Boolean(decadeStart !== null && serverId),
+        placeholderData: keepPreviousData,
         queryFn: async ({ signal }) => {
             if (decadeStart === null || !serverId) return [] as Song[];
             const res = await api.controller.getRandomSongList({
@@ -525,7 +549,7 @@ export const useDecadeDiveFeatureData = (
         return arr;
     }, [minYear, maxYear]);
 
-    const { index, reshuffle } = usePoolRotation(decades.length);
+    const { goNext, goPrev, index, reshuffle } = usePoolRotation(decades.length);
     const decade = decades[index % decades.length];
     const { data: songs, isFetching, isLoading } = useDecadeSongs(decade, serverId);
 
@@ -550,6 +574,8 @@ export const useDecadeDiveFeatureData = (
     return {
         eyebrow: t('page.home.featureDecade_eyebrow'),
         isLoading,
+        onNext: decades.length > 1 ? goNext : undefined,
+        onPrev: decades.length > 1 ? goPrev : undefined,
         onReshuffle: () => {
             retryCountRef.current = 0;
             reshuffle();
