@@ -601,6 +601,7 @@
             "feelingLucky_tooltip": "Shuffle through your whole library — start playback instantly",
             "feelingLucky_error": "Couldn't fetch random tracks. Try again?",
             "featureArtist_empty": "No artists with enough tracks to feature yet",
+            "featureCard_emptyGrid": "Nothing to show right now — try Reshuffle or pick a different variant",
             "featureArtist_eyebrow": "Featured artist",
             "featureArtist_next": "Next",
             "featureArtist_paused": "Auto-rotation paused (hover)",

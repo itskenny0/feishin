@@ -140,6 +140,10 @@ export const FeatureCardShell = ({
 
     const showSkeleton = data.isLoading && data.songs.length === 0;
     const hasSongs = data.songs.length > 0;
+    // After the fetch finishes with no results we want a visible cue rather
+    // than a silently-empty grid — that ambiguity was the most common
+    // 'doesn't load' complaint.
+    const showNoSongsMessage = !data.isLoading && data.songs.length === 0;
 
     const titleNode = data.titleHref ? (
         <Link className={styles.artistName} to={data.titleHref}>
@@ -169,19 +173,19 @@ export const FeatureCardShell = ({
             <div aria-hidden className={styles.scrim} />
             <div className={styles.content}>
                 <div className={styles.songGrid}>
-                    {showSkeleton
-                        ? Array.from({ length: SONGS_PER_CARD }).map((_, idx) => (
-                              <SongTileSkeleton key={idx} />
-                          ))
-                        : data.songs
-                              .slice(0, SONGS_PER_CARD)
-                              .map((song) => (
-                                  <SongTile
-                                      key={song.id}
-                                      onClick={handlePlayFromSong}
-                                      song={song}
-                                  />
-                              ))}
+                    {showSkeleton ? (
+                        Array.from({ length: SONGS_PER_CARD }).map((_, idx) => (
+                            <SongTileSkeleton key={idx} />
+                        ))
+                    ) : showNoSongsMessage ? (
+                        <div className={styles.noSongs}>{t('page.home.featureCard_emptyGrid')}</div>
+                    ) : (
+                        data.songs
+                            .slice(0, SONGS_PER_CARD)
+                            .map((song) => (
+                                <SongTile key={song.id} onClick={handlePlayFromSong} song={song} />
+                            ))
+                    )}
                 </div>
                 <div className={styles.infoPane}>
                     <span className={styles.eyebrow}>{data.eyebrow}</span>

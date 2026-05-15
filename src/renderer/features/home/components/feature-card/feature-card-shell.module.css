@@ -60,6 +60,20 @@
     min-width: 0;
 }
 
+.no-songs {
+    display: flex;
+    grid-row: 1 / -1;
+    grid-column: 1 / -1;
+    align-items: center;
+    justify-content: center;
+    min-height: 180px;
+    padding: var(--theme-spacing-md);
+    font-size: 0.9rem;
+    color: rgb(255 255 255 / 65%);
+    text-align: center;
+    text-shadow: 0 0 6px rgb(0 0 0 / 50%);
+}
+
 .song-tile {
     display: flex;
     flex-direction: column;
