@@ -10,6 +10,7 @@ import { FeatureCardPicker } from '/@/renderer/features/home/components/feature-
 import { FeaturedGenres } from '/@/renderer/features/home/components/featured-genres';
 import { FeelingLuckyButton } from '/@/renderer/features/home/components/feeling-lucky-button';
 import { LibraryStats } from '/@/renderer/features/home/components/library-stats';
+import { NewSinceLastVisit } from '/@/renderer/features/home/components/new-since-last-visit';
 import { QuickFilterChips } from '/@/renderer/features/home/components/quick-filter-chips';
 import { AnimatedPage } from '/@/renderer/features/shared/components/animated-page';
 import { LibraryContainer } from '/@/renderer/features/shared/components/library-container';
@@ -146,6 +147,10 @@ const HomeRoute = () => {
 
                             if (item.id === HomeItem.QUICK_FILTERS) {
                                 return <QuickFilterChips key="quick-filters" />;
+                            }
+
+                            if (item.id === HomeItem.NEW_SINCE_LAST_VISIT) {
+                                return <NewSinceLastVisit key="new-since-last-visit" />;
                             }
 
                             const carousel = sortedCarousel.find((c) => c.uniqueId === item.id);
