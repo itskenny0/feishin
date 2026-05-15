@@ -9,6 +9,7 @@ import {
 } from '/@/renderer/store';
 
 const HOME_ITEMS: Array<[string, string]> = [
+    [HomeItem.NEW_SINCE_LAST_VISIT, 'page.home.newSinceLastVisit_settingLabel'],
     [HomeItem.QUICK_FILTERS, 'page.home.quickFilters_title'],
     [HomeItem.LIBRARY_STATS, 'page.home.libraryStats_title'],
     [HomeItem.GENRES, 'page.home.genres'],

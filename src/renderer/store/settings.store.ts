@@ -82,6 +82,7 @@ const HomeItemSchema = z.enum([
     'genres',
     'libraryStats',
     'mostPlayed',
+    'newSinceLastVisit',
     'quickFilters',
     'random',
     'recentlyAdded',
@@ -861,6 +862,7 @@ export enum HomeItem {
     GENRES = 'genres',
     LIBRARY_STATS = 'libraryStats',
     MOST_PLAYED = 'mostPlayed',
+    NEW_SINCE_LAST_VISIT = 'newSinceLastVisit',
     QUICK_FILTERS = 'quickFilters',
     RANDOM = 'random',
     RECENTLY_ADDED = 'recentlyAdded',
@@ -2667,10 +2669,27 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
+                if (version <= 40) {
+                    // Add NEW_SINCE_LAST_VISIT. Enabled by default because
+                    // it's a friendly noisy-only-when-relevant widget — the
+                    // banner self-hides when no new albums exist.
+                    if (Array.isArray(state.general.homeItems)) {
+                        const has = state.general.homeItems.some(
+                            (i: { id: string }) => i.id === HomeItem.NEW_SINCE_LAST_VISIT,
+                        );
+                        if (!has) {
+                            state.general.homeItems = [
+                                { disabled: false, id: HomeItem.NEW_SINCE_LAST_VISIT },
+                                ...state.general.homeItems,
+                            ];
+                        }
+                    }
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 40,
+            version: 41,
         },
     ),
 );
