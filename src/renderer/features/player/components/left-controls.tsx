@@ -32,7 +32,10 @@ import {
     usePlayerSong,
     useSetFullScreenPlayerStore,
 } from '/@/renderer/store';
-import { useShowFilesystemNameForAlbums } from '/@/renderer/store/settings.store';
+import {
+    useShowFilesystemNameForAlbums,
+    useShowPlaybarYearChip,
+} from '/@/renderer/store/settings.store';
 
 const albumFolderNameFromSongPath = (path?: null | string): null | string => {
     if (!path) return null;
@@ -71,6 +74,7 @@ export const LeftControls = () => {
     const { currentStationArt } = useRadioPlayer();
     const { bindings } = useHotkeySettings();
     const useFsAlbumName = useShowFilesystemNameForAlbums();
+    const showYearChip = useShowPlaybarYearChip();
     const albumDisplayName =
         (useFsAlbumName ? albumFolderNameFromSongPath(currentSong?.path) : null) ||
         currentSong?.album ||
@@ -243,6 +247,14 @@ export const LeftControls = () => {
                                             </Text>
                                         )}
                                     </Text>
+                                    {showYearChip && currentSong?.releaseYear && (
+                                        <span
+                                            className={styles.yearChip}
+                                            title={String(currentSong.releaseYear)}
+                                        >
+                                            {currentSong.releaseYear}
+                                        </span>
+                                    )}
                                     {isSongDefined && (
                                         <ActionIcon
                                             icon="ellipsisVertical"
