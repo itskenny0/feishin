@@ -39,8 +39,12 @@ export type FeatureCardVariant =
  * Variants used by the "Surprise me" rotator. `album` and `albumOfTheDay` are
  * intentionally excluded because they render with a different layout that the
  * generic shell wouldn't fit cleanly.
+ *
+ * Some variants (currently just `unplayed`) rely on Jellyfin-only filters and
+ * would surface a useless "unsupported" empty card on other server types —
+ * we filter them out of the rotator below per `currentServer.type`.
  */
-const SURPRISE_POOL: FeatureCardVariant[] = [
+const SURPRISE_POOL_BASE: FeatureCardVariant[] = [
     'artist',
     'genre',
     'recentlyPlayed',
@@ -51,6 +55,8 @@ const SURPRISE_POOL: FeatureCardVariant[] = [
     'timeMachine',
     'decade',
 ];
+
+const JELLYFIN_ONLY_VARIANTS: ReadonlySet<FeatureCardVariant> = new Set(['unplayed']);
 
 interface ShellWrapperProps {
     cornerBadge?: string;
@@ -135,8 +141,8 @@ const FavoritesVariant = ({ cornerBadge, hideRotationDots }: ShellWrapperProps) 
 
 const UnplayedVariant = ({ cornerBadge, hideRotationDots }: ShellWrapperProps) => {
     const { t } = useTranslation();
-    const serverId = useCurrentServer()?.id;
-    const data = useUnplayedFeatureData(serverId, t);
+    const server = useCurrentServer();
+    const data = useUnplayedFeatureData(server?.id, server?.type, t);
     return (
         <FeatureCardShell
             cornerBadge={cornerBadge}
@@ -249,7 +255,16 @@ const SURPRISE_BADGE_LABELS: Record<FeatureCardVariant, string> = {
 
 const SurpriseMeFeatureCard = () => {
     const { t } = useTranslation();
-    const [poolIdx, setPoolIdx] = useState(() => Math.floor(Math.random() * SURPRISE_POOL.length));
+    const serverType = useCurrentServer()?.type;
+    const pool = useMemo(
+        () =>
+            SURPRISE_POOL_BASE.filter((v) => {
+                if (!JELLYFIN_ONLY_VARIANTS.has(v)) return true;
+                return serverType === 'jellyfin';
+            }),
+        [serverType],
+    );
+    const [poolIdx, setPoolIdx] = useState(() => Math.floor(Math.random() * pool.length));
 
     useEffect(() => {
         const id = window.setInterval(() => {
@@ -258,16 +273,19 @@ const SurpriseMeFeatureCard = () => {
             // freezes the entire chain.
             if (isFeatureCardHovered()) return;
             setPoolIdx((prev) => {
-                if (SURPRISE_POOL.length <= 1) return prev;
-                let next = Math.floor(Math.random() * SURPRISE_POOL.length);
-                if (next === prev) next = (next + 1) % SURPRISE_POOL.length;
+                if (pool.length <= 1) return prev;
+                let next = Math.floor(Math.random() * pool.length);
+                if (next === prev) next = (next + 1) % pool.length;
                 return next;
             });
         }, ROTATE_INTERVAL_MS);
         return () => window.clearInterval(id);
-    }, []);
+    }, [pool.length]);
 
-    const subVariant = useMemo(() => SURPRISE_POOL[poolIdx % SURPRISE_POOL.length], [poolIdx]);
+    const subVariant = useMemo(
+        () => pool[poolIdx % Math.max(pool.length, 1)] ?? pool[0] ?? 'artist',
+        [poolIdx, pool],
+    );
     const badge = `🎲 ${t(`page.home.${SURPRISE_BADGE_LABELS[subVariant]}`)}`;
     return <ShellVariantSwitch cornerBadge={badge} hideRotationDots variant={subVariant} />;
 };
