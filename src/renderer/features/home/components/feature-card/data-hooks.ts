@@ -1,6 +1,6 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { TFunction } from 'i18next';
-import { useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { generatePath } from 'react-router';
 
 import { api } from '/@/renderer/api';
@@ -151,6 +151,13 @@ const useArtistSongs = (artistId: null | string, serverId: string | undefined) =
 // find an artist with ≥2 songs is ≪ 20.
 const MAX_SINGLE_SONG_AUTO_SKIPS = 20;
 
+/** Validated display state — only updated when we have an artist with ≥2 songs. */
+interface ShownArtist {
+    artist: ArtistCandidate;
+    idx: number;
+    songs: Song[];
+}
+
 export const useArtistFeatureData = (
     serverId: string | undefined,
     t: TFunction,
@@ -161,46 +168,81 @@ export const useArtistFeatureData = (
     const current = pool[index % Math.max(pool.length, 1)] as ArtistCandidate | undefined;
     const { data: songs, isFetching } = useArtistSongs(current?.id ?? null, serverId);
 
-    // Server-side filter can't always tell us — Jellyfin's AlbumArtists
-    // endpoint sometimes returns no SongCount even with ItemCounts requested.
-    // Fall back to a client-side check: if the actual song fetch came back
-    // with <2 unique tracks, this artist effectively has one song; auto-
-    // advance to the next candidate. Bounded so we can't get stuck looping.
+    // Two-tier state: `current` is the candidate being evaluated; `shown` is
+    // the artist actually rendered to the user. The display only advances to
+    // a new artist when their songs come back as ≥2 unique tracks (or we've
+    // exhausted retries). Auto-skips through single-song artists happen
+    // silently in the background — the user never sees the bad candidates.
+    const [shown, setShown] = useState<null | ShownArtist>(null);
     const skipCountRef = useRef(0);
+
     useEffect(() => {
-        if (isFetching || isLoading || !songs || !current || pool.length < 2) return;
-        if (songs.length >= 2) {
+        if (isFetching || isLoading || !songs || !current) return;
+        const exhausted = skipCountRef.current >= MAX_SINGLE_SONG_AUTO_SKIPS;
+        const canSkip = pool.length >= 2;
+
+        if (songs.length >= 2 || exhausted || !canSkip) {
+            // Settle: this is the artist we'll display. If we exhausted
+            // retries on a library full of single-song artists, show the
+            // current pick rather than leaving the user on a stale or empty
+            // state forever.
             skipCountRef.current = 0;
+            setShown({ artist: current, idx: index, songs });
             return;
         }
-        if (skipCountRef.current < MAX_SINGLE_SONG_AUTO_SKIPS) {
-            skipCountRef.current += 1;
-            goNext();
-        }
-    }, [songs, isFetching, isLoading, current, pool.length, goNext]);
+
+        // Still searching — advance silently. `shown` keeps the previous
+        // valid artist visible (or stays null on first load) so the user
+        // never sees the in-between candidates flash by.
+        skipCountRef.current += 1;
+        goNext();
+    }, [songs, isFetching, isLoading, current, pool.length, index, goNext]);
+
+    // User-initiated changes clear `shown` so the card transitions to a
+    // skeleton immediately — visible feedback that something is happening
+    // while we evaluate the next pick(s). The 30s auto-rotation and the
+    // auto-skip itself DON'T clear `shown`; they just re-evaluate in the
+    // background and update `shown` once a valid candidate is found, which
+    // reads as a smooth crossfade rather than a flash.
+    const handlePrev = useCallback(() => {
+        skipCountRef.current = 0;
+        setShown(null);
+        goPrev();
+    }, [goPrev]);
+
+    const handleNext = useCallback(() => {
+        skipCountRef.current = 0;
+        setShown(null);
+        goNext();
+    }, [goNext]);
+
+    const handleReshuffle = useCallback(() => {
+        skipCountRef.current = 0;
+        setShown(null);
+        reshuffle();
+    }, [reshuffle]);
 
     const empty = !isLoading && pool.length === 0;
 
     return {
         eyebrow: t('page.home.featureArtist_eyebrow'),
-        isLoading: isLoading || (Boolean(current) && isFetching && (songs ?? []).length === 0),
-        onNext: pool.length > 1 ? goNext : undefined,
-        onPrev: pool.length > 1 ? goPrev : undefined,
-        onReshuffle: () => {
-            skipCountRef.current = 0;
-            reshuffle();
-        },
+        isLoading: isLoading || (!shown && Boolean(current) && !empty),
+        onNext: pool.length > 1 ? handleNext : undefined,
+        onPrev: pool.length > 1 ? handlePrev : undefined,
+        onReshuffle: handleReshuffle,
         rotationCount: pool.length,
-        rotationIndex: index,
-        songs: songs ?? [],
+        rotationIndex: shown?.idx ?? index,
+        songs: shown?.songs ?? [],
         subtitle: empty
             ? t('page.home.featureVariant_empty_subtitle')
-            : current?.songCount
-              ? t('page.home.featureArtist_trackCount', { count: current.songCount })
+            : shown?.artist.songCount
+              ? t('page.home.featureArtist_trackCount', { count: shown.artist.songCount })
               : t('page.home.featureArtist_trackCount_unknown'),
-        title: empty ? t('page.home.featureVariant_empty_title') : (current?.name ?? '…'),
-        titleHref: current
-            ? generatePath(AppRoute.LIBRARY_ALBUM_ARTISTS_DETAIL, { albumArtistId: current.id })
+        title: empty ? t('page.home.featureVariant_empty_title') : (shown?.artist.name ?? '…'),
+        titleHref: shown?.artist
+            ? generatePath(AppRoute.LIBRARY_ALBUM_ARTISTS_DETAIL, {
+                  albumArtistId: shown.artist.id,
+              })
             : undefined,
     };
 };
