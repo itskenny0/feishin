@@ -1,4 +1,4 @@
-import { createRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import styles from './visualizer.module.css';
 
@@ -6,7 +6,7 @@ import { useWebAudio } from '/@/renderer/features/player/hooks/use-webaudio';
 import { getVisualizerAudioNodes } from '/@/renderer/features/player/utils/get-visualizer-audio-nodes';
 import { openVisualizerSettingsModal } from '/@/renderer/features/player/utils/open-visualizer-settings-modal';
 import { ComponentErrorBoundary } from '/@/renderer/features/shared/components/component-error-boundary';
-import { useAccent, usePlaybackType, useSettingsStore } from '/@/renderer/store';
+import { usePlaybackType, useSettingsStore } from '/@/renderer/store';
 import {
     useFullScreenPlayerStore,
     useFullScreenPlayerStoreActions,
@@ -18,8 +18,11 @@ import { PlayerStatus, PlayerType } from '/@/shared/types/types';
 
 const VisualizerInner = () => {
     const { webAudio } = useWebAudio();
-    const canvasRef = createRef<HTMLDivElement>();
-    const accent = useAccent();
+    // useRef, not createRef — the latter allocates a fresh ref object on every
+    // render, which (when the ref is in an effect's deps) causes teardown +
+    // re-attach of WebGL contexts on every parent re-render. Same fix the
+    // butterchurn visualizer got.
+    const canvasRef = useRef<HTMLDivElement | null>(null);
     const visualizer = useSettingsStore((store) => store.visualizer);
     const playbackType = usePlaybackType();
     const opacity = useSettingsStore((store) => store.visualizer.audiomotionanalyzer.opacity);
@@ -220,6 +223,20 @@ const VisualizerInner = () => {
         [visualizer, transformGradientForVisualizer],
     );
 
+    // Reading `options` / `isCustomGradient` / `registerCustomGradients` /
+    // `visualizer` via refs inside the init effect so they don't drag the
+    // effect into a tear-down-and-rebuild loop on every settings change.
+    // Settings updates are handled by the dedicated `motion.setOptions`
+    // effect further down.
+    const optionsRef = useRef(options);
+    optionsRef.current = options;
+    const visualizerRef = useRef(visualizer);
+    visualizerRef.current = visualizer;
+    const isCustomGradientRef = useRef(isCustomGradient);
+    isCustomGradientRef.current = isCustomGradient;
+    const registerCustomGradientsRef = useRef(registerCustomGradients);
+    registerCustomGradientsRef.current = registerCustomGradients;
+
     useEffect(() => {
         const { context } = webAudio || {};
         const inputNodes = getVisualizerAudioNodes(webAudio, playbackType);
@@ -242,21 +259,18 @@ const VisualizerInner = () => {
             // Reset gradients registered flag on new instance
             setGradientsRegistered(false);
 
+            const opts = optionsRef.current;
+            const viz = visualizerRef.current;
+            const isCustom = isCustomGradientRef.current;
             // Create options without custom gradients on first init
-            const initOptions: any = { ...options };
+            const initOptions: any = { ...opts };
 
             // Replace custom gradients with default 'classic' for initial setup
-            if (visualizer.type === 'audiomotionanalyzer') {
-                const ama = visualizer.audiomotionanalyzer;
-                if (isCustomGradient(ama.gradient)) {
-                    initOptions.gradient = 'classic';
-                }
-                if (isCustomGradient(ama.gradientLeft)) {
-                    initOptions.gradientLeft = 'classic';
-                }
-                if (isCustomGradient(ama.gradientRight)) {
-                    initOptions.gradientRight = 'classic';
-                }
+            if (viz.type === 'audiomotionanalyzer') {
+                const ama = viz.audiomotionanalyzer;
+                if (isCustom(ama.gradient)) initOptions.gradient = 'classic';
+                if (isCustom(ama.gradientLeft)) initOptions.gradientLeft = 'classic';
+                if (isCustom(ama.gradientRight)) initOptions.gradientRight = 'classic';
             }
 
             audioMotion = new AudioMotionAnalyzer(canvasRef.current, {
@@ -265,7 +279,7 @@ const VisualizerInner = () => {
             });
 
             // Register custom gradients (this will set gradientsRegistered to true)
-            registerCustomGradients(audioMotion);
+            registerCustomGradientsRef.current(audioMotion);
 
             setMotion(audioMotion);
             for (const node of inputNodes) audioMotion.connectInput(node);
@@ -281,19 +295,7 @@ const VisualizerInner = () => {
                 setMotion(undefined);
             }
         };
-    }, [
-        accent,
-        canvasRef,
-        registerCustomGradients,
-        playbackType,
-        webAudio,
-        visualizer,
-        options,
-        isCustomGradient,
-        motion,
-        libraryLoaded,
-        isPlaying,
-    ]);
+    }, [playbackType, webAudio, motion, libraryLoaded, isPlaying]);
 
     // Kill visualizer after 5 seconds of pause
     useEffect(() => {
