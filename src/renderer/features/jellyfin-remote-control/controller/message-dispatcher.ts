@@ -13,6 +13,13 @@ import { toast } from '/@/shared/components/toast/toast';
 import { Song } from '/@/shared/types/domain-types';
 import { Play } from '/@/shared/types/types';
 
+const DEBUG =
+    typeof import.meta !== 'undefined' && (import.meta as { env?: { DEV?: boolean } }).env?.DEV;
+
+const debug = (...args: unknown[]) => {
+    if (DEBUG) console.log('[jellyfin-remote]', ...args);
+};
+
 export interface DispatcherDeps {
     defaultVolumeStep: number;
     fetchSongsByIds: (itemIds: string[]) => Promise<Song[]>;
@@ -23,7 +30,10 @@ export interface DispatcherDeps {
         mediaPause: () => void;
         mediaPlay: () => void;
         mediaPrevious: () => void;
-        mediaSeekToTimestamp: (ms: number) => void;
+        // NOTE: name says "Timestamp" but the underlying store action expects
+        // SECONDS, not milliseconds. The previous typedef said `ms: number`
+        // which silently produced a 1000× seek bug fixed in commit 4205727d.
+        mediaSeekToTimestamp: (seconds: number) => void;
         mediaSkipBackward: () => void;
         mediaSkipForward: () => void;
         mediaStop: (args?: { reset?: boolean }) => void;
@@ -39,6 +49,9 @@ const PLAY_COMMAND_TO_PLAY_TYPE: Record<JellyfinPlayCommand, Play> = {
     PlayNow: Play.NOW,
 };
 
+// Jellyfin "ticks" are 100-ns units; one second = 10_000_000 ticks.
+const TICKS_PER_SECOND = 10_000_000;
+
 export async function dispatchJellyfinMessage(
     msg: JellyfinIncomingMessage,
     deps: DispatcherDeps,
@@ -47,7 +60,7 @@ export async function dispatchJellyfinMessage(
 
     if (msg.MessageType === 'Playstate') {
         const data = (msg as Extract<JellyfinIncomingMessage, { MessageType: 'Playstate' }>).Data;
-        console.log('[jellyfin-remote] Playstate', data.Command, data);
+        debug('Playstate', data.Command);
         switch (data.Command) {
             case 'FastForward':
                 playerActions.mediaSkipForward();
@@ -69,13 +82,14 @@ export async function dispatchJellyfinMessage(
                 return;
             case 'Seek': {
                 const ticks = data.SeekPositionTicks ?? 0;
-                // Jellyfin "ticks" = 100-ns units; seconds = ticks / 10_000_000.
-                // mediaSeekToTimestamp expects seconds.
-                playerActions.mediaSeekToTimestamp(ticks / 10_000_000);
+                playerActions.mediaSeekToTimestamp(ticks / TICKS_PER_SECOND);
                 return;
             }
             case 'Stop':
-                playerActions.mediaStop();
+                // The Jellyfin "Stop" command semantically means "stop
+                // playback" rather than "rewind to start". Preserve position
+                // so the user can resume from a remote later.
+                playerActions.mediaStop({ reset: false });
                 return;
             case 'Unpause':
                 playerActions.mediaPlay();
@@ -139,6 +153,7 @@ export async function dispatchJellyfinMessage(
         const ids = data.ItemIds ?? [];
         if (ids.length === 0) return;
         const startIndex = data.StartIndex ?? 0;
+        const startPositionTicks = data.StartPositionTicks ?? 0;
 
         // Fast path: if the requested ItemIds match the current playback-order
         // queue exactly, the user clicked an item already in our queue from the
@@ -168,6 +183,9 @@ export async function dispatchJellyfinMessage(
                     ? (state.queue.shuffled[startIndex] ?? startIndex)
                     : startIndex;
                 state.mediaPlayByIndex(defaultIndex);
+                if (startPositionTicks > 0) {
+                    playerActions.mediaSeekToTimestamp(startPositionTicks / TICKS_PER_SECOND);
+                }
                 return;
             }
         }
@@ -190,7 +208,31 @@ export async function dispatchJellyfinMessage(
             return;
         }
 
-        await addToQueueByData(playType, songs);
+        // If the remote sent PlayNext/PlayLast while we're idle, auto-start
+        // playback once the queue is populated — otherwise the user clicks
+        // "Add to queue" from Jellyfin Web and nothing visibly happens.
+        const wasIdle = usePlayerStoreBase.getState().queue.default.length === 0;
+        const effectivePlayType = wasIdle ? Play.NOW : playType;
+
+        await addToQueueByData(effectivePlayType, songs);
+
+        // Honor StartIndex / StartPositionTicks for fresh-queue plays too.
+        if (effectivePlayType === Play.NOW) {
+            if (startIndex > 0 && startIndex < songs.length) {
+                const state = usePlayerStoreBase.getState();
+                const defaultIndex = isShuffleEnabled(state)
+                    ? (state.queue.shuffled[startIndex] ?? startIndex)
+                    : startIndex;
+                state.mediaPlayByIndex(defaultIndex);
+            }
+            if (startPositionTicks > 0) {
+                // Defer so the new song's media element is mounted by the
+                // time the seek lands. A microtask is enough; rAF as belt.
+                requestAnimationFrame(() => {
+                    playerActions.mediaSeekToTimestamp(startPositionTicks / TICKS_PER_SECOND);
+                });
+            }
+        }
         return;
     }
 

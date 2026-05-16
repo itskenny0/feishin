@@ -79,11 +79,23 @@ export const useJellyfinRemoteControl = () => {
             }
         };
 
+        // Wrap player actions so the dispatcher reads the latest reference at
+        // dispatch time, not at start() time — settings/store updates after
+        // the socket opens then take effect immediately without restarting.
+        const liveActionsProxy = new Proxy({} as (typeof playerActionsRef)['current'], {
+            get: (_target, prop: string) => {
+                const fn = (playerActionsRef.current as unknown as Record<string, unknown>)[prop];
+                return typeof fn === 'function' ? (fn as (...a: unknown[]) => unknown) : undefined;
+            },
+        });
+
         controller.start({
             authHeader,
             capabilitiesPayload: {
                 DeviceProfile: null,
-                MessageCallbackUrl: '',
+                // Omit MessageCallbackUrl entirely. Sending an empty string
+                // causes some Jellyfin versions to attempt callbacks against
+                // the empty URL and log errors server-side.
                 PlayableMediaTypes: ['Audio'],
                 SupportedCommands: [
                     'VolumeUp',
@@ -93,7 +105,10 @@ export const useJellyfinRemoteControl = () => {
                     'ToggleMute',
                     'SetVolume',
                     'DisplayMessage',
-                    'PlayMediaSource',
+                    // 'PlayMediaSource' is a Play command, not a
+                    // GeneralCommand — advertising it caused Jellyfin to
+                    // route real Play messages to a code path the dispatcher
+                    // didn't handle. Removed.
                 ],
                 SupportsMediaControl: true,
                 SupportsPersistentIdentifier: true,
@@ -102,9 +117,13 @@ export const useJellyfinRemoteControl = () => {
             device: getDeviceLabel(),
             deviceId,
             dispatcherDeps: {
-                defaultVolumeStep: volumeStepRef.current,
+                // Read step fresh on every dispatch via getter so volume-step
+                // setting changes propagate without a socket restart.
+                get defaultVolumeStep() {
+                    return volumeStepRef.current;
+                },
                 fetchSongsByIds,
-                playerActions: playerActionsRef.current,
+                playerActions: liveActionsProxy,
             },
             serverUrl,
             token,
