@@ -98,11 +98,18 @@ const useArtistCandidates = (serverId: string | undefined) =>
             // Cascade through progressively more permissive thresholds, but
             // never below the hard floor — the user reported single-song
             // artists slipping through when the unfiltered `all` was returned.
-            const primary = all.filter((a) => (a.songCount ?? 0) >= MIN_SONG_COUNT);
+            //
+            // Null songCount is treated as "unknown but acceptable" (mapped to
+            // Infinity for the comparison). Without this, servers that don't
+            // populate SongCount in the response would produce an empty pool
+            // and the card would never load. Only artists with KNOWN low
+            // counts are filtered out.
+            const songCount = (a: ArtistCandidate) => a.songCount ?? Infinity;
+            const primary = all.filter((a) => songCount(a) >= MIN_SONG_COUNT);
             if (primary.length >= 3) return primary;
-            const fallback = all.filter((a) => (a.songCount ?? 0) >= FALLBACK_MIN_SONG_COUNT);
+            const fallback = all.filter((a) => songCount(a) >= FALLBACK_MIN_SONG_COUNT);
             if (fallback.length >= 3) return fallback;
-            const lastResort = all.filter((a) => (a.songCount ?? 0) >= HARD_MIN_SONG_COUNT);
+            const lastResort = all.filter((a) => songCount(a) >= HARD_MIN_SONG_COUNT);
             // Even if this leaves us with 0 or 1 candidates, surface that —
             // the variant's empty-state copy handles "no artist found".
             return lastResort;

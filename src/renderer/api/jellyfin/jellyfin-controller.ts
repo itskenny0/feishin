@@ -93,6 +93,11 @@ export const JF_FIELDS = {
         'Overview',
         'SortName',
         'ProviderIds',
+        // Required for SongCount/AlbumCount to be populated in the response.
+        // Without this Jellyfin returns those fields as undefined and downstream
+        // filters that depend on songCount (e.g. the featured-artist card's
+        // minimum-track-count threshold) treat every artist as having 0 songs.
+        'ItemCounts',
     ],
     ALBUM_DETAIL: ['Genres', 'DateCreated', 'ChildCount', 'People', 'Tags', 'ProviderIds', 'Path'],
     ALBUM_LIST: ['People', 'Tags', 'Studios', 'SortName', 'ProviderIds', 'ChildCount', 'Path'],
