@@ -13,6 +13,7 @@ import { LibraryStats } from '/@/renderer/features/home/components/library-stats
 import { NewSinceLastVisit } from '/@/renderer/features/home/components/new-since-last-visit';
 import { QuickFilterChips } from '/@/renderer/features/home/components/quick-filter-chips';
 import { AnimatedPage } from '/@/renderer/features/shared/components/animated-page';
+import { ComponentErrorBoundary } from '/@/renderer/features/shared/components/component-error-boundary';
 import { LibraryContainer } from '/@/renderer/features/shared/components/library-container';
 import { LibraryHeaderBar } from '/@/renderer/features/shared/components/library-header-bar';
 import { PageErrorBoundary } from '/@/renderer/features/shared/components/page-error-boundary';
@@ -122,35 +123,60 @@ const HomeRoute = () => {
                         px="2rem"
                         ref={containerQuery.ref}
                     >
+                        {/* Per-widget error boundaries so a thrown error in one
+                            widget (e.g. a transient malformed-response from a
+                            specific carousel) doesn't black-hole the entire
+                            home page via PageErrorBoundary below. Each widget
+                            gets its own boundary; the rest keep rendering. */}
                         {homeFeature && homeFeatureStyle === HomeFeatureStyle.SINGLE && (
-                            <>
+                            <ComponentErrorBoundary>
                                 <FeatureCardPicker />
                                 <FeatureCard variant={homeFeatureContent} />
-                            </>
+                            </ComponentErrorBoundary>
                         )}
                         {homeFeature && homeFeatureStyle === HomeFeatureStyle.MULTIPLE && (
-                            <AlbumInfiniteFeatureCarousel />
+                            <ComponentErrorBoundary>
+                                <AlbumInfiniteFeatureCarousel />
+                            </ComponentErrorBoundary>
                         )}
                         {homeFeelingLucky && (
-                            <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
-                                <FeelingLuckyButton />
-                            </div>
+                            <ComponentErrorBoundary>
+                                <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+                                    <FeelingLuckyButton />
+                                </div>
+                            </ComponentErrorBoundary>
                         )}
                         {sortedItems.map((item) => {
                             if (item.id === HomeItem.GENRES) {
-                                return <FeaturedGenres key="featured-genres" />;
+                                return (
+                                    <ComponentErrorBoundary key="featured-genres">
+                                        <FeaturedGenres />
+                                    </ComponentErrorBoundary>
+                                );
                             }
 
                             if (item.id === HomeItem.LIBRARY_STATS) {
-                                return <LibraryStats key="library-stats" />;
+                                return (
+                                    <ComponentErrorBoundary key="library-stats">
+                                        <LibraryStats />
+                                    </ComponentErrorBoundary>
+                                );
                             }
 
                             if (item.id === HomeItem.QUICK_FILTERS) {
-                                return <QuickFilterChips key="quick-filters" />;
+                                return (
+                                    <ComponentErrorBoundary key="quick-filters">
+                                        <QuickFilterChips />
+                                    </ComponentErrorBoundary>
+                                );
                             }
 
                             if (item.id === HomeItem.NEW_SINCE_LAST_VISIT) {
-                                return <NewSinceLastVisit key="new-since-last-visit" />;
+                                return (
+                                    <ComponentErrorBoundary key="new-since-last-visit">
+                                        <NewSinceLastVisit />
+                                    </ComponentErrorBoundary>
+                                );
                             }
 
                             const carousel = sortedCarousel.find((c) => c.uniqueId === item.id);
@@ -158,33 +184,36 @@ const HomeRoute = () => {
                                 return null;
                             }
 
+                            const carouselKey = `carousel-${carousel.uniqueId}`;
                             if (carousel.itemType === LibraryItem.ALBUM) {
                                 return (
-                                    <AlbumInfiniteCarousel
-                                        containerQuery={containerQuery}
-                                        enableRefresh={carousel.enableRefresh}
-                                        key={`carousel-${carousel.uniqueId}`}
-                                        queryKey={['home', 'album', carousel.uniqueId] as const}
-                                        rowCount={1}
-                                        sortBy={carousel.sortBy as AlbumListSort}
-                                        sortOrder={carousel.sortOrder}
-                                        title={carousel.title}
-                                    />
+                                    <ComponentErrorBoundary key={carouselKey}>
+                                        <AlbumInfiniteCarousel
+                                            containerQuery={containerQuery}
+                                            enableRefresh={carousel.enableRefresh}
+                                            queryKey={['home', 'album', carousel.uniqueId] as const}
+                                            rowCount={1}
+                                            sortBy={carousel.sortBy as AlbumListSort}
+                                            sortOrder={carousel.sortOrder}
+                                            title={carousel.title}
+                                        />
+                                    </ComponentErrorBoundary>
                                 );
                             }
 
                             if (carousel.itemType === LibraryItem.SONG) {
                                 return (
-                                    <SongInfiniteCarousel
-                                        containerQuery={containerQuery}
-                                        enableRefresh={carousel.enableRefresh}
-                                        key={`carousel-${carousel.uniqueId}`}
-                                        queryKey={['home', 'song', carousel.uniqueId] as const}
-                                        rowCount={1}
-                                        sortBy={carousel.sortBy as SongListSort}
-                                        sortOrder={carousel.sortOrder}
-                                        title={carousel.title}
-                                    />
+                                    <ComponentErrorBoundary key={carouselKey}>
+                                        <SongInfiniteCarousel
+                                            containerQuery={containerQuery}
+                                            enableRefresh={carousel.enableRefresh}
+                                            queryKey={['home', 'song', carousel.uniqueId] as const}
+                                            rowCount={1}
+                                            sortBy={carousel.sortBy as SongListSort}
+                                            sortOrder={carousel.sortOrder}
+                                            title={carousel.title}
+                                        />
+                                    </ComponentErrorBoundary>
                                 );
                             }
 

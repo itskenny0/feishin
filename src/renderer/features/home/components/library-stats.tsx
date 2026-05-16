@@ -22,11 +22,22 @@ import {
  * limit=1) so the cost is one tiny request per metric.
  */
 
-const formatCount = (n: null | number | undefined): string => {
+/**
+ * Locale-aware compact formatting. 12_345 → "12K" in en-US, "12 K" in
+ * fr-FR, "1,2万" in ja-JP, etc. Falls back to plain string conversion if
+ * the runtime doesn't support `notation: 'compact'`.
+ */
+const formatCount = (n: null | number | undefined, locale: string): string => {
     if (n === null || n === undefined) return '—';
-    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-    if (n >= 1_000) return `${(n / 1_000).toFixed(n >= 10_000 ? 0 : 1)}k`;
-    return String(n);
+    try {
+        return new Intl.NumberFormat(locale, {
+            compactDisplay: 'short',
+            maximumFractionDigits: 1,
+            notation: 'compact',
+        }).format(n);
+    } catch {
+        return String(n);
+    }
 };
 
 const useCounts = (serverId: string | undefined) => {
@@ -101,24 +112,29 @@ const useCounts = (serverId: string | undefined) => {
 };
 
 interface TileProps {
+    error?: boolean;
     label: string;
     loading?: boolean;
-    sub?: string;
     to?: string;
     value: string;
 }
 
-const Tile = ({ label, loading, sub, to, value }: TileProps) => {
+const Tile = ({ error, label, loading, to, value }: TileProps) => {
     const inner = (
         <>
             <span className={styles.tileLabel}>{label}</span>
-            <span className={`${styles.tileValue}${loading ? ` ${styles.loading}` : ''}`}>
+            <span
+                className={`${styles.tileValue}${loading ? ` ${styles.loading}` : ''}${
+                    error ? ` ${styles.error}` : ''
+                }`}
+            >
                 {loading ? '' : value}
             </span>
-            {sub && <span className={styles.tileSub}>{sub}</span>}
         </>
     );
-    if (to) {
+    // Errored tiles don't navigate — clicking through to an "all the things"
+    // page when we couldn't even count them is just another broken UX hop.
+    if (to && !error) {
         return (
             <Link className={`${styles.tile} ${styles.tileLink}`} to={to}>
                 {inner}
@@ -129,39 +145,44 @@ const Tile = ({ label, loading, sub, to, value }: TileProps) => {
 };
 
 export const LibraryStats = () => {
-    const { t } = useTranslation();
+    const { i18n, t } = useTranslation();
     const server = useCurrentServer();
     const serverId = server?.id;
     const counts = useCounts(serverId);
+    const locale = i18n.language || 'en';
 
     const tilesData = useMemo(
         () => [
             {
+                error: counts.tracks.isError,
                 label: t('page.home.libraryStats_tracks'),
                 loading: counts.tracks.isLoading,
                 to: AppRoute.LIBRARY_SONGS,
-                value: formatCount(counts.tracks.data),
+                value: counts.tracks.isError ? '—' : formatCount(counts.tracks.data, locale),
             },
             {
+                error: counts.albums.isError,
                 label: t('page.home.libraryStats_albums'),
                 loading: counts.albums.isLoading,
                 to: AppRoute.LIBRARY_ALBUMS,
-                value: formatCount(counts.albums.data),
+                value: counts.albums.isError ? '—' : formatCount(counts.albums.data, locale),
             },
             {
+                error: counts.artists.isError,
                 label: t('page.home.libraryStats_artists'),
                 loading: counts.artists.isLoading,
                 to: AppRoute.LIBRARY_ALBUM_ARTISTS,
-                value: formatCount(counts.artists.data),
+                value: counts.artists.isError ? '—' : formatCount(counts.artists.data, locale),
             },
             {
+                error: counts.genres.isError,
                 label: t('page.home.libraryStats_genres'),
                 loading: counts.genres.isLoading,
                 to: AppRoute.LIBRARY_GENRES,
-                value: formatCount(counts.genres.data),
+                value: counts.genres.isError ? '—' : formatCount(counts.genres.data, locale),
             },
         ],
-        [counts, t],
+        [counts, t, locale],
     );
 
     return (
@@ -170,6 +191,7 @@ export const LibraryStats = () => {
             <div className={styles.grid}>
                 {tilesData.map((tile) => (
                     <Tile
+                        error={tile.error}
                         key={tile.label}
                         label={tile.label}
                         loading={tile.loading}

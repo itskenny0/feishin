@@ -5,6 +5,7 @@ import { Link } from 'react-router';
 import styles from './quick-filter-chips.module.css';
 
 import { openShuffleAllModal } from '/@/renderer/features/player/components/shuffle-all-modal';
+import { preloadRoute } from '/@/renderer/router/route-preloaders';
 import { AppRoute } from '/@/renderer/router/routes';
 import { Icon } from '/@/shared/components/icon/icon';
 
@@ -23,27 +24,56 @@ export const QuickFilterChips = () => {
         void openShuffleAllModal();
     }, []);
 
+    // Hover-preload each destination's chunk so the page-transition pop is
+    // gone for users hovering before they click. Idempotent per session.
+    const preload = (route: AppRoute) => () => preloadRoute(route);
+
     return (
         <section className={styles.section}>
             <h2 className={styles.header}>{t('page.home.quickFilters_title')}</h2>
             <div className={styles.row}>
-                <Link className={styles.chip} to={AppRoute.FAVORITES}>
+                <Link
+                    className={styles.chip}
+                    onFocus={preload(AppRoute.FAVORITES)}
+                    onMouseEnter={preload(AppRoute.FAVORITES)}
+                    to={AppRoute.FAVORITES}
+                >
                     <Icon icon="favorite" />
                     {t('page.home.quickFilter_favorites')}
                 </Link>
-                <Link className={styles.chip} to={AppRoute.LIBRARY_GENRES}>
+                <Link
+                    className={styles.chip}
+                    onFocus={preload(AppRoute.LIBRARY_GENRES)}
+                    onMouseEnter={preload(AppRoute.LIBRARY_GENRES)}
+                    to={AppRoute.LIBRARY_GENRES}
+                >
                     <Icon icon="genre" />
                     {t('page.home.quickFilter_genres')}
                 </Link>
-                <Link className={styles.chip} to={AppRoute.LIBRARY_ALBUMS}>
+                <Link
+                    className={styles.chip}
+                    onFocus={preload(AppRoute.LIBRARY_ALBUMS)}
+                    onMouseEnter={preload(AppRoute.LIBRARY_ALBUMS)}
+                    to={AppRoute.LIBRARY_ALBUMS}
+                >
                     <Icon icon="album" />
                     {t('page.home.quickFilter_albums')}
                 </Link>
-                <Link className={styles.chip} to={AppRoute.LIBRARY_ALBUM_ARTISTS}>
+                <Link
+                    className={styles.chip}
+                    onFocus={preload(AppRoute.LIBRARY_ALBUM_ARTISTS)}
+                    onMouseEnter={preload(AppRoute.LIBRARY_ALBUM_ARTISTS)}
+                    to={AppRoute.LIBRARY_ALBUM_ARTISTS}
+                >
                     <Icon icon="artist" />
                     {t('page.home.quickFilter_artists')}
                 </Link>
-                <Link className={styles.chip} to={AppRoute.LIBRARY_SONGS}>
+                <Link
+                    className={styles.chip}
+                    onFocus={preload(AppRoute.LIBRARY_SONGS)}
+                    onMouseEnter={preload(AppRoute.LIBRARY_SONGS)}
+                    to={AppRoute.LIBRARY_SONGS}
+                >
                     <Icon icon="track" />
                     {t('page.home.quickFilter_tracks')}
                 </Link>

@@ -76,6 +76,14 @@ function GenreDetailContentAlbums() {
         };
     }, [fuzzyIds]);
 
+    // Don't render the list view until the fuzzy expansion has resolved at
+    // least to [primaryGenreId]. An empty genreIds array reaches the server
+    // as 'no filter' (especially on Jellyfin) and would render the entire
+    // library for a render or two during context init.
+    if (fuzzyIds.length === 0) {
+        return <Spinner container />;
+    }
+
     return (
         <Suspense fallback={<Spinner container />}>
             <AlbumListView
@@ -100,6 +108,10 @@ function GenreDetailContentSongs() {
             genreIds: fuzzyIds,
         };
     }, [fuzzyIds]);
+
+    if (fuzzyIds.length === 0) {
+        return <Spinner container />;
+    }
 
     return (
         <Suspense fallback={<Spinner container />}>
