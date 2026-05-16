@@ -293,6 +293,10 @@ export const Lyrics = ({ fadeOutNoLyricsMessage = true, settingsKey = 'default' 
 
     const credentialedServer = useCurrentServerWithCredential();
 
+    // Lock for the duration of an in-flight upload so a double-click on the
+    // 'Save to server' button doesn't fire two concurrent POSTs against the
+    // same item.
+    const savingLyricsRef = useRef(false);
     const handleSaveLyricsToServer = async () => {
         if (
             !credentialedServer ||
@@ -302,15 +306,68 @@ export const Lyrics = ({ fadeOutNoLyricsMessage = true, settingsKey = 'default' 
         ) {
             return;
         }
-        const ok = await uploadLyricsToServer({
-            itemId: currentSong.id,
-            lyrics: displayLyrics,
-            server: credentialedServer,
-        });
-        if (ok) {
-            toast.info({ message: t('form.lyricsExport.savedToServer') });
-        } else {
-            toast.error({ message: t('form.lyricsExport.saveFailed') });
+        if (savingLyricsRef.current) return;
+        savingLyricsRef.current = true;
+        try {
+            const outcome = await uploadLyricsToServer({
+                itemId: currentSong.id,
+                lyrics: displayLyrics,
+                server: credentialedServer,
+            });
+            switch (outcome.kind) {
+                case 'auth':
+                    toast.error({
+                        message: t('form.lyricsExport.saveFailed_auth', {
+                            defaultValue:
+                                "You don't have permission to upload lyrics to this server.",
+                        }),
+                    });
+                    break;
+                case 'empty':
+                    toast.warn({
+                        message: t('form.lyricsExport.saveFailed_empty', {
+                            defaultValue: 'Nothing to save — these lyrics are empty.',
+                        }),
+                    });
+                    break;
+                case 'failed':
+                    toast.error({
+                        message: t('form.lyricsExport.saveFailed', {
+                            code: String(outcome.status),
+                        }),
+                    });
+                    break;
+                case 'network':
+                    toast.error({
+                        message: t('form.lyricsExport.saveFailed_network', {
+                            defaultValue:
+                                "Couldn't reach the server. Check your connection and try again.",
+                        }),
+                    });
+                    break;
+                case 'success':
+                    toast.info({ message: t('form.lyricsExport.savedToServer') });
+                    // Bust the cached lyrics for this song so a manual refresh
+                    // (or 'Clear') re-fetches the canonical server-side copy
+                    // rather than serving the in-memory pre-upload version.
+                    if (currentSong._serverId && currentSong.id) {
+                        queryClient.invalidateQueries({
+                            queryKey: queryKeys.songs.lyrics(currentSong._serverId, {
+                                songId: currentSong.id,
+                            }),
+                        });
+                    }
+                    break;
+                case 'tooLarge':
+                    toast.error({
+                        message: t('form.lyricsExport.saveFailed_tooLarge', {
+                            defaultValue: 'Lyrics are too large to upload.',
+                        }),
+                    });
+                    break;
+            }
+        } finally {
+            savingLyricsRef.current = false;
         }
     };
 

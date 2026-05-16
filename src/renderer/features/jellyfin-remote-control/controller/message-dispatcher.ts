@@ -217,13 +217,18 @@ export async function dispatchJellyfinMessage(
         await addToQueueByData(effectivePlayType, songs);
 
         // Honor StartIndex / StartPositionTicks for fresh-queue plays too.
+        //
+        // The remote sends StartIndex relative to ItemIds (i.e. relative to
+        // the order of `songs` after fetchSongsByIds preserves ItemIds
+        // order). For the fresh-queue path we just enqueued `songs` in that
+        // same order, so we want to play `songs[startIndex]`. The default
+        // queue indexing matches songs[] order, so we pass startIndex
+        // directly — NO shuffle-map translation (the fast-path's translation
+        // exists because it's matching against an EXISTING shuffled queue;
+        // here the queue is fresh).
         if (effectivePlayType === Play.NOW) {
             if (startIndex > 0 && startIndex < songs.length) {
-                const state = usePlayerStoreBase.getState();
-                const defaultIndex = isShuffleEnabled(state)
-                    ? (state.queue.shuffled[startIndex] ?? startIndex)
-                    : startIndex;
-                state.mediaPlayByIndex(defaultIndex);
+                usePlayerStoreBase.getState().mediaPlayByIndex(startIndex);
             }
             if (startPositionTicks > 0) {
                 // Defer so the new song's media element is mounted by the
