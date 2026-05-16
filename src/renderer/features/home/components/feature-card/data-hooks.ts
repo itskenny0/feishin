@@ -25,8 +25,43 @@ import {
 // Common constants
 // ============================================================================
 
+/**
+ * Collapse duplicate songs (same track tagged on a single, album, and a
+ * compilation = three rows in Jellyfin) down to one. Libraries with heavy
+ * duplication were filling the 10-tile grid with the same track 3-4 times.
+ * We also use this list for "Play all", so dedupe at this layer fixes both
+ * the visible grid and the enqueue.
+ */
+const dedupeSongsByTitle = (songs: Song[]): Song[] => {
+    const seen = new Set<string>();
+    const out: Song[] = [];
+    for (const song of songs) {
+        // MusicBrainz recording ID is the most reliable cross-release
+        // identity when it exists; fall back to a normalized title so two
+        // slightly-different taggings of "Stronger" still collapse.
+        const key =
+            song.mbzRecordingId ||
+            song.mbzTrackId ||
+            (song.name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+        if (!key) {
+            // Don't dedupe rows with no usable key — they could legitimately
+            // be different songs that just happen to be untagged.
+            out.push(song);
+            continue;
+        }
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(song);
+    }
+    return out;
+};
+
 const MIN_SONG_COUNT = 30;
 const FALLBACK_MIN_SONG_COUNT = 10;
+// Hard floor — single-song artists are never useful for a "featured artist"
+// grid. Better to surface an explicit empty state than to dress up a
+// one-track-wonder as if it were a curated pick.
+const HARD_MIN_SONG_COUNT = 5;
 const CANDIDATE_FETCH_LIMIT = 200;
 const YEAR_POOL_RANGE: [number, number] = [1960, new Date().getFullYear()];
 
@@ -60,11 +95,17 @@ const useArtistCandidates = (serverId: string | undefined) =>
                 name: a.name,
                 songCount: a.songCount ?? null,
             }));
+            // Cascade through progressively more permissive thresholds, but
+            // never below the hard floor — the user reported single-song
+            // artists slipping through when the unfiltered `all` was returned.
             const primary = all.filter((a) => (a.songCount ?? 0) >= MIN_SONG_COUNT);
             if (primary.length >= 3) return primary;
             const fallback = all.filter((a) => (a.songCount ?? 0) >= FALLBACK_MIN_SONG_COUNT);
             if (fallback.length >= 3) return fallback;
-            return all;
+            const lastResort = all.filter((a) => (a.songCount ?? 0) >= HARD_MIN_SONG_COUNT);
+            // Even if this leaves us with 0 or 1 candidates, surface that —
+            // the variant's empty-state copy handles "no artist found".
+            return lastResort;
         },
         queryKey: ['feature-card-artists', serverId ?? ''] as const,
         staleTime: 1000 * 60 * 60,
@@ -80,17 +121,20 @@ const useArtistSongs = (artistId: null | string, serverId: string | undefined) =
         placeholderData: keepPreviousData,
         queryFn: async ({ signal }) => {
             if (!artistId || !serverId) return [] as Song[];
+            // Over-fetch so dedupeSongsByTitle still produces a full grid for
+            // libraries where the same track is tagged on a single + album +
+            // compilation. 3× is enough for typical duplication levels.
             const res = await api.controller.getSongList({
                 apiClientProps: { serverId, signal },
                 query: {
                     albumArtistIds: [artistId],
-                    limit: SONGS_PER_CARD,
+                    limit: SONGS_PER_CARD * 3,
                     sortBy: SongListSort.RANDOM,
                     sortOrder: SortOrder.DESC,
                     startIndex: 0,
                 },
             });
-            return (res?.items ?? []) as Song[];
+            return dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(0, SONGS_PER_CARD);
         },
         queryKey: ['feature-card-artist-songs', serverId ?? '', artistId ?? ''] as const,
         staleTime: 1000 * 60 * 5,
@@ -182,9 +226,9 @@ const useGenreSongs = (
             const genreParam = serverType === 'jellyfin' ? genreId : genreName;
             const res = await api.controller.getRandomSongList({
                 apiClientProps: { serverId, signal },
-                query: { genre: genreParam, limit: SONGS_PER_CARD, played: Played.All },
+                query: { genre: genreParam, limit: SONGS_PER_CARD * 3, played: Played.All },
             });
-            return (res?.items ?? []) as Song[];
+            return dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(0, SONGS_PER_CARD);
         },
         queryKey: ['feature-card-genre-songs', serverId ?? '', genreId ?? ''] as const,
         staleTime: 1000 * 60 * 5,
@@ -243,13 +287,13 @@ const useRecentlyPlayedSongs = (serverId: string | undefined) =>
             const res = await api.controller.getSongList({
                 apiClientProps: { serverId, signal },
                 query: {
-                    limit: SONGS_PER_CARD,
+                    limit: SONGS_PER_CARD * 3,
                     sortBy: SongListSort.RECENTLY_PLAYED,
                     sortOrder: SortOrder.DESC,
                     startIndex: 0,
                 },
             });
-            return (res?.items ?? []) as Song[];
+            return dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(0, SONGS_PER_CARD);
         },
         queryKey: ['feature-card-recently-played', serverId ?? ''] as const,
         staleTime: 1000 * 60 * 2,
@@ -282,13 +326,13 @@ const useTopPlayedSongs = (serverId: string | undefined) =>
             const res = await api.controller.getSongList({
                 apiClientProps: { serverId, signal },
                 query: {
-                    limit: SONGS_PER_CARD,
+                    limit: SONGS_PER_CARD * 3,
                     sortBy: SongListSort.PLAY_COUNT,
                     sortOrder: SortOrder.DESC,
                     startIndex: 0,
                 },
             });
-            return (res?.items ?? []) as Song[];
+            return dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(0, SONGS_PER_CARD);
         },
         queryKey: ['feature-card-top-played', serverId ?? ''] as const,
         staleTime: 1000 * 60 * 10,
@@ -322,13 +366,13 @@ const useFavoritesSongs = (serverId: string | undefined) =>
                 apiClientProps: { serverId, signal },
                 query: {
                     favorite: true,
-                    limit: SONGS_PER_CARD,
+                    limit: SONGS_PER_CARD * 3,
                     sortBy: SongListSort.RANDOM,
                     sortOrder: SortOrder.DESC,
                     startIndex: 0,
                 },
             });
-            return (res?.items ?? []) as Song[];
+            return dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(0, SONGS_PER_CARD);
         },
         // staleTime 0 so reshuffle truly re-randomises rather than serving cached
         queryKey: ['feature-card-favorites', serverId ?? ''] as const,
@@ -362,9 +406,9 @@ const useUnplayedSongs = (serverId: string | undefined, reseedCounter: number) =
             if (!serverId) return [] as Song[];
             const res = await api.controller.getRandomSongList({
                 apiClientProps: { serverId, signal },
-                query: { limit: SONGS_PER_CARD, played: Played.Never },
+                query: { limit: SONGS_PER_CARD * 3, played: Played.Never },
             });
-            return (res?.items ?? []) as Song[];
+            return dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(0, SONGS_PER_CARD);
         },
         // The reseed counter is part of the queryKey so reshuffle gets a fresh
         // server-side random sample instead of the cached set.
@@ -406,13 +450,13 @@ const useForgottenFavoritesSongs = (serverId: string | undefined) =>
                 apiClientProps: { serverId, signal },
                 query: {
                     favorite: true,
-                    limit: SONGS_PER_CARD,
+                    limit: SONGS_PER_CARD * 3,
                     sortBy: SongListSort.RECENTLY_PLAYED,
                     sortOrder: SortOrder.ASC,
                     startIndex: 0,
                 },
             });
-            return (res?.items ?? []) as Song[];
+            return dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(0, SONGS_PER_CARD);
         },
         queryKey: ['feature-card-forgotten', serverId ?? ''] as const,
         staleTime: 1000 * 60 * 30,
@@ -445,9 +489,14 @@ const useTimeMachineSongs = (year: null | number, serverId: string | undefined) 
             if (!year || !serverId) return [] as Song[];
             const res = await api.controller.getRandomSongList({
                 apiClientProps: { serverId, signal },
-                query: { limit: SONGS_PER_CARD, maxYear: year, minYear: year, played: Played.All },
+                query: {
+                    limit: SONGS_PER_CARD * 3,
+                    maxYear: year,
+                    minYear: year,
+                    played: Played.All,
+                },
             });
-            return (res?.items ?? []) as Song[];
+            return dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(0, SONGS_PER_CARD);
         },
         queryKey: ['feature-card-time-machine', serverId ?? '', year ?? 0] as const,
         staleTime: 1000 * 60 * 5,
@@ -525,13 +574,13 @@ const useDecadeSongs = (decadeStart: null | number, serverId: string | undefined
             const res = await api.controller.getRandomSongList({
                 apiClientProps: { serverId, signal },
                 query: {
-                    limit: SONGS_PER_CARD,
+                    limit: SONGS_PER_CARD * 3,
                     maxYear: decadeStart + 9,
                     minYear: decadeStart,
                     played: Played.All,
                 },
             });
-            return (res?.items ?? []) as Song[];
+            return dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(0, SONGS_PER_CARD);
         },
         queryKey: ['feature-card-decade', serverId ?? '', decadeStart ?? -1] as const,
         staleTime: 1000 * 60 * 5,
