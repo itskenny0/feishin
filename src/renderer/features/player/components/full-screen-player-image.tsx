@@ -36,6 +36,7 @@ import { Stack } from '/@/shared/components/stack/stack';
 import { Text } from '/@/shared/components/text/text';
 import { useSetState } from '/@/shared/hooks/use-set-state';
 import { ExplicitStatus, LibraryItem } from '/@/shared/types/domain-types';
+import { isPlausibleReleaseYear } from '/@/shared/utils/release-year';
 
 const imageVariants: Variants = {
     closed: {
@@ -209,7 +210,9 @@ export const FullScreenPlayerImage = () => {
         release_type: currentSong?.tags?.releasetype && (
             <Badge>{currentSong?.tags?.releasetype[0]}</Badge>
         ),
-        release_year: currentSong?.releaseYear && <Badge>{currentSong?.releaseYear}</Badge>,
+        release_year: isPlausibleReleaseYear(currentSong?.releaseYear) && (
+            <Badge>{currentSong?.releaseYear}</Badge>
+        ),
         sample_rate: currentSong?.sampleRate && <Badge>{currentSong?.sampleRate / 1000} kHz</Badge>,
         track_number: currentSong?.trackNumber && (
             <Badge>

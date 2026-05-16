@@ -536,7 +536,10 @@ export const GeneralSettingsSchema = z.object({
     showFilesystemNameForAlbums: z.boolean(),
     showFilesystemNameForFolders: z.boolean(),
     showLyricsInSidebar: z.boolean(),
-    showPlaybarYearChip: z.boolean(),
+    // .default(true) so a settings-file import from before this field was
+    // added (or any future version-bump-less addition) doesn't fail
+    // ValidationSettingsStateSchema.safeParse with a missing-key error.
+    showPlaybarYearChip: z.boolean().default(true),
     showRatings: z.boolean(),
     showVisualizerInSidebar: z.boolean(),
     sidebarBottomSection: z.enum(['playlists', 'favoriteAlbums', 'none']),

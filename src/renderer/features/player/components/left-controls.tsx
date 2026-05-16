@@ -51,6 +51,7 @@ import { Text } from '/@/shared/components/text/text';
 import { Tooltip } from '/@/shared/components/tooltip/tooltip';
 import { PlaybackSelectors } from '/@/shared/constants/playback-selectors';
 import { LibraryItem } from '/@/shared/types/domain-types';
+import { isPlausibleReleaseYear } from '/@/shared/utils/release-year';
 
 export const LeftControls = () => {
     const { t } = useTranslation();
@@ -236,6 +237,11 @@ export const LeftControls = () => {
                                         onFocus={preloadNowPlaying}
                                         onMouseEnter={preloadNowPlaying}
                                         overflow="hidden"
+                                        // Allow the title to shrink in a wrap:nowrap Group so the
+                                        // year chip + ellipsis menu (flex-shrink:0) stay visible
+                                        // on long titles. Without minWidth:0 a long title pushes
+                                        // both off-screen on narrow playerbars.
+                                        style={{ flex: '1 1 auto', minWidth: 0 }}
                                         to={AppRoute.NOW_PLAYING}
                                     >
                                         {title || '—'}
@@ -247,22 +253,15 @@ export const LeftControls = () => {
                                             </Text>
                                         )}
                                     </Text>
-                                    {(() => {
-                                        // Validate that the value is actually a plausible
-                                        // 4-digit year before rendering. Some tracks come
-                                        // back with releaseYear === 1 (default-init or a
-                                        // mis-parsed empty date), and rendering "1" next
-                                        // to the title looks like a bug, not a year.
-                                        const y = currentSong?.releaseYear;
-                                        if (!showYearChip || typeof y !== 'number') return null;
-                                        if (!Number.isInteger(y) || y < 1000 || y > 9999)
-                                            return null;
-                                        return (
-                                            <span className={styles.yearChip} title={String(y)}>
-                                                {y}
+                                    {showYearChip &&
+                                        isPlausibleReleaseYear(currentSong?.releaseYear) && (
+                                            <span
+                                                className={styles.yearChip}
+                                                title={String(currentSong?.releaseYear)}
+                                            >
+                                                {currentSong?.releaseYear}
                                             </span>
-                                        );
-                                    })()}
+                                        )}
                                     {isSongDefined && (
                                         <ActionIcon
                                             icon="ellipsisVertical"
