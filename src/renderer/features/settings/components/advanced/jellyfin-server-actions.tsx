@@ -6,7 +6,7 @@ import {
     SettingOption,
     SettingsSection,
 } from '/@/renderer/features/settings/components/settings-section';
-import { useCurrentServerWithCredential } from '/@/renderer/store/auth.store';
+import { useCurrentServerWithCredential, useIsAdmin } from '/@/renderer/store/auth.store';
 import { getServerUrl } from '/@/renderer/utils/normalize-server-url';
 import { Button } from '/@/shared/components/button/button';
 import { toast } from '/@/shared/components/toast/toast';
@@ -25,6 +25,7 @@ import { ServerType } from '/@/shared/types/domain-types';
 export const JellyfinServerActions = memo(() => {
     const { t } = useTranslation();
     const server = useCurrentServerWithCredential();
+    const { isAdmin } = useIsAdmin();
     const [scanning, setScanning] = useState(false);
 
     const handleTriggerLibraryScan = useCallback(async () => {
@@ -57,7 +58,10 @@ export const JellyfinServerActions = memo(() => {
         }
     }, [server, t]);
 
-    if (!server || server.type !== ServerType.JELLYFIN) return null;
+    // Hide the entire section for non-Jellyfin servers and for non-admin
+    // Jellyfin users — POST /Library/Refresh requires Administrator scope
+    // and clicking the button as a non-admin only produces a 403 toast.
+    if (!server || server.type !== ServerType.JELLYFIN || !isAdmin) return null;
 
     const options: SettingOption[] = [
         {
@@ -73,7 +77,7 @@ export const JellyfinServerActions = memo(() => {
                         : t('setting.jellyfinAdmin_scanLibrary')}
                 </Button>
             ),
-            description: t('setting.jellyfinAdmin_scanLibrary', { context: 'description' }),
+            description: t('setting.jellyfinAdmin_scanLibrary_description'),
             isHidden: false,
             title: t('setting.jellyfinAdmin_scanLibrary'),
         },
