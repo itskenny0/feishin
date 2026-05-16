@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { generatePath, Link } from 'react-router';
 
@@ -32,7 +32,21 @@ const hashStringToInt = (s: string): number => {
     return h;
 };
 
-const useAlbumOfTheDayCandidates = (serverId: string | undefined) =>
+/**
+ * YYYY-MM-DD in the user's LOCAL timezone. Previous implementation used
+ * `new Date().toISOString().slice(0,10)` which is UTC — a US-Pacific user
+ * would see the album-of-the-day flip at 4 PM local. Using local means the
+ * rollover happens at the user's actual midnight.
+ */
+const localDateKey = (): string => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${dd}`;
+};
+
+const useAlbumOfTheDayCandidates = (serverId: string | undefined, dateKey: string) =>
     useQuery({
         enabled: Boolean(serverId),
         gcTime: 1000 * 60 * 60 * 24,
@@ -58,29 +72,40 @@ const useAlbumOfTheDayCandidates = (serverId: string | undefined) =>
         // staleTime 24h so we don't re-roll mid-day; the candidate pool is
         // refreshed on the next calendar day either way (via the queryKey
         // including the date string).
-        queryKey: [
-            'feature-card-album-of-the-day-pool',
-            serverId ?? '',
-            new Date().toISOString().slice(0, 10),
-        ] as const,
+        queryKey: ['feature-card-album-of-the-day-pool', serverId ?? '', dateKey] as const,
         staleTime: 1000 * 60 * 60 * 24,
     });
 
-interface AlbumOfTheDayCardProps {
-    /** If true, hide the "Play album" button — used inside Surprise me to avoid
-     *  duplicating UI conventions across variants. */
-    compact?: boolean;
-}
+/**
+ * Tracks the local date key and re-renders consumers when midnight crosses,
+ * so a session that stays open past midnight rolls over to the next day's
+ * pick without needing a manual reload.
+ */
+const useLocalDateKey = (): string => {
+    const [date, setDate] = useState(localDateKey);
+    useEffect(() => {
+        // Sample every minute. Cheap; ensures the rollover happens within a
+        // minute of local midnight rather than waiting for the next render.
+        const interval = setInterval(() => {
+            const now = localDateKey();
+            setDate((prev) => (prev === now ? prev : now));
+        }, 60_000);
+        return () => clearInterval(interval);
+    }, []);
+    return date;
+};
 
-export const AlbumOfTheDayCard = ({ compact = false }: AlbumOfTheDayCardProps) => {
+export const AlbumOfTheDayCard = () => {
     const { t } = useTranslation();
     const server = useCurrentServer();
     const serverId = server?.id;
     const { addToQueueByData } = usePlayer();
 
-    const { data: candidates, isLoading: candidatesLoading } = useAlbumOfTheDayCandidates(serverId);
-
-    const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
+    const today = useLocalDateKey();
+    const { data: candidates, isLoading: candidatesLoading } = useAlbumOfTheDayCandidates(
+        serverId,
+        today,
+    );
 
     const featured = useMemo<Album | null>(() => {
         if (!candidates || candidates.length === 0) return null;
@@ -201,18 +226,16 @@ export const AlbumOfTheDayCard = ({ compact = false }: AlbumOfTheDayCardProps) =
                             t('page.home.featureAlbumOfTheDay_loading')
                         )}
                     </span>
-                    {!compact && (
-                        <div className={styles.actions}>
-                            <Button
-                                disabled={!detail?.songs || detail.songs.length === 0}
-                                leftSection={<Icon icon="mediaPlay" />}
-                                onClick={handlePlay}
-                                variant="filled"
-                            >
-                                {t('page.home.featureAlbumOfTheDay_play')}
-                            </Button>
-                        </div>
-                    )}
+                    <div className={styles.actions}>
+                        <Button
+                            disabled={!detail?.songs || detail.songs.length === 0}
+                            leftSection={<Icon icon="mediaPlay" />}
+                            onClick={handlePlay}
+                            variant="filled"
+                        >
+                            {t('page.home.featureAlbumOfTheDay_play')}
+                        </Button>
+                    </div>
                 </div>
             </div>
         </div>

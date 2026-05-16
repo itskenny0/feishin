@@ -9,6 +9,7 @@ import {
     SONGS_PER_CARD,
 } from '/@/renderer/features/home/components/feature-card/feature-card-shell';
 import { usePoolRotation } from '/@/renderer/features/home/components/feature-card/use-pool-rotation';
+import { isCleanGenreName } from '/@/renderer/features/home/utils/genre-filter';
 import { AppRoute } from '/@/renderer/router/routes';
 import {
     AlbumArtist,
@@ -31,18 +32,29 @@ import {
  * duplication were filling the 10-tile grid with the same track 3-4 times.
  * We also use this list for "Play all", so dedupe at this layer fixes both
  * the visible grid and the enqueue.
+ *
+ * Important: the title-only fallback is SCOPED PER ARTIST. Without this,
+ * across a mixed-artist grid (favorites, top-played, recently-played), a
+ * song called "Intro" by Artist A and a totally different "Intro" by
+ * Artist B would collide and one would silently drop out — a real concern
+ * for libraries heavy on Monstercat / electronic compilations where
+ * generic titles ("Intro", "Outro", "Sunshine", "Stay") are common.
  */
 const dedupeSongsByTitle = (songs: Song[]): Song[] => {
     const seen = new Set<string>();
     const out: Song[] = [];
     for (const song of songs) {
         // MusicBrainz recording ID is the most reliable cross-release
-        // identity when it exists; fall back to a normalized title so two
-        // slightly-different taggings of "Stronger" still collapse.
-        const key =
-            song.mbzRecordingId ||
-            song.mbzTrackId ||
-            (song.name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+        // identity when it exists; fall back to a normalized title +
+        // artist so two slightly-different taggings of "Stronger" by the
+        // same artist still collapse, but "Stronger" by two different
+        // artists don't.
+        const title = (song.name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+        const artist = (song.artistName || song.albumArtistName || '')
+            .trim()
+            .toLowerCase()
+            .replace(/\s+/g, ' ');
+        const key = song.mbzRecordingId || song.mbzTrackId || (title ? `${artist}::${title}` : '');
         if (!key) {
             // Don't dedupe rows with no usable key — they could legitimately
             // be different songs that just happen to be untagged.
@@ -176,6 +188,15 @@ export const useArtistFeatureData = (
     const [shown, setShown] = useState<null | ShownArtist>(null);
     const skipCountRef = useRef(0);
 
+    // Reset `shown` and the skip counter when the server changes — without
+    // this, switching servers would leave the previous server's artist on
+    // screen (and its titleHref would point at a dead route on the new
+    // server) until the new candidate pool settled.
+    useEffect(() => {
+        skipCountRef.current = 0;
+        setShown(null);
+    }, [serverId]);
+
     useEffect(() => {
         if (isFetching || isLoading || !songs || !current) return;
         const exhausted = skipCountRef.current >= MAX_SINGLE_SONG_AUTO_SKIPS;
@@ -293,7 +314,10 @@ const useGenreSongs = (
     useQuery({
         enabled: Boolean(genreId && serverId),
         gcTime: 1000 * 60 * 30,
-        placeholderData: keepPreviousData,
+        // No keepPreviousData: when the user clicks prev/next or the 30s
+        // rotation fires, we want the grid to clear immediately so the
+        // title and songs are never out of sync. Brief skeleton flash is
+        // acceptable; lingering wrong-genre songs under a new title is not.
         queryFn: async ({ signal }) => {
             if (!genreId || !serverId) return [] as Song[];
             // Jellyfin uses genre id; navidrome/subsonic use genre name. Pass the
@@ -308,22 +332,6 @@ const useGenreSongs = (
         queryKey: ['feature-card-genre-songs', serverId ?? '', genreId ?? ''] as const,
         staleTime: 1000 * 60 * 5,
     });
-
-/**
- * Drop junk multi-tag genre names ('rap;50 Cent;...', 'Genre: Subgenre', etc.)
- * before they end up in the rotation. Same heuristic as the home-grid filter.
- */
-const isCleanGenreName = (name: string): boolean => {
-    if (!name) return false;
-    const trimmed = name.trim();
-    if (trimmed.length === 0 || trimmed.length > 40) return false;
-    if (trimmed.includes(';')) return false;
-    if (trimmed.includes(':')) return false;
-    if (/\d{3,}/.test(trimmed)) return false;
-    if ((trimmed.match(/,/g) || []).length >= 4) return false;
-    const letterCount = (trimmed.match(/[a-zA-Z]/g) || []).length;
-    return letterCount * 2 >= trimmed.length;
-};
 
 export const useGenreFeatureData = (
     serverId: string | undefined,
@@ -515,12 +523,28 @@ const useUnplayedSongs = (serverId: string | undefined, reseedCounter: number) =
 
 export const useUnplayedFeatureData = (
     serverId: string | undefined,
+    serverType: string | undefined,
     t: TFunction,
 ): FeatureCardData => {
+    // Played.Never is only honored by Jellyfin's controller. Subsonic/
+    // Navidrome's getRandomSongList does not forward the played filter, so
+    // we'd silently return a random *all*-songs sample under the "Tracks
+    // you've never played" label. Surface an explicit empty state rather
+    // than misrepresenting the data.
+    const unsupported = serverType !== undefined && serverType !== 'jellyfin';
     // Use the rotation index as a reseed nonce; pool size of 100 is arbitrary —
     // we never have 100 different samples but each reshuffle just increments.
-    const { index, reshuffle } = usePoolRotation(100);
-    const { data: songs, isLoading } = useUnplayedSongs(serverId, index);
+    const { index, reshuffle } = usePoolRotation(unsupported ? 0 : 100);
+    const { data: songs, isLoading } = useUnplayedSongs(unsupported ? undefined : serverId, index);
+    if (unsupported) {
+        return {
+            eyebrow: t('page.home.featureUnplayed_eyebrow'),
+            isLoading: false,
+            songs: [],
+            subtitle: t('page.home.featureVariant_unsupported_subtitle'),
+            title: t('page.home.featureVariant_unsupported_title'),
+        };
+    }
     return {
         eyebrow: t('page.home.featureUnplayed_eyebrow'),
         isLoading,
@@ -581,7 +605,10 @@ export const useForgottenFavoritesFeatureData = (
 const useTimeMachineSongs = (year: null | number, serverId: string | undefined) =>
     useQuery({
         enabled: Boolean(year && serverId),
-        placeholderData: keepPreviousData,
+        // No keepPreviousData: the auto-skip below can churn the year
+        // multiple times in succession. The 2-tier `shown` state below
+        // hides those transitions from the user; React-Query keeping
+        // stale data here would just confuse the dispatch path.
         queryFn: async ({ signal }) => {
             if (!year || !serverId) return [] as Song[];
             const res = await api.controller.getRandomSongList({
@@ -605,6 +632,12 @@ const useTimeMachineSongs = (year: null | number, serverId: string | undefined) 
 // O(retries) in network calls, not O(years).
 const MAX_AUTO_SKIP_RETRIES = 30;
 
+interface ShownTimeMachine {
+    idx: number;
+    songs: Song[];
+    year: number;
+}
+
 export const useTimeMachineFeatureData = (
     serverId: string | undefined,
     t: TFunction,
@@ -620,41 +653,69 @@ export const useTimeMachineFeatureData = (
     const year = yearPool[index % yearPool.length];
     const { data: songs, isFetching, isLoading } = useTimeMachineSongs(year, serverId);
 
-    // The picked year may have zero tracks in this user's library. Auto-skip
-    // up to N times to a different year so the user doesn't have to hammer
-    // reshuffle to find a populated era. After N attempts we give up and
-    // show the empty state so the cycle doesn't burn requests forever on
-    // libraries with very few year tags.
+    // Two-tier state: the auto-skip below may try several empty years before
+    // landing on one with tracks. Without this, the title would flash
+    // 1923→1956→1991 while the grid stayed empty. `shown` holds the last
+    // year we successfully rendered; we only swap to a new year once its
+    // songs are validated.
+    const [shown, setShown] = useState<null | ShownTimeMachine>(null);
+    const [retriesExhausted, setRetriesExhausted] = useState(false);
     const retryCountRef = useRef(0);
     useEffect(() => {
-        if (isFetching || isLoading) return;
-        if (!songs) return;
+        // Clear cross-server state.
+        retryCountRef.current = 0;
+        setRetriesExhausted(false);
+        setShown(null);
+    }, [serverId]);
+    useEffect(() => {
+        if (isFetching || isLoading || !songs || !year) return;
         if (songs.length > 0) {
             retryCountRef.current = 0;
+            setRetriesExhausted(false);
+            setShown({ idx: index, songs, year });
             return;
         }
         if (retryCountRef.current < MAX_AUTO_SKIP_RETRIES) {
             retryCountRef.current += 1;
             reshuffle();
+        } else {
+            // Give up. Surface a generic empty state rather than naming the
+            // specific year we just gave up on — that reads as "1962 has
+            // nothing" rather than "we couldn't find a populated year".
+            setRetriesExhausted(true);
         }
-    }, [isFetching, isLoading, reshuffle, songs]);
+    }, [isFetching, isLoading, reshuffle, songs, year, index]);
 
-    const empty = !isLoading && !isFetching && (songs?.length ?? 0) === 0;
+    const handlePrev = useCallback(() => {
+        retryCountRef.current = 0;
+        setRetriesExhausted(false);
+        setShown(null);
+        goPrev();
+    }, [goPrev]);
+    const handleNext = useCallback(() => {
+        retryCountRef.current = 0;
+        setRetriesExhausted(false);
+        setShown(null);
+        goNext();
+    }, [goNext]);
+    const handleReshuffle = useCallback(() => {
+        retryCountRef.current = 0;
+        setRetriesExhausted(false);
+        setShown(null);
+        reshuffle();
+    }, [reshuffle]);
 
     return {
         eyebrow: t('page.home.featureTimeMachine_eyebrow'),
-        isLoading,
-        onNext: yearPool.length > 1 ? goNext : undefined,
-        onPrev: yearPool.length > 1 ? goPrev : undefined,
-        onReshuffle: () => {
-            retryCountRef.current = 0;
-            reshuffle();
-        },
+        isLoading: isLoading || (!shown && !retriesExhausted),
+        onNext: yearPool.length > 1 ? handleNext : undefined,
+        onPrev: yearPool.length > 1 ? handlePrev : undefined,
+        onReshuffle: handleReshuffle,
         rotationCount: yearPool.length,
-        rotationIndex: index,
-        songs: songs ?? [],
-        subtitle: empty ? t('page.home.featureTimeMachine_empty') : undefined,
-        title: String(year),
+        rotationIndex: shown?.idx ?? index,
+        songs: shown?.songs ?? [],
+        subtitle: retriesExhausted ? t('page.home.featureTimeMachine_empty') : undefined,
+        title: shown ? String(shown.year) : t('page.home.featureVariant_empty_title'),
     };
 };
 
@@ -665,7 +726,7 @@ export const useTimeMachineFeatureData = (
 const useDecadeSongs = (decadeStart: null | number, serverId: string | undefined) =>
     useQuery({
         enabled: Boolean(decadeStart !== null && serverId),
-        placeholderData: keepPreviousData,
+        // See useTimeMachineSongs — no keepPreviousData here either.
         queryFn: async ({ signal }) => {
             if (decadeStart === null || !serverId) return [] as Song[];
             const res = await api.controller.getRandomSongList({
@@ -683,6 +744,12 @@ const useDecadeSongs = (decadeStart: null | number, serverId: string | undefined
         staleTime: 1000 * 60 * 5,
     });
 
+interface ShownDecade {
+    decade: number;
+    idx: number;
+    songs: Song[];
+}
+
 export const useDecadeDiveFeatureData = (
     serverId: string | undefined,
     t: TFunction,
@@ -699,39 +766,67 @@ export const useDecadeDiveFeatureData = (
     const decade = decades[index % decades.length];
     const { data: songs, isFetching, isLoading } = useDecadeSongs(decade, serverId);
 
-    // Same auto-skip pattern as time machine: decades with no tracks are
-    // skipped without making the user click reshuffle. Lower retry budget
-    // because there are only ~7 decades.
+    // Same 2-tier state machine as time-machine: hide auto-skip transitions
+    // from the user. Retry budget = decades.length - 1 so even on a sparse
+    // library we exhaustively try every decade before giving up; the
+    // previous magic-number 4 left 26% of cold loads stuck on the empty
+    // state on libraries with gaps.
+    const [shown, setShown] = useState<null | ShownDecade>(null);
+    const [retriesExhausted, setRetriesExhausted] = useState(false);
     const retryCountRef = useRef(0);
+    const maxRetries = Math.max(decades.length - 1, 1);
     useEffect(() => {
-        if (isFetching || isLoading || !songs) return;
+        retryCountRef.current = 0;
+        setRetriesExhausted(false);
+        setShown(null);
+    }, [serverId]);
+    useEffect(() => {
+        if (isFetching || isLoading || !songs || decade === undefined) return;
         if (songs.length > 0) {
             retryCountRef.current = 0;
+            setRetriesExhausted(false);
+            setShown({ decade, idx: index, songs });
             return;
         }
-        if (retryCountRef.current < 4) {
+        if (retryCountRef.current < maxRetries) {
             retryCountRef.current += 1;
             reshuffle();
+        } else {
+            setRetriesExhausted(true);
         }
-    }, [isFetching, isLoading, reshuffle, songs]);
+    }, [isFetching, isLoading, reshuffle, songs, decade, index, maxRetries]);
 
-    const empty = !isLoading && !isFetching && (songs?.length ?? 0) === 0;
+    const handlePrev = useCallback(() => {
+        retryCountRef.current = 0;
+        setRetriesExhausted(false);
+        setShown(null);
+        goPrev();
+    }, [goPrev]);
+    const handleNext = useCallback(() => {
+        retryCountRef.current = 0;
+        setRetriesExhausted(false);
+        setShown(null);
+        goNext();
+    }, [goNext]);
+    const handleReshuffle = useCallback(() => {
+        retryCountRef.current = 0;
+        setRetriesExhausted(false);
+        setShown(null);
+        reshuffle();
+    }, [reshuffle]);
 
     return {
         eyebrow: t('page.home.featureDecade_eyebrow'),
-        isLoading,
-        onNext: decades.length > 1 ? goNext : undefined,
-        onPrev: decades.length > 1 ? goPrev : undefined,
-        onReshuffle: () => {
-            retryCountRef.current = 0;
-            reshuffle();
-        },
+        isLoading: isLoading || (!shown && !retriesExhausted),
+        onNext: decades.length > 1 ? handleNext : undefined,
+        onPrev: decades.length > 1 ? handlePrev : undefined,
+        onReshuffle: handleReshuffle,
         rotationCount: decades.length,
-        rotationIndex: index,
-        songs: songs ?? [],
-        subtitle: empty
+        rotationIndex: shown?.idx ?? index,
+        songs: shown?.songs ?? [],
+        subtitle: retriesExhausted
             ? t('page.home.featureTimeMachine_empty')
             : t('page.home.featureDecade_subtitle'),
-        title: `${decade}s`,
+        title: shown ? `${shown.decade}s` : t('page.home.featureVariant_empty_title'),
     };
 };

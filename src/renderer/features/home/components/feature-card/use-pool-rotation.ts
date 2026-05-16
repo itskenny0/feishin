@@ -15,20 +15,32 @@ const pickRandomIndex = (length: number, exclude: null | number = null): number 
 /**
  * Auto-rotation through a pool of candidates. Picks a random index initially,
  * advances every {@link ROTATE_INTERVAL_MS} ms, and reshuffles on demand.
- * Rotation pauses while {@link pausedRef} resolves to true (typically a mouse-
- * enter hover flag), but this hook owns the timer either way.
+ * Rotation pauses while a feature card is hovered (`hover-signal.ts`).
  *
- * Returns {index, reshuffle, paused-tracker setters} for the consumer.
+ * Returns {index, goPrev, goNext, reshuffle}.
  */
 export const usePoolRotation = (poolSize: number) => {
-    const [index, setIndex] = useState(0);
+    // We track both the index AND the pool size it was picked against so we
+    // can detect when the pool first transitions from 0 → N and synchronously
+    // re-pick during the same render. Without this, the first render with a
+    // populated pool would see `index = 0`, which the caller would use to
+    // index pool[0] and fire a wasted song-list fetch for an item we never
+    // intend to display (auto-rotation immediately moves to a random index).
+    const [state, setState] = useState<{ index: number; sizeAtPick: number }>({
+        index: 0,
+        sizeAtPick: 0,
+    });
 
-    // Reset to a random starting point whenever the pool changes size — picking
-    // 0 every time would mean the same item shows on every home-page visit.
-    useEffect(() => {
-        if (poolSize === 0) return;
-        setIndex(pickRandomIndex(poolSize));
-    }, [poolSize]);
+    // Synchronous in-render reseed when the pool changes size. React allows
+    // setState during render as long as it's gated by a condition that
+    // converges (here: sizeAtPick === poolSize after the update). On the
+    // restarted render the new index is used immediately, so the caller
+    // never sees the stale pool[0] state.
+    if (poolSize > 0 && state.sizeAtPick !== poolSize) {
+        setState({ index: pickRandomIndex(poolSize), sizeAtPick: poolSize });
+    }
+
+    const index = state.index;
 
     // Re-arm the rotation timer whenever the index changes — either from the
     // auto-rotation itself or from manual prev/next/reshuffle. This way a
@@ -47,7 +59,10 @@ export const usePoolRotation = (poolSize: number) => {
                 timer = setTimeout(tick, 1_000);
                 return;
             }
-            setIndex((prev) => pickRandomIndex(poolSize, prev));
+            setState((prev) => ({
+                index: pickRandomIndex(poolSize, prev.index),
+                sizeAtPick: poolSize,
+            }));
         };
         timer = setTimeout(tick, ROTATE_INTERVAL_MS);
         return () => {
@@ -58,7 +73,10 @@ export const usePoolRotation = (poolSize: number) => {
 
     const reshuffle = useCallback(() => {
         if (poolSize === 0) return;
-        setIndex((prev) => pickRandomIndex(poolSize, prev));
+        setState((prev) => ({
+            index: pickRandomIndex(poolSize, prev.index),
+            sizeAtPick: poolSize,
+        }));
     }, [poolSize]);
 
     // Sequential navigation — used by the prev/next arrows on the shell. Wraps
@@ -66,12 +84,18 @@ export const usePoolRotation = (poolSize: number) => {
     // current position.
     const goPrev = useCallback(() => {
         if (poolSize === 0) return;
-        setIndex((prev) => (prev - 1 + poolSize) % poolSize);
+        setState((prev) => ({
+            index: (prev.index - 1 + poolSize) % poolSize,
+            sizeAtPick: poolSize,
+        }));
     }, [poolSize]);
 
     const goNext = useCallback(() => {
         if (poolSize === 0) return;
-        setIndex((prev) => (prev + 1) % poolSize);
+        setState((prev) => ({
+            index: (prev.index + 1) % poolSize,
+            sizeAtPick: poolSize,
+        }));
     }, [poolSize]);
 
     return { goNext, goPrev, index, reshuffle };
