@@ -1,6 +1,7 @@
 import clsx from 'clsx';
 import { AnimatePresence, motion } from 'motion/react';
-import { MouseEvent, useMemo } from 'react';
+import { MouseEvent, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 
 import styles from './sidebar.module.css';
@@ -43,6 +44,7 @@ import { ImageUnloader } from '/@/shared/components/image/image';
 import { ScrollArea } from '/@/shared/components/scroll-area/scroll-area';
 import { Text } from '/@/shared/components/text/text';
 import { Tooltip } from '/@/shared/components/tooltip/tooltip';
+import { useDisclosure } from '/@/shared/hooks/use-disclosure';
 import { ExplicitStatus, LibraryItem } from '/@/shared/types/domain-types';
 import { Platform } from '/@/shared/types/types';
 
@@ -189,6 +191,11 @@ const SidebarImage = () => {
         setFullScreenPlayerStore({ expanded: !isFullScreenPlayerExpanded });
     };
 
+    // Zoom lightbox state — separate from the full-screen player so the user
+    // can briefly inspect cover art without opening the whole player UI.
+    const [isZoomOpen, zoomHandlers] = useDisclosure(false);
+    const zoomImageUrl = isRadioActive ? radioImageUrl : imageUrl;
+
     const handleToggleContextMenu = (e: MouseEvent<HTMLDivElement>) => {
         e.preventDefault();
         e.stopPropagation();
@@ -248,6 +255,29 @@ const SidebarImage = () => {
                 )}
             </Tooltip>
             <ActionIcon
+                icon="expand"
+                iconProps={{
+                    size: 'lg',
+                }}
+                onClick={(e) => {
+                    e.stopPropagation();
+                    if (!zoomImageUrl) return;
+                    zoomHandlers.open();
+                }}
+                opacity={0.8}
+                radius="md"
+                style={{
+                    cursor: 'default',
+                    position: 'absolute',
+                    right: '3.5rem',
+                    top: '1rem',
+                }}
+                tooltip={{
+                    label: t('common.zoom', { defaultValue: 'Zoom' }),
+                    openDelay: 500,
+                }}
+            />
+            <ActionIcon
                 icon="arrowDownS"
                 iconProps={{
                     size: 'lg',
@@ -269,6 +299,61 @@ const SidebarImage = () => {
                     openDelay: 500,
                 }}
             />
+            <ImageZoomLightbox
+                imageUrl={zoomImageUrl}
+                onClose={zoomHandlers.close}
+                opened={isZoomOpen}
+            />
         </motion.div>
+    );
+};
+
+/**
+ * Full-window lightbox for the currently playing album art. Renders into a
+ * portal so the sidebar's overflow:hidden doesn't clip it, and bails out via
+ * Escape and backdrop click. Image scales to viewport height with an aspect-
+ * preserving max-width.
+ */
+const ImageZoomLightbox = ({
+    imageUrl,
+    onClose,
+    opened,
+}: {
+    imageUrl: null | string | undefined;
+    onClose: () => void;
+    opened: boolean;
+}) => {
+    const { t } = useTranslation();
+
+    useEffect(() => {
+        if (!opened) return undefined;
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') onClose();
+        };
+        document.addEventListener('keydown', onKey);
+        return () => document.removeEventListener('keydown', onKey);
+    }, [opened, onClose]);
+
+    if (!opened || !imageUrl) return null;
+
+    return createPortal(
+        <div className={styles.zoomOverlay} onClick={onClose} role="dialog">
+            <img
+                alt=""
+                className={styles.zoomImage}
+                onClick={(e) => e.stopPropagation()}
+                src={imageUrl}
+            />
+            <ActionIcon
+                aria-label={t('common.close')}
+                className={styles.zoomCloseButton}
+                icon="x"
+                iconProps={{ size: 'xl' }}
+                onClick={onClose}
+                radius="md"
+                tooltip={{ label: t('common.close'), openDelay: 500 }}
+            />
+        </div>,
+        document.body,
     );
 };

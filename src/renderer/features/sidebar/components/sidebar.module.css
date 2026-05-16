@@ -56,6 +56,66 @@
     filter: blur(20px);
 }
 
+.zoom-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4vh 4vw;
+    cursor: zoom-out;
+    background: rgb(0 0 0 / 88%);
+    backdrop-filter: blur(8px);
+    animation: zoom-overlay-fade-in 180ms ease-out;
+}
+
+@keyframes zoom-overlay-fade-in {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+.zoom-image {
+    max-width: 100%;
+    max-height: 100%;
+    cursor: default;
+    object-fit: contain;
+    border-radius: var(--theme-radius-md);
+    box-shadow: 0 24px 64px rgb(0 0 0 / 60%);
+    animation: zoom-image-pop 220ms cubic-bezier(0.2, 0.9, 0.3, 1.1);
+}
+
+@keyframes zoom-image-pop {
+    from {
+        opacity: 0;
+        transform: scale(0.92);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.zoom-close-button {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    z-index: 10000;
+    color: white;
+    background: rgb(0 0 0 / 40%);
+    backdrop-filter: blur(8px);
+}
+
+.zoom-close-button:hover {
+    background: rgb(0 0 0 / 60%);
+}
+
 .accordion-root {
     height: 100%;
 }
