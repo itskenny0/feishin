@@ -7,7 +7,13 @@
     position: relative;
     display: flex;
     width: 100%;
-    min-height: 280px;
+
+    /* Lock the card height — variable-length artist names were resizing
+       the card between rotations, which made `top: 50%` arrows slide up
+       and down. Fixed height keeps the arrows anchored at the same point. */
+    height: 300px;
+    min-height: 300px;
+    max-height: 300px;
     margin-bottom: var(--theme-spacing-md);
     container-type: inline-size;
     overflow: hidden;
@@ -157,6 +163,13 @@
 
 .artist-name {
     display: -webkit-box;
+
+    /* Reserve exactly 2 lines of vertical space regardless of how many
+       lines the title actually wraps to. Without this, switching from a
+       2-line title to a 1-line title was changing the info-pane height,
+       which fed back into the card's overall layout and could nudge the
+       nav arrows visually even with a locked card height. */
+    min-height: calc(1.05em * 2);
     overflow: hidden;
     text-overflow: ellipsis;
     -webkit-line-clamp: 2;
