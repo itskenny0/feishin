@@ -56,12 +56,6 @@ const dedupeSongsByTitle = (songs: Song[]): Song[] => {
     return out;
 };
 
-const MIN_SONG_COUNT = 30;
-const FALLBACK_MIN_SONG_COUNT = 10;
-// Hard floor — single-song artists are never useful for a "featured artist"
-// grid. Better to surface an explicit empty state than to dress up a
-// one-track-wonder as if it were a curated pick.
-const HARD_MIN_SONG_COUNT = 5;
 const CANDIDATE_FETCH_LIMIT = 200;
 const YEAR_POOL_RANGE: [number, number] = [1960, new Date().getFullYear()];
 
@@ -95,26 +89,26 @@ const useArtistCandidates = (serverId: string | undefined) =>
                 name: a.name,
                 songCount: a.songCount ?? null,
             }));
-            // Cascade through progressively more permissive thresholds, but
-            // never below the hard floor — the user reported single-song
-            // artists slipping through when the unfiltered `all` was returned.
+
+            // The user's original ask: 'single-song artists should never
+            // appear'. Take that literally — drop only artists with a
+            // *known* songCount < 2. Null counts (server omits SongCount)
+            // pass through, so we never end up with an empty pool just
+            // because the API didn't return the count.
             //
-            // Null songCount is treated as "unknown but acceptable" (mapped to
-            // Infinity for the comparison). Without this, servers that don't
-            // populate SongCount in the response would produce an empty pool
-            // and the card would never load. Only artists with KNOWN low
-            // counts are filtered out.
-            const songCount = (a: ArtistCandidate) => a.songCount ?? Infinity;
-            const primary = all.filter((a) => songCount(a) >= MIN_SONG_COUNT);
-            if (primary.length >= 3) return primary;
-            const fallback = all.filter((a) => songCount(a) >= FALLBACK_MIN_SONG_COUNT);
-            if (fallback.length >= 3) return fallback;
-            const lastResort = all.filter((a) => songCount(a) >= HARD_MIN_SONG_COUNT);
-            // Even if this leaves us with 0 or 1 candidates, surface that —
-            // the variant's empty-state copy handles "no artist found".
-            return lastResort;
+            // Earlier iterations of this code had a tiered cascade
+            // (>=30 → >=10 → >=5) which produced a permanently empty
+            // pool on servers that didn't populate SongCount at all.
+            const usable = all.filter((a) => a.songCount === null || a.songCount >= 2);
+
+            // Last-ditch fallback: tiny libraries where every artist has
+            // exactly one song still get a working card rather than the
+            // 'Nothing to feature yet' state — better to show something.
+            return usable.length > 0 ? usable : all;
         },
-        queryKey: ['feature-card-artists', serverId ?? ''] as const,
+        // v2 — invalidate any stale empty-result cache from the previous
+        // tiered-filter version that some clients may have persisted.
+        queryKey: ['feature-card-artists-v2', serverId ?? ''] as const,
         staleTime: 1000 * 60 * 60,
     });
 
