@@ -1,10 +1,11 @@
-import { useCallback, useEffect } from 'react';
+import { MouseEvent as ReactMouseEvent, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 
 import styles from './feature-card-shell.module.css';
 
 import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
+import { ContextMenuController } from '/@/renderer/features/context-menu/context-menu-controller';
 import { setFeatureCardHovered } from '/@/renderer/features/home/components/feature-card/hover-signal';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
 import { Button } from '/@/shared/components/button/button';
@@ -48,7 +49,15 @@ export interface FeatureCardData {
     titleHref?: string;
 }
 
-const SongTile = ({ onClick, song }: { onClick: (song: Song) => void; song: Song }) => {
+const SongTile = ({
+    onClick,
+    onContextMenu,
+    song,
+}: {
+    onClick: (song: Song) => void;
+    onContextMenu: (e: ReactMouseEvent<HTMLButtonElement>, song: Song) => void;
+    song: Song;
+}) => {
     const imageUrl = useItemImageUrl({
         id: song.imageId || undefined,
         imageUrl: song.imageUrl || undefined,
@@ -60,6 +69,7 @@ const SongTile = ({ onClick, song }: { onClick: (song: Song) => void; song: Song
         <button
             className={styles.songTile}
             onClick={() => onClick(song)}
+            onContextMenu={(e) => onContextMenu(e, song)}
             title={song.name}
             type="button"
         >
@@ -124,6 +134,20 @@ export const FeatureCardShell = ({
         [addToQueueByData, data.songs],
     );
 
+    // Right-click on a tile opens the standard song context menu (queue,
+    // add-to-playlist, info, etc.) — same controller used by the library
+    // views, so the menu items stay consistent. The `items` array carries
+    // the clicked song so single-item actions target it; multi-select isn't
+    // meaningful from a grid tile so we hand off just the one.
+    const handleContextMenu = useCallback((e: ReactMouseEvent<HTMLButtonElement>, song: Song) => {
+        e.preventDefault();
+        e.stopPropagation();
+        ContextMenuController.call({
+            cmd: { items: [song], type: LibraryItem.SONG },
+            event: e,
+        });
+    }, []);
+
     // Hover state is forwarded to a module-level signal that usePoolRotation
     // reads on every tick. Avoids prop drilling through every variant and
     // keeps Surprise Me's outer rotation honoring the same pause.
@@ -183,7 +207,12 @@ export const FeatureCardShell = ({
                         data.songs
                             .slice(0, SONGS_PER_CARD)
                             .map((song) => (
-                                <SongTile key={song.id} onClick={handlePlayFromSong} song={song} />
+                                <SongTile
+                                    key={song.id}
+                                    onClick={handlePlayFromSong}
+                                    onContextMenu={handleContextMenu}
+                                    song={song}
+                                />
                             ))
                     )}
                 </div>
