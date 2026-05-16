@@ -141,6 +141,13 @@ const useArtistSongs = (artistId: null | string, serverId: string | undefined) =
         staleTime: 1000 * 60 * 5,
     });
 
+// Cap how often we auto-advance past a known-single-song artist before
+// giving up. On a library full of single-track features this could otherwise
+// loop hundreds of times. 20 is a comfortable budget — even with 90% of the
+// random candidate pool being singles, the expected number of attempts to
+// find an artist with ≥2 songs is ≪ 20.
+const MAX_SINGLE_SONG_AUTO_SKIPS = 20;
+
 export const useArtistFeatureData = (
     serverId: string | undefined,
     t: TFunction,
@@ -150,6 +157,25 @@ export const useArtistFeatureData = (
     const { goNext, goPrev, index, reshuffle } = usePoolRotation(pool.length);
     const current = pool[index % Math.max(pool.length, 1)] as ArtistCandidate | undefined;
     const { data: songs, isFetching } = useArtistSongs(current?.id ?? null, serverId);
+
+    // Server-side filter can't always tell us — Jellyfin's AlbumArtists
+    // endpoint sometimes returns no SongCount even with ItemCounts requested.
+    // Fall back to a client-side check: if the actual song fetch came back
+    // with <2 unique tracks, this artist effectively has one song; auto-
+    // advance to the next candidate. Bounded so we can't get stuck looping.
+    const skipCountRef = useRef(0);
+    useEffect(() => {
+        if (isFetching || isLoading || !songs || !current || pool.length < 2) return;
+        if (songs.length >= 2) {
+            skipCountRef.current = 0;
+            return;
+        }
+        if (skipCountRef.current < MAX_SINGLE_SONG_AUTO_SKIPS) {
+            skipCountRef.current += 1;
+            goNext();
+        }
+    }, [songs, isFetching, isLoading, current, pool.length, goNext]);
+
     const empty = !isLoading && pool.length === 0;
 
     return {
@@ -157,7 +183,10 @@ export const useArtistFeatureData = (
         isLoading: isLoading || (Boolean(current) && isFetching && (songs ?? []).length === 0),
         onNext: pool.length > 1 ? goNext : undefined,
         onPrev: pool.length > 1 ? goPrev : undefined,
-        onReshuffle: reshuffle,
+        onReshuffle: () => {
+            skipCountRef.current = 0;
+            reshuffle();
+        },
         rotationCount: pool.length,
         rotationIndex: index,
         songs: songs ?? [],
