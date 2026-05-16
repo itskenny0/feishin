@@ -247,14 +247,22 @@ export const LeftControls = () => {
                                             </Text>
                                         )}
                                     </Text>
-                                    {showYearChip && currentSong?.releaseYear && (
-                                        <span
-                                            className={styles.yearChip}
-                                            title={String(currentSong.releaseYear)}
-                                        >
-                                            {currentSong.releaseYear}
-                                        </span>
-                                    )}
+                                    {(() => {
+                                        // Validate that the value is actually a plausible
+                                        // 4-digit year before rendering. Some tracks come
+                                        // back with releaseYear === 1 (default-init or a
+                                        // mis-parsed empty date), and rendering "1" next
+                                        // to the title looks like a bug, not a year.
+                                        const y = currentSong?.releaseYear;
+                                        if (!showYearChip || typeof y !== 'number') return null;
+                                        if (!Number.isInteger(y) || y < 1000 || y > 9999)
+                                            return null;
+                                        return (
+                                            <span className={styles.yearChip} title={String(y)}>
+                                                {y}
+                                            </span>
+                                        );
+                                    })()}
                                     {isSongDefined && (
                                         <ActionIcon
                                             icon="ellipsisVertical"
