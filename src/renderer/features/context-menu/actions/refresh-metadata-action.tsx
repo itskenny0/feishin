@@ -2,11 +2,14 @@ import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { createAuthHeader } from '/@/renderer/api/jellyfin/jellyfin-api';
-import { useCurrentServerWithCredential } from '/@/renderer/store/auth.store';
+import { useCurrentServerWithCredential, useIsAdmin } from '/@/renderer/store/auth.store';
 import { getServerUrl } from '/@/renderer/utils/normalize-server-url';
 import { ContextMenu } from '/@/shared/components/context-menu/context-menu';
 import { toast } from '/@/shared/components/toast/toast';
 import { ServerType } from '/@/shared/types/domain-types';
+import { runWithConcurrency } from '/@/shared/utils/promise-pool';
+
+const BULK_ACTION_CONCURRENCY = 4;
 
 interface RefreshMetadataActionProps {
     disabled?: boolean;
@@ -26,6 +29,7 @@ interface RefreshMetadataActionProps {
 export const RefreshMetadataAction = ({ disabled, ids }: RefreshMetadataActionProps) => {
     const { t } = useTranslation();
     const server = useCurrentServerWithCredential();
+    const { isAdmin } = useIsAdmin();
 
     const onSelect = useCallback(async () => {
         if (!server || server.type !== ServerType.JELLYFIN || ids.length === 0) return;
@@ -57,7 +61,11 @@ export const RefreshMetadataAction = ({ disabled, ids }: RefreshMetadataActionPr
             }
         };
 
-        const results = await Promise.all(ids.map(refreshOne));
+        // Refresh is much heavier than mark-played server-side (it can hit
+        // disk + image providers) — cap concurrency lower.
+        const results = await runWithConcurrency(ids, BULK_ACTION_CONCURRENCY, (id) =>
+            refreshOne(id),
+        );
         const ok = results.filter(Boolean).length;
         if (ok === ids.length) {
             toast.info({
@@ -75,7 +83,10 @@ export const RefreshMetadataAction = ({ disabled, ids }: RefreshMetadataActionPr
         }
     }, [ids, server, t]);
 
-    if (!server || server.type !== ServerType.JELLYFIN) return null;
+    // Jellyfin's /Items/{id}/Refresh requires Administrator scope. Hide the
+    // option entirely for non-admin users rather than letting them click it
+    // and watch a 403 error toast.
+    if (!server || server.type !== ServerType.JELLYFIN || !isAdmin) return null;
 
     return (
         <ContextMenu.Item

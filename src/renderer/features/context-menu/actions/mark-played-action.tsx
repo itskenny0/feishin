@@ -8,6 +8,12 @@ import { getServerUrl } from '/@/renderer/utils/normalize-server-url';
 import { ContextMenu } from '/@/shared/components/context-menu/context-menu';
 import { toast } from '/@/shared/components/toast/toast';
 import { ServerType } from '/@/shared/types/domain-types';
+import { runWithConcurrency } from '/@/shared/utils/promise-pool';
+
+// Bound bulk-action HTTP request concurrency. Right-clicking thousands of
+// songs and clicking "Mark played" otherwise sends every request in parallel
+// which Jellyfin's rate-limiter rejects in batches.
+const BULK_ACTION_CONCURRENCY = 8;
 
 interface MarkPlayedActionProps {
     disabled?: boolean;
@@ -53,15 +59,15 @@ const usePlayedToggleAction = (ids: string[], played: boolean) => {
             }
         };
 
-        const results = await Promise.all(ids.map(flipOne));
+        const results = await runWithConcurrency(ids, BULK_ACTION_CONCURRENCY, (id) => flipOne(id));
         const ok = results.filter(Boolean).length;
         if (ok > 0) {
             // The visible userPlayCount/userPlayed flags live on song / album
-            // / artist rows. Invalidate ONLY those root key namespaces — the
-            // previous `predicate: () => true` invalidated every cached
-            // query in the app (sidebar lists, currently-playing, lyrics,
-            // playlists, server-info, …), which fired a refetch storm on
-            // every single mark-played click.
+            // / artist / playlist rows. Invalidate those namespaces only —
+            // an earlier version used `predicate: () => true` which fired a
+            // refetch storm across every cached query, but narrowing too
+            // aggressively (the next pass omitted playlists) left
+            // playlist-detail views showing stale play counts.
             const serverId = server.id;
             queryClient.invalidateQueries({
                 predicate: (q) => {
@@ -69,7 +75,12 @@ const usePlayedToggleAction = (ids: string[], played: boolean) => {
                     if (!Array.isArray(key) || key.length < 2) return false;
                     if (key[0] !== serverId) return false;
                     const ns = key[1];
-                    return ns === 'songs' || ns === 'albums' || ns === 'albumArtists';
+                    return (
+                        ns === 'songs' ||
+                        ns === 'albums' ||
+                        ns === 'albumArtists' ||
+                        ns === 'playlists'
+                    );
                 },
             });
         }
