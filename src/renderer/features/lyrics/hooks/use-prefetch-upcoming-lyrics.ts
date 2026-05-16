@@ -11,6 +11,31 @@ import {
 } from '/@/renderer/store';
 import { QueueSong } from '/@/shared/types/domain-types';
 
+// Cap the recall of previously-prefetched song IDs so a long-running session
+// (radio / random play / shuffle) doesn't grow this Set unbounded for the
+// lifetime of the app. When the cap is hit, the oldest entries are evicted
+// first so they're eligible for re-prefetching if they show up again later.
+const PREFETCHED_RECALL_LIMIT = 500;
+
+/**
+ * Append a key to a bounded LRU-ish set (insertion order = recency). When
+ * the cap is exceeded, drops the oldest entries until back under the cap.
+ */
+const rememberBounded = (set: Set<string>, key: string, limit: number): void => {
+    // Re-insertion of an existing key bumps it to "newest" position because
+    // JS Set iteration is insertion-order.
+    if (set.has(key)) set.delete(key);
+    set.add(key);
+    if (set.size > limit) {
+        const overflow = set.size - limit;
+        const iter = set.values();
+        for (let i = 0; i < overflow; i += 1) {
+            const oldest = iter.next();
+            if (!oldest.done) set.delete(oldest.value);
+        }
+    }
+};
+
 const useUpcomingLyricsPrefetch = () => {
     const queryClient = useQueryClient();
     const enabled = usePrefetchUpcomingLyrics();
@@ -37,7 +62,7 @@ const useUpcomingLyricsPrefetch = () => {
                     queryKeys.songs.lyrics(song._serverId, { songId: song.id }),
                 );
                 if (existing !== undefined) {
-                    prefetchedRef.current.add(cacheKey);
+                    rememberBounded(prefetchedRef.current, cacheKey, PREFETCHED_RECALL_LIMIT);
                     continue;
                 }
 
@@ -54,7 +79,7 @@ const useUpcomingLyricsPrefetch = () => {
                     )
                     .finally(() => {
                         inflightRef.current.delete(cacheKey);
-                        prefetchedRef.current.add(cacheKey);
+                        rememberBounded(prefetchedRef.current, cacheKey, PREFETCHED_RECALL_LIMIT);
                     });
             }
         };

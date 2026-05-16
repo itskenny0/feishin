@@ -143,8 +143,11 @@ export const useIsAdmin = () =>
         };
     }, shallow);
 
-export const useCurrentServerWithCredential = () =>
-    useAuthStore((state) => state.currentServer) as ServerListItemWithCredential;
+export const useCurrentServerWithCredential = (): null | ServerListItemWithCredential =>
+    // Honest type: every caller already defensively checks for null/credential
+    // (because the previous cast lied to TS), so reflect reality here. Makes
+    // future callers handle the unloaded-server / signed-out case explicitly.
+    useAuthStore((state) => state.currentServer) as null | ServerListItemWithCredential;
 
 export const useServerList = () => useAuthStore((state) => state.serverList);
 
