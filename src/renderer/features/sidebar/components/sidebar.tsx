@@ -182,6 +182,23 @@ const SidebarImage = () => {
         type: 'sidebar',
     });
 
+    // Request the full-screen-sized cover for the zoom lightbox so it doesn't
+    // pixelate when scaled to viewport height. The sidebar variant (~400px)
+    // is fine for the small thumbnail but stretches badly at viewport size.
+    const fullResImageUrl = useItemImageUrl({
+        id: currentSong?.imageId || undefined,
+        itemType: LibraryItem.SONG,
+        serverId: currentSong?._serverId,
+        type: 'fullScreenPlayer',
+    });
+    const fullResRadioImageUrl = useItemImageUrl({
+        id: isRadioActive ? currentStationArt?.imageId || undefined : undefined,
+        imageUrl: isRadioActive ? currentStationArt?.imageUrl || undefined : undefined,
+        itemType: LibraryItem.RADIO_STATION,
+        serverId: isRadioActive ? currentStationArt?.serverId : undefined,
+        type: 'fullScreenPlayer',
+    });
+
     const isPlayingRadio = isRadioActive && isRadioPlaying;
     const isSongDefined = Boolean(currentSong?.id);
 
@@ -194,7 +211,9 @@ const SidebarImage = () => {
     // Zoom lightbox state — separate from the full-screen player so the user
     // can briefly inspect cover art without opening the whole player UI.
     const [isZoomOpen, zoomHandlers] = useDisclosure(false);
-    const zoomImageUrl = isRadioActive ? radioImageUrl : imageUrl;
+    const zoomImageUrl = isRadioActive
+        ? fullResRadioImageUrl || radioImageUrl
+        : fullResImageUrl || imageUrl;
 
     const handleToggleContextMenu = (e: MouseEvent<HTMLDivElement>) => {
         e.preventDefault();
@@ -254,29 +273,30 @@ const SidebarImage = () => {
                     <ImageUnloader icon="emptySongImage" />
                 )}
             </Tooltip>
-            <ActionIcon
-                icon="expand"
-                iconProps={{
-                    size: 'lg',
-                }}
-                onClick={(e) => {
-                    e.stopPropagation();
-                    if (!zoomImageUrl) return;
-                    zoomHandlers.open();
-                }}
-                opacity={0.8}
-                radius="md"
-                style={{
-                    cursor: 'default',
-                    position: 'absolute',
-                    right: '3.5rem',
-                    top: '1rem',
-                }}
-                tooltip={{
-                    label: t('common.zoom', { defaultValue: 'Zoom' }),
-                    openDelay: 500,
-                }}
-            />
+            {zoomImageUrl && (
+                <ActionIcon
+                    icon="expand"
+                    iconProps={{
+                        size: 'lg',
+                    }}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        zoomHandlers.open();
+                    }}
+                    opacity={0.8}
+                    radius="md"
+                    style={{
+                        cursor: 'default',
+                        position: 'absolute',
+                        right: '3.5rem',
+                        top: '1rem',
+                    }}
+                    tooltip={{
+                        label: t('common.zoom'),
+                        openDelay: 500,
+                    }}
+                />
+            )}
             <ActionIcon
                 icon="arrowDownS"
                 iconProps={{
