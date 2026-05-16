@@ -1,4 +1,4 @@
-import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
 import { shuffle } from 'lodash';
 import { memo, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -8,6 +8,7 @@ import styles from './featured-genres.module.css';
 
 import { api } from '/@/renderer/api';
 import { queryKeys } from '/@/renderer/api/query-keys';
+import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { genresQueries } from '/@/renderer/features/genres/api/genres-api';
 import { useIsPlayerFetching, usePlayer } from '/@/renderer/features/player/context/player-context';
 import { PlayButton } from '/@/renderer/features/shared/components/play-button';
@@ -17,9 +18,48 @@ import { useCurrentServer, useCurrentServerId } from '/@/renderer/store';
 import { Button } from '/@/shared/components/button/button';
 import { Group } from '/@/shared/components/group/group';
 import { TextTitle } from '/@/shared/components/text-title/text-title';
-import { Genre, GenreListSort, Played, SortOrder } from '/@/shared/types/domain-types';
+import {
+    AlbumListSort,
+    Genre,
+    GenreListSort,
+    LibraryItem,
+    Played,
+    SortOrder,
+} from '/@/shared/types/domain-types';
 import { Play } from '/@/shared/types/types';
 import { stringToColor } from '/@/shared/utils/string-to-color';
+
+/**
+ * Heuristic gatekeeper for genre names worth showing on the home page.
+ *
+ * Jellyfin happily stores multi-tag strings — produced upstream by sloppy
+ * taggers — as single genre rows. The home grid surfaced names like
+ * "rap;50 Cent;Gangsta..." which are neither browseable as genres nor
+ * actually meaningful labels. We drop them rather than display garbage tiles.
+ *
+ * Filters applied (any one disqualifies the name):
+ *  - empty / whitespace
+ *  - contains semicolons (multi-tag concatenation)
+ *  - 3+ consecutive digits (track numbers, years)
+ *  - excessive commas (4+ — composite list)
+ *  - colon usage (typical "Category: Subcategory" multi-tag pattern)
+ *  - longer than 40 characters
+ *  - majority non-letter characters
+ */
+const isCleanGenreName = (name: string): boolean => {
+    if (!name) return false;
+    const trimmed = name.trim();
+    if (trimmed.length === 0 || trimmed.length > 40) return false;
+    if (trimmed.includes(';')) return false;
+    if (trimmed.includes(':')) return false;
+    if (/\d{3,}/.test(trimmed)) return false;
+    if ((trimmed.match(/,/g) || []).length >= 4) return false;
+    // Letters should make up at least half the string — protects against
+    // pure-numeric or symbol-heavy junk like "808" or "/// dark".
+    const letterCount = (trimmed.match(/[a-zA-Z]/g) || []).length;
+    if (letterCount * 2 < trimmed.length) return false;
+    return true;
+};
 
 function getGenresToShow(breakpoints: {
     isLargerThanLg: boolean;
@@ -80,7 +120,11 @@ export const FeaturedGenres = () => {
 
     const randomGenres = useMemo(() => {
         if (!genresQuery.data?.items) return [];
-        return shuffle(genresQuery.data.items);
+        // Drop garbage names before shuffling so the visible-N slice is
+        // guaranteed to be N usable tiles, not N candidates we then filter
+        // down to (which produced fewer-than-expected tiles).
+        const clean = genresQuery.data.items.filter((g: Genre) => isCleanGenreName(g.name));
+        return shuffle(clean);
     }, [genresQuery.data]);
 
     const genresToShow = useMemo(() => {
@@ -142,6 +186,34 @@ export const FeaturedGenres = () => {
     );
 };
 
+/**
+ * Fetch one album that carries this genre so the tile can show its cover
+ * as a backdrop. Cached aggressively — covers don't change and re-fetching
+ * on every home visit wasted requests.
+ */
+const useGenreCoverAlbum = (genreId: string, serverId: string) =>
+    useQuery({
+        enabled: Boolean(genreId && serverId),
+        gcTime: 1000 * 60 * 60 * 24,
+        queryFn: async ({ signal }) => {
+            const res = await api.controller.getAlbumList({
+                apiClientProps: { serverId, signal },
+                query: {
+                    genreIds: [genreId],
+                    limit: 1,
+                    sortBy: AlbumListSort.RANDOM,
+                    sortOrder: SortOrder.DESC,
+                    startIndex: 0,
+                },
+            });
+            return res?.items?.[0] ?? null;
+        },
+        queryKey: ['featured-genre-cover', serverId, genreId] as const,
+        // 24h — covers are functionally static and re-fetching costs an
+        // entire album-list request per tile.
+        staleTime: 1000 * 60 * 60 * 24,
+    });
+
 const GenrePlayButton = ({ genre }: { genre: Genre }) => {
     const queryClient = useQueryClient();
     const isPlayerFetching = useIsPlayerFetching();
@@ -186,6 +258,16 @@ const GenrePlayButton = ({ genre }: { genre: Genre }) => {
 };
 
 const GenreItem = memo(({ genre }: { genre: Genre & { color: string; path: string } }) => {
+    const serverId = useCurrentServerId() ?? '';
+    const { data: coverAlbum } = useGenreCoverAlbum(genre.id, serverId);
+    const coverImageUrl = useItemImageUrl({
+        id: coverAlbum?.imageId || undefined,
+        imageUrl: coverAlbum?.imageUrl || undefined,
+        itemType: LibraryItem.ALBUM,
+        serverId,
+        type: 'itemCard',
+    });
+
     return (
         <div
             className={styles.genreContainer}
@@ -196,6 +278,14 @@ const GenreItem = memo(({ genre }: { genre: Genre & { color: string; path: strin
                 } as React.CSSProperties
             }
         >
+            {coverImageUrl && (
+                <div
+                    aria-hidden
+                    className={styles.genreBackdrop}
+                    style={{ backgroundImage: `url(${coverImageUrl})` }}
+                />
+            )}
+            <div aria-hidden className={styles.genreScrim} />
             <Link className={styles.genreLink} state={{ item: genre }} to={genre.path}>
                 <span className={styles.genreName}>{genre.name}</span>
                 <GenrePlayButton genre={genre} />
