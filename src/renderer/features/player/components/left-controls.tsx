@@ -36,13 +36,6 @@ import {
     useShowFilesystemNameForAlbums,
     useShowPlaybarYearChip,
 } from '/@/renderer/store/settings.store';
-
-const albumFolderNameFromSongPath = (path?: null | string): null | string => {
-    if (!path) return null;
-    const segments = path.split(/[/\\]/).filter(Boolean);
-    if (segments.length < 2) return null;
-    return segments[segments.length - 2] ?? null;
-};
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Center } from '/@/shared/components/center/center';
 import { Group } from '/@/shared/components/group/group';
@@ -51,6 +44,7 @@ import { Text } from '/@/shared/components/text/text';
 import { Tooltip } from '/@/shared/components/tooltip/tooltip';
 import { PlaybackSelectors } from '/@/shared/constants/playback-selectors';
 import { LibraryItem } from '/@/shared/types/domain-types';
+import { albumFolderFromSongPath } from '/@/shared/utils/album-folder-from-path';
 import { isPlausibleReleaseYear } from '/@/shared/utils/release-year';
 
 export const LeftControls = () => {
@@ -77,7 +71,7 @@ export const LeftControls = () => {
     const useFsAlbumName = useShowFilesystemNameForAlbums();
     const showYearChip = useShowPlaybarYearChip();
     const albumDisplayName =
-        (useFsAlbumName ? albumFolderNameFromSongPath(currentSong?.path) : null) ||
+        (useFsAlbumName ? albumFolderFromSongPath(currentSong?.path) : null) ||
         currentSong?.album ||
         '—';
 

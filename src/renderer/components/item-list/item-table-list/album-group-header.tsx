@@ -14,15 +14,7 @@ import { usePlayButtonBehavior } from '/@/renderer/store';
 import { useShowFilesystemNameForAlbums } from '/@/renderer/store/settings.store';
 import { LibraryItem, Song } from '/@/shared/types/domain-types';
 import { Play } from '/@/shared/types/types';
-
-const albumFolderNameFromSongPath = (path?: null | string): null | string => {
-    if (!path) return null;
-    const segments = path.split(/[/\\]/).filter(Boolean);
-    // Song paths end with the audio filename, so the album folder is the
-    // segment immediately before that.
-    if (segments.length < 2) return null;
-    return segments[segments.length - 2] ?? null;
-};
+import { albumFolderFromSongPath } from '/@/shared/utils/album-folder-from-path';
 
 interface AlbumGroupHeaderProps {
     groupRowCount?: number;
@@ -41,7 +33,7 @@ export const AlbumGroupHeader = ({
     const playButtonBehavior = usePlayButtonBehavior();
     const useFsName = useShowFilesystemNameForAlbums();
     const albumDisplayName =
-        (useFsName ? albumFolderNameFromSongPath(song?.path) : null) ?? song?.album ?? '';
+        (useFsName ? albumFolderFromSongPath(song?.path) : null) ?? song?.album ?? '';
     const rowHeight = {
         compact: TableItemSize.COMPACT,
         large: TableItemSize.LARGE,

@@ -19,13 +19,6 @@ import {
     useSetFullScreenPlayerStore,
 } from '/@/renderer/store';
 import { useShowFilesystemNameForAlbums } from '/@/renderer/store/settings.store';
-
-const albumFolderNameFromSongPath = (path?: null | string): null | string => {
-    if (!path) return null;
-    const segments = path.split(/[/\\]/).filter(Boolean);
-    if (segments.length < 2) return null;
-    return segments[segments.length - 2] ?? null;
-};
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Group } from '/@/shared/components/group/group';
 import { Icon } from '/@/shared/components/icon/icon';
@@ -35,6 +28,7 @@ import { Tooltip } from '/@/shared/components/tooltip/tooltip';
 import { PlaybackSelectors } from '/@/shared/constants/playback-selectors';
 import { LibraryItem } from '/@/shared/types/domain-types';
 import { PlayerStatus } from '/@/shared/types/types';
+import { albumFolderFromSongPath } from '/@/shared/utils/album-folder-from-path';
 
 export const MobilePlayerbar = () => {
     const { t } = useTranslation();
@@ -49,7 +43,7 @@ export const MobilePlayerbar = () => {
     const isSongDefined = Boolean(currentSong?.id);
     const useFsAlbumName = useShowFilesystemNameForAlbums();
     const albumDisplayName =
-        (useFsAlbumName ? albumFolderNameFromSongPath(currentSong?.path) : null) ||
+        (useFsAlbumName ? albumFolderFromSongPath(currentSong?.path) : null) ||
         currentSong?.album ||
         '—';
 

@@ -13,17 +13,11 @@ import {
 import { prefetchAlbumDetail, preloadRoute } from '/@/renderer/router/route-preloaders';
 import { AppRoute } from '/@/renderer/router/routes';
 import { useShowFilesystemNameForAlbums } from '/@/renderer/store/settings.store';
-
-const preloadAlbumDetail = () => preloadRoute(AppRoute.LIBRARY_ALBUMS_DETAIL);
 import { Text } from '/@/shared/components/text/text';
 import { Song } from '/@/shared/types/domain-types';
+import { albumFolderFromSongPath } from '/@/shared/utils/album-folder-from-path';
 
-const albumFolderNameFromSongPath = (path?: null | string): null | string => {
-    if (!path) return null;
-    const segments = path.split(/[/\\]/).filter(Boolean);
-    if (segments.length < 2) return null;
-    return segments[segments.length - 2] ?? null;
-};
+const preloadAlbumDetail = () => preloadRoute(AppRoute.LIBRARY_ALBUMS_DETAIL);
 
 const AlbumColumn = (props: ItemTableListInnerColumn) => {
     const rowItem = props.getRowItem?.(props.rowIndex) ?? (props.data as any[])[props.rowIndex];
@@ -39,7 +33,7 @@ const AlbumColumn = (props: ItemTableListInnerColumn) => {
     }, [albumId]);
 
     const displayValue = useFsName
-        ? (albumFolderNameFromSongPath(song?.path) ?? (typeof row === 'string' ? row : null))
+        ? (albumFolderFromSongPath(song?.path) ?? (typeof row === 'string' ? row : null))
         : typeof row === 'string'
           ? row
           : null;
