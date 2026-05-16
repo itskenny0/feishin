@@ -56,12 +56,22 @@ const usePlayedToggleAction = (ids: string[], played: boolean) => {
         const results = await Promise.all(ids.map(flipOne));
         const ok = results.filter(Boolean).length;
         if (ok > 0) {
-            // The visible userPlayCount/userPlayed flags live on song rows that
-            // are cached by tanstack-query. Drop the song/album/artist root
-            // caches so the next fetch picks up the new server state. We can't
-            // narrow more precisely because the flag is computed across many
-            // queryKeys.
-            queryClient.invalidateQueries({ predicate: () => true });
+            // The visible userPlayCount/userPlayed flags live on song / album
+            // / artist rows. Invalidate ONLY those root key namespaces — the
+            // previous `predicate: () => true` invalidated every cached
+            // query in the app (sidebar lists, currently-playing, lyrics,
+            // playlists, server-info, …), which fired a refetch storm on
+            // every single mark-played click.
+            const serverId = server.id;
+            queryClient.invalidateQueries({
+                predicate: (q) => {
+                    const key = q.queryKey;
+                    if (!Array.isArray(key) || key.length < 2) return false;
+                    if (key[0] !== serverId) return false;
+                    const ns = key[1];
+                    return ns === 'songs' || ns === 'albums' || ns === 'albumArtists';
+                },
+            });
         }
         return ok;
     }, [ids, played, queryClient, server]);

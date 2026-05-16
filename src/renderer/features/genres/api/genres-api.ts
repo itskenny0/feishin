@@ -77,22 +77,29 @@ export const useGenreList = () => {
  * matching catches the common case (parent contained in child) without
  * needing genre hierarchies on the server.
  *
- * Falls back to [primaryGenreId] when the genre isn't found in the cached
- * list, so a stale link still resolves to the literal genre.
+ * Edge cases:
+ *  - Empty / whitespace `primaryGenreId` (race during context-init) returns
+ *    []. Callers should NOT play / browse with an empty filter — on Jellyfin
+ *    a falsy genreIds query maps to "all songs in the library".
+ *  - `primaryGenreId` not in the cached genre list: returns just
+ *    [primaryGenreId] so stale links still resolve to the literal genre.
+ *  - The primary id is ALWAYS first in the returned array, so callers that
+ *    truncate to genreIds[0] (e.g., the Subsonic single-genre paths) at
+ *    least play the user's actual selection rather than an alphabetically-
+ *    earlier sibling.
  */
 export const useFuzzyGenreIds = (primaryGenreId: string): string[] => {
     const { data: genres } = useGenreList();
     return useMemo(() => {
-        if (!genres?.items) return [primaryGenreId];
-        const primary = genres.items.find((g) => g.id === primaryGenreId);
-        if (!primary) return [primaryGenreId];
+        const trimmed = primaryGenreId.trim();
+        if (!trimmed) return [];
+        if (!genres?.items) return [trimmed];
+        const primary = genres.items.find((g) => g.id === trimmed);
+        if (!primary) return [trimmed];
         const needle = primary.name.trim().toLowerCase();
-        if (!needle) return [primaryGenreId];
-        const matches = genres.items.filter((g) => g.name.toLowerCase().includes(needle));
-        // Always include the primary id even if name-matching somehow excludes
-        // it (e.g. weird casing in a server normaliser).
-        const ids = new Set(matches.map((g) => g.id));
-        ids.add(primaryGenreId);
-        return Array.from(ids);
+        if (!needle) return [trimmed];
+        const matched = genres.items.filter((g) => g.name.toLowerCase().includes(needle));
+        const matchedIds = matched.map((g) => g.id).filter((id) => id !== trimmed);
+        return [trimmed, ...matchedIds];
     }, [genres, primaryGenreId]);
 };

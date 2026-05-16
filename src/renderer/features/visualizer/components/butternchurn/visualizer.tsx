@@ -1,4 +1,4 @@
-import { createRef, useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import styles from './visualizer.module.css';
 
@@ -42,8 +42,12 @@ export function getButterchurnPresetOptions(presets: Record<string, string>) {
 
 const VisualizerInner = () => {
     const { webAudio } = useWebAudio();
-    const canvasRef = createRef<HTMLCanvasElement>();
-    const containerRef = createRef<HTMLDivElement>();
+    // useRef, not createRef — the latter allocates a NEW ref object on every
+    // render, which (for effects that depend on the ref identity) causes
+    // teardown + re-attach of expensive resources like ResizeObserver on
+    // every parent render.
+    const canvasRef = useRef<HTMLCanvasElement | null>(null);
+    const containerRef = useRef<HTMLDivElement | null>(null);
     const visualizerRef = useRef<ButterchurnVisualizer | undefined>(undefined);
     const isInitializedRef = useRef(false);
     const [isVisualizerReady, setIsVisualizerReady] = useState(false);

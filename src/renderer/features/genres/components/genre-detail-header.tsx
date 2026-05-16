@@ -78,6 +78,12 @@ const AlbumPlayButton = () => {
         };
     }, [query, fuzzyIds]);
 
+    // Don't render until we have a usable genre id — without this, a render
+    // before useListContext populates `id` would send `genreIds: []` to the
+    // server. On Jellyfin that resolves to "no filter" and the play button
+    // would happily enqueue the entire library.
+    if (fuzzyIds.length === 0) return null;
+
     return (
         <LibraryHeaderBar.PlayButton
             itemType={LibraryItem.ALBUM}
@@ -98,6 +104,8 @@ const SongPlayButton = () => {
             genreIds: fuzzyIds,
         };
     }, [query, fuzzyIds]);
+
+    if (fuzzyIds.length === 0) return null;
 
     return (
         <LibraryHeaderBar.PlayButton

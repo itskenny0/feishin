@@ -10,6 +10,7 @@ import { api } from '/@/renderer/api';
 import { queryKeys } from '/@/renderer/api/query-keys';
 import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { genresQueries, useFuzzyGenreIds } from '/@/renderer/features/genres/api/genres-api';
+import { isCleanGenreName } from '/@/renderer/features/home/utils/genre-filter';
 import { useIsPlayerFetching, usePlayer } from '/@/renderer/features/player/context/player-context';
 import { PlayButton } from '/@/renderer/features/shared/components/play-button';
 import { useContainerQuery } from '/@/renderer/hooks';
@@ -28,38 +29,6 @@ import {
 } from '/@/shared/types/domain-types';
 import { Play } from '/@/shared/types/types';
 import { stringToColor } from '/@/shared/utils/string-to-color';
-
-/**
- * Heuristic gatekeeper for genre names worth showing on the home page.
- *
- * Jellyfin happily stores multi-tag strings — produced upstream by sloppy
- * taggers — as single genre rows. The home grid surfaced names like
- * "rap;50 Cent;Gangsta..." which are neither browseable as genres nor
- * actually meaningful labels. We drop them rather than display garbage tiles.
- *
- * Filters applied (any one disqualifies the name):
- *  - empty / whitespace
- *  - contains semicolons (multi-tag concatenation)
- *  - 3+ consecutive digits (track numbers, years)
- *  - excessive commas (4+ — composite list)
- *  - colon usage (typical "Category: Subcategory" multi-tag pattern)
- *  - longer than 40 characters
- *  - majority non-letter characters
- */
-const isCleanGenreName = (name: string): boolean => {
-    if (!name) return false;
-    const trimmed = name.trim();
-    if (trimmed.length === 0 || trimmed.length > 40) return false;
-    if (trimmed.includes(';')) return false;
-    if (trimmed.includes(':')) return false;
-    if (/\d{3,}/.test(trimmed)) return false;
-    if ((trimmed.match(/,/g) || []).length >= 4) return false;
-    // Letters should make up at least half the string — protects against
-    // pure-numeric or symbol-heavy junk like "808" or "/// dark".
-    const letterCount = (trimmed.match(/[a-zA-Z]/g) || []).length;
-    if (letterCount * 2 < trimmed.length) return false;
-    return true;
-};
 
 function getGenresToShow(breakpoints: {
     isLargerThanLg: boolean;

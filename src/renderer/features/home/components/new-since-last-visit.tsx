@@ -11,17 +11,27 @@ import { useCurrentServer } from '/@/renderer/store';
 import { Icon } from '/@/shared/components/icon/icon';
 import { Album, AlbumListSort, SortOrder } from '/@/shared/types/domain-types';
 
-const STORAGE_KEY = 'home_last_visit_iso';
+// Stored per-server so switching servers doesn't carry one library's last-visit
+// across to another. Older single-key value is gracefully ignored.
+const STORAGE_KEY_PREFIX = 'home_last_visit_iso:';
 const MAX_LOOKBACK_DAYS = 14;
-const PROBE_LIMIT = 60;
+// Cap how far back we'll look on first run / for the fallback. Keep this in
+// sync with MAX_LOOKBACK_DAYS so first-visit and returning-user lookback
+// windows match.
+const FALLBACK_LOOKBACK_DAYS = MAX_LOOKBACK_DAYS;
+// Sized to cover ~14 days on most libraries. If the actual count is larger
+// (it can happen on heavily-curated libraries) the banner switches to "60+".
+const PROBE_LIMIT = 200;
+
+const storageKey = (serverId: string) => `${STORAGE_KEY_PREFIX}${serverId}`;
 
 /**
- * Read the persisted last-visit ISO date string. Returns a fallback of
- * (now - {@link MAX_LOOKBACK_DAYS} days) when the user has never been here
- * before, so the widget always has *something* to surface on first run.
+ * Read the persisted last-visit ISO date string for this server. Returns a
+ * fallback of (now - {@link FALLBACK_LOOKBACK_DAYS} days) when the user has
+ * never been here before, so the widget has something to surface on first run.
  */
-const readLastVisit = (): Date => {
-    const stored = localStorage.getItem(STORAGE_KEY);
+const readLastVisit = (serverId: string): Date => {
+    const stored = localStorage.getItem(storageKey(serverId));
     if (stored) {
         const parsed = new Date(stored);
         if (!Number.isNaN(parsed.getTime())) {
@@ -32,7 +42,7 @@ const readLastVisit = (): Date => {
             return parsed;
         }
     }
-    return new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    return new Date(Date.now() - FALLBACK_LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
 };
 
 /**
@@ -45,25 +55,50 @@ const readLastVisit = (): Date => {
 export const NewSinceLastVisit = () => {
     const { t } = useTranslation();
     const server = useCurrentServer();
+    const serverId = server?.id ?? '';
 
-    // useRef's argument is only used on the first render but is re-evaluated on
-    // every render in React 18, which would re-read localStorage each time. Use
-    // lazy-init via useState for a clean read-once.
-    const [lastVisit] = useState<Date>(() => readLastVisit());
-    const [ready, setReady] = useState(false);
+    // Snapshot of the previous-visit timestamp, captured once on mount per
+    // server. Re-derive when the server changes so the banner shows the right
+    // library's window. (Lazy useState initialiser so localStorage isn't read
+    // on every render.)
+    const [lastVisit, setLastVisit] = useState<Date>(() => readLastVisit(serverId));
 
     useEffect(() => {
-        // Persist the new "last visit" once we've snapshot the previous one.
-        localStorage.setItem(STORAGE_KEY, new Date().toISOString());
-        setReady(true);
-    }, []);
+        // Server changed (or first mount with a real server). Snapshot the
+        // previous value for *this* server then DON'T immediately overwrite
+        // it — the previous implementation wrote `now` on every mount, which
+        // made the second open of the home page show ~0 new albums even
+        // though plenty had arrived since the user's actual previous session.
+        //
+        // We instead persist `now` only on tab/window close. That way the
+        // banner reflects "since the previous session" rather than "since
+        // the previous home-page render".
+        if (!serverId) return;
+        setLastVisit(readLastVisit(serverId));
+
+        const persistNow = () => {
+            localStorage.setItem(storageKey(serverId), new Date().toISOString());
+        };
+        window.addEventListener('beforeunload', persistNow);
+        // Also persist when the tab/window becomes hidden — covers mobile
+        // browsers that don't fire beforeunload reliably and Electron
+        // window-close paths.
+        const onVisibility = () => {
+            if (document.visibilityState === 'hidden') persistNow();
+        };
+        document.addEventListener('visibilitychange', onVisibility);
+        return () => {
+            window.removeEventListener('beforeunload', persistNow);
+            document.removeEventListener('visibilitychange', onVisibility);
+        };
+    }, [serverId]);
 
     const { data: probe } = useQuery({
-        enabled: Boolean(server?.id) && ready,
+        enabled: Boolean(serverId),
         queryFn: async ({ signal }) => {
-            if (!server?.id) return [] as Album[];
+            if (!serverId) return [] as Album[];
             const res = await api.controller.getAlbumList({
-                apiClientProps: { serverId: server.id, signal },
+                apiClientProps: { serverId, signal },
                 query: {
                     limit: PROBE_LIMIT,
                     sortBy: AlbumListSort.RECENTLY_ADDED,
@@ -73,18 +108,24 @@ export const NewSinceLastVisit = () => {
             });
             return (res?.items ?? []) as Album[];
         },
-        queryKey: ['home-new-since-last-visit', server?.id ?? ''] as const,
+        queryKey: ['home-new-since-last-visit', serverId] as const,
         staleTime: 1000 * 60 * 5,
     });
 
-    const newCount = useMemo(() => {
-        if (!probe) return 0;
+    const { atCap, newCount } = useMemo(() => {
+        if (!probe) return { atCap: false, newCount: 0 };
         const threshold = lastVisit.getTime();
-        return probe.filter((a) => {
-            if (!a.createdAt) return false;
+        let count = 0;
+        for (const a of probe) {
+            if (!a.createdAt) continue;
             const ts = new Date(a.createdAt).getTime();
-            return Number.isFinite(ts) && ts >= threshold;
-        }).length;
+            if (Number.isFinite(ts) && ts >= threshold) count += 1;
+        }
+        // If the probe is the full PROBE_LIMIT AND every entry is newer than
+        // the threshold, the true count may exceed our sample — flag so the
+        // copy can show "PROBE_LIMIT+" instead of a misleading exact number.
+        const saturated = probe.length === PROBE_LIMIT && count === PROBE_LIMIT;
+        return { atCap: saturated, newCount: count };
     }, [probe, lastVisit]);
 
     if (!probe) return null;
@@ -95,7 +136,12 @@ export const NewSinceLastVisit = () => {
             <div className={styles.left}>
                 <span className={styles.eyebrow}>{t('page.home.newSinceLastVisit_eyebrow')}</span>
                 <span className={styles.title}>
-                    {t('page.home.newSinceLastVisit_title', { count: newCount })}
+                    {atCap
+                        ? t('page.home.newSinceLastVisit_title', {
+                              count: newCount,
+                              defaultValue: `{{count}}+ new since last visit`,
+                          })
+                        : t('page.home.newSinceLastVisit_title', { count: newCount })}
                 </span>
                 <span className={styles.subtitle}>
                     {t('page.home.newSinceLastVisit_subtitle', {
