@@ -11,6 +11,7 @@ import { TextTitle } from '/@/shared/components/text-title/text-title';
 import { Text } from '/@/shared/components/text/text';
 import { PlaybackSelectors } from '/@/shared/constants/playback-selectors';
 import { QueueSong } from '/@/shared/types/domain-types';
+import { isPlausibleReleaseYear } from '/@/shared/utils/release-year';
 
 interface MobileFullscreenPlayerMetadataProps {
     currentSong?: QueueSong;
@@ -40,7 +41,9 @@ export const MobileFullscreenPlayerMetadata = memo(
             : currentSong?.artists?.map((a) => a.name).join(', ');
         const album = isRadio ? radioStationName || '—' : currentSong?.album;
         const container = currentSong?.container;
-        const year = currentSong?.releaseYear;
+        const year = isPlausibleReleaseYear(currentSong?.releaseYear)
+            ? currentSong?.releaseYear
+            : null;
         const isFavorite = currentSong?.userFavorite;
         const rating = currentSong?.userRating;
 

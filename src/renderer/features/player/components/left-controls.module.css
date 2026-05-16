@@ -73,7 +73,8 @@
 }
 
 /* Small year pill rendered next to the title — quick "what year is this?"
-   glance without opening the song detail page. */
+   glance without opening the song detail page. flex-shrink: 0 so it
+   stays visible when the title shrinks-with-ellipsis on narrow widths. */
 .year-chip {
     display: inline-flex;
     flex: 0 0 auto;
@@ -86,7 +87,7 @@
     letter-spacing: 0.02em;
     user-select: none;
     background: var(--theme-colors-surface);
-    border: 1px solid var(--theme-colors-border-muted, rgb(255 255 255 / 14%));
+    border: 1px solid var(--theme-colors-border);
     border-radius: 999px;
 }
 
