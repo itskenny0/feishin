@@ -79,17 +79,18 @@ export const NewSinceLastVisit = () => {
         const persistNow = () => {
             localStorage.setItem(storageKey(serverId), new Date().toISOString());
         };
+        // Persist on actual app/tab close only. The previous version also
+        // listened for visibilitychange:hidden, which in Electron fires on
+        // every alt-tab and on Windows on every minimize → the timestamp
+        // moved forward constantly and the banner effectively never showed.
+        // The pagehide event fires on actual page navigation/close in both
+        // browsers and Electron, covering the case where beforeunload is
+        // suppressed (mobile browsers / strict-tab-close).
         window.addEventListener('beforeunload', persistNow);
-        // Also persist when the tab/window becomes hidden — covers mobile
-        // browsers that don't fire beforeunload reliably and Electron
-        // window-close paths.
-        const onVisibility = () => {
-            if (document.visibilityState === 'hidden') persistNow();
-        };
-        document.addEventListener('visibilitychange', onVisibility);
+        window.addEventListener('pagehide', persistNow);
         return () => {
             window.removeEventListener('beforeunload', persistNow);
-            document.removeEventListener('visibilitychange', onVisibility);
+            window.removeEventListener('pagehide', persistNow);
         };
     }, [serverId]);
 

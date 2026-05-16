@@ -65,6 +65,12 @@
     animation: pulse 1.4s ease-in-out infinite;
 }
 
+/* Errored tiles display the em-dash placeholder in muted text so the user
+   can tell at a glance that the value isn't a legitimate zero. */
+.tile-value.error {
+    color: var(--theme-colors-text-muted);
+}
+
 .tile-sub {
     font-size: 0.78rem;
     color: var(--theme-colors-text-muted);
