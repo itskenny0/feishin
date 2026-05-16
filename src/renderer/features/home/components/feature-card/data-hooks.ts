@@ -116,10 +116,13 @@ const useArtistSongs = (artistId: null | string, serverId: string | undefined) =
     useQuery({
         enabled: Boolean(artistId && serverId),
         gcTime: 1000 * 60 * 30,
-        // Keep the previous artist's songs visible while the next set fetches.
-        // Without this, every rotation tick blanks the grid to skeletons for
-        // a beat, which the user perceives as the card "flashing".
-        placeholderData: keepPreviousData,
+        // Intentionally NO keepPreviousData here. The artist-card auto-skips
+        // single-song artists by calling goNext() from a useEffect, which can
+        // change the current artist several times in quick succession. With
+        // placeholderData on, the title would update to the new artist while
+        // the previous artist's songs lingered in the grid — visually that
+        // reads as 'wrong songs for this artist'. Better to flash a brief
+        // skeleton than to display inconsistent state.
         queryFn: async ({ signal }) => {
             if (!artistId || !serverId) return [] as Song[];
             // Over-fetch so dedupeSongsByTitle still produces a full grid for
@@ -264,6 +267,22 @@ const useGenreSongs = (
         staleTime: 1000 * 60 * 5,
     });
 
+/**
+ * Drop junk multi-tag genre names ('rap;50 Cent;...', 'Genre: Subgenre', etc.)
+ * before they end up in the rotation. Same heuristic as the home-grid filter.
+ */
+const isCleanGenreName = (name: string): boolean => {
+    if (!name) return false;
+    const trimmed = name.trim();
+    if (trimmed.length === 0 || trimmed.length > 40) return false;
+    if (trimmed.includes(';')) return false;
+    if (trimmed.includes(':')) return false;
+    if (/\d{3,}/.test(trimmed)) return false;
+    if ((trimmed.match(/,/g) || []).length >= 4) return false;
+    const letterCount = (trimmed.match(/[a-zA-Z]/g) || []).length;
+    return letterCount * 2 >= trimmed.length;
+};
+
 export const useGenreFeatureData = (
     serverId: string | undefined,
     serverType: string | undefined,
@@ -271,7 +290,13 @@ export const useGenreFeatureData = (
 ): FeatureCardData => {
     const { data: candidates, isLoading } = useGenreCandidates(serverId);
     const pool = useMemo(
-        () => (candidates ?? []).filter((g) => (g.albumCount ?? 0) > 0),
+        // Previous filter required albumCount > 0, but Jellyfin's genre
+        // normalize hardcodes albumCount: null — every candidate was rejected
+        // and the card was permanently stuck on its empty state. Trust the
+        // API: if Jellyfin returned the genre, it exists. Drop only names
+        // that are obviously junk so we don't surface 'rap;50 Cent;...' as a
+        // featured genre.
+        () => (candidates ?? []).filter((g) => isCleanGenreName(g.name)),
         [candidates],
     );
     const { goNext, goPrev, index, reshuffle } = usePoolRotation(pool.length);
