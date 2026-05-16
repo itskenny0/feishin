@@ -20,13 +20,6 @@ import {
     usePlayerSong,
 } from '/@/renderer/store';
 import { useShowFilesystemNameForAlbums } from '/@/renderer/store/settings.store';
-
-const albumFolderNameFromSongPath = (path?: null | string): null | string => {
-    if (!path) return null;
-    const segments = path.split(/[/\\]/).filter(Boolean);
-    if (segments.length < 2) return null;
-    return segments[segments.length - 2] ?? null;
-};
 import { Badge } from '/@/shared/components/badge/badge';
 import { Center } from '/@/shared/components/center/center';
 import { Flex } from '/@/shared/components/flex/flex';
@@ -36,6 +29,7 @@ import { Stack } from '/@/shared/components/stack/stack';
 import { Text } from '/@/shared/components/text/text';
 import { useSetState } from '/@/shared/hooks/use-set-state';
 import { ExplicitStatus, LibraryItem } from '/@/shared/types/domain-types';
+import { albumFolderFromSongPath } from '/@/shared/utils/album-folder-from-path';
 import { isPlausibleReleaseYear } from '/@/shared/utils/release-year';
 
 const imageVariants: Variants = {
@@ -116,8 +110,7 @@ export const FullScreenPlayerImage = () => {
     const playerItems = usePlayerItems();
     const useFsAlbumName = useShowFilesystemNameForAlbums();
     const albumDisplayName =
-        (useFsAlbumName ? albumFolderNameFromSongPath(currentSong?.path) : null) ||
-        currentSong?.album;
+        (useFsAlbumName ? albumFolderFromSongPath(currentSong?.path) : null) || currentSong?.album;
 
     const isPlayingRadio = isRadioActive && isRadioPlaying;
 
