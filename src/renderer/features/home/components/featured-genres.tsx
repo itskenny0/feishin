@@ -9,7 +9,7 @@ import styles from './featured-genres.module.css';
 import { api } from '/@/renderer/api';
 import { queryKeys } from '/@/renderer/api/query-keys';
 import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
-import { genresQueries } from '/@/renderer/features/genres/api/genres-api';
+import { genresQueries, useFuzzyGenreIds } from '/@/renderer/features/genres/api/genres-api';
 import { useIsPlayerFetching, usePlayer } from '/@/renderer/features/player/context/player-context';
 import { PlayButton } from '/@/renderer/features/shared/components/play-button';
 import { useContainerQuery } from '/@/renderer/hooks';
@@ -23,7 +23,7 @@ import {
     Genre,
     GenreListSort,
     LibraryItem,
-    Played,
+    SongListSort,
     SortOrder,
 } from '/@/shared/types/domain-types';
 import { Play } from '/@/shared/types/types';
@@ -219,40 +219,42 @@ const GenrePlayButton = ({ genre }: { genre: Genre }) => {
     const isPlayerFetching = useIsPlayerFetching();
     const player = usePlayer();
     const serverId = useCurrentServerId();
+    // Expand to every genre whose name contains the clicked one so 'metal'
+    // also plays 'death metal', 'black metal', etc. Falls back to the
+    // single id when no matches.
+    const fuzzyIds = useFuzzyGenreIds(genre.id);
 
-    const handlePlay = useCallback(
-        async (genre: Genre) => {
-            if (!serverId) return;
+    const handlePlay = useCallback(async () => {
+        if (!serverId) return;
 
-            const data = await queryClient.fetchQuery({
-                gcTime: 0,
-                queryFn: () => {
-                    return api.controller.getRandomSongList({
-                        apiClientProps: { serverId },
-                        query: {
-                            genre: genre.id,
-                            limit: 100,
-                            played: Played.All,
-                        },
-                    });
-                },
-                queryKey: queryKeys.player.fetch(),
-                staleTime: 0,
-            });
+        // getSongList accepts genreIds (plural array); getRandomSongList
+        // only takes a single genre string, which would defeat the fuzzy
+        // expansion. Sort RANDOM + a generous limit gives a comparable
+        // shuffled set.
+        const data = await queryClient.fetchQuery({
+            gcTime: 0,
+            queryFn: () => {
+                return api.controller.getSongList({
+                    apiClientProps: { serverId },
+                    query: {
+                        genreIds: fuzzyIds,
+                        limit: 100,
+                        sortBy: SongListSort.RANDOM,
+                        sortOrder: SortOrder.DESC,
+                        startIndex: 0,
+                    },
+                });
+            },
+            queryKey: queryKeys.player.fetch(),
+            staleTime: 0,
+        });
 
-            player.addToQueueByData(data?.items || [], Play.NOW);
-        },
-        [player, queryClient, serverId],
-    );
+        player.addToQueueByData(data?.items || [], Play.NOW);
+    }, [player, queryClient, serverId, fuzzyIds]);
 
     return (
         <span className={styles.playButtonWrapper}>
-            <PlayButton
-                fill={true}
-                isSecondary
-                loading={isPlayerFetching}
-                onClick={() => handlePlay(genre)}
-            />
+            <PlayButton fill={true} isSecondary loading={isPlayerFetching} onClick={handlePlay} />
         </span>
     );
 };

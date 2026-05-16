@@ -2,6 +2,7 @@ import { Suspense, useMemo } from 'react';
 import { useParams } from 'react-router';
 
 import { AlbumListView } from '/@/renderer/features/albums/components/album-list-content';
+import { useFuzzyGenreIds } from '/@/renderer/features/genres/api/genres-api';
 import { ListFilters, ListFiltersTitle } from '/@/renderer/features/shared/components/list-filters';
 import { ListWithSidebarContainer } from '/@/renderer/features/shared/components/list-with-sidebar-container';
 import { SaveAsCollectionButton } from '/@/renderer/features/shared/components/save-as-collection-button';
@@ -66,12 +67,14 @@ export const GenreDetailContent = () => {
 function GenreDetailContentAlbums() {
     const { genreId } = useParams() as { genreId: string };
     const { display, grid, itemsPerPage, pagination, table } = useListSettings(ItemListKey.ALBUM);
+    // Fuzzy expansion so clicking "Metal" also matches "Death Metal" etc.
+    const fuzzyIds = useFuzzyGenreIds(genreId);
 
     const overrideQuery = useMemo(() => {
         return {
-            genreIds: [genreId],
+            genreIds: fuzzyIds,
         };
-    }, [genreId]);
+    }, [fuzzyIds]);
 
     return (
         <Suspense fallback={<Spinner container />}>
@@ -90,12 +93,13 @@ function GenreDetailContentAlbums() {
 function GenreDetailContentSongs() {
     const { genreId } = useParams() as { genreId: string };
     const { display, grid, itemsPerPage, pagination, table } = useListSettings(ItemListKey.SONG);
+    const fuzzyIds = useFuzzyGenreIds(genreId);
 
     const overrideQuery = useMemo(() => {
         return {
-            genreIds: [genreId],
+            genreIds: fuzzyIds,
         };
-    }, [genreId]);
+    }, [fuzzyIds]);
 
     return (
         <Suspense fallback={<Spinner container />}>
