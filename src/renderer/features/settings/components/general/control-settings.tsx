@@ -567,6 +567,23 @@ export const ControlSettings = memo(() => {
                   },
               ]
             : []),
+        {
+            control: (
+                <Switch
+                    checked={settings.showPlaybarYearChip}
+                    onChange={(e) => {
+                        setSettings({
+                            general: {
+                                ...settings,
+                                showPlaybarYearChip: e.currentTarget.checked,
+                            },
+                        });
+                    }}
+                />
+            ),
+            description: t('setting.showPlaybarYearChip', { context: 'description' }),
+            title: t('setting.showPlaybarYearChip'),
+        },
     ];
 
     return <SettingsSection options={controlOptions} title={t('page.setting.controls')} />;

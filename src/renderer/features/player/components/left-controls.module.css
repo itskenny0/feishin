@@ -72,6 +72,24 @@
     }
 }
 
+/* Small year pill rendered next to the title — quick "what year is this?"
+   glance without opening the song detail page. */
+.year-chip {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    padding: 1px 7px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--theme-colors-foreground-muted);
+    letter-spacing: 0.02em;
+    user-select: none;
+    background: var(--theme-colors-surface);
+    border: 1px solid var(--theme-colors-border-muted, rgb(255 255 255 / 14%));
+    border-radius: 999px;
+}
+
 .left-controls-container {
     display: flex;
     width: 100%;

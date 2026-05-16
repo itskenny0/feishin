@@ -531,6 +531,7 @@ export const GeneralSettingsSchema = z.object({
     showFilesystemNameForAlbums: z.boolean(),
     showFilesystemNameForFolders: z.boolean(),
     showLyricsInSidebar: z.boolean(),
+    showPlaybarYearChip: z.boolean(),
     showRatings: z.boolean(),
     showVisualizerInSidebar: z.boolean(),
     sidebarBottomSection: z.enum(['playlists', 'favoriteAlbums', 'none']),
@@ -1221,6 +1222,7 @@ const initialState: SettingsState = {
         showFilesystemNameForAlbums: false,
         showFilesystemNameForFolders: true,
         showLyricsInSidebar: true,
+        showPlaybarYearChip: true,
         showRatings: true,
         showVisualizerInSidebar: true,
         sidebarBottomSection: 'playlists',
@@ -2964,6 +2966,9 @@ export const useShowLyricsInSidebar = () =>
 
 export const useShowVisualizerInSidebar = () =>
     useSettingsStore((state) => state.general.showVisualizerInSidebar, shallow);
+
+export const useShowPlaybarYearChip = () =>
+    useSettingsStore((state) => state.general.showPlaybarYearChip, shallow);
 
 export const useAutoDJSettings = () => useSettingsStore((store) => store.autoDJ, shallow);
 
