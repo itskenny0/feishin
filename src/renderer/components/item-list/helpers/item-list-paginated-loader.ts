@@ -110,7 +110,13 @@ export const useItemListPaginatedLoader = ({
                 });
             }
 
-            await queryClient.invalidateQueries();
+            // Scope to this list's item type on this server. Previously this
+            // was a global invalidateQueries() that refetched every cached
+            // query in the app — favorites, sidebar playlists, home stats,
+            // scrobble counts, etc. — on every refresh-button click.
+            await queryClient.invalidateQueries({
+                queryKey: [serverId, getQueryKeyName(itemType)],
+            });
         },
         mutationKey: getListRefreshMutationKey(eventKey ?? 'paginated'),
     });

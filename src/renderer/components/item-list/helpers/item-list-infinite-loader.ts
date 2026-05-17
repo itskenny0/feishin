@@ -297,8 +297,14 @@ export const useItemListInfiniteLoader = ({
 
     const refreshMutation = useMutation({
         mutationFn: async (force?: boolean) => {
-            // Invalidate all queries to ensure fresh data
-            queryClient.invalidateQueries();
+            // Invalidate ONLY queries for this list's item type on this server.
+            // Previously this was an unscoped `invalidateQueries()` which
+            // marked every cached query in the app stale (favorites, sidebar
+            // playlists, home stats, scrobble counts, …) on every refresh —
+            // a perf footgun the refresh button shouldn't carry.
+            queryClient.invalidateQueries({
+                queryKey: [serverId, getListQueryKeyName(itemType)],
+            });
 
             // Reset the infinite list data
             const currentData = queryClient.getQueryData<{
