@@ -24,7 +24,6 @@ const getAudioDevices = async () => {
 
 const getMpvAudioDevices = async () => {
     if (!mpvPlayer) {
-        console.log('mpvPlayer not found');
         return [];
     }
 

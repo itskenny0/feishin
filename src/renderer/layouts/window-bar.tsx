@@ -36,6 +36,7 @@ interface WindowBarControlsProps {
 }
 
 const WindowsControls = ({ controls, title }: WindowBarControlsProps) => {
+    const { t } = useTranslation();
     const { handleClose, handleMaximize, handleMinimize } = controls;
 
     return (
@@ -47,13 +48,24 @@ const WindowsControls = ({ controls, title }: WindowBarControlsProps) => {
                 </Text>
             </div>
             <div className={styles.windowsButtonGroup}>
-                <div className={styles.windowsButton} onClick={handleMinimize} role="button">
+                <div
+                    aria-label={t('common.minimize', { defaultValue: 'Minimize' })}
+                    className={styles.windowsButton}
+                    onClick={handleMinimize}
+                    role="button"
+                >
                     <RiSubtractLine size={19} />
                 </div>
-                <div className={styles.windowsButton} onClick={handleMaximize} role="button">
+                <div
+                    aria-label={t('common.maximize', { defaultValue: 'Maximize' })}
+                    className={styles.windowsButton}
+                    onClick={handleMaximize}
+                    role="button"
+                >
                     <RiCheckboxBlankLine size={13} />
                 </div>
                 <div
+                    aria-label={t('common.close')}
                     className={clsx(styles.windowsButton, styles.exit)}
                     onClick={handleClose}
                     role="button"
@@ -66,6 +78,7 @@ const WindowsControls = ({ controls, title }: WindowBarControlsProps) => {
 };
 
 const MacOsControls = ({ controls, title }: WindowBarControlsProps) => {
+    const { t } = useTranslation();
     const { handleClose, handleMaximize, handleMinimize } = controls;
 
     const [hoverMin, setHoverMin] = useState(false);
@@ -76,11 +89,13 @@ const MacOsControls = ({ controls, title }: WindowBarControlsProps) => {
         <div className={styles.macosContainer}>
             <div className={styles.macosButtonGroup}>
                 <div
+                    aria-label={t('common.minimize', { defaultValue: 'Minimize' })}
                     className={clsx(styles.macosButton, styles.minButton)}
                     id="min-button"
                     onClick={handleMinimize}
                     onMouseLeave={() => setHoverMin(false)}
                     onMouseOver={() => setHoverMin(true)}
+                    role="button"
                 >
                     <img
                         alt=""
@@ -90,11 +105,13 @@ const MacOsControls = ({ controls, title }: WindowBarControlsProps) => {
                     />
                 </div>
                 <div
+                    aria-label={t('common.maximize', { defaultValue: 'Maximize' })}
                     className={clsx(styles.macosButton, styles.maxButton)}
                     id="max-button"
                     onClick={handleMaximize}
                     onMouseLeave={() => setHoverMax(false)}
                     onMouseOver={() => setHoverMax(true)}
+                    role="button"
                 >
                     <img
                         alt=""
@@ -104,11 +121,13 @@ const MacOsControls = ({ controls, title }: WindowBarControlsProps) => {
                     />
                 </div>
                 <div
+                    aria-label={t('common.close')}
                     className={clsx(styles.macosButton)}
                     id="close-button"
                     onClick={handleClose}
                     onMouseLeave={() => setHoverClose(false)}
                     onMouseOver={() => setHoverClose(true)}
+                    role="button"
                 >
                     <img
                         alt=""
