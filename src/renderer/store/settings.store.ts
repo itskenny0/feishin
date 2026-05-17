@@ -675,6 +675,8 @@ const PlaybackSettingsSchema = z.object({
     mpvExtraParameters: z.array(z.string()),
     mpvProperties: MpvSettingsSchema,
     preservePitch: z.boolean(),
+    remoteTargetDeviceId: z.string().nullable().optional(),
+    remoteTargetDeviceName: z.string().nullable().optional(),
     scrobble: ScrobbleSettingsSchema,
     /**
      * Number of seconds to fade the volume down before the sleep timer
@@ -1911,6 +1913,8 @@ const initialState: SettingsState = {
             replayGainPreampDB: 0,
         },
         preservePitch: true,
+        remoteTargetDeviceId: null,
+        remoteTargetDeviceName: null,
         scrobble: {
             enabled: true,
             notify: false,
@@ -2696,10 +2700,24 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
+                if (version <= 41) {
+                    // Jellyfin Connect: persist the last-picked remote
+                    // playback target across launches so the user lands
+                    // back on the device they were controlling.
+                    if (state.playback.remoteTargetDeviceId === undefined) {
+                        state.playback.remoteTargetDeviceId =
+                            initialState.playback.remoteTargetDeviceId;
+                    }
+                    if (state.playback.remoteTargetDeviceName === undefined) {
+                        state.playback.remoteTargetDeviceName =
+                            initialState.playback.remoteTargetDeviceName;
+                    }
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 41,
+            version: 42,
         },
     ),
 );
@@ -2707,6 +2725,15 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
 export const useSettingsStoreActions = () => useSettingsStore((state) => state.actions);
 
 export const usePlaybackSettings = () => useSettingsStore((state) => state.playback, shallow);
+
+export const useRemoteTargetSetting = () =>
+    useSettingsStore(
+        (state) => ({
+            deviceId: state.playback.remoteTargetDeviceId ?? null,
+            deviceName: state.playback.remoteTargetDeviceName ?? null,
+        }),
+        shallow,
+    );
 
 export const useTableSettings = (type: ItemListKey) =>
     useSettingsStore((state) => state.lists[type as keyof typeof state.lists]);

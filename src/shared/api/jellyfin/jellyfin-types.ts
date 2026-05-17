@@ -246,6 +246,7 @@ const sessionInfo = z.object({
     IsActive: z.boolean(),
     LastActivityDate: z.string(),
     LastPlaybackCheckIn: z.string(),
+    NowPlayingItem: z.any().optional(),
     NowPlayingQueue: z.array(z.any()),
     NowPlayingQueueFullItems: z.array(z.any()),
     PlayableMediaTypes: z.array(z.any()),
@@ -253,8 +254,10 @@ const sessionInfo = z.object({
         CanSeek: z.boolean(),
         IsMuted: z.boolean(),
         IsPaused: z.boolean(),
+        PlaylistItemId: z.string().optional(),
         PositionTicks: z.number().optional(),
         RepeatMode: z.string(),
+        VolumeLevel: z.number().optional(),
     }),
     RemoteEndPoint: z.string(),
     ServerId: z.string(),
@@ -735,6 +738,29 @@ const scrobbleParameters = z.object({
     VolumeLevel: z.number().optional(),
 });
 
+const getSessionsParameters = z.object({
+    ControllableByUserId: z.string().optional(),
+});
+
+const postPlayingParameters = z.object({
+    ItemIds: z.string(),
+    PlayCommand: z.enum(['PlayNow', 'PlayNext', 'PlayLast']),
+    StartIndex: z.number().optional(),
+    StartPositionTicks: z.number().optional(),
+});
+
+const postPlayingCommandParameters = z.object({
+    PlaylistIndex: z.number().optional(),
+    SeekPositionTicks: z.number().optional(),
+});
+
+const postGeneralCommandBody = z.object({
+    Arguments: z.record(z.string()).optional(),
+    Name: z.string(),
+});
+
+const remoteCommandResponse = z.any();
+
 const scrobble = z.any();
 
 const favorite = z.object({
@@ -885,9 +911,13 @@ export const jfType = {
         folder: folderParameters,
         genreList: genreListParameters,
         getQueue: getQueueParameters,
+        getSessions: getSessionsParameters,
         musicFolderList: musicFolderListParameters,
         playlistDetail: playlistDetailParameters,
         playlistList: playlistListParameters,
+        postGeneralCommand: postGeneralCommandBody,
+        postPlaying: postPlayingParameters,
+        postPlayingCommand: postPlayingCommandParameters,
         removeFromPlaylist: removeFromPlaylistParameters,
         saveQueue: saveQueueParameters,
         scrobble: scrobbleParameters,
@@ -924,6 +954,7 @@ export const jfType = {
         playlist,
         playlistList,
         playlistSongList,
+        remoteCommand: remoteCommandResponse,
         removeFromPlaylist,
         scrobble,
         search,

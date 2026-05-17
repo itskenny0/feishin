@@ -2,6 +2,10 @@ import { useTranslation } from 'react-i18next';
 
 import styles from './center-controls.module.css';
 
+import {
+    useActivePlayerSource,
+    useTransportEnabled,
+} from '/@/renderer/features/jellyfin-remote-target/hooks/use-active-player-source';
 import { MainPlayButton, PlayerButton } from '/@/renderer/features/player/components/player-button';
 import { PlayerbarSlider } from '/@/renderer/features/player/components/playerbar-slider';
 import { openShuffleAllModal } from '/@/renderer/features/player/components/shuffle-all-modal';
@@ -16,12 +20,10 @@ import {
     useButtonSize,
     usePlayerRepeat,
     usePlayerShuffle,
-    usePlayerSongProperties,
-    usePlayerStatus,
     useSkipButtons,
 } from '/@/renderer/store';
 import { Icon } from '/@/shared/components/icon/icon';
-import { PlayerRepeat, PlayerShuffle, PlayerStatus } from '/@/shared/types/types';
+import { PlayerRepeat, PlayerShuffle } from '/@/shared/types/types';
 
 export const CenterControls = () => {
     const skip = useSkipButtons();
@@ -127,10 +129,11 @@ const ShuffleButton = ({ disabled }: { disabled?: boolean }) => {
     const buttonSize = useButtonSize();
     const shuffle = usePlayerShuffle();
     const { toggleShuffle } = usePlayer();
+    const canShuffle = useTransportEnabled('Shuffle');
 
     return (
         <PlayerButton
-            disabled={disabled}
+            disabled={disabled || !canShuffle}
             icon={
                 <Icon
                     fill={shuffle === PlayerShuffle.NONE ? 'default' : 'primary'}
@@ -140,6 +143,7 @@ const ShuffleButton = ({ disabled }: { disabled?: boolean }) => {
             }
             isActive={shuffle !== PlayerShuffle.NONE}
             onClick={toggleShuffle}
+            style={{ opacity: canShuffle ? undefined : 0.4 }}
             tooltip={{
                 label:
                     shuffle === PlayerShuffle.NONE
@@ -158,12 +162,14 @@ const PreviousButton = ({ disabled }: { disabled?: boolean }) => {
     const { t } = useTranslation();
     const buttonSize = useButtonSize();
     const { mediaPrevious } = usePlayer();
+    const canPrevious = useTransportEnabled('PreviousTrack');
 
     return (
         <PlayerButton
-            disabled={disabled}
+            disabled={disabled || !canPrevious}
             icon={<Icon fill="default" icon="mediaPrevious" size={buttonSize} />}
             onClick={mediaPrevious}
+            style={{ opacity: canPrevious ? undefined : 0.4 }}
             tooltip={{
                 label: t('player.previous'),
                 openDelay: 400,
@@ -195,16 +201,17 @@ const SkipBackwardButton = ({ disabled }: { disabled?: boolean }) => {
 };
 
 const CenterPlayButton = ({ disabled }: { disabled?: boolean }) => {
-    const { id: currentSongId } = usePlayerSongProperties(['id']) ?? {};
-
-    const status = usePlayerStatus();
+    const source = useActivePlayerSource();
+    const currentSongId = source.nowPlayingItem?.id;
     const { mediaTogglePlayPause } = usePlayer();
+    const canPlayPause = useTransportEnabled('PlayPause');
 
     return (
         <MainPlayButton
-            disabled={disabled || currentSongId === undefined}
-            isPaused={status === PlayerStatus.PAUSED}
+            disabled={disabled || currentSongId === undefined || !canPlayPause}
+            isPaused={source.isPaused}
             onClick={mediaTogglePlayPause}
+            style={{ opacity: canPlayPause ? undefined : 0.4 }}
         />
     );
 };
@@ -234,12 +241,14 @@ const NextButton = ({ disabled }: { disabled?: boolean }) => {
     const { t } = useTranslation();
     const buttonSize = useButtonSize();
     const { mediaNext } = usePlayer();
+    const canNext = useTransportEnabled('NextTrack');
 
     return (
         <PlayerButton
-            disabled={disabled}
+            disabled={disabled || !canNext}
             icon={<Icon fill="default" icon="mediaNext" size={buttonSize} />}
             onClick={mediaNext}
+            style={{ opacity: canNext ? undefined : 0.4 }}
             tooltip={{
                 label: t('player.next'),
                 openDelay: 400,
@@ -254,10 +263,11 @@ const RepeatButton = ({ disabled }: { disabled?: boolean }) => {
     const buttonSize = useButtonSize();
     const repeat = usePlayerRepeat();
     const { toggleRepeat } = usePlayer();
+    const canRepeat = useTransportEnabled('SetRepeatMode');
 
     return (
         <PlayerButton
-            disabled={disabled}
+            disabled={disabled || !canRepeat}
             icon={
                 repeat === PlayerRepeat.ONE ? (
                     <Icon fill="primary" icon="mediaRepeatOne" size={buttonSize} />
@@ -271,6 +281,7 @@ const RepeatButton = ({ disabled }: { disabled?: boolean }) => {
             }
             isActive={repeat !== PlayerRepeat.NONE}
             onClick={toggleRepeat}
+            style={{ opacity: canRepeat ? undefined : 0.4 }}
             tooltip={{
                 label: `${
                     repeat === PlayerRepeat.NONE
