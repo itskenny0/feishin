@@ -73,3 +73,14 @@
     align-items: center;
     justify-content: center;
 }
+
+/* Enforce the iOS HIG / WCAG minimum 44×44 touch target on the mobile
+   playerbar so prev/next/play buttons aren't fiddly to tap on phones.
+   The ActionIcon defaults render smaller; this widens the hit area
+   without changing the visible icon size. */
+@media (pointer: coarse) {
+    .controls-wrapper button {
+        min-width: 44px;
+        min-height: 44px;
+    }
+}

@@ -67,7 +67,12 @@ img {
 @media only screen and (width < 640px) {
     body,
     html {
-        overflow-x: auto;
+        /* Was overflow-x: auto, which allowed the page to scroll
+           horizontally when content was wider than the viewport. That
+           hides the playerbar at the right edge on phones. Forbid
+           horizontal scroll instead — layout components should
+           shrink/wrap to fit. */
+        overflow-x: hidden;
     }
 }
 

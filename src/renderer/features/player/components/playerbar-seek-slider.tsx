@@ -74,11 +74,17 @@ export const PlayerbarSeekSlider = ({ max, min }: PlayerbarSeekSliderProps) => {
                 // The useEffect will detect when currentTime catches up and clear isSeeking.
                 // Also set a fallback timeout to clear isSeeking after a max delay
                 // in case the seek doesn't complete (e.g., network issues).
+                //
+                // Bumped from 1000ms → 5000ms: transcoded streams (high-bit-
+                // rate FLAC, radio re-encoding) routinely take 2-4s to land
+                // a seek; the previous 1s fallback snapped the slider back
+                // to the old position before the seek completed, making the
+                // user think the seek didn't take.
                 seekTimeoutRef.current = setTimeout(() => {
                     setIsSeeking(false);
                     lastSeekValueRef.current = null;
                     seekTimeoutRef.current = null;
-                }, 1000);
+                }, 5000);
             }}
             onClick={(e) => {
                 e?.stopPropagation();
