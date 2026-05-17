@@ -1,3 +1,4 @@
+import { t } from 'i18next';
 import isElectron from 'is-electron';
 import { useEffect, useRef } from 'react';
 
@@ -53,7 +54,10 @@ export const useRemote = () => {
                     category: LogCategory.REMOTE,
                     meta: { error },
                 });
-                toast.warn({ message: error, title: 'Failed to enable remote' });
+                toast.warn({
+                    message: error,
+                    title: t('error.remoteEnableError'),
+                });
             });
         // We only want to fire this once
         // eslint-disable-next-line react-hooks/exhaustive-deps

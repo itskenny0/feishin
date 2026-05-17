@@ -38,7 +38,7 @@ export const SettingsOptions = memo(
                                 {title}
                             </Text>
                             {note && (
-                                <Tooltip label={note} openDelay={0}>
+                                <Tooltip label={note} openDelay={400}>
                                     <Icon icon="info" />
                                 </Tooltip>
                             )}

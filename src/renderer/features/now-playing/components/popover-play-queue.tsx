@@ -52,7 +52,7 @@ export const PopoverPlayQueue = ({
                     size="sm"
                     tooltip={{
                         label: t('player.viewQueue'),
-                        openDelay: 0,
+                        openDelay: 400,
                     }}
                     variant="subtle"
                 />

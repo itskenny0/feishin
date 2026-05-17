@@ -322,7 +322,7 @@ export const AppMenu = () => {
                                     label: t('setting.sidePlayQueueLayout', {
                                         context: 'optionHorizontal',
                                     }),
-                                    openDelay: 0,
+                                    openDelay: 400,
                                     position: 'bottom',
                                 }}
                                 variant={
@@ -341,7 +341,7 @@ export const AppMenu = () => {
                                     label: t('setting.sidePlayQueueLayout', {
                                         context: 'optionVertical',
                                     }),
-                                    openDelay: 0,
+                                    openDelay: 400,
                                     position: 'bottom',
                                 }}
                                 variant={

@@ -108,7 +108,7 @@ export const MpvSettings = memo(() => {
                         onClick={handleReloadMpv}
                         tooltip={{
                             label: t('common.reload'),
-                            openDelay: 0,
+                            openDelay: 400,
                         }}
                         variant="subtle"
                     />
