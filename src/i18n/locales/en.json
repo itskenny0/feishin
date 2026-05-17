@@ -584,6 +584,7 @@
         "remoteTarget": {
             "listenOn": "Listen on",
             "noDevices": "No other Jellyfin clients online",
+            "noDevicesHint": "Sign in to Jellyfin Media Player, Findroid, or jellyfin-web on another device with this same account, then refresh.",
             "nowPlayingOn": "Now playing on {{deviceName}}",
             "reconnecting": "Reconnecting to {{deviceName}}…",
             "thisComputer": "This computer",

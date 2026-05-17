@@ -12,6 +12,7 @@ export interface RemoteDevice {
     nowPlayingTitle: null | string;
     sessionId: string; // session.Id — what we POST to
     supportsMediaControl: boolean;
+    supportsRemoteControl: boolean;
 }
 
 export interface RemoteMirrored {
