@@ -17,10 +17,19 @@ interface PlayerButtonProps extends Omit<ActionIconProps, 'icon' | 'variant'> {
 
 export const PlayerButton = forwardRef<HTMLButtonElement, PlayerButtonProps>(
     ({ icon, isActive, tooltip, variant, ...rest }: PlayerButtonProps, ref) => {
+        // Derive aria-label from the tooltip label when no explicit one is
+        // provided. The icon-only player buttons (stop/prev/next/shuffle-
+        // all/queue-jump/etc.) previously had no accessible name at all —
+        // screen readers announced 'button' with no context.
+        const derivedAriaLabel =
+            (rest['aria-label'] as string | undefined) ??
+            (typeof tooltip?.label === 'string' ? tooltip.label : undefined);
+
         if (tooltip) {
             return (
                 <Tooltip {...tooltip}>
                     <ActionIcon
+                        aria-label={derivedAriaLabel}
                         className={clsx({
                             [styles.active]: isActive,
                         })}

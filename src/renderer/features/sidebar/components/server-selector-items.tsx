@@ -14,6 +14,7 @@ import { useAuthStoreActions, useCurrentServer, useServerList } from '/@/rendere
 import { hasFeature } from '/@/shared/api/utils';
 import { DropdownMenu } from '/@/shared/components/dropdown-menu/dropdown-menu';
 import { Icon } from '/@/shared/components/icon/icon';
+import { toast } from '/@/shared/components/toast/toast';
 import { ServerListItemWithCredential, ServerType } from '/@/shared/types/domain-types';
 import { ServerFeature } from '/@/shared/types/features-types';
 
@@ -31,9 +32,22 @@ export const ServerSelectorItems = () => {
     );
 
     const handleSetCurrentServer = (server: ServerListItemWithCredential) => {
+        // No-op when re-selecting the same server (avoids a useless toast on
+        // accidental click of the already-active row).
+        if (currentServer?.id === server.id) return;
         navigate(AppRoute.HOME);
         setCurrentServer(server);
         setMusicFolderId(undefined);
+        // Surface a brief toast so an accidental click on a neighbouring
+        // server in the dropdown is visible rather than silent — the cache
+        // gets purged on switch, so it can otherwise feel like the app
+        // briefly broke.
+        toast.info({
+            message: t('form.addServer.switchedTo', {
+                defaultValue: 'Switched to {{name}}',
+                name: server.name,
+            }),
+        });
     };
 
     const supportsMultiSelect = hasFeature(currentServer, ServerFeature.MUSIC_FOLDER_MULTISELECT);
