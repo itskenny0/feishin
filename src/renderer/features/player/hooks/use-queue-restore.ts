@@ -97,13 +97,30 @@ export const useRestoreQueue = () => {
                 songsQueries.getQueue({ query: {}, serverId }),
             );
 
-            if (queue) {
-                player.setQueue(
-                    queue.entry,
-                    queue.currentIndex,
-                    queue.positionMs !== undefined ? queue.positionMs / 1000 : undefined,
-                );
+            // No saved queue on the server — give explicit feedback so
+            // the user doesn't click Restore and wonder if it ran.
+            if (!queue || !queue.entry || queue.entry.length === 0) {
+                toast.info({
+                    message: t('form.restoreQueue.empty', {
+                        defaultValue: 'No saved queue on the server',
+                    }),
+                });
+                return;
             }
+
+            player.setQueue(
+                queue.entry,
+                queue.currentIndex,
+                queue.positionMs !== undefined ? queue.positionMs / 1000 : undefined,
+            );
+
+            toast.success({
+                message: t('form.restoreQueue.success', {
+                    count: queue.entry.length,
+                    defaultValue_one: 'Restored 1 song from server',
+                    defaultValue_other: 'Restored {{count}} songs from server',
+                }),
+            });
         } catch (error) {
             toast.error({
                 message: (error as Error).message,
