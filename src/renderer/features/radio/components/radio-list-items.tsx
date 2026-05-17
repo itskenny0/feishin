@@ -146,23 +146,27 @@ const RadioListItem = ({ station }: RadioListItemProps) => {
                     <Group className={styles['radio-item-actions']} gap="xs">
                         {permissions.radio.edit && (
                             <ActionIcon
+                                aria-label={t('common.edit')}
                                 icon="edit"
                                 onClick={handleEditClick}
                                 size="sm"
                                 tooltip={{
                                     label: t('common.edit'),
+                                    openDelay: 400,
                                 }}
                                 variant="subtle"
                             />
                         )}
                         {permissions.radio.delete && (
                             <ActionIcon
+                                aria-label={t('common.delete')}
                                 icon="delete"
                                 iconProps={{ color: 'error' }}
                                 onClick={handleDeleteClick}
                                 size="sm"
                                 tooltip={{
                                     label: t('common.delete'),
+                                    openDelay: 400,
                                 }}
                                 variant="subtle"
                             />
