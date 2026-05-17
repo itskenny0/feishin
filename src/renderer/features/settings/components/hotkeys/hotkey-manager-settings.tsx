@@ -266,12 +266,17 @@ export const HotkeyManagerSettings = memo(() => {
                                                 readOnly
                                                 rightSection={
                                                     <ActionIcon
+                                                        aria-label={t('common.edit')}
                                                         icon="edit"
                                                         onClick={() => {
                                                             setSelected(binding as BindingActions);
                                                             document
                                                                 .getElementById(`hotkey-${binding}`)
                                                                 ?.focus();
+                                                        }}
+                                                        tooltip={{
+                                                            label: t('common.edit'),
+                                                            openDelay: 400,
                                                         }}
                                                         variant="transparent"
                                                     />
@@ -328,6 +333,7 @@ export const HotkeyManagerSettings = memo(() => {
                                         {bindings[binding as keyof typeof BINDINGS_MAP].hotkey && (
                                             <Table.Td>
                                                 <ActionIcon
+                                                    aria-label={t('common.clear')}
                                                     icon="x"
                                                     iconProps={{
                                                         color: 'error',
@@ -335,6 +341,10 @@ export const HotkeyManagerSettings = memo(() => {
                                                     onClick={() =>
                                                         handleClearHotkey(binding as BindingActions)
                                                     }
+                                                    tooltip={{
+                                                        label: t('common.clear'),
+                                                        openDelay: 400,
+                                                    }}
                                                     variant="transparent"
                                                 />
                                             </Table.Td>

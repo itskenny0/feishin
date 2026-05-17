@@ -54,9 +54,11 @@ const PlaylistSongListFiltersSidebar = () => {
                     </Button>
                     {setIsSidebarOpen && (
                         <ActionIcon
+                            aria-label={t('common.close')}
                             icon="unpin"
                             onClick={() => setIsSidebarOpen(false)}
                             size="compact-sm"
+                            tooltip={{ label: t('common.close'), openDelay: 400 }}
                             variant="subtle"
                         />
                     )}
