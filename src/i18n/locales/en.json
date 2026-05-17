@@ -766,6 +766,7 @@
         "mute": "Mute",
         "muted": "Muted",
         "next": "Next",
+        "volume": "Volume",
         "play": "Play",
         "playbackFetchCancel": "This is taking a while… close the notification to cancel",
         "playbackFetchInProgress": "Loading songs…",

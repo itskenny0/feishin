@@ -122,7 +122,8 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
         },
     });
 
-    const isSubmitDisabled = !form.values.name || !form.values.url || !form.values.username;
+    const isSubmitDisabled =
+        !form.values.name || !form.values.url || !form.values.username || !form.values.password;
 
     const fillServerDetails = (server: DiscoveredServerItem) => {
         form.setValues({ ...server });
@@ -263,6 +264,7 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
                             label={t('form.addServer.input', {
                                 context: 'url',
                             })}
+                            placeholder="https://music.example.com"
                             required
                             {...form.getInputProps('url')}
                         />

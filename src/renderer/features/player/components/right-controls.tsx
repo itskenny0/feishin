@@ -452,7 +452,18 @@ const VolumeButton = () => {
     return (
         <>
             <ActionIcon
-                icon={muted ? 'volumeMute' : volume > 50 ? 'volumeMax' : 'volumeNormal'}
+                aria-label={muted || volume === 0 ? t('player.muted') : t('player.volume')}
+                // Show the muted icon at 0 volume too — slider-to-zero
+                // should look the same as explicit mute, otherwise the
+                // icon stays at 'volumeNormal' while no sound plays and
+                // it reads as "Feishin is broken".
+                icon={
+                    muted || volume === 0
+                        ? 'volumeMute'
+                        : volume > 50
+                          ? 'volumeMax'
+                          : 'volumeNormal'
+                }
                 iconProps={{
                     color: muted ? 'muted' : undefined,
                     size: 'xl',
