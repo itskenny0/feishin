@@ -16,7 +16,10 @@ export const useAutosave = () => {
         if (enabled && server?.type && server.type !== ServerType.JELLYFIN) {
             if (currentSong?._uniqueId !== priorSongId.current) {
                 if (songCount.current === count) {
-                    savePlayQueue();
+                    // silent: autosave is invisible to the user; avoid
+                    // popping a toast every N songs for a save they
+                    // didn't initiate.
+                    savePlayQueue({ silent: true });
                     songCount.current = 1;
                 } else {
                     songCount.current += 1;

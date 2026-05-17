@@ -37,11 +37,20 @@ export const QueueRestoreTimestampHook = () => {
     return null;
 };
 
+/**
+ * Save the current play queue to the server.
+ *
+ * `silent: true` suppresses the success toast — used by the autosave hook,
+ * which fires this every N song changes and would otherwise pop a toast at
+ * the user every few minutes for an action they didn't initiate. Failure
+ * toasts always fire so the user knows when something genuinely broke.
+ */
 export const useSaveQueue = () => {
     const serverId = useCurrentServerId();
 
     const mutation = useMutation({
-        mutationFn: async () => {
+        mutationFn: async (args?: { silent?: boolean }) => {
+            const silent = args?.silent ?? false;
             if (!serverId) {
                 throw new Error(t('error.serverRequired'));
             }
@@ -68,9 +77,11 @@ export const useSaveQueue = () => {
                     },
                 });
 
-                toast.success({
-                    message: t('form.saveQueue.success'),
-                });
+                if (!silent) {
+                    toast.success({
+                        message: t('form.saveQueue.success'),
+                    });
+                }
             } catch (error) {
                 toast.error({
                     message: (error as Error).message,

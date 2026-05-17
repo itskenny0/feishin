@@ -170,7 +170,7 @@ const QueueRestoreActions = () => {
                 icon="upload"
                 iconProps={{ size: 'lg' }}
                 loading={isSavingQueue}
-                onClick={() => handleSaveQueue()}
+                onClick={() => handleSaveQueue(undefined)}
                 tooltip={{
                     label: t('player.saveQueueToServer'),
                     openDelay: 400,
