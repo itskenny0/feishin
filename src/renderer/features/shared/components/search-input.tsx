@@ -167,7 +167,7 @@ export const SearchInput = ({
                 iconProps={{ size: 'lg' }}
                 onClick={handleButtonClick}
                 style={buttonStyle}
-                tooltip={{ label: 'Search' }}
+                tooltip={{ label: 'Search', openDelay: 400 }}
                 variant="subtle"
             />
         </Box>

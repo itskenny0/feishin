@@ -84,7 +84,7 @@ export const MobileFullscreenPlayerHeader = memo(
                     icon="arrowDownS"
                     iconProps={{ size: 'lg' }}
                     onClick={onClose}
-                    tooltip={{ label: t('common.minimize') }}
+                    tooltip={{ label: t('common.minimize'), openDelay: 400 }}
                     variant={isPageHovered ? 'default' : 'subtle'}
                 />
                 <Popover position="bottom-end">
@@ -92,7 +92,7 @@ export const MobileFullscreenPlayerHeader = memo(
                         <ActionIcon
                             icon="settings2"
                             iconProps={{ size: 'lg' }}
-                            tooltip={{ label: t('common.configure') }}
+                            tooltip={{ label: t('common.configure'), openDelay: 400 }}
                             variant={isPageHovered ? 'default' : 'subtle'}
                         />
                     </Popover.Target>
