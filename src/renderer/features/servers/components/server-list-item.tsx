@@ -84,6 +84,7 @@ export const ServerListItem = ({ server }: ServerListItemProps) => {
                                 onClick={() => handleEdit()}
                                 tooltip={{
                                     label: t('page.manageServers.editServerDetailsTooltip'),
+                                    openDelay: 400,
                                 }}
                             >
                                 {t('common.edit')}

@@ -584,6 +584,7 @@ export const SidebarPlaylistList = () => {
                             size="xs"
                             tooltip={{
                                 label: t('action.createPlaylist'),
+                                openDelay: 400,
                             }}
                             variant="subtle"
                         />
@@ -619,6 +620,7 @@ export const SidebarPlaylistList = () => {
                             to={AppRoute.PLAYLISTS}
                             tooltip={{
                                 label: t('action.viewPlaylists'),
+                                openDelay: 400,
                             }}
                             variant="subtle"
                         />

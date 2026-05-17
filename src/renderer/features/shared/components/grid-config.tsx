@@ -579,6 +579,7 @@ const GridRowItem = memo(
                             size="xs"
                             tooltip={{
                                 label: t('table.config.general.moveUp'),
+                                openDelay: 400,
                             }}
                             variant="subtle"
                         />
@@ -589,6 +590,7 @@ const GridRowItem = memo(
                             size="xs"
                             tooltip={{
                                 label: t('table.config.general.moveDown'),
+                                openDelay: 400,
                             }}
                             variant="subtle"
                         />
@@ -601,6 +603,7 @@ const GridRowItem = memo(
                             size="xs"
                             tooltip={{
                                 label: t('table.config.general.alignLeft'),
+                                openDelay: 400,
                             }}
                             variant={item.align === 'start' ? 'filled' : 'subtle'}
                         />
@@ -611,6 +614,7 @@ const GridRowItem = memo(
                             size="xs"
                             tooltip={{
                                 label: t('table.config.general.alignCenter'),
+                                openDelay: 400,
                             }}
                             variant={item.align === 'center' ? 'filled' : 'subtle'}
                         />
@@ -621,6 +625,7 @@ const GridRowItem = memo(
                             size="xs"
                             tooltip={{
                                 label: t('table.config.general.alignRight'),
+                                openDelay: 400,
                             }}
                             variant={item.align === 'end' ? 'filled' : 'subtle'}
                         />

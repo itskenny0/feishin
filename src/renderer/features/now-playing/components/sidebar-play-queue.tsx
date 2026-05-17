@@ -314,6 +314,7 @@ const PanelReorderControls = ({ panelType }: { panelType: 'lyrics' | 'visualizer
                     size="xs"
                     tooltip={{
                         label: t('action.moveUp'),
+                        openDelay: 400,
                     }}
                     variant="subtle"
                 />
@@ -325,6 +326,7 @@ const PanelReorderControls = ({ panelType }: { panelType: 'lyrics' | 'visualizer
                     size="xs"
                     tooltip={{
                         label: t('action.moveDown'),
+                        openDelay: 400,
                     }}
                     variant="subtle"
                 />
@@ -335,6 +337,7 @@ const PanelReorderControls = ({ panelType }: { panelType: 'lyrics' | 'visualizer
                     size="xs"
                     tooltip={{
                         label: t('common.close'),
+                        openDelay: 400,
                     }}
                     variant="subtle"
                 />

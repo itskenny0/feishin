@@ -31,6 +31,7 @@ export const DisplayTypeToggleButton = ({
                     : isDetail
                       ? t('table.config.view.detail')
                       : t('table.config.view.table'),
+                openDelay: 400,
             }}
             variant="subtle"
             {...buttonProps}
