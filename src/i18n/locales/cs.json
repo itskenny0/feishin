@@ -48,7 +48,8 @@
         "sleepTimer_timeRemaining": "Zbývá {{time}}",
         "sleepTimer_setCustom": "Nastavit časovač",
         "sleepTimer_cancel": "Zrušit časovač",
-        "albumRadio": "Rádio alba"
+        "albumRadio": "Rádio alba",
+        "scrobbleForceSubmit": "Vynutit scrobble"
     },
     "setting": {
         "crossfadeStyle_description": "Vyberte způsob prolnutí u přehrávače zvuku",
@@ -429,7 +430,25 @@
         "playerbarWaveformStretch": "Natáhnutí vlnové křivky",
         "playerbarWaveformStretch_description": "Natáhně vlnovou křivku tak, aby vyplnila dostupný prostor",
         "preventSuspendOnPlayback_description": "Zabránit aplikaci v uspání během přehrávání hudby",
-        "preventSuspendOnPlayback": "Zabránit uspání při přehrávání"
+        "preventSuspendOnPlayback": "Zabránit uspání při přehrávání",
+        "hotkey_listShowPlayingSong": "Zobrazit přehrávanou skladbu v seznamu",
+        "sidebarPlaylistFolders_description": "Vytvořit zobrazení složky pro seznamy skadeb, které zahrnují nastavený oddělovač v názvu",
+        "sidebarPlaylistFolders": "Povolit složky",
+        "sidebarPlaylistFolderSeparator_description": "Znak (nebo řetězec) oddělující úrovně složek v názvu seznamu skladeb",
+        "sidebarPlaylistFolderSeparator": "Oddělovač složek",
+        "sidebarPlaylistFolderView_description": "Jak jsou složky zobrazeny v postranní liště",
+        "sidebarPlaylistFolderView": "Zobrazení složky",
+        "sidebarPlaylistFolderView_optionSingle": "Jedna složka",
+        "sidebarPlaylistFolderView_optionTree": "Stromové zobrazení",
+        "sidebarPlaylistFolderView_optionNavigation": "Zobrazení navigace",
+        "sidebarPlaylistFolderTreeIndent_description": "Počet pixelů, o který je odsazená každá větev",
+        "sidebarPlaylistFolderTreeIndent": "Odsazení větví",
+        "sidebarPlaylistFolderTreeLineColor_description": "Barva spojujících linek větví (ponechte prázdné pro výchozí)",
+        "sidebarPlaylistFolderTreeLineColor": "Barva linky stromu",
+        "sidebarPlaylistMode_description": "Jak je každý seznam skladeb zobrazen v seznamu v postranní liště",
+        "sidebarPlaylistMode": "Režim seznamů skladeb v postranní liště",
+        "sidebarPlaylistMode_optionCompact": "Kompaktní",
+        "sidebarPlaylistMode_optionExpanded": "Rozšířený"
     },
     "action": {
         "editPlaylist": "Upravit $t(entity.playlist, {\"count\": 1})",
@@ -473,7 +492,9 @@
         "addOrRemoveFromSelection": "Přidat nebo odebrat z výběru",
         "selectRangeOfItems": "Vyberte rozsah položek",
         "selectAll": "Vybrat vše",
-        "goToCurrent": "Přejít na aktuální položku"
+        "goToCurrent": "Přejít na aktuální položku",
+        "collapseAllFolders": "Sbalit všechny složky",
+        "expandAllFolders": "Rozbalit všechny složky"
     },
     "common": {
         "backward": "Zpátky",
@@ -602,7 +623,8 @@
         "rename": "Přejmenovat",
         "newVersionAvailable": "Je dostupná nová verze",
         "numberOfResults": "{{numberOfResults}} výsledků",
-        "grouping": "Seskupování"
+        "grouping": "Seskupování",
+        "back": "Zpět"
     },
     "table": {
         "config": {
@@ -1139,7 +1161,7 @@
         "folderWithCount_few": "{{count}} složky",
         "folderWithCount_other": "{{count}} složek",
         "albumArtist_one": "Umělec alba",
-        "albumArtist_few": "umělci alb",
+        "albumArtist_few": "Umělci alb",
         "albumArtist_other": "Umělci alb",
         "track_one": "Skladba",
         "track_few": "skladby",
@@ -1176,7 +1198,7 @@
         "song_few": "písničky",
         "song_other": "Písní",
         "radioStation_one": "Stanice rádia",
-        "radioStation_few": "stanice rádia",
+        "radioStation_few": "Stanice rádia",
         "radioStation_other": "Stanice rádia",
         "radioStationWithCount_one": "{{count}} stanice rádia",
         "radioStationWithCount_few": "{{count}} stanice rádia",

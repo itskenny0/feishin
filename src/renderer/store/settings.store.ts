@@ -174,6 +174,7 @@ const BindingActionsSchema = z.enum([
     'listPlayNext',
     'listPlayLast',
     'listNavigateToPage',
+    'listShowPlayingSong',
 ]);
 
 const DiscordDisplayTypeSchema = z.enum(['artist', 'feishin', 'song']);
@@ -188,6 +189,10 @@ const SideQueueTypeSchema = z.enum(['sideDrawerQueue', 'sideQueue']);
 const SideQueueLayoutSchema = z.enum(['horizontal', 'vertical']);
 
 const SidebarPanelTypeSchema = z.enum(['queue', 'lyrics', 'visualizer']);
+
+const SidebarPlaylistFolderViewSchema = z.enum(['single', 'tree', 'navigation']);
+
+const SidebarPlaylistModeSchema = z.enum(['compact', 'expanded']);
 
 const CollectionSchema = z.object({
     filterQueryString: z.string(),
@@ -542,8 +547,14 @@ export const GeneralSettingsSchema = z.object({
     sidebarCollapseShared: z.boolean(),
     sidebarItems: z.array(SidebarItemTypeSchema),
     sidebarPanelOrder: z.array(SidebarPanelTypeSchema),
+    sidebarPlaylistFolders: z.boolean(),
+    sidebarPlaylistFolderSeparator: z.string().min(1),
+    sidebarPlaylistFolderTreeIndent: z.number().int().min(0).max(64),
+    sidebarPlaylistFolderTreeLineColor: z.string(),
+    sidebarPlaylistFolderView: SidebarPlaylistFolderViewSchema,
     sidebarPlaylistList: z.boolean(),
     sidebarPlaylistListFilterRegex: z.string(),
+    sidebarPlaylistMode: SidebarPlaylistModeSchema,
     sidebarPlaylistSorting: z.boolean(),
     sideQueueLayout: SideQueueLayoutSchema,
     sideQueueType: SideQueueTypeSchema,
@@ -807,6 +818,7 @@ export enum BindingActions {
     LIST_PLAY_LAST = 'listPlayLast',
     LIST_PLAY_NEXT = 'listPlayNext',
     LIST_PLAY_NOW = 'listPlayNow',
+    LIST_SHOW_PLAYING_SONG = 'listShowPlayingSong',
     LOCAL_SEARCH = 'localSearch',
     MUTE = 'volumeMute',
     NAVIGATE_HOME = 'navigateHome',
@@ -1235,8 +1247,14 @@ const initialState: SettingsState = {
         sidebarCollapseShared: false,
         sidebarItems,
         sidebarPanelOrder: ['queue', 'lyrics', 'visualizer'],
+        sidebarPlaylistFolders: true,
+        sidebarPlaylistFolderSeparator: '/',
+        sidebarPlaylistFolderTreeIndent: 16,
+        sidebarPlaylistFolderTreeLineColor: '',
+        sidebarPlaylistFolderView: 'tree',
         sidebarPlaylistList: true,
         sidebarPlaylistListFilterRegex: '',
+        sidebarPlaylistMode: 'expanded',
         sidebarPlaylistSorting: false,
         sideQueueLayout: 'horizontal',
         sideQueueType: 'sideQueue',
@@ -1271,6 +1289,7 @@ const initialState: SettingsState = {
             listPlayLast: { allowGlobal: false, hotkey: '', isGlobal: false },
             listPlayNext: { allowGlobal: false, hotkey: '', isGlobal: false },
             listPlayNow: { allowGlobal: false, hotkey: '', isGlobal: false },
+            listShowPlayingSong: { allowGlobal: false, hotkey: 'mod+l', isGlobal: false },
             localSearch: { allowGlobal: false, hotkey: 'mod+f', isGlobal: false },
             navigateHome: { allowGlobal: false, hotkey: 'mod+h', isGlobal: false },
             // Most defaults below were empty strings — new users had a
@@ -2866,6 +2885,21 @@ export const useCollections = () => {
     );
 };
 
+export const useSidebarPlaylistFolders = () =>
+    useSettingsStore((state) => state.general.sidebarPlaylistFolders, shallow);
+
+export const useSidebarPlaylistFolderSeparator = () =>
+    useSettingsStore((state) => state.general.sidebarPlaylistFolderSeparator, shallow);
+
+export const useSidebarPlaylistFolderView = () =>
+    useSettingsStore((state) => state.general.sidebarPlaylistFolderView, shallow);
+
+export const useSidebarPlaylistFolderTreeIndent = () =>
+    useSettingsStore((state) => state.general.sidebarPlaylistFolderTreeIndent, shallow);
+
+export const useSidebarPlaylistFolderTreeLineColor = () =>
+    useSettingsStore((state) => state.general.sidebarPlaylistFolderTreeLineColor, shallow);
+
 export const useSidebarPlaylistList = () =>
     useSettingsStore((state) => state.general.sidebarPlaylistList, shallow);
 
@@ -2885,6 +2919,9 @@ export const useSetDetailSectionCollapsed = () => {
         });
     };
 };
+
+export const useSidebarPlaylistMode = () =>
+    useSettingsStore((state) => state.general.sidebarPlaylistMode, shallow);
 
 export const useSidebarPlaylistSorting = () =>
     useSettingsStore((state) => state.general.sidebarPlaylistSorting, shallow);
