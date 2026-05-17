@@ -110,6 +110,7 @@ const CollectionRow = ({
                         <DropdownMenu position="right-start" trigger="click">
                             <DropdownMenu.Target>
                                 <ActionIcon
+                                    aria-label={t('common.menu', { defaultValue: 'Menu' })}
                                     className={styles.moreButton}
                                     icon="ellipsisVertical"
                                     iconProps={{ size: 'xs' }}
