@@ -504,6 +504,7 @@ const ExternalLinksContent = ({
                             target="_blank"
                             tooltip={{
                                 label: t('action.openIn.lastfm'),
+                                openDelay: 400,
                             }}
                             variant="subtle"
                         />
@@ -521,6 +522,7 @@ const ExternalLinksContent = ({
                             target="_blank"
                             tooltip={{
                                 label: t('action.openIn.musicbrainz'),
+                                openDelay: 400,
                             }}
                             variant="subtle"
                         />
@@ -538,6 +540,7 @@ const ExternalLinksContent = ({
                             target="_blank"
                             tooltip={{
                                 label: t('action.openIn.listenbrainz'),
+                                openDelay: 400,
                             }}
                             variant="subtle"
                         />
@@ -555,6 +558,7 @@ const ExternalLinksContent = ({
                             target="_blank"
                             tooltip={{
                                 label: t('action.openIn.qobuz'),
+                                openDelay: 400,
                             }}
                             variant="subtle"
                         />
@@ -576,6 +580,7 @@ const ExternalLinksContent = ({
                             target={nativeSpotify ? undefined : '_blank'}
                             tooltip={{
                                 label: t('action.openIn.spotify'),
+                                openDelay: 400,
                             }}
                             variant="subtle"
                         />
