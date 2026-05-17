@@ -281,7 +281,7 @@ function BaseGridCarousel(props: GridCarouselProps) {
                                             iconProps={{ size: 'xs' }}
                                             onClick={onRefresh}
                                             size="xs"
-                                            tooltip={{ label: 'Refresh' }}
+                                            tooltip={{ label: 'Refresh', openDelay: 400 }}
                                             variant="transparent"
                                         />
                                     )}

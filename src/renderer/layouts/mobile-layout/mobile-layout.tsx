@@ -45,7 +45,7 @@ export const MobileLayout = ({ shell }: MobileLayoutProps) => {
                     icon="menu"
                     onClick={openSidebar}
                     size="lg"
-                    tooltip={{ label: 'Menu' }}
+                    tooltip={{ label: 'Menu', openDelay: 400 }}
                     variant="subtle"
                 />
                 <main className={styles.mainContent}>

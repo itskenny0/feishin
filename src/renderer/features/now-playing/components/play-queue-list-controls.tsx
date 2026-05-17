@@ -128,21 +128,21 @@ const QueuePlaybackIcons = ({ tableRef }: { tableRef: RefObject<ItemListHandle |
                 icon="mediaShuffle"
                 iconProps={{ size: 'lg' }}
                 onClick={handleShuffleQueue}
-                tooltip={{ label: t('player.shuffle') }}
+                tooltip={{ label: t('player.shuffle'), openDelay: 400 }}
                 variant="subtle"
             />
             <ActionIcon
                 icon="x"
                 iconProps={{ size: 'lg' }}
                 onClick={handleClearQueue}
-                tooltip={{ label: t('action.clearQueue') }}
+                tooltip={{ label: t('action.clearQueue'), openDelay: 400 }}
                 variant="subtle"
             />
             <ActionIcon
                 icon="goToItem"
                 iconProps={{ size: 'lg' }}
                 onClick={handleJumpToCurrent}
-                tooltip={{ label: t('action.goToCurrent') }}
+                tooltip={{ label: t('action.goToCurrent'), openDelay: 400 }}
                 variant="subtle"
             />
         </>
@@ -173,6 +173,7 @@ const QueueRestoreActions = () => {
                 onClick={() => handleSaveQueue()}
                 tooltip={{
                     label: t('player.saveQueueToServer'),
+                    openDelay: 400,
                 }}
                 variant="subtle"
             />
@@ -184,6 +185,7 @@ const QueueRestoreActions = () => {
                 onClick={handleRestoreQueue}
                 tooltip={{
                     label: t('player.restoreQueueFromServer'),
+                    openDelay: 400,
                 }}
                 variant="subtle"
             />

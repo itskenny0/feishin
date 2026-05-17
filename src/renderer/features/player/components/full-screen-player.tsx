@@ -288,7 +288,7 @@ const Controls = () => {
                 icon="arrowDownS"
                 iconProps={{ size: 'lg' }}
                 onClick={handleToggleFullScreenPlayer}
-                tooltip={{ label: t('common.minimize') }}
+                tooltip={{ label: t('common.minimize'), openDelay: 400 }}
                 variant="subtle"
             />
             <Popover position="bottom-start">
@@ -296,7 +296,7 @@ const Controls = () => {
                     <ActionIcon
                         icon="settings2"
                         iconProps={{ size: 'lg' }}
-                        tooltip={{ label: t('common.configure') }}
+                        tooltip={{ label: t('common.configure'), openDelay: 400 }}
                         variant="subtle"
                     />
                 </Popover.Target>
