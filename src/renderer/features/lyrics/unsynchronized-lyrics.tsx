@@ -1,3 +1,4 @@
+import { t } from 'i18next';
 import { useMemo } from 'react';
 
 import styles from './unsynchronized-lyrics.module.css';
@@ -49,7 +50,10 @@ export const UnsynchronizedLyrics = ({
                     alignment={settings.alignment}
                     className="lyric-credit"
                     fontSize={settings.fontSizeUnsync}
-                    text={`Provided by ${source}`}
+                    text={t('lyrics.providedBy', {
+                        defaultValue: 'Provided by {{source}}',
+                        source,
+                    })}
                 />
             )}
             {settings.showMatch && remote && (
@@ -57,7 +61,11 @@ export const UnsynchronizedLyrics = ({
                     alignment={settings.alignment}
                     className="lyric-credit"
                     fontSize={settings.fontSizeUnsync}
-                    text={`"${name} by ${artist}"`}
+                    text={t('lyrics.match', {
+                        artist,
+                        defaultValue: '"{{name}} by {{artist}}"',
+                        name,
+                    })}
                 />
             )}
             {lines.map((text, idx) => (

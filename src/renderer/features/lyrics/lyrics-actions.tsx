@@ -108,7 +108,7 @@ export const LyricsActions = ({
                         </Button>
                     ) : null}
                     <ActionIcon
-                        aria-label="Decrease lyric offset"
+                        aria-label={t('common.slower')}
                         icon="minus"
                         onClick={() => handleLyricOffset(offsetMs - 50)}
                         tooltip={{
@@ -119,15 +119,20 @@ export const LyricsActions = ({
                     />
                     <Tooltip label={t('setting.lyricOffset')} openDelay={400}>
                         <NumberInput
-                            aria-label="Lyric offset"
+                            aria-label={t('setting.lyricOffset')}
                             onChange={handleLyricOffset}
+                            // Arrow-key step matches the +/- buttons (50ms)
+                            // so keyboard adjustment doesn't move by 1ms at
+                            // a time, which was useless against typical
+                            // synced-lyric drift.
+                            step={50}
                             styles={{ input: { textAlign: 'center' } }}
                             value={offsetMs || 0}
                             width={70}
                         />
                     </Tooltip>
                     <ActionIcon
-                        aria-label="Increase lyric offset"
+                        aria-label={t('common.faster')}
                         icon="plus"
                         onClick={() => handleLyricOffset(offsetMs + 50)}
                         tooltip={{

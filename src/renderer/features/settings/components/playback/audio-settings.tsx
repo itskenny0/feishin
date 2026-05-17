@@ -127,7 +127,6 @@ export const AudioSettings = memo(() => {
                 <Select
                     clearable
                     data={audioDevices}
-                    defaultValue={audioDeviceId}
                     disabled={!isElectron()}
                     onChange={(e) =>
                         setSettings({
@@ -137,6 +136,11 @@ export const AudioSettings = memo(() => {
                                     : { audioDeviceId: e },
                         })
                     }
+                    // Controlled so swapping player type (the picker stays
+                    // mounted but its source changes) actually updates the
+                    // visible selection rather than sticking on the
+                    // first-render device id.
+                    value={audioDeviceId}
                 />
             ),
             description: t('setting.audioDevice', {

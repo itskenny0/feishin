@@ -1,4 +1,5 @@
 import clsx from 'clsx';
+import { t } from 'i18next';
 import isElectron from 'is-electron';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 
@@ -394,7 +395,10 @@ export const SynchronizedLyrics = ({
                     alignment={settings.alignment}
                     className="lyric-credit"
                     fontSize={settings.fontSize}
-                    text={`Provided by ${source}`}
+                    text={t('lyrics.providedBy', {
+                        defaultValue: 'Provided by {{source}}',
+                        source,
+                    })}
                 />
             )}
             {settings.showMatch && remote && (
@@ -402,7 +406,11 @@ export const SynchronizedLyrics = ({
                     alignment={settings.alignment}
                     className="lyric-credit"
                     fontSize={settings.fontSize}
-                    text={`"${name} by ${artist}"`}
+                    text={t('lyrics.match', {
+                        artist,
+                        defaultValue: '"{{name}} by {{artist}}"',
+                        name,
+                    })}
                 />
             )}
             {sortedLyrics.map(([time, text], idx) => (
