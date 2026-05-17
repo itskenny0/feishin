@@ -48,6 +48,7 @@ function ArtistImageUploadOverlay({
     data?: AlbumArtistDetailResponse;
     onUploadFile: (file: File) => Promise<void>;
 }) {
+    const { t } = useTranslation();
     const deleteArtistImageMutation = useDeleteArtistImage({});
     const server = useCurrentServer();
 
@@ -65,16 +66,22 @@ function ArtistImageUploadOverlay({
             >
                 {(props) => (
                     <ActionIcon
+                        aria-label={t('common.upload', { defaultValue: 'Upload image' })}
                         icon="uploadImage"
                         iconProps={{ size: 'lg' }}
                         radius="xl"
                         size="xs"
+                        tooltip={{
+                            label: t('common.upload', { defaultValue: 'Upload image' }),
+                            openDelay: 400,
+                        }}
                         variant="default"
                         {...props}
                     />
                 )}
             </FileButton>
             <ActionIcon
+                aria-label={t('common.delete')}
                 disabled={!data?.uploadedImage}
                 icon="delete"
                 iconProps={{ size: 'lg' }}
@@ -90,6 +97,14 @@ function ArtistImageUploadOverlay({
                 }}
                 radius="xl"
                 size="xs"
+                tooltip={{
+                    label: data?.uploadedImage
+                        ? t('common.delete')
+                        : t('form.editPlaylist.noUploadedCover', {
+                              defaultValue: 'No uploaded image to remove',
+                          }),
+                    openDelay: 400,
+                }}
                 variant="default"
             />
         </Group>
