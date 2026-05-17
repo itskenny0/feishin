@@ -49,6 +49,11 @@ const isDuplicate = (key: string): boolean => {
 const showToast = ({ message, onClose, type, ...props }: NotificationProps) => {
     if (message && isDuplicate(`${type ?? 'info'}::${message}`)) return undefined;
     return notifications.show({
+        // Errors stick around until dismissed; everything else auto-closes
+        // a little quicker than Mantine's default 5s so the playerbar isn't
+        // covered for long. Callers that pass an explicit autoClose still
+        // win because of the spread below.
+        autoClose: type === 'error' ? false : 3500,
         ...props,
         classNames: {
             body: styles.body,
@@ -62,6 +67,9 @@ const showToast = ({ message, onClose, type, ...props }: NotificationProps) => {
                 [styles.warning]: type === 'warning',
             }),
             title: styles.title,
+        },
+        closeButtonProps: {
+            'aria-label': t('common.close', { defaultValue: 'Close' }),
         },
         message: message ?? '',
         onClose,

@@ -49,6 +49,7 @@ export const SettingsHeader = ({ setSearch }: SettingsHeaderProps) => {
                     </Group>
                     <Group>
                         <SearchInput
+                            autoFocus
                             defaultValue={search}
                             onChange={(event) => setSearch(event.target.value.toLocaleLowerCase())}
                         />
