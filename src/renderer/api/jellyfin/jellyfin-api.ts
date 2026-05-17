@@ -196,6 +196,15 @@ export const contract = c.router({
             400: jfType._response.error,
         },
     },
+    getSessions: {
+        method: 'GET',
+        path: 'sessions',
+        query: jfType._parameters.getSessions,
+        responses: {
+            200: jfType._response.getSessions,
+            400: jfType._response.error,
+        },
+    },
     getSimilarArtistList: {
         method: 'GET',
         path: 'artists/:id/similar',
@@ -289,6 +298,38 @@ export const contract = c.router({
         path: 'sessions/capabilities/full',
         responses: {
             204: jfType._response.capabilitiesFull,
+            400: jfType._response.error,
+        },
+    },
+    postGeneralCommand: {
+        body: jfType._parameters.postGeneralCommand,
+        method: 'POST',
+        path: 'sessions/:sessionId/command',
+        responses: {
+            200: jfType._response.remoteCommand,
+            204: jfType._response.remoteCommand,
+            400: jfType._response.error,
+        },
+    },
+    postPlaying: {
+        body: z.null(),
+        method: 'POST',
+        path: 'sessions/:sessionId/playing',
+        query: jfType._parameters.postPlaying,
+        responses: {
+            200: jfType._response.remoteCommand,
+            204: jfType._response.remoteCommand,
+            400: jfType._response.error,
+        },
+    },
+    postPlayingCommand: {
+        body: z.null(),
+        method: 'POST',
+        path: 'sessions/:sessionId/playing/:command',
+        query: jfType._parameters.postPlayingCommand,
+        responses: {
+            200: jfType._response.remoteCommand,
+            204: jfType._response.remoteCommand,
             400: jfType._response.error,
         },
     },
