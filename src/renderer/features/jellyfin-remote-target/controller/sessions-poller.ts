@@ -33,6 +33,7 @@ export class SessionsPoller {
         this.stop();
         this.isRunning = true;
         this.startArgs = args;
+        useRemoteTargetStore.getState().actions.setPollerActive(true);
         // Tick immediately so the picker doesn't show 'No devices' for 3 s.
         void this.tick();
         this.timer = setInterval(() => void this.tick(), POLL_INTERVAL_MS);
@@ -44,6 +45,7 @@ export class SessionsPoller {
         this.offlineSince = 0;
         this.prevQueueIdsByDevice = {};
         this.rawByDeviceId = {};
+        useRemoteTargetStore.getState().actions.setPollerActive(false);
         if (this.timer) {
             clearInterval(this.timer);
             this.timer = null;

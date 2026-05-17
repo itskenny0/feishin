@@ -12,6 +12,7 @@ interface RemoteTargetState {
         setDeviceList: (devices: RemoteDevice[]) => void;
         setMirrored: (mirrored: Partial<RemoteMirrored>) => void;
         setPickerOpen: (open: boolean) => void;
+        setPollerActive: (active: boolean) => void;
         setStatus: (status: RemoteTargetStatus) => void;
         setTarget: (target: {
             capabilities: string[];
@@ -21,6 +22,13 @@ interface RemoteTargetState {
         }) => void;
     };
     deviceList: RemoteDevice[];
+    /**
+     * `true` once the poller has completed at least one /Sessions tick for
+     * the current session. Lets the picker show a "Searching…" state instead
+     * of "No devices" for the brief window between opening the popover and
+     * the first response landing.
+     */
+    hasPolledOnce: boolean;
     mirrored: RemoteMirrored;
     pickerOpen: boolean;
     sessionId: null | string; // re-resolved each Sessions tick from targetDeviceId
@@ -47,9 +55,10 @@ export const useRemoteTargetStore = create<RemoteTargetState>((set) => ({
                 targetDeviceId: null,
                 targetDeviceName: null,
             }),
-        setDeviceList: (devices) => set({ deviceList: devices }),
+        setDeviceList: (devices) => set({ deviceList: devices, hasPolledOnce: true }),
         setMirrored: (partial) => set((s) => ({ mirrored: { ...s.mirrored, ...partial } })),
         setPickerOpen: (open) => set({ pickerOpen: open }),
+        setPollerActive: (active) => set(active ? {} : { hasPolledOnce: false }),
         setStatus: (status) => set({ status }),
         setTarget: ({ capabilities, deviceId, deviceName, sessionId }) =>
             set(() => ({
@@ -61,6 +70,7 @@ export const useRemoteTargetStore = create<RemoteTargetState>((set) => ({
             })),
     },
     deviceList: [],
+    hasPolledOnce: false,
     mirrored: emptyMirrored,
     pickerOpen: false,
     sessionId: null,
