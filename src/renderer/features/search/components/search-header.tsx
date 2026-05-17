@@ -77,7 +77,9 @@ export const SearchHeader = ({ navigationId }: SearchHeaderProps) => {
             <PageHeader>
                 <Flex justify="space-between" w="100%">
                     <LibraryHeaderBar ignoreMaxWidth>
-                        <LibraryHeaderBar.Title>Search</LibraryHeaderBar.Title>
+                        <LibraryHeaderBar.Title>
+                            {t('common.search', { defaultValue: 'Search' })}
+                        </LibraryHeaderBar.Title>
                     </LibraryHeaderBar>
                     <Group>
                         <SearchInput

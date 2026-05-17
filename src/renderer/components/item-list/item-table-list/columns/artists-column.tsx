@@ -11,9 +11,12 @@ import {
     TableColumnContainer,
 } from '/@/renderer/components/item-list/item-table-list/item-table-list-column';
 import { JoinedArtists } from '/@/renderer/features/albums/components/joined-artists';
+import { preloadRoute } from '/@/renderer/router/route-preloaders';
 import { AppRoute } from '/@/renderer/router/routes';
 import { Text } from '/@/shared/components/text/text';
 import { LibraryItem, RelatedAlbumArtist, Song } from '/@/shared/types/domain-types';
+
+const preloadArtistDetail = () => preloadRoute(AppRoute.LIBRARY_ARTISTS_DETAIL);
 
 const AlbumArtistsColumn = (props: ItemTableListInnerColumn) => {
     const rowItem = props.getRowItem?.(props.rowIndex) ?? (props.data as any[])[props.rowIndex];
@@ -47,6 +50,8 @@ const AlbumArtistsColumn = (props: ItemTableListInnerColumn) => {
                                 isLink
                                 isMuted
                                 isNoSelect
+                                onFocus={preloadArtistDetail}
+                                onMouseEnter={preloadArtistDetail}
                                 state={{ item: artist }}
                                 to={artist.path}
                             >
