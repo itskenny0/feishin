@@ -87,8 +87,19 @@ export const ListFiltersModal = ({ isActive, itemType }: ListFiltersProps) => {
                         <Group>
                             {canPin && (
                                 <ActionIcon
+                                    aria-label={
+                                        isSidebarOpen
+                                            ? t('common.close')
+                                            : t('common.pin', { defaultValue: 'Pin' })
+                                    }
                                     icon={isSidebarOpen ? 'unpin' : 'pin'}
                                     onClick={handlePin}
+                                    tooltip={{
+                                        label: isSidebarOpen
+                                            ? t('common.close')
+                                            : t('common.pin', { defaultValue: 'Pin' }),
+                                        openDelay: 400,
+                                    }}
                                     variant="subtle"
                                 />
                             )}
@@ -167,9 +178,11 @@ export const ListFiltersTitle = ({ itemType }: ListFiltersTitleProps) => {
                 </Button>
                 {canUnpin && (
                     <ActionIcon
+                        aria-label={t('common.close')}
                         icon="unpin"
                         onClick={handleUnpin}
                         size="compact-sm"
+                        tooltip={{ label: t('common.close'), openDelay: 400 }}
                         variant="subtle"
                     />
                 )}
