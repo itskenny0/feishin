@@ -16,6 +16,7 @@ export const SettingsButton = ({ ...props }: SettingsButtonProps) => {
             }}
             tooltip={{
                 label: t('common.configure'),
+                openDelay: 400,
                 ...props.tooltip,
             }}
             variant="subtle"

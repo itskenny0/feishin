@@ -271,6 +271,7 @@ export const SidebarFavoriteAlbumsList = () => {
                                 label: t('action.viewAlbums', {
                                     postProcess: 'sentenceCase',
                                 }),
+                                openDelay: 400,
                             }}
                             variant="subtle"
                         />

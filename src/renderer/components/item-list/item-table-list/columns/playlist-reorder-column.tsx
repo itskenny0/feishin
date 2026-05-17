@@ -321,6 +321,7 @@ const PlaylistReorderColumnBase = (props: ItemTableListInnerColumn) => {
                                 </Stack>
                             </>
                         ),
+                        openDelay: 400,
                     }}
                     variant="default"
                 />
@@ -342,6 +343,7 @@ const PlaylistReorderColumnBase = (props: ItemTableListInnerColumn) => {
                                 </Stack>
                             </>
                         ),
+                        openDelay: 400,
                     }}
                     variant="default"
                 />

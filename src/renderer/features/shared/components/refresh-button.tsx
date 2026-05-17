@@ -20,6 +20,7 @@ export const RefreshButton = ({ loading, onClick, ...props }: RefreshButtonProps
             onClick={onClick}
             tooltip={{
                 label: t('common.refresh'),
+                openDelay: 400,
                 ...props.tooltip,
             }}
             variant="subtle"

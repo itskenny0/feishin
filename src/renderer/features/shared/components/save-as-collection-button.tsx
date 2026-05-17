@@ -107,6 +107,7 @@ export const SaveAsCollectionButton = ({ fullWidth, itemType }: SaveAsCollection
                         onClick={handleOpen}
                         tooltip={{
                             label: t('page.collections.saveAsCollection'),
+                            openDelay: 400,
                         }}
                         variant="subtle"
                     />

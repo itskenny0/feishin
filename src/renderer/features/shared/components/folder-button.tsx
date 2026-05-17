@@ -19,6 +19,7 @@ export const FolderButton = ({ isActive, ...props }: FolderButtonProps) => {
             }}
             tooltip={{
                 label: t('entity.folder', { count: 1 }),
+                openDelay: 400,
                 ...props.tooltip,
             }}
             variant="subtle"

@@ -28,6 +28,7 @@ export const OrderToggleButton = ({
             onClick={onToggle}
             tooltip={{
                 label: sortOrder === SortOrder.ASC ? t('common.ascending') : t('common.descending'),
+                openDelay: 400,
             }}
             variant="subtle"
             {...buttonProps}
