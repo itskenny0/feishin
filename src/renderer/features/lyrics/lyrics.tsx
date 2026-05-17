@@ -384,12 +384,14 @@ export const Lyrics = ({ fadeOutNoLyricsMessage = true, settingsKey = 'default' 
         <ComponentErrorBoundary>
             <div className={styles.lyricsContainer}>
                 <ActionIcon
+                    aria-label={t('common.settings')}
                     className={styles.settingsIcon}
                     icon="settings2"
                     iconProps={{ size: 'lg' }}
                     onClick={handleOpenSettings}
                     pos="absolute"
                     right={0}
+                    tooltip={{ label: t('common.settings'), openDelay: 400 }}
                     top={0}
                     variant="subtle"
                 />

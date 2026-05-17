@@ -1,6 +1,7 @@
 import { useSuspenseQuery } from '@tanstack/react-query';
 import clsx from 'clsx';
 import formatDuration from 'format-duration';
+import { t } from 'i18next';
 import { motion } from 'motion/react';
 import { Fragment, Suspense, useCallback, useRef } from 'react';
 
@@ -83,6 +84,7 @@ const CloseExpandedButton = () => {
     const setGlobalExpanded = useSetGlobalExpanded();
     return (
         <ActionIcon
+            aria-label={t('common.close')}
             className={clsx(styles.closeButton)}
             icon="x"
             iconProps={{
@@ -91,6 +93,7 @@ const CloseExpandedButton = () => {
             onClick={() => setGlobalExpanded(null)}
             radius="50%"
             size="sm"
+            tooltip={{ label: t('common.close'), openDelay: 400 }}
             variant="default"
         />
     );
