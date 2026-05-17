@@ -169,6 +169,7 @@
         "warning": "Warning",
         "error": "Error",
         "info": "Info",
+        "back": "Back",
         "explicit": "Explicit",
         "clean": "Clean",
         "gridRows": "Grid rows",
