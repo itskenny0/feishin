@@ -592,16 +592,26 @@ export const PlaylistQueryBuilder = forwardRef(
                                         />
                                         {extraFiltersForm.values.sortEntries.length > 1 && (
                                             <ActionIcon
+                                                aria-label={t('common.delete')}
                                                 icon="minus"
                                                 onClick={() => handleRemoveSortEntry(index)}
+                                                tooltip={{
+                                                    label: t('common.delete'),
+                                                    openDelay: 400,
+                                                }}
                                                 variant="subtle"
                                             />
                                         )}
                                         {index ===
                                             extraFiltersForm.values.sortEntries.length - 1 && (
                                             <ActionIcon
+                                                aria-label={t('common.add')}
                                                 icon="plus"
                                                 onClick={handleAddSortEntry}
+                                                tooltip={{
+                                                    label: t('common.add'),
+                                                    openDelay: 400,
+                                                }}
                                                 variant="subtle"
                                             />
                                         )}
