@@ -507,12 +507,14 @@ export const MobileFullscreenPlayer = () => {
                     >
                         <div className={styles.queueHeader}>
                             <ActionIcon
+                                aria-label={t('common.collapse')}
                                 icon="arrowDownS"
                                 onClick={handleToggleFullScreenPlayer}
                                 size="sm"
                                 variant={isPageHovered ? 'default' : 'subtle'}
                             />
                             <ActionIcon
+                                aria-label={t('common.close')}
                                 icon="x"
                                 iconProps={{ size: 'xl' }}
                                 onClick={handleToggleQueue}
@@ -539,6 +541,7 @@ export const MobileFullscreenPlayer = () => {
                     >
                         <div className={styles.lyricsHeader}>
                             <ActionIcon
+                                aria-label={t('common.collapse')}
                                 icon="arrowDownS"
                                 onClick={handleToggleFullScreenPlayer}
                                 size="sm"
@@ -548,6 +551,7 @@ export const MobileFullscreenPlayer = () => {
                                 {t('page.fullscreenPlayer.lyrics')}
                             </Text>
                             <ActionIcon
+                                aria-label={t('common.close')}
                                 icon="x"
                                 iconProps={{ size: 'xl' }}
                                 onClick={handleToggleLyrics}
