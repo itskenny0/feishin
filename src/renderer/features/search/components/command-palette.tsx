@@ -189,7 +189,9 @@ export const CommandPalette = ({ modalProps }: CommandPaletteProps) => {
                     if (value.includes('search')) return 1;
                     return 0;
                 }}
-                label="Global Command Menu"
+                label={t('page.search.commandPaletteLabel', {
+                    defaultValue: 'Global Command Menu',
+                })}
                 onKeyDown={(e) => {
                     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
                         searchInputRef.current?.focus();
