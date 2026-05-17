@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { ErrorBoundary } from 'react-error-boundary';
 import { useTranslation } from 'react-i18next';
 
@@ -81,6 +82,8 @@ interface PageErrorBoundaryProps {
 }
 
 export const PageErrorBoundary = ({ children }: PageErrorBoundaryProps) => {
+    const queryClient = useQueryClient();
+
     return (
         <ErrorBoundary
             FallbackComponent={PageErrorFallback}
@@ -89,7 +92,14 @@ export const PageErrorBoundary = ({ children }: PageErrorBoundaryProps) => {
                     console.error('Page error boundary caught an error:', error, errorInfo);
                 }
             }}
-            onReset={() => {}}
+            onReset={() => {
+                // Without this, clicking "Reload" re-rendered the same
+                // children with the same cached errored queries, which
+                // would just re-throw and put the boundary right back in
+                // the error state. Reset all queries so the new render
+                // starts fresh.
+                queryClient.resetQueries();
+            }}
         >
             {children}
         </ErrorBoundary>
