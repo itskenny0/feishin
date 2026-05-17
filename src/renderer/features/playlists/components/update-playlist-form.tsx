@@ -247,6 +247,8 @@ function PlaylistCoverField({
     const previewId = showServerCover ? playlistImage?.imageId || undefined : undefined;
     const previewSrc = pendingPreviewUrl || (showServerCover ? playlistImage?.imageUrl || '' : '');
 
+    const { t } = useTranslation();
+
     const secondaryAction = () => {
         if (pendingFile) {
             onClearPending();
@@ -261,6 +263,12 @@ function PlaylistCoverField({
 
     const secondaryIcon = pendingFile ? 'x' : removeCustomCover ? 'arrowLeft' : 'delete';
 
+    const secondaryLabel = pendingFile
+        ? t('common.clear')
+        : removeCustomCover
+          ? t('common.cancel')
+          : t('common.delete');
+
     const iconControls = (
         <>
             <FileButton accept="image/*" onChange={onFileSelect}>
@@ -268,10 +276,15 @@ function PlaylistCoverField({
                     const { ...triggerRest } = props;
                     return (
                         <ActionIcon
+                            aria-label={t('common.upload', { defaultValue: 'Upload image' })}
                             icon="uploadImage"
                             iconProps={{ size: 'lg' }}
                             radius="xl"
                             size="sm"
+                            tooltip={{
+                                label: t('common.upload', { defaultValue: 'Upload image' }),
+                                openDelay: 400,
+                            }}
                             variant="default"
                             {...triggerRest}
                             style={{ pointerEvents: 'auto' }}
@@ -280,6 +293,7 @@ function PlaylistCoverField({
                 }}
             </FileButton>
             <ActionIcon
+                aria-label={secondaryLabel}
                 disabled={secondaryDisabled}
                 icon={secondaryIcon}
                 iconProps={{ size: 'lg' }}
@@ -287,6 +301,7 @@ function PlaylistCoverField({
                 radius="xl"
                 size="sm"
                 style={{ pointerEvents: 'auto' }}
+                tooltip={{ label: secondaryLabel, openDelay: 400 }}
                 variant="default"
             />
         </>
