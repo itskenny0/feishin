@@ -1,3 +1,4 @@
+import { t } from 'i18next';
 import { memo, MouseEvent } from 'react';
 
 import styles from './mobile-fullscreen-player.module.css';
@@ -32,6 +33,8 @@ export const MobileFullscreenPlayerBottomControls = memo(
             <div className={styles.bottomControlsBar}>
                 <Group className={styles.bottomControlsGroup} gap={0}>
                     <ActionIcon
+                        aria-label={t('player.shuffle')}
+                        aria-pressed={shuffle !== PlayerShuffle.NONE}
                         className={styles.bottomControlIcon}
                         icon="mediaShuffle"
                         iconProps={{
@@ -42,6 +45,8 @@ export const MobileFullscreenPlayerBottomControls = memo(
                         variant="transparent"
                     />
                     <ActionIcon
+                        aria-label={t('player.repeat')}
+                        aria-pressed={repeat !== PlayerRepeat.NONE}
                         className={styles.bottomControlIcon}
                         icon={repeat === PlayerRepeat.ONE ? 'mediaRepeatOne' : 'mediaRepeat'}
                         iconProps={{
@@ -52,6 +57,8 @@ export const MobileFullscreenPlayerBottomControls = memo(
                         variant="transparent"
                     />
                     <ActionIcon
+                        aria-label={t('player.viewQueue')}
+                        aria-pressed={isQueueActive}
                         className={styles.bottomControlIcon}
                         icon="queue"
                         iconProps={{
@@ -62,6 +69,8 @@ export const MobileFullscreenPlayerBottomControls = memo(
                         variant="transparent"
                     />
                     <ActionIcon
+                        aria-label={t('player.lyrics')}
+                        aria-pressed={isLyricsActive}
                         className={styles.bottomControlIcon}
                         icon="metadata"
                         iconProps={{
@@ -72,6 +81,7 @@ export const MobileFullscreenPlayerBottomControls = memo(
                         variant="transparent"
                     />
                     <ActionIcon
+                        aria-label={t('common.menu')}
                         className={styles.bottomControlIcon}
                         icon="ellipsisVertical"
                         iconProps={{
