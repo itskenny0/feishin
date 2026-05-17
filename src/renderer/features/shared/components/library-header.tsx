@@ -439,6 +439,8 @@ export const LibraryHeaderMenu = ({
                 )}
                 {onFavorite && (
                     <ActionIcon
+                        aria-label={t('common.favorite', { defaultValue: 'Favorite' })}
+                        aria-pressed={Boolean(favorite)}
                         disabled={isMutatingFavorite}
                         icon="favorite"
                         iconProps={{
@@ -446,14 +448,20 @@ export const LibraryHeaderMenu = ({
                         }}
                         onClick={onFavorite}
                         size="lg"
+                        tooltip={{
+                            label: t('common.favorite', { defaultValue: 'Favorite' }),
+                            openDelay: 400,
+                        }}
                         variant="transparent"
                     />
                 )}
                 {onMore && (
                     <ActionIcon
+                        aria-label={t('common.menu')}
                         icon="ellipsisHorizontal"
                         onClick={onMore}
                         size="lg"
+                        tooltip={{ label: t('common.menu'), openDelay: 400 }}
                         variant="transparent"
                     />
                 )}
