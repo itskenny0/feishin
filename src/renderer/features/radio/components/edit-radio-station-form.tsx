@@ -233,6 +233,11 @@ function RadioStationCoverField({
     const secondaryDisabled = !pendingFile && !hadUploadedCover;
 
     const secondaryIcon = pendingFile ? 'x' : removeCustomCover ? 'arrowLeft' : 'delete';
+    const secondaryLabel = pendingFile
+        ? t('common.clear')
+        : removeCustomCover
+          ? t('common.cancel')
+          : t('common.delete');
 
     const iconControls = (
         <>
@@ -241,10 +246,15 @@ function RadioStationCoverField({
                     const { ...triggerRest } = props;
                     return (
                         <ActionIcon
+                            aria-label={t('common.upload', { defaultValue: 'Upload image' })}
                             icon="uploadImage"
                             iconProps={{ size: 'lg' }}
                             radius="xl"
                             size="sm"
+                            tooltip={{
+                                label: t('common.upload', { defaultValue: 'Upload image' }),
+                                openDelay: 400,
+                            }}
                             variant="default"
                             {...triggerRest}
                             style={{ pointerEvents: 'auto' }}
@@ -253,6 +263,7 @@ function RadioStationCoverField({
                 }}
             </FileButton>
             <ActionIcon
+                aria-label={secondaryLabel}
                 disabled={secondaryDisabled}
                 icon={secondaryIcon}
                 iconProps={{ size: 'lg' }}
@@ -260,6 +271,7 @@ function RadioStationCoverField({
                 radius="xl"
                 size="sm"
                 style={{ pointerEvents: 'auto' }}
+                tooltip={{ label: secondaryLabel, openDelay: 400 }}
                 variant="default"
             />
         </>
