@@ -73,14 +73,23 @@ export const ActionBar = () => {
 };
 
 const NavigateButtons = () => {
+    const { t } = useTranslation();
     const navigate = useNavigate();
 
     return (
         <>
-            <Button onClick={() => navigate(-1)} p="0">
+            <Button
+                aria-label={t('common.back', { defaultValue: 'Back' })}
+                onClick={() => navigate(-1)}
+                p="0"
+            >
                 <Icon icon="arrowLeftS" size="lg" />
             </Button>
-            <Button onClick={() => navigate(1)} p="0">
+            <Button
+                aria-label={t('common.forward', { defaultValue: 'Forward' })}
+                onClick={() => navigate(1)}
+                p="0"
+            >
                 <Icon icon="arrowRightS" size="lg" />
             </Button>
         </>

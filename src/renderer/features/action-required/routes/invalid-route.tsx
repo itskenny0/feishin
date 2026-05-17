@@ -24,7 +24,16 @@ const InvalidRoute = () => {
                         <Text size="xl">{t('error.apiRouteError')}</Text>
                     </Group>
                     <Text>{location.pathname}</Text>
-                    <ActionIcon icon="arrowLeftS" onClick={() => navigate(-1)} variant="filled" />
+                    <ActionIcon
+                        aria-label={t('common.back', { defaultValue: 'Back' })}
+                        icon="arrowLeftS"
+                        onClick={() => navigate(-1)}
+                        tooltip={{
+                            label: t('common.back', { defaultValue: 'Back' }),
+                            openDelay: 400,
+                        }}
+                        variant="filled"
+                    />
                 </Stack>
             </Center>
         </AnimatedPage>
