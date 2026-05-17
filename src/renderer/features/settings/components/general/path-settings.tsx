@@ -64,10 +64,12 @@ export const PathSettings = memo(() => {
             <Group>
                 <Text>{t('setting.pathReplace')}</Text>
                 <ActionIcon
+                    aria-label={t('common.refresh')}
                     icon="refresh"
                     loading={randomSong.isFetching}
                     onClick={() => randomSong.refetch()}
                     size="xs"
+                    tooltip={{ label: t('common.refresh'), openDelay: 400 }}
                     variant="transparent"
                 />
             </Group>
