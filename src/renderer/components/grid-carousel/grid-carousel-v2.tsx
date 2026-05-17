@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 
 import { AnimatePresence, motion } from 'motion/react';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import styles from './grid-carousel.module.css';
 
@@ -78,6 +79,7 @@ function BaseGridCarousel(props: GridCarouselProps) {
         rowCount = 1,
         title,
     } = props;
+    const { t } = useTranslation();
     const defaultContainerQuery = useGridCarouselContainerQuery();
     const containerQuery = providedContainerQuery || defaultContainerQuery;
     const { ref, ...cq } = containerQuery;
@@ -281,7 +283,7 @@ function BaseGridCarousel(props: GridCarouselProps) {
                                             iconProps={{ size: 'xs' }}
                                             onClick={onRefresh}
                                             size="xs"
-                                            tooltip={{ label: 'Refresh', openDelay: 400 }}
+                                            tooltip={{ label: t('common.refresh'), openDelay: 400 }}
                                             variant="transparent"
                                         />
                                     )}
