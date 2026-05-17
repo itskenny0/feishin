@@ -212,7 +212,14 @@ export const LeftControls = () => {
                         </div>
                     )}
                 </AnimatePresence>
-                <motion.div className={styles.metadataStack} layout="position">
+                {/* Plain div, not motion.div with layout='position'. The
+                    layout animation re-ran on every song change because the
+                    image's exit animation briefly removes the sibling,
+                    nudging this stack's position. Result was the title /
+                    artist / album text jiggling every track. With layout
+                    removed the metadata stays still and the cover swap
+                    still animates. */}
+                <div className={styles.metadataStack}>
                     {isRadioMode ? (
                         <RadioMetadataDisplay
                             onStopPropagation={stopPropagation}
@@ -338,7 +345,7 @@ export const LeftControls = () => {
                             </div>
                         </>
                     )}
-                </motion.div>
+                </div>
             </LayoutGroup>
         </div>
     );

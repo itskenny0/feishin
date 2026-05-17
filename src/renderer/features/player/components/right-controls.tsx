@@ -148,6 +148,18 @@ const QueueButton = () => {
 
     useHotkeys([
         [bindings.toggleQueue.isGlobal ? '' : bindings.toggleQueue.hotkey, handleToggleQueue],
+        // Escape closes the queue drawer when it's open. Consistent with
+        // how Escape closes modals/dialogs throughout the app — without
+        // this the right-side queue had no keyboard close affordance.
+        [
+            'Escape',
+            (e) => {
+                if (sideQueueType === 'sideQueue' && isSidebarRightExpanded) {
+                    e.preventDefault();
+                    setSideBar({ rightExpanded: false });
+                }
+            },
+        ],
     ]);
 
     const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
