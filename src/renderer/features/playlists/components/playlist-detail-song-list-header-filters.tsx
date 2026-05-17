@@ -279,7 +279,11 @@ const SaveAndReplaceButton = ({ mode, songIds }: { mode?: 'edit' | 'view'; songI
 
     return (
         <Button
-            leftSection={<Icon color="error" icon="save" />}
+            // The save icon is just a regular action affordance — was tinted
+            // 'error' red regardless of state which read as "this is
+            // dangerous / there's a problem". Default fill matches the rest
+            // of the toolbar.
+            leftSection={<Icon icon="save" />}
             onClick={handleOpenModal}
             size="sm"
             variant="subtle"
