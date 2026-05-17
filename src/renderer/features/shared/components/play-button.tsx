@@ -21,6 +21,7 @@ export const DefaultPlayButton = forwardRef<HTMLButtonElement, DefaultPlayButton
     ({ className, variant = 'filled', ...props }, ref) => {
         return (
             <ActionIcon
+                aria-label={(props['aria-label'] as string | undefined) ?? t('player.play')}
                 className={clsx(styles.textButton, className, {
                     [styles.unthemed]: variant !== 'filled',
                 })}
@@ -165,11 +166,13 @@ const PlayButtonBase = forwardRef<HTMLButtonElement, PlayButtonProps>(
 
         return (
             <button
+                aria-label={t('player.play')}
                 className={clsx(styles.playButton, classNames, {
                     [styles.fill]: fill,
                     [styles.secondary]: isSecondary,
                 })}
                 ref={ref}
+                type="button"
                 {...clickHandlers.handlers}
                 {...clickHandlers.props}
             >
