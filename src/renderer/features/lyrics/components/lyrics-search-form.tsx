@@ -186,6 +186,7 @@ export const LyricsSearchForm = ({ artist, name, onSearchOverride }: LyricSearch
                         rightSection={
                             form.values.name ? (
                                 <ActionIcon
+                                    aria-label={t('common.clear')}
                                     icon="x"
                                     onClick={() => form.setFieldValue('name', '')}
                                     size="sm"
@@ -202,6 +203,7 @@ export const LyricsSearchForm = ({ artist, name, onSearchOverride }: LyricSearch
                         rightSection={
                             form.values.artist ? (
                                 <ActionIcon
+                                    aria-label={t('common.clear')}
                                     icon="x"
                                     onClick={() => form.setFieldValue('artist', '')}
                                     size="sm"
