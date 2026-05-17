@@ -21,7 +21,11 @@ export const useRemoteDevices = () => {
         () =>
             devices
                 .filter((d) => d.deviceId !== ourDeviceId)
-                .filter((d) => d.supportsMediaControl)
+                // A session is a valid control target if it advertises EITHER
+                // SupportsMediaControl or SupportsRemoteControl. jellyfin-web's
+                // own Play On... picker uses SupportsRemoteControl, so requiring
+                // SupportsMediaControl alone hides web clients entirely.
+                .filter((d) => d.supportsMediaControl || d.supportsRemoteControl)
                 .slice()
                 .sort(compareDevices),
         [devices, ourDeviceId],

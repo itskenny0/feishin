@@ -25,7 +25,14 @@ const safeSessionToDevice = (s: any): null | RemoteDevice => {
         nowPlayingItemId: np?.Id ?? null,
         nowPlayingTitle: np?.Name ?? null,
         sessionId: s.Id,
-        supportsMediaControl: Boolean(s.SupportsMediaControl),
+        // Read both — Jellyfin clients are inconsistent: jellyfin-web sets
+        // SupportsRemoteControl but not SupportsMediaControl; JMP/Findroid
+        // typically set SupportsMediaControl. Either signal means the
+        // session accepts inbound playback commands.
+        supportsMediaControl: Boolean(
+            s.SupportsMediaControl ?? s.Capabilities?.SupportsMediaControl,
+        ),
+        supportsRemoteControl: Boolean(s.SupportsRemoteControl),
     };
 };
 

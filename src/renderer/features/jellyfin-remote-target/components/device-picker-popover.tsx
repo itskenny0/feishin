@@ -90,9 +90,14 @@ export const DevicePickerPopover = ({ children, onClose, opened }: DevicePickerP
                         </Text>
                     </UnstyledButton>
                     {devices.length === 0 && (
-                        <Text c="dimmed" px="xs" py={6} size="sm">
-                            {t('page.remoteTarget.noDevices')}
-                        </Text>
+                        <Stack gap={2} px="xs" py={6}>
+                            <Text c="dimmed" size="sm">
+                                {t('page.remoteTarget.noDevices')}
+                            </Text>
+                            <Text c="dimmed" size="xs">
+                                {t('page.remoteTarget.noDevicesHint')}
+                            </Text>
+                        </Stack>
                     )}
                     {devices.map((d) => {
                         const active = target.deviceId === d.deviceId;
