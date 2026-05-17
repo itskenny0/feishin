@@ -72,3 +72,12 @@
     pointer-events: auto;
     opacity: 1;
 }
+
+/* Touch devices have no hover affordance — always show the edit/delete
+   actions there. Same pattern as the sidebar playlist row controls. */
+@media (pointer: coarse) {
+    .radio-item-actions {
+        pointer-events: auto;
+        opacity: 1;
+    }
+}
