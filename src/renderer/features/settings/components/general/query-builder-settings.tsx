@@ -111,9 +111,11 @@ export const QueryBuilderSettings = memo(() => {
                                         width="30%"
                                     />
                                     <ActionIcon
+                                        aria-label={t('common.delete')}
                                         icon="remove"
                                         onClick={() => handleRemoveCustomField(index)}
                                         size="sm"
+                                        tooltip={{ label: t('common.delete'), openDelay: 400 }}
                                         variant="subtle"
                                     />
                                 </Group>

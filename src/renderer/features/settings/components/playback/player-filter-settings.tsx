@@ -401,9 +401,14 @@ export const PlayerFilterSettings = memo(() => {
                                             value={filter.value}
                                         />
                                         <ActionIcon
+                                            aria-label={t('common.delete')}
                                             icon="remove"
                                             onClick={() => handleRemoveFilter(filter.id)}
                                             size="sm"
+                                            tooltip={{
+                                                label: t('common.delete'),
+                                                openDelay: 400,
+                                            }}
                                             variant="subtle"
                                         />
                                     </Group>
