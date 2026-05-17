@@ -1,3 +1,4 @@
+import { t } from 'i18next';
 import { DragControls, Reorder, useDragControls } from 'motion/react';
 
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
@@ -8,6 +9,7 @@ import { Text } from '/@/shared/components/text/text';
 const DragHandle = ({ dragControls }: { dragControls: DragControls }) => {
     return (
         <ActionIcon
+            aria-label={t('common.dragToReorder', { defaultValue: 'Drag to reorder' })}
             icon="dragVertical"
             iconProps={{
                 size: 'md',
