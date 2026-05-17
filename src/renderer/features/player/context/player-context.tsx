@@ -227,22 +227,23 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
             timeoutIds.current = {
                 ...timeoutIds.current,
                 [fetchId]: setTimeout(() => {
-                    toastId = toast.info({
-                        autoClose: false,
-                        message: t('player.playbackFetchCancel'),
-                        onClose: () => {
-                            queryClient.cancelQueries({
-                                exact: false,
-                                queryKey: getRootQueryKey(itemType, serverId),
-                            });
+                    toastId =
+                        toast.info({
+                            autoClose: false,
+                            message: t('player.playbackFetchCancel'),
+                            onClose: () => {
+                                queryClient.cancelQueries({
+                                    exact: false,
+                                    queryKey: getRootQueryKey(itemType, serverId),
+                                });
 
-                            queryClient.cancelQueries({
-                                exact: false,
-                                queryKey: queryKeys.player.fetch(),
-                            });
-                        },
-                        title: t('player.playbackFetchInProgress'),
-                    });
+                                queryClient.cancelQueries({
+                                    exact: false,
+                                    queryKey: queryKeys.player.fetch(),
+                                });
+                            },
+                            title: t('player.playbackFetchInProgress'),
+                        }) ?? null;
                 }, 2000),
             };
 
@@ -453,27 +454,28 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
                 timeoutIds.current = {
                     ...timeoutIds.current,
                     [fetchId]: setTimeout(() => {
-                        toastId = toast.info({
-                            autoClose: false,
-                            message: t('player.playbackFetchCancel'),
-                            onClose: () => {
-                                logFn.debug(logMsg[LogCategory.PLAYER].cancelledFetch, {
-                                    category: LogCategory.PLAYER,
-                                    meta: { itemType, serverId },
-                                });
+                        toastId =
+                            toast.info({
+                                autoClose: false,
+                                message: t('player.playbackFetchCancel'),
+                                onClose: () => {
+                                    logFn.debug(logMsg[LogCategory.PLAYER].cancelledFetch, {
+                                        category: LogCategory.PLAYER,
+                                        meta: { itemType, serverId },
+                                    });
 
-                                queryClient.cancelQueries({
-                                    exact: false,
-                                    queryKey: getRootQueryKey(itemType, serverId),
-                                });
+                                    queryClient.cancelQueries({
+                                        exact: false,
+                                        queryKey: getRootQueryKey(itemType, serverId),
+                                    });
 
-                                queryClient.cancelQueries({
-                                    exact: false,
-                                    queryKey: queryKeys.player.fetch(),
-                                });
-                            },
-                            title: t('player.playbackFetchInProgress'),
-                        });
+                                    queryClient.cancelQueries({
+                                        exact: false,
+                                        queryKey: queryKeys.player.fetch(),
+                                    });
+                                },
+                                title: t('player.playbackFetchInProgress'),
+                            }) ?? null;
                     }, 2000),
                 };
                 let startIndex = 0;

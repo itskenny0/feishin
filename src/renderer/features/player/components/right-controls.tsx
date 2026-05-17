@@ -35,6 +35,7 @@ import { Button } from '/@/shared/components/button/button';
 import { Flex } from '/@/shared/components/flex/flex';
 import { Group } from '/@/shared/components/group/group';
 import { Rating } from '/@/shared/components/rating/rating';
+import { Tooltip } from '/@/shared/components/tooltip/tooltip';
 import { useMediaQuery } from '/@/shared/hooks/use-media-query';
 import { useThrottledCallback } from '/@/shared/hooks/use-throttled-callback';
 import { useThrottledValue } from '/@/shared/hooks/use-throttled-value';
@@ -100,18 +101,26 @@ const AutoDJButton = () => {
     };
 
     return (
-        <Button
-            onClick={(e) => {
-                e.stopPropagation();
-                toggleAutoDJ();
-            }}
-            size="compact-xs"
-            style={{ color: settings.enabled ? 'var(--theme-colors-primary)' : undefined }}
-            uppercase
-            variant="transparent"
+        <Tooltip
+            label={`${t('setting.autoDJ')} — ${t('setting.autoDJ_description')}`}
+            openDelay={400}
+            withinPortal
         >
-            {t('setting.autoDJ')}
-        </Button>
+            <Button
+                aria-label={t('setting.autoDJ')}
+                aria-pressed={settings.enabled}
+                onClick={(e) => {
+                    e.stopPropagation();
+                    toggleAutoDJ();
+                }}
+                size="compact-xs"
+                style={{ color: settings.enabled ? 'var(--theme-colors-primary)' : undefined }}
+                uppercase
+                variant="transparent"
+            >
+                {t('setting.autoDJ')}
+            </Button>
+        </Tooltip>
     );
 };
 
@@ -160,7 +169,7 @@ const QueueButton = () => {
                 size="sm"
                 tooltip={{
                     label: t('player.viewQueue'),
-                    openDelay: 0,
+                    openDelay: 400,
                 }}
                 variant="subtle"
             />
@@ -206,7 +215,7 @@ const LyricsButton = () => {
             size="sm"
             tooltip={{
                 label: t('player.lyrics'),
-                openDelay: 0,
+                openDelay: 400,
             }}
             variant="subtle"
         />
@@ -289,7 +298,7 @@ const FavoriteButton = () => {
             size="sm"
             tooltip={{
                 label: currentSong?.userFavorite ? t('player.unfavorite') : t('player.favorite'),
-                openDelay: 0,
+                openDelay: 400,
             }}
             variant="subtle"
         />
@@ -443,8 +452,8 @@ const VolumeButton = () => {
                 onWheel={handleVolumeWheel}
                 size="sm"
                 tooltip={{
-                    label: muted ? t('player.muted') : volume,
-                    openDelay: 0,
+                    label: muted ? t('player.muted') : `${volume}%`,
+                    openDelay: 400,
                 }}
                 variant="subtle"
             />

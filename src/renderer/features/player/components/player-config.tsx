@@ -182,7 +182,7 @@ export const PlayerConfig = () => {
                     stopsPropagation
                     tooltip={{
                         label: t('common.setting', { count: 2 }),
-                        openDelay: 0,
+                        openDelay: 400,
                     }}
                     variant="subtle"
                 />

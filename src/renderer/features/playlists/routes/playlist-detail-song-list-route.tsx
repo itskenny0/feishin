@@ -200,7 +200,11 @@ const PlaylistDetailSongListRoute = () => {
                         closeAllModals();
                     }}
                 >
-                    <Text>Are you sure you want to delete this playlist?</Text>
+                    <Text>
+                        {t('form.deletePlaylist.confirm', {
+                            defaultValue: 'Are you sure you want to delete this playlist?',
+                        })}
+                    </Text>
                 </ConfirmModal>
             ),
             title: t('form.deletePlaylist.title'),

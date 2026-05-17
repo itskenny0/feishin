@@ -102,6 +102,7 @@ const AlbumArtistDetailRouteContent = () => {
                     target: headerRef,
                 }}
                 ref={scrollAreaRef}
+                scrollKey={`album-artist-detail-${routeId}`}
             >
                 {showBlurredImage ? (
                     <LibraryBackgroundImage

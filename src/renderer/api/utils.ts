@@ -1,10 +1,12 @@
+import { t } from 'i18next';
+
 import { useAuthStore } from '/@/renderer/store';
 import { toast } from '/@/shared/components/toast/toast';
 import { ServerListItem } from '/@/shared/types/types';
 
 export const authenticationFailure = (currentServer: null | ServerListItem) => {
     toast.error({
-        message: 'Your session has expired.',
+        message: t('error.sessionExpiredError', { defaultValue: 'Your session has expired.' }),
     });
 
     if (currentServer) {

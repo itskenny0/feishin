@@ -35,6 +35,7 @@ import { Icon } from '/@/shared/components/icon/icon';
 import { Image } from '/@/shared/components/image/image';
 import { Text } from '/@/shared/components/text/text';
 import { useLocalStorage } from '/@/shared/hooks/use-local-storage';
+import { useMediaQuery } from '/@/shared/hooks/use-media-query';
 import {
     LibraryItem,
     Playlist,
@@ -68,6 +69,10 @@ const PlaylistRowButton = memo(
         const sidebarPlaylistSorting = useSidebarPlaylistSorting();
 
         const [isHovered, setIsHovered] = useState(false);
+        // Touch devices have no hover affordance — show the play/next/last
+        // controls all the time so tablet users can actually reach them.
+        const isCoarsePointer = useMediaQuery('(pointer: coarse)');
+        const showControls = isHovered || isCoarsePointer;
 
         const { isDraggedOver, isDragging, ref } = useDragDrop<HTMLAnchorElement>({
             drag: {
@@ -271,7 +276,7 @@ const PlaylistRowButton = memo(
                     </div>
                 </div>
 
-                {isHovered && <RowControls id={to} onPlay={handlePlay} />}
+                {showControls && <RowControls id={to} onPlay={handlePlay} />}
             </Link>
         );
     },
@@ -521,10 +526,14 @@ export const SidebarPlaylistList = () => {
                 </Group>
             </Accordion.Control>
             <Accordion.Panel>
-                {playlistItems?.items?.map((item, index) => (
+                {playlistItems?.items?.map((item) => (
                     <PlaylistRowButton
                         item={item}
-                        key={index}
+                        // Use the stable playlist id so React doesn't mis-
+                        // attribute hover / drag state to neighbouring rows
+                        // after a reorder. The previous key={index} bound
+                        // state to the position, not the item.
+                        key={item.id}
                         name={item.name}
                         onContextMenu={handleContextMenu}
                         onReorder={handleReorder}
@@ -680,10 +689,14 @@ export const SidebarSharedPlaylistList = () => {
                 </Text>
             </Accordion.Control>
             <Accordion.Panel>
-                {playlistItems?.items?.map((item, index) => (
+                {playlistItems?.items?.map((item) => (
                     <PlaylistRowButton
                         item={item}
-                        key={index}
+                        // Use the stable playlist id so React doesn't mis-
+                        // attribute hover / drag state to neighbouring rows
+                        // after a reorder. The previous key={index} bound
+                        // state to the position, not the item.
+                        key={item.id}
                         name={item.name}
                         onContextMenu={handleContextMenu}
                         onReorder={handleReorder}
