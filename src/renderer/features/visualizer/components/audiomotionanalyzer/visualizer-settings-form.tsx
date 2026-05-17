@@ -1018,12 +1018,22 @@ const GeneralSettings = () => {
                 <Group gap="xs">
                     {t('visualizer.general')}
                     <ActionIcon
+                        aria-label={t('visualizer.documentation', {
+                            defaultValue: 'Documentation',
+                        })}
                         component="a"
                         href="https://audiomotion.dev/#/?id=constructor-specific-options"
                         icon="externalLink"
                         iconProps={{ color: 'info' }}
+                        rel="noreferrer"
                         size="xs"
                         target="_blank"
+                        tooltip={{
+                            label: t('visualizer.documentation', {
+                                defaultValue: 'Documentation',
+                            }),
+                            openDelay: 400,
+                        }}
                         variant="transparent"
                     />
                 </Group>
@@ -1395,12 +1405,22 @@ const CustomGradientsManager = () => {
                 <Group gap="xs">
                     {t('visualizer.customGradients')}
                     <ActionIcon
+                        aria-label={t('visualizer.documentation', {
+                            defaultValue: 'Documentation',
+                        })}
                         component="a"
                         href="https://audiomotion.dev/#/?id=registergradient-name-options-"
                         icon="externalLink"
                         iconProps={{ color: 'info' }}
+                        rel="noreferrer"
                         size="xs"
                         target="_blank"
+                        tooltip={{
+                            label: t('visualizer.documentation', {
+                                defaultValue: 'Documentation',
+                            }),
+                            openDelay: 400,
+                        }}
                         variant="transparent"
                     />
                 </Group>
