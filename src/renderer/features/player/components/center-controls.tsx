@@ -96,7 +96,7 @@ const RadioStopButton = ({ disabled }: { disabled?: boolean }) => {
             onClick={stop}
             tooltip={{
                 label: t('player.stop'),
-                openDelay: 0,
+                openDelay: 400,
             }}
             variant="tertiary"
         />
@@ -115,7 +115,7 @@ const StopButton = ({ disabled }: { disabled?: boolean }) => {
             onClick={() => mediaStop()}
             tooltip={{
                 label: t('player.stop'),
-                openDelay: 0,
+                openDelay: 400,
             }}
             variant="tertiary"
         />
@@ -147,7 +147,7 @@ const ShuffleButton = ({ disabled }: { disabled?: boolean }) => {
                               context: 'off',
                           })
                         : t('player.shuffle'),
-                openDelay: 0,
+                openDelay: 400,
             }}
             variant="tertiary"
         />
@@ -166,7 +166,7 @@ const PreviousButton = ({ disabled }: { disabled?: boolean }) => {
             onClick={mediaPrevious}
             tooltip={{
                 label: t('player.previous'),
-                openDelay: 0,
+                openDelay: 400,
             }}
             variant="secondary"
         />
@@ -187,7 +187,7 @@ const SkipBackwardButton = ({ disabled }: { disabled?: boolean }) => {
                 label: t('player.skip', {
                     context: 'back',
                 }),
-                openDelay: 0,
+                openDelay: 400,
             }}
             variant="secondary"
         />
@@ -223,7 +223,7 @@ const SkipForwardButton = ({ disabled }: { disabled?: boolean }) => {
                 label: t('player.skip', {
                     context: 'forward',
                 }),
-                openDelay: 0,
+                openDelay: 400,
             }}
             variant="secondary"
         />
@@ -242,7 +242,7 @@ const NextButton = ({ disabled }: { disabled?: boolean }) => {
             onClick={mediaNext}
             tooltip={{
                 label: t('player.next'),
-                openDelay: 0,
+                openDelay: 400,
             }}
             variant="secondary"
         />
@@ -285,7 +285,7 @@ const RepeatButton = ({ disabled }: { disabled?: boolean }) => {
                                 context: 'one',
                             })
                 }`,
-                openDelay: 0,
+                openDelay: 400,
             }}
             variant="tertiary"
         />
@@ -303,7 +303,7 @@ const ShuffleAllButton = ({ disabled }: { disabled?: boolean }) => {
             onClick={() => openShuffleAllModal()}
             tooltip={{
                 label: t('form.shuffleAll.title'),
-                openDelay: 0,
+                openDelay: 400,
             }}
             variant="tertiary"
         />

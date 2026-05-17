@@ -21,6 +21,8 @@ import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Box } from '/@/shared/components/box/box';
 import { Divider } from '/@/shared/components/divider/divider';
 import { Group } from '/@/shared/components/group/group';
+import { ConfirmModal, openModal } from '/@/shared/components/modal/modal';
+import { Text } from '/@/shared/components/text/text';
 import { ServerFeature } from '/@/shared/types/features-types';
 import { ItemListKey, ListDisplayType } from '/@/shared/types/types';
 
@@ -88,7 +90,25 @@ const QueuePlaybackIcons = ({ tableRef }: { tableRef: RefObject<ItemListHandle |
     const player = usePlayer();
 
     const handleClearQueue = () => {
-        player.clearQueue();
+        // Wrap in a confirm modal — one accidental click on this 16px icon
+        // otherwise wipes a hand-built queue with no undo.
+        openModal({
+            children: (
+                <ConfirmModal
+                    onConfirm={() => {
+                        player.clearQueue();
+                    }}
+                >
+                    <Text>
+                        {t('action.clearQueue_confirm', {
+                            defaultValue: 'Clear the current playback queue?',
+                        })}
+                    </Text>
+                </ConfirmModal>
+            ),
+            title: t('action.clearQueue'),
+        });
+        return;
     };
 
     const handleJumpToCurrent = () => {

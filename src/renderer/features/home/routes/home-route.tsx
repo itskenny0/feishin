@@ -114,6 +114,7 @@ const HomeRoute = () => {
                     offset: 200,
                 }}
                 ref={scrollAreaRef}
+                scrollKey="home"
             >
                 <LibraryContainer>
                     <Stack

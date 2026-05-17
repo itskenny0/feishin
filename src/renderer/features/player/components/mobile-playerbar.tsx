@@ -90,7 +90,7 @@ export const MobilePlayerbar = () => {
                                 >
                                     <Tooltip
                                         label={t('player.toggleFullscreenPlayer')}
-                                        openDelay={0}
+                                        openDelay={400}
                                     >
                                         <ItemImage
                                             className={clsx(
@@ -214,7 +214,7 @@ export const MobilePlayerbar = () => {
                     }}
                     tooltip={{
                         label: t('player.previous'),
-                        openDelay: 0,
+                        openDelay: 400,
                     }}
                     variant="tertiary"
                 />
@@ -234,7 +234,7 @@ export const MobilePlayerbar = () => {
                     }}
                     tooltip={{
                         label: t('player.next'),
-                        openDelay: 0,
+                        openDelay: 400,
                     }}
                     variant="tertiary"
                 />

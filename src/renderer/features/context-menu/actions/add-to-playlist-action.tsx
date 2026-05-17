@@ -264,16 +264,22 @@ export const AddToPlaylistAction = ({ items, itemType }: AddToPlaylistActionProp
                                 title: t('error.genericError'),
                             });
                         },
-                        onSuccess: () => {},
+                        // Move the success toast into onSuccess. The previous
+                        // version fired the success toast synchronously after
+                        // .mutate(), so the user saw "Added N tracks" even
+                        // when the request later failed — quickly followed by
+                        // a separate error toast. Now success and error are
+                        // mutually exclusive and accurate.
+                        onSuccess: () => {
+                            toast.success({
+                                message: t('form.addToPlaylist.success', {
+                                    message: songsToAdd.length,
+                                    numOfPlaylists: 1,
+                                }),
+                            });
+                        },
                     },
                 );
-
-                toast.success({
-                    message: t('form.addToPlaylist.success', {
-                        message: songsToAdd.length,
-                        numOfPlaylists: 1,
-                    }),
-                });
             } catch (error) {
                 toast.error({
                     message: (error as Error).message,

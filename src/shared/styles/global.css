@@ -1,6 +1,21 @@
 * {
     box-sizing: border-box;
+
+    /* Suppress the default focus ring only for mouse focus (i.e. :focus
+       without :focus-visible). Keyboard users get a visible ring via the
+       rule below — without it focus indicators across the app were
+       invisible. */
     outline: none;
+}
+
+/* Visible keyboard-focus indicator. Tuned to be high-contrast in both
+   light and dark themes; offset gives breathing room from the focused
+   element's border so it reads as a halo rather than a stroke that
+   overlaps content. */
+*:focus-visible {
+    outline: 2px solid var(--theme-colors-primary, #4dabf7);
+    outline-offset: 2px;
+    border-radius: 2px;
 }
 
 *,

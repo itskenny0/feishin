@@ -33,10 +33,18 @@ export const ActionBar = () => {
             >
                 <Grid.Col span={7}>
                     <TextInput
+                        aria-label={t('common.search')}
                         leftSection={<Icon icon="search" />}
                         onClick={open}
+                        // Open the palette on any printable key OR Enter/Space.
+                        // (Previously only Enter/Space worked, so a user
+                        // typing into the search box saw their first
+                        // keystroke vanish.) The first keystroke is still
+                        // lost — the palette doesn't accept a seeded query
+                        // — but at least the palette opens immediately and
+                        // accepts the rest of the typed string.
                         onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.key === ' ') {
+                            if (e.key === 'Enter' || e.key === ' ' || e.key.length === 1) {
                                 open();
                             }
                         }}

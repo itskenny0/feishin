@@ -6,6 +6,7 @@ import {
     ModalsProviderProps as MantineModalsProviderProps,
     openModal as openModalMantine,
 } from '@mantine/modals';
+import { t } from 'i18next';
 import React, { ReactNode } from 'react';
 
 import styles from './modal.module.css';
@@ -57,8 +58,8 @@ export const Modal = ({ children, classNames, handlers, ...rest }: ModalProps) =
             radius="md"
             scrollAreaComponent={ScrollArea}
             transitionProps={{
-                duration: 300,
-                exitDuration: 300,
+                duration: 150,
+                exitDuration: 120,
                 transition: 'fade' as const,
             }}
         >
@@ -113,7 +114,7 @@ export const ConfirmModal = ({
             <Flex>{children}</Flex>
             <Group justify="flex-end">
                 <Button disabled={loading} onClick={handleCancel} variant="default">
-                    {labels?.cancel ? labels.cancel : 'Cancel'}
+                    {labels?.cancel ?? t('common.cancel', { defaultValue: 'Cancel' })}
                 </Button>
                 <Button
                     data-autofocus
@@ -122,7 +123,7 @@ export const ConfirmModal = ({
                     onClick={onConfirm}
                     variant="filled"
                 >
-                    {labels?.confirm ? labels.confirm : 'Confirm'}
+                    {labels?.confirm ?? t('common.confirm', { defaultValue: 'Confirm' })}
                 </Button>
             </Group>
         </Stack>
@@ -156,8 +157,8 @@ export const ModalsProvider = ({ children, ...rest }: ModalsProviderProps) => {
                 radius: 'xl',
                 scrollAreaComponent: ScrollArea,
                 transitionProps: {
-                    duration: 300,
-                    exitDuration: 300,
+                    duration: 150,
+                    exitDuration: 120,
                     transition: 'fade',
                 },
             }}

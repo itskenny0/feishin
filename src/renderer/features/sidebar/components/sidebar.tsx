@@ -76,7 +76,29 @@ export const Sidebar = () => {
     const sidebarItems = useSidebarItems();
     const { windowBarStyle } = useWindowSettings();
     const sidebarImageEnabled = useAppStore((state) => state.sidebar.image);
+    const sidebarExpandedFromStore = useAppStore((state) => state.sidebar.expanded);
+    const { setSideBar } = useAppStoreActions();
     const showImage = sidebarImageEnabled;
+
+    // Persist accordion open/close across launches. Empty store value
+    // (initial state for existing users) is treated as "show defaults" so
+    // the experience matches what they had before. After any user
+    // interaction the explicit list is persisted.
+    const SIDEBAR_DEFAULT_OPEN = useMemo(
+        () => ['library', 'collections', 'playlists', 'favorite-albums'],
+        [],
+    );
+    const sidebarExpanded =
+        sidebarExpandedFromStore.length > 0 ? sidebarExpandedFromStore : SIDEBAR_DEFAULT_OPEN;
+    const handleAccordionChange = (val: null | string | string[]) => {
+        // Mantine's multi-accordion onChange gives us the new open list.
+        // Store a sentinel so 'all collapsed' is distinguishable from
+        // 'never interacted with the accordion' (the latter wants the
+        // defaults). The simplest sentinel is a single non-existent value;
+        // any non-empty array means "the user's choice — respect it".
+        const next = Array.isArray(val) ? val : val ? [val] : [];
+        setSideBar({ expanded: next.length === 0 ? ['__collapsed__'] : next });
+    };
 
     const sidebarItemsWithRoute: SidebarItemType[] = useMemo(() => {
         if (!sidebarItems) return [];
@@ -120,8 +142,13 @@ export const Sidebar = () => {
                         item: styles.accordionItem,
                         root: styles.accordionRoot,
                     }}
-                    defaultValue={['library', 'collections', 'playlists', 'favorite-albums']}
                     multiple
+                    onChange={handleAccordionChange}
+                    value={
+                        (sidebarExpanded.includes('__collapsed__')
+                            ? []
+                            : sidebarExpanded) as unknown as string
+                    }
                 >
                     <Accordion.Item value="library">
                         <Accordion.Control>

@@ -253,7 +253,7 @@ export const SleepTimerButton = () => {
                     size="sm"
                     tooltip={{
                         label: t('player.sleepTimer'),
-                        openDelay: 0,
+                        openDelay: 400,
                     }}
                     variant="subtle"
                 />

@@ -431,9 +431,25 @@ const VisualizerInner = () => {
         const visualizer = visualizerRef.current;
         if (!visualizer || !isVisualizerReady) return;
 
+        // Honor prefers-reduced-motion: don't run any animation. Users with
+        // vestibular sensitivity get a static cover-art-only experience
+        // when they've explicitly asked the OS to reduce motion.
+        const reducedMotion =
+            typeof window !== 'undefined' &&
+            window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+        if (reducedMotion) return;
+
         let lastFrameTime = 0;
-        const maxFPS = butterchurnSettings.maxFPS;
-        const minFrameInterval = maxFPS > 0 ? 1000 / maxFPS : 0;
+        const userMaxFPS = butterchurnSettings.maxFPS;
+
+        const computeMinFrameInterval = (): number => {
+            // Drop to ~30fps when the window is hidden — the browser already
+            // throttles rAF in background tabs, but Electron windows that are
+            // merely behind another window still get full rAF; capping here
+            // keeps GPU + battery use down when the user can't see anything.
+            if (typeof document !== 'undefined' && document.hidden) return 1000 / 30;
+            return userMaxFPS > 0 ? 1000 / userMaxFPS : 0;
+        };
 
         const render = (currentTime: number) => {
             const currentVisualizer = visualizerRef.current;
@@ -445,7 +461,8 @@ const VisualizerInner = () => {
                 return;
             }
 
-            if (maxFPS === 0 || currentTime - lastFrameTime >= minFrameInterval) {
+            const minFrameInterval = computeMinFrameInterval();
+            if (minFrameInterval === 0 || currentTime - lastFrameTime >= minFrameInterval) {
                 currentVisualizer.render();
                 lastFrameTime = currentTime;
             }
