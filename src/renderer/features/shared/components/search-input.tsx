@@ -7,6 +7,7 @@ import {
     useRef,
     useState,
 } from 'react';
+import { useTranslation } from 'react-i18next';
 import { shallow } from 'zustand/shallow';
 
 import { useHotkeys } from '/@/renderer/hooks/use-hotkeys';
@@ -32,6 +33,7 @@ export const SearchInput = ({
     onChange,
     ...props
 }: SearchInputProps) => {
+    const { t } = useTranslation();
     const ref = useRef<HTMLInputElement>(null);
     const binding = useSettingsStore((state) => state.hotkeys.bindings.localSearch, shallow);
     const [isInputMode, setIsInputMode] = useState(false);
@@ -167,7 +169,7 @@ export const SearchInput = ({
                 iconProps={{ size: 'lg' }}
                 onClick={handleButtonClick}
                 style={buttonStyle}
-                tooltip={{ label: 'Search', openDelay: 400 }}
+                tooltip={{ label: t('common.search'), openDelay: 400 }}
                 variant="subtle"
             />
         </Box>

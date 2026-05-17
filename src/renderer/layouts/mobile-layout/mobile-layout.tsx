@@ -1,6 +1,7 @@
 import clsx from 'clsx';
 import { AnimatePresence } from 'motion/react';
 import { Suspense } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Outlet } from 'react-router';
 
 import styles from './mobile-layout.module.css';
@@ -23,6 +24,7 @@ interface MobileLayoutProps {
 }
 
 export const MobileLayout = ({ shell }: MobileLayoutProps) => {
+    const { t } = useTranslation();
     const [sidebarOpened, { close: closeSidebar, open: openSidebar }] = useDisclosure(false);
     const {
         expanded: isFullScreenPlayerExpanded,
@@ -41,11 +43,15 @@ export const MobileLayout = ({ shell }: MobileLayoutProps) => {
             >
                 {!shell && <WindowBar />}
                 <ActionIcon
+                    aria-label={t('common.menu', { defaultValue: 'Menu' })}
                     className={styles.drawerButton}
                     icon="menu"
                     onClick={openSidebar}
                     size="lg"
-                    tooltip={{ label: 'Menu', openDelay: 400 }}
+                    tooltip={{
+                        label: t('common.menu', { defaultValue: 'Menu' }),
+                        openDelay: 400,
+                    }}
                     variant="subtle"
                 />
                 <main className={styles.mainContent}>
