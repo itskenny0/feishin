@@ -180,7 +180,7 @@ export const CreatePlaylistForm = ({ onCancel }: CreatePlaylistFormProps) => {
                 <Group justify="flex-end">
                     {isSmartPlaylist && step === 2 && (
                         <ModalButton onClick={() => setStep(1)} px="2xl" uppercase variant="subtle">
-                            Back
+                            {t('common.back', { defaultValue: 'Back' })}
                         </ModalButton>
                     )}
                     <ModalButton onClick={onCancel} px="2xl" uppercase variant="subtle">
