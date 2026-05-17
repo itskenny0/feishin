@@ -113,11 +113,11 @@ export const LyricsActions = ({
                         onClick={() => handleLyricOffset(offsetMs - 50)}
                         tooltip={{
                             label: t('common.slower'),
-                            openDelay: 0,
+                            openDelay: 400,
                         }}
                         variant="subtle"
                     />
-                    <Tooltip label={t('setting.lyricOffset')} openDelay={0}>
+                    <Tooltip label={t('setting.lyricOffset')} openDelay={400}>
                         <NumberInput
                             aria-label="Lyric offset"
                             onChange={handleLyricOffset}
@@ -132,7 +132,7 @@ export const LyricsActions = ({
                         onClick={() => handleLyricOffset(offsetMs + 50)}
                         tooltip={{
                             label: t('common.faster'),
-                            openDelay: 0,
+                            openDelay: 400,
                         }}
                         variant="subtle"
                     />

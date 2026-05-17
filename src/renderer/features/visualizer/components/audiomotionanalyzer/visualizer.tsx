@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import styles from './visualizer.module.css';
 
@@ -355,6 +356,7 @@ const VisualizerInner = () => {
 };
 
 export const Visualizer = () => {
+    const { t } = useTranslation();
     const { visualizerExpanded } = useFullScreenPlayerStore();
     const { setStore } = useFullScreenPlayerStoreActions();
 
@@ -372,15 +374,19 @@ export const Visualizer = () => {
                 top="var(--theme-spacing-sm)"
             >
                 <ActionIcon
+                    aria-label={t('player.toggleFullscreenPlayer')}
                     icon="expand"
                     iconProps={{ size: 'lg' }}
                     onClick={handleToggleFullscreen}
+                    tooltip={{ label: t('player.toggleFullscreenPlayer'), openDelay: 400 }}
                     variant="subtle"
                 />
                 <ActionIcon
+                    aria-label={t('common.settings')}
                     icon="settings2"
                     iconProps={{ size: 'lg' }}
                     onClick={openVisualizerSettingsModal}
+                    tooltip={{ label: t('common.settings'), openDelay: 400 }}
                     variant="subtle"
                 />
             </Group>

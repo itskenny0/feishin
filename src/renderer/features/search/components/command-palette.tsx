@@ -1,3 +1,4 @@
+import { t } from 'i18next';
 import { useCallback, useDeferredValue, useRef, useState } from 'react';
 
 import { Command, CommandPalettePages } from '/@/renderer/features/search/components/command';
@@ -67,10 +68,12 @@ function CommandPaletteSearch({
                 rightSection={
                     query && (
                         <ActionIcon
+                            aria-label={t('common.clear')}
                             onClick={() => {
                                 setQuery('');
                                 searchInputRef.current?.focus();
                             }}
+                            tooltip={{ label: t('common.clear'), openDelay: 400 }}
                             variant="transparent"
                         >
                             <Icon icon="x" />

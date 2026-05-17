@@ -563,7 +563,7 @@ const RowComponent = ({
             }}
             label={displayName}
             offset={tooltipOffset}
-            openDelay={0}
+            openDelay={400}
             position="right"
             withArrow={false}
         >

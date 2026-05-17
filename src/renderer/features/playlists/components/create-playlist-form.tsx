@@ -144,7 +144,9 @@ export const CreatePlaylistForm = ({ onCancel }: CreatePlaylistFormProps) => {
                                 hasFeature(server, ServerFeature.PLAYLISTS_SMART) && (
                                     <Switch
                                         checked={isSmartPlaylist}
-                                        label="Is smart playlist?"
+                                        label={t('form.createPlaylist.smartPlaylist', {
+                                            defaultValue: 'Is smart playlist?',
+                                        })}
                                         onChange={(e) => {
                                             const next = e.currentTarget.checked;
                                             setIsSmartPlaylist(next);
@@ -160,7 +162,11 @@ export const CreatePlaylistForm = ({ onCancel }: CreatePlaylistFormProps) => {
 
                 {isSmartPlaylist && step === 2 && (
                     <Stack pt="1rem">
-                        <Text>Query Editor</Text>
+                        <Text>
+                            {t('form.createPlaylist.queryEditor', {
+                                defaultValue: 'Query Editor',
+                            })}
+                        </Text>
                         <PlaylistQueryBuilder
                             limit={undefined}
                             query={undefined}

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import styles from './visualizer.module.css';
 
@@ -542,6 +543,7 @@ const CurrentPresetDisplay = () => {
 };
 
 export const Visualizer = () => {
+    const { t } = useTranslation();
     const { visualizerExpanded } = useFullScreenPlayerStore();
     const { setStore } = useFullScreenPlayerStoreActions();
     const { setSettings } = useSettingsStoreActions();
@@ -653,15 +655,19 @@ export const Visualizer = () => {
                 top="var(--theme-spacing-sm)"
             >
                 <ActionIcon
+                    aria-label={t('player.toggleFullscreenPlayer')}
                     icon="expand"
                     iconProps={{ size: 'lg' }}
                     onClick={handleToggleFullscreen}
+                    tooltip={{ label: t('player.toggleFullscreenPlayer'), openDelay: 400 }}
                     variant="subtle"
                 />
                 <ActionIcon
+                    aria-label={t('common.settings')}
                     icon="settings2"
                     iconProps={{ size: 'lg' }}
                     onClick={openVisualizerSettingsModal}
+                    tooltip={{ label: t('common.settings'), openDelay: 400 }}
                     variant="subtle"
                 />
             </Group>
@@ -673,15 +679,25 @@ export const Visualizer = () => {
                 style={{ bottom: 'var(--theme-spacing-sm)' }}
             >
                 <ActionIcon
+                    aria-label={t('common.previous', { defaultValue: 'Previous' })}
                     icon="arrowLeftS"
                     iconProps={{ size: 'lg' }}
                     onClick={handlePreviousPreset}
+                    tooltip={{
+                        label: t('common.previous', { defaultValue: 'Previous preset' }),
+                        openDelay: 400,
+                    }}
                     variant="subtle"
                 />
                 <ActionIcon
+                    aria-label={t('common.next', { defaultValue: 'Next' })}
                     icon="arrowRightS"
                     iconProps={{ size: 'lg' }}
                     onClick={handleNextPreset}
+                    tooltip={{
+                        label: t('common.next', { defaultValue: 'Next preset' }),
+                        openDelay: 400,
+                    }}
                     variant="subtle"
                 />
             </Group>
