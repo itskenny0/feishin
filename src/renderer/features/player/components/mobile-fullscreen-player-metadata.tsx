@@ -1,4 +1,5 @@
 import clsx from 'clsx';
+import { t } from 'i18next';
 import { memo, MouseEvent } from 'react';
 
 import styles from './mobile-fullscreen-player.module.css';
@@ -81,6 +82,8 @@ export const MobileFullscreenPlayerMetadata = memo(
                 {!isRadio && (
                     <Group align="center" className={styles.actionsRow} gap="xs">
                         <ActionIcon
+                            aria-label={t('common.favorite', { defaultValue: 'Favorite' })}
+                            aria-pressed={Boolean(isFavorite)}
                             icon="favorite"
                             iconProps={{
                                 fill: isFavorite ? 'primary' : undefined,
