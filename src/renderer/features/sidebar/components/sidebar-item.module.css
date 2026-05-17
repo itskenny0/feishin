@@ -44,7 +44,24 @@
 }
 
 .link.active {
+    position: relative;
+    font-weight: 700;
     color: var(--theme-colors-primary-filled);
+}
+
+/* 3px accent stripe on the leading edge — the previous active-state only
+   changed the text color, which on dark themes blended into the muted
+   surface. Stripe is high-contrast and immediately readable. Uses logical
+   inset-inline-start so it mirrors correctly under RTL. */
+.link.active::before {
+    position: absolute;
+    inset-inline-start: 0;
+    top: 4px;
+    bottom: 4px;
+    width: 3px;
+    content: '';
+    background: var(--theme-colors-primary-filled);
+    border-radius: 2px;
 }
 
 .link.disabled {
