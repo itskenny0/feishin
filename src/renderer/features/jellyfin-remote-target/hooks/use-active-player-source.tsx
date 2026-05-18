@@ -4,6 +4,7 @@ import type { Song } from '/@/shared/types/domain-types';
 import { useMemo } from 'react';
 
 import { useRemoteTarget } from '/@/renderer/features/jellyfin-remote-target/hooks/use-remote-target';
+import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
 import { usePlayerSong, usePlayerStatus, usePlayerVolume } from '/@/renderer/store/player.store';
 import { PlayerStatus } from '/@/shared/types/types';
 
@@ -55,8 +56,17 @@ export const useActivePlayerSource = (): ActivePlayerSource => {
     }, [remote, localSong, localStatus, localVolume]);
 };
 
+/**
+ * Whether a given transport capability is available on the active player.
+ *
+ * Subscribes to a primitive only — the boolean answer itself — so this is
+ * cheap to call from every transport button without dragging the full
+ * useActivePlayerSource (now-playing item, queue, position, volume) into
+ * each button's render path.
+ */
 export const useTransportEnabled = (capability: string): boolean => {
-    const source = useActivePlayerSource();
-    if (source.mode === 'local') return true;
-    return source.capabilities.includes(capability);
+    return useRemoteTargetStore((s) => {
+        if (s.targetDeviceId === null) return true;
+        return s.mirrored.capabilities.includes(capability);
+    });
 };
