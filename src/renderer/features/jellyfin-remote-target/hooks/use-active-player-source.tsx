@@ -70,3 +70,18 @@ export const useTransportEnabled = (capability: string): boolean => {
         return s.mirrored.capabilities.includes(capability);
     });
 };
+
+/**
+ * Just the now-playing track of the active source — local song when no
+ * remote target is set, the mirrored remote song otherwise. Subscribes only
+ * to the relevant slice so consumers don't re-render on every position
+ * tick or volume change.
+ */
+export const useActiveNowPlayingItem = (): null | Song => {
+    const localSong = usePlayerSong();
+    const remoteSong = useRemoteTargetStore((s) =>
+        s.targetDeviceId === null ? null : s.mirrored.nowPlayingItem,
+    );
+    const isRemote = useRemoteTargetStore((s) => s.targetDeviceId !== null);
+    return isRemote ? remoteSong : ((localSong as null | Song) ?? null);
+};
