@@ -5,3 +5,6 @@ out
 .eslintcache
 *.log*
 release
+
+# brainstorm session content + state (visual companion)
+.superpowers/
