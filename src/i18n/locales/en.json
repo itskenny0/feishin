@@ -736,6 +736,7 @@
             "discord": "Discord",
             "logger": "Logger",
             "playerFilters": "Player Filters",
+            "trackmap": "Trackmap",
             "visualizer": "Visualizer Settings"
         },
         "sidebar": {

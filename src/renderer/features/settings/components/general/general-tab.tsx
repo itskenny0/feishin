@@ -9,6 +9,7 @@ import { QueryBuilderSettings } from '/@/renderer/features/settings/components/g
 import { ScrobbleSettings } from '/@/renderer/features/settings/components/general/scrobble-settings';
 import { SidebarSettings } from '/@/renderer/features/settings/components/general/sidebar-settings';
 import { ThemeSettings } from '/@/renderer/features/settings/components/general/theme-settings';
+import { TrackmapSettings } from '/@/renderer/features/settings/components/general/trackmap-settings';
 import { useCurrentServer } from '/@/renderer/store';
 import { hasFeature } from '/@/shared/api/utils';
 import { Divider } from '/@/shared/components/divider/divider';
@@ -28,6 +29,7 @@ export const GeneralTab = memo(() => {
             { component: SidebarSettings, key: 'sidebar' },
             { component: ScrobbleSettings, key: 'scrobble' },
             { component: LyricSettings, key: 'lyrics' },
+            { component: TrackmapSettings, key: 'trackmap' },
         ];
 
         if (supportsSmartPlaylists) {
