@@ -9,6 +9,35 @@ import { jfApiClient } from '/@/renderer/api/jellyfin/jellyfin-api';
 import { JF_FIELDS } from '/@/renderer/api/jellyfin/jellyfin-controller';
 import { jfNormalize } from '/@/shared/api/jellyfin/jellyfin-normalize';
 
+/**
+ * The custom api implementation in jfApiClient swallows non-2xx responses
+ * and returns them as a normal result (so callers can inspect the status).
+ * For control commands we want errors to surface, so wrap the status check
+ * here and throw a RemoteCommandError on failure.
+ */
+class RemoteCommandError extends Error {
+    constructor(
+        public readonly endpoint: string,
+        public readonly status: number,
+        body: unknown,
+    ) {
+        const detail =
+            typeof body === 'string'
+                ? body
+                : body && typeof body === 'object' && 'Message' in body
+                  ? String((body as { Message: unknown }).Message)
+                  : '';
+        super(`Remote command failed (${endpoint}): HTTP ${status}${detail ? ` — ${detail}` : ''}`);
+        this.name = 'RemoteCommandError';
+    }
+}
+
+const assertOk = (endpoint: string, res: { body: unknown; status: number | undefined }): void => {
+    if (typeof res.status !== 'number' || res.status < 200 || res.status >= 300) {
+        throw new RemoteCommandError(endpoint, res.status ?? 0, res.body);
+    }
+};
+
 type ServerArg = { server: ServerListItemWithCredential };
 
 const safeSessionToDevice = (s: any): null | RemoteDevice => {
@@ -73,7 +102,8 @@ export const remoteTargetApi = {
         const res = await jfApiClient({ server: args.server }).getSessions({
             query: { ControllableByUserId: userId },
         });
-        if (res.status !== 200 || !Array.isArray(res.body)) return [];
+        assertOk('GET /Sessions', res);
+        if (!Array.isArray(res.body)) return [];
         return res.body
             .map((s) => safeSessionToDevice(s))
             .filter((d): d is RemoteDevice => Boolean(d));
@@ -82,6 +112,9 @@ export const remoteTargetApi = {
     /**
      * Like listSessions but also returns the matching raw session object so
      * callers can read fields not in RemoteDevice (e.g. NowPlayingQueue).
+     *
+     * Throws on non-2xx so the poller can show an error banner instead of
+     * silently looking like there are simply no devices.
      */
     listSessionsWithRaw: async (
         args: ServerArg,
@@ -91,7 +124,8 @@ export const remoteTargetApi = {
         const res = await jfApiClient({ server: args.server }).getSessions({
             query: { ControllableByUserId: userId },
         });
-        if (res.status !== 200 || !Array.isArray(res.body)) return { devices: [], raws: {} };
+        assertOk('GET /Sessions', res);
+        if (!Array.isArray(res.body)) return { devices: [], raws: {} };
         const raws: Record<string, unknown> = {};
         const devices: RemoteDevice[] = [];
         for (const s of res.body) {
@@ -115,7 +149,7 @@ export const remoteTargetApi = {
             startPositionTicks?: number;
         },
     ): Promise<void> => {
-        await jfApiClient({ server: args.server }).postPlaying({
+        const res = await jfApiClient({ server: args.server }).postPlaying({
             body: null,
             params: { sessionId: args.sessionId },
             query: {
@@ -125,6 +159,7 @@ export const remoteTargetApi = {
                 StartPositionTicks: args.startPositionTicks,
             },
         });
+        assertOk('Play', res);
     },
 
     /**
@@ -137,10 +172,11 @@ export const remoteTargetApi = {
             sessionId: string;
         },
     ): Promise<void> => {
-        await jfApiClient({ server: args.server }).postGeneralCommand({
+        const res = await jfApiClient({ server: args.server }).postGeneralCommand({
             body: { Arguments: args.arguments, Name: args.name },
             params: { sessionId: args.sessionId },
         });
+        assertOk(`GeneralCommand:${args.name}`, res);
     },
 
     /**
@@ -154,7 +190,7 @@ export const remoteTargetApi = {
             sessionId: string;
         },
     ): Promise<void> => {
-        await jfApiClient({ server: args.server }).postPlayingCommand({
+        const res = await jfApiClient({ server: args.server }).postPlayingCommand({
             body: null,
             params: { command: args.command, sessionId: args.sessionId },
             query: {
@@ -162,5 +198,8 @@ export const remoteTargetApi = {
                 SeekPositionTicks: args.seekPositionTicks,
             },
         });
+        assertOk(`Playstate:${args.command}`, res);
     },
 };
+
+export { RemoteCommandError };

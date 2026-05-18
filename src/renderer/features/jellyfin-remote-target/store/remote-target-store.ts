@@ -13,6 +13,7 @@ interface RemoteTargetState {
         setMirrored: (mirrored: Partial<RemoteMirrored>) => void;
         setPickerOpen: (open: boolean) => void;
         setPollerActive: (active: boolean) => void;
+        setPollError: (error: null | string) => void;
         setStatus: (status: RemoteTargetStatus) => void;
         setTarget: (target: {
             capabilities: string[];
@@ -31,6 +32,12 @@ interface RemoteTargetState {
     hasPolledOnce: boolean;
     mirrored: RemoteMirrored;
     pickerOpen: boolean;
+    /**
+     * Last error message from the /Sessions poll, or null if the last poll
+     * succeeded. Surfaced in the picker so a silent network/auth failure
+     * doesn't masquerade as "no devices online".
+     */
+    pollError: null | string;
     sessionId: null | string; // re-resolved each Sessions tick from targetDeviceId
     status: RemoteTargetStatus;
     targetDeviceId: null | string;
@@ -58,7 +65,8 @@ export const useRemoteTargetStore = create<RemoteTargetState>((set) => ({
         setDeviceList: (devices) => set({ deviceList: devices, hasPolledOnce: true }),
         setMirrored: (partial) => set((s) => ({ mirrored: { ...s.mirrored, ...partial } })),
         setPickerOpen: (open) => set({ pickerOpen: open }),
-        setPollerActive: (active) => set(active ? {} : { hasPolledOnce: false }),
+        setPollerActive: (active) => set(active ? {} : { hasPolledOnce: false, pollError: null }),
+        setPollError: (error) => set({ pollError: error }),
         setStatus: (status) => set({ status }),
         setTarget: ({ capabilities, deviceId, deviceName, sessionId }) =>
             set(() => ({
@@ -73,6 +81,7 @@ export const useRemoteTargetStore = create<RemoteTargetState>((set) => ({
     hasPolledOnce: false,
     mirrored: emptyMirrored,
     pickerOpen: false,
+    pollError: null,
     sessionId: null,
     status: 'idle',
     targetDeviceId: null,

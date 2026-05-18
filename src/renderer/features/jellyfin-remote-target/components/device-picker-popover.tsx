@@ -26,6 +26,7 @@ export const DevicePickerPopover = ({ children, onClose, opened }: DevicePickerP
     const devices = useRemoteDevices();
     const target = useRemoteTarget();
     const hasPolledOnce = useRemoteTargetStore((s) => s.hasPolledOnce);
+    const pollError = useRemoteTargetStore((s) => s.pollError);
     const setPickerOpen = useRemoteTargetStore((s) => s.actions.setPickerOpen);
     const setTarget = useRemoteTargetStore((s) => s.actions.setTarget);
     const clearTarget = useRemoteTargetStore((s) => s.actions.clearTarget);
@@ -90,8 +91,19 @@ export const DevicePickerPopover = ({ children, onClose, opened }: DevicePickerP
                             {t('page.remoteTarget.thisComputer')}
                         </Text>
                     </UnstyledButton>
-                    {devices.length === 0 &&
-                        (hasPolledOnce ? (
+                    {devices.length === 0 && pollError ? (
+                        <Stack gap={2} px="xs" py={6}>
+                            <Text c="var(--mantine-color-red-5)" size="sm">
+                                {t('page.remoteTarget.pollFailed', {
+                                    defaultValue: 'Could not reach the Jellyfin server',
+                                })}
+                            </Text>
+                            <Text c="dimmed" size="xs">
+                                {pollError}
+                            </Text>
+                        </Stack>
+                    ) : devices.length === 0 ? (
+                        hasPolledOnce ? (
                             <Stack gap={2} px="xs" py={6}>
                                 <Text c="dimmed" size="sm">
                                     {t('page.remoteTarget.noDevices')}
@@ -106,7 +118,8 @@ export const DevicePickerPopover = ({ children, onClose, opened }: DevicePickerP
                                     defaultValue: 'Searching for devices…',
                                 })}
                             </Text>
-                        ))}
+                        )
+                    ) : null}
                     {devices.map((d) => {
                         const active = target.deviceId === d.deviceId;
                         const subtitle = d.nowPlayingTitle

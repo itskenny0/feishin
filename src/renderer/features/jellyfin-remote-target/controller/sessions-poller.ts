@@ -79,14 +79,18 @@ export class SessionsPoller {
             result = await remoteTargetApi.listSessionsWithRaw({ server });
         } catch (err) {
             console.warn('[remote-target] poll failed', err);
-            // Empty the device list on poll failure so the picker shows the
-            // 'no devices' message rather than stale entries. A failed first
-            // poll otherwise hangs forever as 'idle' with a frozen list.
+            // Empty the device list on poll failure and record the error so
+            // the picker can show *why* it's empty (auth issue, network down,
+            // bad URL, etc.) instead of pretending there are simply no other
+            // clients online.
             actions.setDeviceList([]);
+            actions.setPollError(err instanceof Error ? err.message : String(err));
             this.handleMissingTarget(onOffline);
             return;
         }
 
+        // Successful poll — clear any prior error.
+        actions.setPollError(null);
         actions.setDeviceList(result.devices);
         this.rawByDeviceId = {};
         for (const d of result.devices) {
