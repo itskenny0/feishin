@@ -1,8 +1,12 @@
 .container {
     position: absolute;
-    inset: 0;
+
+    /* The slider wrapper is only 20 px tall — that's not enough room for the
+       trackmap to read. Spill 10 px above and 10 px below so the wave is
+       centered on the slider track and gets ~40 px of vertical real estate.
+       The user explicitly authorised exceeding the seek-bar bounds. */
+    inset: -10px 0;
     z-index: 0;
-    overflow: hidden;
     pointer-events: none;
 }
 
