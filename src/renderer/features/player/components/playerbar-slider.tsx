@@ -6,8 +6,13 @@ import styles from './playerbar-slider.module.css';
 
 import { useActivePlayerSource } from '/@/renderer/features/jellyfin-remote-target/hooks/use-active-player-source';
 import { ScrobbleStatus } from '/@/renderer/features/player/components/scrobble-status';
+import { TrackmapCanvas } from '/@/renderer/features/trackmap';
 import { useAppStore, useAppStoreActions, usePlayerTimestamp } from '/@/renderer/store';
-import { PlayerbarSliderType, usePlayerbarSlider } from '/@/renderer/store/settings.store';
+import {
+    PlayerbarSliderType,
+    usePlayerbarSlider,
+    useTrackmapEnabled,
+} from '/@/renderer/store/settings.store';
 import { Slider, SliderProps } from '/@/shared/components/slider/slider';
 import { Spinner } from '/@/shared/components/spinner/spinner';
 import { Text } from '/@/shared/components/text/text';
@@ -71,6 +76,7 @@ export const PlayerbarSlider = () => {
     const remoteTimeSec = source.mode === 'remote' ? source.positionMs / 1000 : undefined;
 
     const isWaveform = playerbarSlider?.type === PlayerbarSliderType.WAVEFORM;
+    const trackmapEnabled = useTrackmapEnabled();
 
     return (
         <div className={styles.sliderContainer}>
@@ -83,7 +89,12 @@ export const PlayerbarSlider = () => {
                         <PlayerbarWaveform />
                     </Suspense>
                 ) : (
-                    <PlayerbarSeekSlider max={songDuration} min={0} />
+                    <>
+                        {trackmapEnabled && <TrackmapCanvas />}
+                        <div style={{ position: 'relative', width: '100%', zIndex: 1 }}>
+                            <PlayerbarSeekSlider max={songDuration} min={0} />
+                        </div>
+                    </>
                 )}
             </div>
             <div className={styles.sliderValueWrapper}>

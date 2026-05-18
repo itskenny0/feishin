@@ -84,6 +84,7 @@
 }
 
 .slider-wrapper {
+    position: relative;
     display: flex;
     flex: 6;
     align-items: center;
