@@ -146,6 +146,7 @@ export const SearchInput = ({
     return (
         <Box style={containerStyle}>
             <TextInput
+                aria-label={t('common.search')}
                 leftSection={<Icon icon="search" />}
                 maw={fillContainer ? '100%' : '20dvw'}
                 {...inputProps}
