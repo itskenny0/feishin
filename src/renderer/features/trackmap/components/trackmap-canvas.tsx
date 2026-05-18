@@ -44,6 +44,11 @@ export const TrackmapCanvas = () => {
     const glowRef = useRef(glow);
     const dataRef = useRef(data);
     const styleRef = useRef(style);
+    // Shared "schedule a redraw" handle — populated by the draw-loop effect,
+    // called by the resize observer so a window resize (which clears the
+    // canvas backing store) immediately triggers a repaint instead of
+    // leaving the canvas blank until the next playback tick.
+    const scheduleDrawRef = useRef<(() => void) | null>(null);
 
     heightRef.current = height;
     glowRef.current = glow;
@@ -61,6 +66,10 @@ export const TrackmapCanvas = () => {
             const rect = container.getBoundingClientRect();
             canvas.width = Math.max(1, Math.floor(rect.width * dpr));
             canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+            // Setting width/height clears the canvas; ask the draw loop to
+            // repaint so the user doesn't see a blank slot until the next
+            // timestamp tick (matters when paused).
+            scheduleDrawRef.current?.();
         };
 
         sync();
@@ -175,6 +184,9 @@ export const TrackmapCanvas = () => {
             if (rafId !== null) return;
             rafId = requestAnimationFrame(draw);
         };
+        // Expose to the resize observer so a resize-driven canvas clear
+        // triggers a redraw even while playback is paused.
+        scheduleDrawRef.current = schedule;
 
         schedule();
 
@@ -188,6 +200,7 @@ export const TrackmapCanvas = () => {
         return () => {
             if (rafId !== null) cancelAnimationFrame(rafId);
             unsub?.();
+            scheduleDrawRef.current = null;
         };
     }, [data, glow, height, playerStatus, style, currentSong?.id]);
 
