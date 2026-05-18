@@ -188,6 +188,8 @@ const PlaylistTargetSchema = z.enum(['album', 'track']);
 const SideQueueTypeSchema = z.enum(['sideDrawerQueue', 'sideQueue']);
 const SideQueueLayoutSchema = z.enum(['horizontal', 'vertical']);
 
+const TrackmapStyleSchema = z.enum(['glow']);
+
 const SidebarPanelTypeSchema = z.enum(['queue', 'lyrics', 'visualizer']);
 
 const SidebarPlaylistFolderViewSchema = z.enum(['single', 'tree', 'navigation']);
@@ -563,6 +565,12 @@ export const GeneralSettingsSchema = z.object({
     theme: z.nativeEnum(AppTheme),
     themeDark: z.nativeEnum(AppTheme),
     themeLight: z.nativeEnum(AppTheme),
+    trackmapEnabled: z.boolean(),
+    trackmapGlow: z.number().min(0).max(100),
+    trackmapHeight: z.number().min(0).max(100),
+    trackmapOnlyOverLan: z.boolean(),
+    trackmapSensitivity: z.number().min(0).max(100),
+    trackmapStyle: TrackmapStyleSchema,
     useThemeAccentColor: z.boolean(),
     useThemePrimaryShade: z.boolean(),
     volumeWheelStep: z.number(),
@@ -1267,6 +1275,12 @@ const initialState: SettingsState = {
         theme: AppTheme.DEFAULT_DARK,
         themeDark: AppTheme.DEFAULT_DARK,
         themeLight: AppTheme.DEFAULT_LIGHT,
+        trackmapEnabled: true,
+        trackmapGlow: 70,
+        trackmapHeight: 60,
+        trackmapOnlyOverLan: false,
+        trackmapSensitivity: 50,
+        trackmapStyle: 'glow',
         useThemeAccentColor: false,
         useThemePrimaryShade: true,
         volumeWheelStep: 5,
@@ -2714,10 +2728,34 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
+                if (version <= 42) {
+                    // Trackmap feature — six new keys under state.general.
+                    if (state.general.trackmapEnabled === undefined) {
+                        state.general.trackmapEnabled = initialState.general.trackmapEnabled;
+                    }
+                    if (state.general.trackmapGlow === undefined) {
+                        state.general.trackmapGlow = initialState.general.trackmapGlow;
+                    }
+                    if (state.general.trackmapHeight === undefined) {
+                        state.general.trackmapHeight = initialState.general.trackmapHeight;
+                    }
+                    if (state.general.trackmapOnlyOverLan === undefined) {
+                        state.general.trackmapOnlyOverLan =
+                            initialState.general.trackmapOnlyOverLan;
+                    }
+                    if (state.general.trackmapSensitivity === undefined) {
+                        state.general.trackmapSensitivity =
+                            initialState.general.trackmapSensitivity;
+                    }
+                    if (state.general.trackmapStyle === undefined) {
+                        state.general.trackmapStyle = initialState.general.trackmapStyle;
+                    }
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 42,
+            version: 43,
         },
     ),
 );
@@ -3069,3 +3107,21 @@ export const useButterchurnSettings = () => {
         };
     }, shallow);
 };
+
+export const useTrackmapEnabled = () =>
+    useSettingsStore((state) => state.general.trackmapEnabled, shallow);
+
+export const useTrackmapGlow = () =>
+    useSettingsStore((state) => state.general.trackmapGlow, shallow);
+
+export const useTrackmapHeight = () =>
+    useSettingsStore((state) => state.general.trackmapHeight, shallow);
+
+export const useTrackmapOnlyOverLan = () =>
+    useSettingsStore((state) => state.general.trackmapOnlyOverLan, shallow);
+
+export const useTrackmapSensitivity = () =>
+    useSettingsStore((state) => state.general.trackmapSensitivity, shallow);
+
+export const useTrackmapStyle = () =>
+    useSettingsStore((state) => state.general.trackmapStyle, shallow);
