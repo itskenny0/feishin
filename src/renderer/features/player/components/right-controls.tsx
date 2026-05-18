@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 
 import { DevicePickerButton } from '/@/renderer/features/jellyfin-remote-target/components/device-picker-button';
 import {
+    useActiveNowPlayingItem,
     useActivePlayerSource,
     useTransportEnabled,
 } from '/@/renderer/features/jellyfin-remote-target/hooks/use-active-player-source';
@@ -239,7 +240,7 @@ const LyricsButton = () => {
 };
 
 const FavoriteButton = () => {
-    const currentSong = useActivePlayerSource().nowPlayingItem;
+    const currentSong = useActiveNowPlayingItem();
     const { bindings } = useHotkeySettings();
 
     const addToFavoritesMutation = useCreateFavorite({});
@@ -353,7 +354,7 @@ const useFavoritePreviousSongHotkeys = ({
 
 const RatingButton = () => {
     const server = useCurrentServer();
-    const currentSong = useActivePlayerSource().nowPlayingItem;
+    const currentSong = useActiveNowPlayingItem();
     const setRating = useSetRating();
 
     const isSongDefined = Boolean(currentSong?.id);
