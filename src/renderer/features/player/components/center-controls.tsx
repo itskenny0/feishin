@@ -3,7 +3,8 @@ import { useTranslation } from 'react-i18next';
 import styles from './center-controls.module.css';
 
 import {
-    useActivePlayerSource,
+    useActiveIsPaused,
+    useActiveNowPlayingItem,
     useTransportEnabled,
 } from '/@/renderer/features/jellyfin-remote-target/hooks/use-active-player-source';
 import { MainPlayButton, PlayerButton } from '/@/renderer/features/player/components/player-button';
@@ -201,15 +202,16 @@ const SkipBackwardButton = ({ disabled }: { disabled?: boolean }) => {
 };
 
 const CenterPlayButton = ({ disabled }: { disabled?: boolean }) => {
-    const source = useActivePlayerSource();
-    const currentSongId = source.nowPlayingItem?.id;
+    const currentSong = useActiveNowPlayingItem();
+    const currentSongId = currentSong?.id;
+    const isPaused = useActiveIsPaused();
     const { mediaTogglePlayPause } = usePlayer();
     const canPlayPause = useTransportEnabled('PlayPause');
 
     return (
         <MainPlayButton
             disabled={disabled || currentSongId === undefined || !canPlayPause}
-            isPaused={source.isPaused}
+            isPaused={isPaused}
             onClick={mediaTogglePlayPause}
             style={{ opacity: canPlayPause ? undefined : 0.4 }}
         />

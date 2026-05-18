@@ -85,3 +85,17 @@ export const useActiveNowPlayingItem = (): null | Song => {
     const isRemote = useRemoteTargetStore((s) => s.targetDeviceId !== null);
     return isRemote ? remoteSong : ((localSong as null | Song) ?? null);
 };
+
+/**
+ * Combined pause state for the active source. In remote mode, mirrors the
+ * remote device's PlayState.IsPaused; in local mode, derives from the local
+ * player status. Primitive boolean — components only re-render on flip.
+ */
+export const useActiveIsPaused = (): boolean => {
+    const localStatus = usePlayerStatus();
+    const remoteIsPaused = useRemoteTargetStore((s) =>
+        s.targetDeviceId === null ? false : s.mirrored.playState.isPaused,
+    );
+    const isRemote = useRemoteTargetStore((s) => s.targetDeviceId !== null);
+    return isRemote ? remoteIsPaused : localStatus !== PlayerStatus.PLAYING;
+};
