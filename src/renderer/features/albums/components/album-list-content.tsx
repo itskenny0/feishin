@@ -1,7 +1,11 @@
+import { useSuspenseQuery } from '@tanstack/react-query';
 import { lazy, Suspense, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { useListContext } from '/@/renderer/context/list-context';
+import { albumQueries } from '/@/renderer/features/albums/api/album-api';
 import { useAlbumListFilters } from '/@/renderer/features/albums/hooks/use-album-list-filters';
+import { EmptyState, EmptyStateProps } from '/@/renderer/features/shared/components/empty-state';
 import { ListFilters, ListFiltersTitle } from '/@/renderer/features/shared/components/list-filters';
 import { ListWithSidebarContainer } from '/@/renderer/features/shared/components/list-with-sidebar-container';
 import { SaveAsCollectionButton } from '/@/renderer/features/shared/components/save-as-collection-button';
@@ -100,6 +104,7 @@ export type OverrideAlbumListQuery = Omit<Partial<AlbumListQuery>, 'limit' | 'st
 export const AlbumListView = ({
     detail,
     display,
+    emptyState,
     grid,
     itemsPerPage,
     overrideQuery,
@@ -107,8 +112,10 @@ export const AlbumListView = ({
     table,
 }: ItemListSettings & {
     detail?: ItemListSettings['detail'];
+    emptyState?: EmptyStateProps;
     overrideQuery?: OverrideAlbumListQuery;
 }) => {
+    const { t } = useTranslation();
     const server = useCurrentServer();
     const { pageKey } = useListContext();
 
@@ -126,6 +133,24 @@ export const AlbumListView = ({
             sortOrder: overrideQuery.sortOrder || query.sortOrder,
         };
     }, [query, overrideQuery]);
+
+    const countQuery = useSuspenseQuery(
+        albumQueries.listCount({
+            query: { ...mergedQuery, limit: itemsPerPage },
+            serverId: server.id,
+        }),
+    );
+
+    if (countQuery.data === 0) {
+        const fallback: EmptyStateProps = {
+            description: t('emptyState.albumsDescription', {
+                defaultValue: 'Albums will appear here once your library is scanned.',
+            }),
+            icon: 'album',
+            title: t('emptyState.albumsTitle', { defaultValue: 'No albums yet' }),
+        };
+        return <EmptyState {...fallback} {...emptyState} />;
+    }
 
     switch (display) {
         case ListDisplayType.GRID: {

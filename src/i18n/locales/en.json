@@ -221,6 +221,16 @@
         "trackWithCount_one": "{{count}} track",
         "trackWithCount_other": "{{count}} tracks"
     },
+    "emptyState": {
+        "albumsTitle": "No albums yet",
+        "albumsDescription": "Albums will appear here once your library is scanned.",
+        "songsTitle": "No songs found",
+        "songsDescription": "Try a broader filter or scan your music library.",
+        "searchTitle": "No results",
+        "searchDescription": "We couldn't find anything matching that search.",
+        "queueTitle": "Your queue is empty",
+        "queueDescription": "Pick a song from the library and the queue will pick up from there."
+    },
     "error": {
         "apiRouteError": "Unable to route request",
         "audioDeviceFetchError": "An error occurred when trying to get audio devices",

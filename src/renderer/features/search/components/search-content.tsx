@@ -1,4 +1,5 @@
 import { Suspense } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useParams, useSearchParams } from 'react-router';
 
 import {
@@ -10,6 +11,7 @@ import {
     OverrideAlbumArtistListQuery,
 } from '/@/renderer/features/artists/components/album-artist-list-content';
 import { AnimatedPage } from '/@/renderer/features/shared/components/animated-page';
+import { EmptyStateProps } from '/@/renderer/features/shared/components/empty-state';
 import {
     OverrideSongListQuery,
     SongListView,
@@ -39,12 +41,28 @@ export const SearchContent = () => {
     );
 };
 
+const useSearchEmptyState = (active: boolean): EmptyStateProps | undefined => {
+    const { t } = useTranslation();
+    if (!active) {
+        return undefined;
+    }
+    return {
+        description: t('emptyState.searchDescription', {
+            defaultValue: "We couldn't find anything matching that search.",
+        }),
+        icon: 'search',
+        title: t('emptyState.searchTitle', { defaultValue: 'No results' }),
+    };
+};
+
 const AlbumSearch = () => {
     const { display, grid, itemsPerPage, pagination, table } = useListSettings(ItemListKey.ALBUM);
     const [searchParams] = useSearchParams();
+    const searchTerm = searchParams.get('query') || '';
+    const emptyState = useSearchEmptyState(searchTerm.length > 0);
 
     const albumQuery: OverrideAlbumListQuery = {
-        searchTerm: searchParams.get('query') || '',
+        searchTerm,
         sortBy: AlbumListSort.NAME,
         sortOrder: SortOrder.ASC,
     };
@@ -52,6 +70,7 @@ const AlbumSearch = () => {
     return (
         <AlbumListView
             display={display}
+            emptyState={emptyState}
             grid={grid}
             itemsPerPage={itemsPerPage}
             overrideQuery={albumQuery}
@@ -64,9 +83,11 @@ const AlbumSearch = () => {
 const SongSearch = () => {
     const { display, grid, itemsPerPage, pagination, table } = useListSettings(ItemListKey.SONG);
     const [searchParams] = useSearchParams();
+    const searchTerm = searchParams.get('query') || '';
+    const emptyState = useSearchEmptyState(searchTerm.length > 0);
 
     const songQuery: OverrideSongListQuery = {
-        searchTerm: searchParams.get('query') || '',
+        searchTerm,
         sortBy: SongListSort.NAME,
         sortOrder: SortOrder.ASC,
     };
@@ -74,6 +95,7 @@ const SongSearch = () => {
     return (
         <SongListView
             display={display}
+            emptyState={emptyState}
             grid={grid}
             itemsPerPage={itemsPerPage}
             overrideQuery={songQuery}
