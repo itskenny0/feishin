@@ -5,6 +5,8 @@ import styles from './trackmap-canvas.module.css';
 import { useTrackmap } from '/@/renderer/features/trackmap/hooks/use-trackmap';
 import { usePlayerSong, usePlayerStatus } from '/@/renderer/store/player.store';
 import {
+    type TrackmapAdvancedSettings,
+    useTrackmapAdvanced,
     useTrackmapGlow,
     useTrackmapHeight,
     useTrackmapStyle,
@@ -58,26 +60,25 @@ const parseColor = (input: string): null | Rgb => {
     return null;
 };
 
-/** Strand B — committed cyberpunk-pink. Fixed, not theme-derived. */
-const STRAND_B: Rgb = { b: 182, g: 114, r: 244 }; // #f472b6 (Tailwind pink-400)
-/** Background ribbon glow — deep violet. */
-const BG_GLOW = 'rgba(124, 58, 237'; // #7c3aed (Tailwind violet-600), alpha appended
-/** Cool / "slow" anchor for the envelope-fill energy gradient. */
-const COOL_COLOR: Rgb = { b: 246, g: 89, r: 155 }; // ≈ #9b59f6 — soft purple
+/** Hard-coded fallbacks for when a user-configured color fails to parse. */
+const FALLBACK_STRAND_B: Rgb = { b: 182, g: 114, r: 244 }; // #f472b6
+const FALLBACK_COOL: Rgb = { b: 246, g: 89, r: 155 }; // #9b59f6
+const FALLBACK_BG_GLOW: Rgb = { b: 237, g: 58, r: 124 }; // #7c3aed
+const FALLBACK_ACCENT: Rgb = { b: 238, g: 211, r: 34 }; // #22d3ee
 
 const rgbStr = (c: Rgb, a?: number): string =>
     a === undefined ? `rgb(${c.r}, ${c.g}, ${c.b})` : `rgba(${c.r}, ${c.g}, ${c.b}, ${a})`;
 
 /**
  * Build a horizontal gradient whose color at each bin position interpolates
- * between the cool anchor (low intensity) and the theme accent (high
- * intensity) using `bins[i]` as the weight. Used by the envelope-fill pass
- * so the silhouette reads the song's mood spatially.
+ * between the cool anchor (low intensity) and a warm anchor (high
+ * intensity) using `bins[i]` as the weight.
  */
 const buildEnergyGradient = (
     ctx: CanvasRenderingContext2D,
     w: number,
     bins: Float32Array,
+    cool: Rgb,
     warm: Rgb,
 ): CanvasGradient => {
     const grad = ctx.createLinearGradient(0, 0, w, 0);
@@ -85,30 +86,33 @@ const buildEnergyGradient = (
     for (let i = 0; i < n; i += 1) {
         const t = i / (n - 1);
         const k = bins[i];
-        const r = Math.round(COOL_COLOR.r + (warm.r - COOL_COLOR.r) * k);
-        const g = Math.round(COOL_COLOR.g + (warm.g - COOL_COLOR.g) * k);
-        const b = Math.round(COOL_COLOR.b + (warm.b - COOL_COLOR.b) * k);
+        const r = Math.round(cool.r + (warm.r - cool.r) * k);
+        const g = Math.round(cool.g + (warm.g - cool.g) * k);
+        const b = Math.round(cool.b + (warm.b - cool.b) * k);
         grad.addColorStop(t, `rgb(${r}, ${g}, ${b})`);
     }
     return grad;
 };
 
 /**
- * Draws a double-helix "data tape" behind the seek slider. The intensity
- * bins control the envelope (how far each strand swings from the centerline);
- * the helix itself contributes the smooth sinusoidal motion across x. Two
- * strands intertwine with phase offset π, and additive blending where they
- * cross produces bright flashes without any explicit crossover scripting.
- * Thin "base-pair" rungs connect the strands every ~22 px for DNA character.
+ * Draws the trackmap visualisation behind the seek slider. Every visual
+ * knob lives in the settings store under `state.general.trackmap*`; this
+ * component reads them via refs so changes apply on the next paint without
+ * restarting the animation loop or re-mounting the canvas.
  *
- * Motion (skipped under prefers-reduced-motion):
- *  - Helix rotation: one full twist every ~6 s
- *  - Spatial drift: pattern slides rightward (~6 s per canvas width)
- *  - Breath: amplitude ±3% over 7 s
+ * Composition:
+ *  1. Background ribbon glow (violet wash, vertical fade)
+ *  2. Envelope-fill + outline (the DATA layer — per-bin energy gradient)
+ *  3. DNA base-pair rungs (vertical connectors between the two strands)
+ *  4. Strand halos (additive blend, blurred shadow)
+ *  5. Crisp strand lines (additive blend, no shadow)
+ *  6. Unplayed-side dim mask (destination-in alpha gradient)
+ *  7. Playhead glow strip (additive blend)
  *
- * The animation loop runs continuously while playing so every frame is
- * driven by `performance.now()` rather than the once-per-second timestamp
- * subscription — that's what makes it look smooth instead of blocky.
+ * Motion (all gated on `prefers-reduced-motion`):
+ *  - Helix rotation (period configurable via trackmapHelixRotationSec;
+ *    0 = static, which is the default per recent user feedback)
+ *  - Amplitude breath (period + amplitude configurable)
  */
 export const TrackmapCanvas = () => {
     const currentSong = usePlayerSong();
@@ -116,6 +120,7 @@ export const TrackmapCanvas = () => {
     const style = useTrackmapStyle();
     const height = useTrackmapHeight();
     const glow = useTrackmapGlow();
+    const advanced = useTrackmapAdvanced();
     const { data } = useTrackmap(currentSong ?? null);
 
     const containerRef = useRef<HTMLDivElement | null>(null);
@@ -124,13 +129,7 @@ export const TrackmapCanvas = () => {
     const glowRef = useRef(glow);
     const dataRef = useRef(data);
     const styleRef = useRef(style);
-    // Song duration (ms) read into a ref so the draw loop can compute the
-    // playhead fraction against the *player engine's* timeline rather than
-    // the decoded trackmap's duration. If a Jellyfin/Subsonic stream is
-    // transcoded to a slightly different duration than the source metadata,
-    // the two diverge by a few seconds and the visualisation visibly leads
-    // (or lags) the audio. The audio engine sets `currentTime` against the
-    // source duration, so we have to match that.
+    const advancedRef = useRef<TrackmapAdvancedSettings>(advanced);
     const songDurationMsRef = useRef<number>(0);
     const scheduleDrawRef = useRef<(() => void) | null>(null);
 
@@ -138,9 +137,10 @@ export const TrackmapCanvas = () => {
     glowRef.current = glow;
     dataRef.current = data;
     styleRef.current = style;
+    advancedRef.current = advanced;
     songDurationMsRef.current = currentSong?.duration ?? 0;
 
-    // Resize observer — keep the backing-store size in sync with CSS size * DPR.
+    // Resize observer + DPR-change watcher.
     useEffect(() => {
         const container = containerRef.current;
         const canvas = canvasRef.current;
@@ -158,11 +158,8 @@ export const TrackmapCanvas = () => {
         const ro = new ResizeObserver(sync);
         ro.observe(container);
 
-        // Also catch device-pixel-ratio changes that don't change the CSS
-        // size (e.g. user drags the window to a Retina monitor). Without
-        // this, the canvas backing store stays at the old DPR and renders
-        // blurry. We watch a matchMedia query pinned to the current DPR;
-        // when it stops matching, DPR has changed — sync and re-arm.
+        // Also catch device-pixel-ratio changes that don't change CSS size
+        // (window dragged to a Retina monitor).
         let mq: MediaQueryList | null = null;
         const armDprWatcher = () => {
             const dpr = window.devicePixelRatio || 1;
@@ -182,8 +179,8 @@ export const TrackmapCanvas = () => {
         };
     }, []);
 
-    // Continuous draw loop while playing — every frame is a `performance.now()`
-    // sample, so the helix rotation / drift / breath all advance at 60 fps.
+    // Draw loop. Every settings field is read off `advancedRef.current` so
+    // settings tweaks apply on the next paint.
     useEffect(() => {
         const canvas = canvasRef.current;
         const container = containerRef.current;
@@ -209,9 +206,6 @@ export const TrackmapCanvas = () => {
             ctx2d.clearRect(0, 0, w, h);
 
             const trackmap = dataRef.current;
-            // Defensive: trackmap must exist, the style must match, AND the
-            // bins must have content. A zero-length bins array would make
-            // `binCount - 1 = -1` and produce NaN coordinates downstream.
             if (
                 !trackmap ||
                 styleRef.current !== 'glow' ||
@@ -222,8 +216,18 @@ export const TrackmapCanvas = () => {
                 return;
             }
 
+            const adv = advancedRef.current;
             const accent = readAccentColor();
-            const strandA = parseColor(accent) ?? { b: 238, g: 211, r: 34 }; // #22d3ee fallback
+            // Strand A — user override has priority; empty string falls back
+            // to the resolved theme accent.
+            const strandA =
+                (adv.colorWarm && parseColor(adv.colorWarm)) ||
+                parseColor(accent) ||
+                FALLBACK_ACCENT;
+            const strandB = parseColor(adv.colorStrandB) || FALLBACK_STRAND_B;
+            const coolColor = parseColor(adv.colorCool) || FALLBACK_COOL;
+            const bgGlowColor = parseColor(adv.colorBgGlow) || FALLBACK_BG_GLOW;
+
             const heightFactor = heightRef.current / 100;
             const glowFactor = glowRef.current / 100;
             const dpr = window.devicePixelRatio || 1;
@@ -231,26 +235,19 @@ export const TrackmapCanvas = () => {
             const now = isAnimating ? performance.now() : 0;
             const yCenter = h / 2;
             const baseHalfH = (h / 2) * heightFactor;
-            // Subtle breath: ±3% over 7s. Always positive so the helix never inverts.
-            const breath = 1 + 0.03 * Math.sin((now / 7000) * Math.PI * 2);
+            const breathAmp = Math.max(0, Math.min(0.3, adv.breathAmplitudePct / 100));
+            const breathPeriodMs = Math.max(500, adv.breathPeriodSec * 1000);
+            const breath = 1 + breathAmp * Math.sin((now / breathPeriodMs) * Math.PI * 2);
             const halfH = baseHalfH * breath;
 
-            // Helix parameters. No rotation — the user reported any
-            // horizontal motion (even at 14 s/turn) "moves the scale around
-            // and invalidates the data". With the helix static, every x
-            // position on the canvas corresponds 1:1 to a fixed audio time,
-            // and you can pin "this is the drop" to a specific pixel without
-            // it drifting away on the next frame. The strands still appear
-            // as an intertwined pattern (they're cos and -cos of a spatial
-            // phase that varies along x), but the pattern is now stationary.
-            const helixCycles = 6; // how many full twists span the canvas width
-            const rot = 0; // no temporal rotation — the strands stay put
+            const helixCycles = Math.max(1, adv.helixCycles);
+            // helixRotationSec = 0 ⇒ static (rot stays 0).
+            const rot =
+                adv.helixRotationSec > 0 ? (now * Math.PI * 2) / (adv.helixRotationSec * 1000) : 0;
 
             const bins = trackmap.bins;
             const binCount = bins.length;
 
-            // Sub-pixel bin interpolation — feeds the polyline at one sample
-            // per device pixel so the strands look continuous, not stair-stepped.
             const sampleBin = (xFrac: number): number => {
                 const f = xFrac * (binCount - 1);
                 const lo = Math.floor(f);
@@ -259,47 +256,38 @@ export const TrackmapCanvas = () => {
                 return bins[lo] * (1 - t) + bins[hi] * t;
             };
 
-            // Phase at a given x. The `-rot` term makes the spatial pattern
-            // drift rightward over time (positive cos-phase moves right as t
-            // increases), matching the direction the playhead moves.
             const phaseAt = (xFrac: number): number => xFrac * Math.PI * 2 * helixCycles - rot;
 
-            // Prefer the song-metadata duration (what the player engine
-            // uses for `currentTime`) over the trackmap's decoded duration —
-            // the two can disagree by several seconds for transcoded streams,
-            // and using the wrong one makes the visualisation visibly lead
-            // or lag the audio.
             const timelineMs =
                 songDurationMsRef.current > 0 ? songDurationMsRef.current : trackmap.durationMs;
             const playheadFrac =
                 timelineMs > 0 ? Math.min(1, Math.max(0, lastPlayheadMs / timelineMs)) : 0;
             const playheadX = playheadFrac * w;
 
-            // === Pass 1: background ribbon glow ============================
-            // A soft violet wash centered on the slider axis. Gives the
-            // trackmap visible footprint even where the strands are quiet.
+            // === Pass 1: background ribbon glow =============================
             {
-                const bgGrad = ctx2d.createLinearGradient(0, yCenter - halfH, 0, yCenter + halfH);
-                bgGrad.addColorStop(0, `${BG_GLOW}, 0)`);
-                bgGrad.addColorStop(0.5, `${BG_GLOW}, 0.16)`);
-                bgGrad.addColorStop(1, `${BG_GLOW}, 0)`);
-                ctx2d.save();
-                ctx2d.fillStyle = bgGrad;
-                ctx2d.fillRect(0, 0, w, h);
-                ctx2d.restore();
+                const a = adv.bgGlowAlpha / 100;
+                if (a > 0) {
+                    const bgGrad = ctx2d.createLinearGradient(
+                        0,
+                        yCenter - halfH,
+                        0,
+                        yCenter + halfH,
+                    );
+                    bgGrad.addColorStop(0, rgbStr(bgGlowColor, 0));
+                    bgGrad.addColorStop(0.5, rgbStr(bgGlowColor, a));
+                    bgGrad.addColorStop(1, rgbStr(bgGlowColor, 0));
+                    ctx2d.save();
+                    ctx2d.fillStyle = bgGrad;
+                    ctx2d.fillRect(0, 0, w, h);
+                    ctx2d.restore();
+                }
             }
 
-            // === Pass 1.5: envelope-fill + outline silhouette ===============
-            // The DATA layer — a clear mirrored wave shape filled with the
-            // per-bin energy gradient (purple at quiet sections, theme accent
-            // at peaks), AND stroked with a faint outline so the wave's
-            // edge stays defined even where the helix sits low. Lets the
-            // eye read amplitude at a glance: drops, choruses, bridges
-            // all jump out as clear shapes regardless of helix phase.
+            // === Pass 2: envelope fill + outline ============================
             {
                 const stepEnv = Math.max(1, Math.floor(dpr));
-                const envGradient = buildEnergyGradient(ctx2d, w, bins, strandA);
-                // Build the closed envelope path once and reuse it for fill + stroke.
+                const energyGrad = buildEnergyGradient(ctx2d, w, bins, coolColor, strandA);
                 ctx2d.beginPath();
                 for (let px = 0; px <= w; px += stepEnv) {
                     const xFrac = px / w;
@@ -316,57 +304,56 @@ export const TrackmapCanvas = () => {
                 }
                 ctx2d.closePath();
 
-                // Fill the area at modest opacity for visual mass.
-                ctx2d.save();
-                ctx2d.fillStyle = envGradient;
-                ctx2d.globalAlpha = 0.3;
-                ctx2d.fill();
-                ctx2d.restore();
-
-                // Stroke the outline at higher opacity so the wave edge
-                // reads even when the fill is competing with the helix.
-                ctx2d.save();
-                ctx2d.strokeStyle = envGradient;
-                ctx2d.globalAlpha = 0.65;
-                ctx2d.lineWidth = Math.max(1, dpr);
-                ctx2d.lineJoin = 'round';
-                ctx2d.stroke();
-                ctx2d.restore();
-            }
-
-            // === Pass 2: DNA base-pair rungs ================================
-            // Thin vertical connectors between the two strands every ~22 px.
-            // Opacity scales with |cos(phi)| so rungs fade out at crossings
-            // (where the strands meet) and brighten at max separation.
-            {
-                const rungSpacingCssPx = 22;
-                const rungSpacing = Math.max(2, rungSpacingCssPx * dpr);
-                ctx2d.save();
-                ctx2d.lineCap = 'round';
-                ctx2d.lineWidth = Math.max(1, 1.2 * dpr);
-                for (let xR = 0; xR <= w; xR += rungSpacing) {
-                    const xFrac = xR / w;
-                    const intensity = sampleBin(xFrac);
-                    const cosphi = Math.cos(phaseAt(xFrac));
-                    const envelope = intensity * halfH;
-                    const yA = yCenter - envelope * cosphi;
-                    const yB = yCenter + envelope * cosphi;
-                    const visibility = Math.abs(cosphi);
-                    if (visibility < 0.15) continue;
-                    ctx2d.strokeStyle = rgbStr(STRAND_B, 0.35 * visibility);
-                    ctx2d.beginPath();
-                    ctx2d.moveTo(xR, yA);
-                    ctx2d.lineTo(xR, yB);
-                    ctx2d.stroke();
+                const fillA = adv.envelopeFillAlpha / 100;
+                if (fillA > 0) {
+                    ctx2d.save();
+                    ctx2d.fillStyle = energyGrad;
+                    ctx2d.globalAlpha = fillA;
+                    ctx2d.fill();
+                    ctx2d.restore();
                 }
-                ctx2d.restore();
+                const outlineA = adv.envelopeOutlineAlpha / 100;
+                const outlineW = adv.envelopeOutlineWidthPx * dpr;
+                if (outlineA > 0 && outlineW > 0) {
+                    ctx2d.save();
+                    ctx2d.strokeStyle = energyGrad;
+                    ctx2d.globalAlpha = outlineA;
+                    ctx2d.lineWidth = Math.max(1, outlineW);
+                    ctx2d.lineJoin = 'round';
+                    ctx2d.stroke();
+                    ctx2d.restore();
+                }
             }
 
-            // === Pass 3: strand halos (additive blend, blurred shadow) =====
-            // The halo gives each strand its luminous "neon tube" appearance.
-            // Additive blending means where the two halos overlap (at
-            // crossings) they brighten to white — the natural cyberpunk glow.
-            const step = Math.max(1, Math.floor(dpr)); // 1 CSS-pixel resolution
+            // === Pass 3: DNA base-pair rungs ================================
+            {
+                const rungA = adv.rungAlpha / 100;
+                if (rungA > 0) {
+                    const rungSpacing = Math.max(2, adv.rungSpacingPx * dpr);
+                    ctx2d.save();
+                    ctx2d.lineCap = 'round';
+                    ctx2d.lineWidth = Math.max(1, 1.2 * dpr);
+                    for (let xR = 0; xR <= w; xR += rungSpacing) {
+                        const xFrac = xR / w;
+                        const intensity = sampleBin(xFrac);
+                        const cosphi = Math.cos(phaseAt(xFrac));
+                        const envelope = intensity * halfH;
+                        const yA = yCenter - envelope * cosphi;
+                        const yB = yCenter + envelope * cosphi;
+                        const visibility = Math.abs(cosphi);
+                        if (visibility < 0.15) continue;
+                        ctx2d.strokeStyle = rgbStr(strandB, rungA * visibility);
+                        ctx2d.beginPath();
+                        ctx2d.moveTo(xR, yA);
+                        ctx2d.lineTo(xR, yB);
+                        ctx2d.stroke();
+                    }
+                    ctx2d.restore();
+                }
+            }
+
+            // === Strand path helper =========================================
+            const step = Math.max(1, Math.floor(dpr));
             const drawStrandPath = (sign: -1 | 1) => {
                 ctx2d.beginPath();
                 let started = false;
@@ -385,74 +372,100 @@ export const TrackmapCanvas = () => {
                 }
             };
 
+            // === Pass 4: strand halos =======================================
             if (!reducedMotion && glowFactor > 0) {
+                const haloA = (adv.strandHaloAlpha / 100) * glowFactor;
+                if (haloA > 0) {
+                    ctx2d.save();
+                    ctx2d.globalCompositeOperation = 'lighter';
+                    ctx2d.lineCap = 'round';
+                    ctx2d.lineJoin = 'round';
+                    ctx2d.lineWidth = Math.max(2, 2.4 * dpr);
+                    ctx2d.shadowBlur = adv.haloBlurPx * glowFactor;
+
+                    ctx2d.strokeStyle = rgbStr(strandA, haloA);
+                    ctx2d.shadowColor = rgbStr(strandA);
+                    drawStrandPath(-1);
+                    ctx2d.stroke();
+
+                    ctx2d.strokeStyle = rgbStr(strandB, haloA);
+                    ctx2d.shadowColor = rgbStr(strandB);
+                    drawStrandPath(1);
+                    ctx2d.stroke();
+
+                    ctx2d.restore();
+                }
+            }
+
+            // === Pass 5: crisp strands ======================================
+            {
+                const crispA = adv.strandCrispAlpha / 100;
+                if (crispA > 0) {
+                    ctx2d.save();
+                    ctx2d.globalCompositeOperation = 'lighter';
+                    ctx2d.lineCap = 'round';
+                    ctx2d.lineJoin = 'round';
+                    ctx2d.lineWidth = Math.max(1.5, 1.8 * dpr);
+                    ctx2d.shadowBlur = 0;
+
+                    ctx2d.strokeStyle = rgbStr(strandA, crispA);
+                    drawStrandPath(-1);
+                    ctx2d.stroke();
+
+                    ctx2d.strokeStyle = rgbStr(strandB, crispA);
+                    drawStrandPath(1);
+                    ctx2d.stroke();
+
+                    ctx2d.restore();
+                }
+            }
+
+            // === Pass 6: unplayed dim mask ==================================
+            {
+                const dimMin = Math.max(0, Math.min(1, adv.dimMaskMin / 100));
+                const transition = Math.max(0, adv.dimMaskTransitionPx * dpr);
                 ctx2d.save();
-                ctx2d.globalCompositeOperation = 'lighter';
-                ctx2d.lineCap = 'round';
-                ctx2d.lineJoin = 'round';
-                ctx2d.lineWidth = Math.max(2, 2.4 * dpr);
-                ctx2d.shadowBlur = 14 * glowFactor;
-
-                ctx2d.strokeStyle = rgbStr(strandA, 0.65 * glowFactor);
-                ctx2d.shadowColor = rgbStr(strandA);
-                drawStrandPath(-1);
-                ctx2d.stroke();
-
-                ctx2d.strokeStyle = rgbStr(STRAND_B, 0.65 * glowFactor);
-                ctx2d.shadowColor = rgbStr(STRAND_B);
-                drawStrandPath(1);
-                ctx2d.stroke();
-
+                ctx2d.globalCompositeOperation = 'destination-in';
+                if (transition <= 0) {
+                    // Hard edge: opaque on the played side, dimMin on the unplayed.
+                    ctx2d.fillStyle = 'rgba(0,0,0,1)';
+                    ctx2d.fillRect(0, 0, playheadX, h);
+                    ctx2d.fillStyle = `rgba(0,0,0,${dimMin})`;
+                    ctx2d.fillRect(playheadX, 0, w - playheadX, h);
+                } else {
+                    const dimGrad = ctx2d.createLinearGradient(
+                        playheadX,
+                        0,
+                        playheadX + transition,
+                        0,
+                    );
+                    dimGrad.addColorStop(0, 'rgba(0,0,0,1)');
+                    dimGrad.addColorStop(1, `rgba(0,0,0,${dimMin})`);
+                    ctx2d.fillStyle = dimGrad;
+                    ctx2d.fillRect(0, 0, w, h);
+                }
                 ctx2d.restore();
             }
 
-            // === Pass 4: crisp strands on top of the halos =================
-            // Full-opacity lines, no shadow, still additive so crossings glow.
-            ctx2d.save();
-            ctx2d.globalCompositeOperation = 'lighter';
-            ctx2d.lineCap = 'round';
-            ctx2d.lineJoin = 'round';
-            ctx2d.lineWidth = Math.max(1.5, 1.8 * dpr);
-            ctx2d.shadowBlur = 0;
-
-            ctx2d.strokeStyle = rgbStr(strandA, 0.9);
-            drawStrandPath(-1);
-            ctx2d.stroke();
-
-            ctx2d.strokeStyle = rgbStr(STRAND_B, 0.9);
-            drawStrandPath(1);
-            ctx2d.stroke();
-
-            ctx2d.restore();
-
-            // === Pass 5: unplayed dim mask =================================
-            // Middle ground — between the original 0.40 (too ignorable) and
-            // the cyberpunk-max 0.55. Still clearly distinguishes played
-            // from unplayed without either side disappearing.
-            ctx2d.save();
-            ctx2d.globalCompositeOperation = 'destination-in';
-            const dimGrad = ctx2d.createLinearGradient(playheadX, 0, playheadX + 30, 0);
-            dimGrad.addColorStop(0, 'rgba(0,0,0,1)');
-            dimGrad.addColorStop(1, 'rgba(0,0,0,0.48)');
-            ctx2d.fillStyle = dimGrad;
-            ctx2d.fillRect(0, 0, w, h);
-            ctx2d.restore();
-
-            // === Pass 6: playhead glow strip ===============================
-            // Bright vertical bar at the playhead. Additive blend so it
-            // pops over the strands rather than masking them.
+            // === Pass 7: playhead glow strip ================================
             if (!reducedMotion && glowFactor > 0) {
-                ctx2d.save();
-                ctx2d.globalCompositeOperation = 'lighter';
-                ctx2d.fillStyle = rgbStr(strandA, 0.4 * glowFactor);
-                ctx2d.shadowColor = rgbStr(strandA);
-                ctx2d.shadowBlur = 12 * glowFactor;
-                const phWidth = Math.max(2, 3 * dpr);
-                ctx2d.fillRect(playheadX - phWidth / 2, 0, phWidth, h);
-                ctx2d.restore();
+                const phA = (adv.playheadGlowAlpha / 100) * glowFactor;
+                if (phA > 0) {
+                    ctx2d.save();
+                    ctx2d.globalCompositeOperation = 'lighter';
+                    ctx2d.fillStyle = rgbStr(strandA, phA);
+                    ctx2d.shadowColor = rgbStr(strandA);
+                    ctx2d.shadowBlur = adv.playheadShadowBlurPx * glowFactor;
+                    const phWidth = Math.max(2, adv.playheadWidthPx * dpr);
+                    ctx2d.fillRect(playheadX - phWidth / 2, 0, phWidth, h);
+                    ctx2d.restore();
+                }
             }
 
-            // Chain the rAF while animating.
+            // Chain the rAF while animating. We also chain if the helix is
+            // configured with non-zero rotation OR the breath amplitude is
+            // non-zero AND the player is playing — both depend on `now`
+            // advancing for visual change.
             if (isAnimating) {
                 rafId = requestAnimationFrame(draw);
             }

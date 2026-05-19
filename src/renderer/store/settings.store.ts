@@ -7,6 +7,7 @@ import { generatePath } from 'react-router';
 import { z } from 'zod';
 import { devtools, persist, subscribeWithSelector } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
+import { useShallow } from 'zustand/react/shallow';
 import { shallow } from 'zustand/shallow';
 import { createWithEqualityFn } from 'zustand/traditional';
 
@@ -565,11 +566,33 @@ export const GeneralSettingsSchema = z.object({
     theme: z.nativeEnum(AppTheme),
     themeDark: z.nativeEnum(AppTheme),
     themeLight: z.nativeEnum(AppTheme),
+    trackmapBgGlowAlpha: z.number().min(0).max(100),
+    trackmapBreathAmplitudePct: z.number().min(0).max(30),
+    trackmapBreathPeriodSec: z.number().min(1).max(30),
+    trackmapColorBgGlow: z.string(),
+    trackmapColorCool: z.string(),
+    trackmapColorStrandB: z.string(),
+    trackmapColorWarm: z.string(),
+    trackmapDimMaskMin: z.number().min(0).max(100),
+    trackmapDimMaskTransitionPx: z.number().min(0).max(100),
     trackmapEnabled: z.boolean(),
+    trackmapEnvelopeFillAlpha: z.number().min(0).max(100),
+    trackmapEnvelopeOutlineAlpha: z.number().min(0).max(100),
+    trackmapEnvelopeOutlineWidthPx: z.number().min(0).max(10),
     trackmapGlow: z.number().min(0).max(100),
+    trackmapHaloBlurPx: z.number().min(0).max(50),
     trackmapHeight: z.number().min(0).max(100),
+    trackmapHelixCycles: z.number().min(1).max(12),
+    trackmapHelixRotationSec: z.number().min(0).max(120),
     trackmapOnlyOverLan: z.boolean(),
+    trackmapPlayheadGlowAlpha: z.number().min(0).max(100),
+    trackmapPlayheadShadowBlurPx: z.number().min(0).max(50),
+    trackmapPlayheadWidthPx: z.number().min(1).max(20),
+    trackmapRungAlpha: z.number().min(0).max(100),
+    trackmapRungSpacingPx: z.number().min(4).max(100),
     trackmapSensitivity: z.number().min(0).max(100),
+    trackmapStrandCrispAlpha: z.number().min(0).max(100),
+    trackmapStrandHaloAlpha: z.number().min(0).max(100),
     trackmapStyle: TrackmapStyleSchema,
     useThemeAccentColor: z.boolean(),
     useThemePrimaryShade: z.boolean(),
@@ -1275,11 +1298,33 @@ const initialState: SettingsState = {
         theme: AppTheme.DEFAULT_DARK,
         themeDark: AppTheme.DEFAULT_DARK,
         themeLight: AppTheme.DEFAULT_LIGHT,
+        trackmapBgGlowAlpha: 16,
+        trackmapBreathAmplitudePct: 3,
+        trackmapBreathPeriodSec: 7,
+        trackmapColorBgGlow: '#7c3aed',
+        trackmapColorCool: '#9b59f6',
+        trackmapColorStrandB: '#f472b6',
+        trackmapColorWarm: '',
+        trackmapDimMaskMin: 48,
+        trackmapDimMaskTransitionPx: 30,
         trackmapEnabled: true,
+        trackmapEnvelopeFillAlpha: 30,
+        trackmapEnvelopeOutlineAlpha: 65,
+        trackmapEnvelopeOutlineWidthPx: 1,
         trackmapGlow: 70,
+        trackmapHaloBlurPx: 14,
         trackmapHeight: 60,
+        trackmapHelixCycles: 6,
+        trackmapHelixRotationSec: 0,
         trackmapOnlyOverLan: false,
+        trackmapPlayheadGlowAlpha: 40,
+        trackmapPlayheadShadowBlurPx: 12,
+        trackmapPlayheadWidthPx: 3,
+        trackmapRungAlpha: 35,
+        trackmapRungSpacingPx: 22,
         trackmapSensitivity: 50,
+        trackmapStrandCrispAlpha: 90,
+        trackmapStrandHaloAlpha: 65,
         trackmapStyle: 'glow',
         useThemeAccentColor: false,
         useThemePrimaryShade: true,
@@ -2752,10 +2797,49 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
+                if (version <= 43) {
+                    // Trackmap advanced knobs — populate any missing field
+                    // from the matching initial-state default. Users get the
+                    // current behaviour out of the box and can tune from
+                    // there in Settings → General → Trackmap → Advanced.
+                    const trackmapAdvancedKeys = [
+                        'trackmapBgGlowAlpha',
+                        'trackmapBreathAmplitudePct',
+                        'trackmapBreathPeriodSec',
+                        'trackmapColorBgGlow',
+                        'trackmapColorCool',
+                        'trackmapColorStrandB',
+                        'trackmapColorWarm',
+                        'trackmapDimMaskMin',
+                        'trackmapDimMaskTransitionPx',
+                        'trackmapEnvelopeFillAlpha',
+                        'trackmapEnvelopeOutlineAlpha',
+                        'trackmapEnvelopeOutlineWidthPx',
+                        'trackmapHaloBlurPx',
+                        'trackmapHelixCycles',
+                        'trackmapHelixRotationSec',
+                        'trackmapPlayheadGlowAlpha',
+                        'trackmapPlayheadShadowBlurPx',
+                        'trackmapPlayheadWidthPx',
+                        'trackmapRungAlpha',
+                        'trackmapRungSpacingPx',
+                        'trackmapStrandCrispAlpha',
+                        'trackmapStrandHaloAlpha',
+                    ] as const;
+                    for (const k of trackmapAdvancedKeys) {
+                        if (state.general[k] === undefined) {
+                            // The cast is safe because every advanced key has
+                            // a matching default of the same type in
+                            // initialState.general above.
+                            (state.general as any)[k] = (initialState.general as any)[k];
+                        }
+                    }
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 43,
+            version: 44,
         },
     ),
 );
@@ -3128,3 +3212,43 @@ export const useTrackmapSensitivity = () =>
 
 export const useTrackmapStyle = () =>
     useSettingsStore((state) => state.general.trackmapStyle, shallow);
+
+/**
+ * The 22 trackmap "advanced" knobs as a single shallow-compared object.
+ * Aggregated so the canvas component doesn't need 22 individual selectors
+ * (and so the JSON export can serialise them in one place). Only the
+ * settings under this selector are considered "tunable visual params";
+ * the master toggle / lan-only / sensitivity / height / glow / style
+ * settings have their own individual selectors above because they're
+ * the primary user-facing knobs.
+ */
+export const useTrackmapAdvanced = () =>
+    useSettingsStore(
+        useShallow((state) => ({
+            bgGlowAlpha: state.general.trackmapBgGlowAlpha,
+            breathAmplitudePct: state.general.trackmapBreathAmplitudePct,
+            breathPeriodSec: state.general.trackmapBreathPeriodSec,
+            colorBgGlow: state.general.trackmapColorBgGlow,
+            colorCool: state.general.trackmapColorCool,
+            colorStrandB: state.general.trackmapColorStrandB,
+            colorWarm: state.general.trackmapColorWarm,
+            dimMaskMin: state.general.trackmapDimMaskMin,
+            dimMaskTransitionPx: state.general.trackmapDimMaskTransitionPx,
+            envelopeFillAlpha: state.general.trackmapEnvelopeFillAlpha,
+            envelopeOutlineAlpha: state.general.trackmapEnvelopeOutlineAlpha,
+            envelopeOutlineWidthPx: state.general.trackmapEnvelopeOutlineWidthPx,
+            haloBlurPx: state.general.trackmapHaloBlurPx,
+            helixCycles: state.general.trackmapHelixCycles,
+            helixRotationSec: state.general.trackmapHelixRotationSec,
+            playheadGlowAlpha: state.general.trackmapPlayheadGlowAlpha,
+            playheadShadowBlurPx: state.general.trackmapPlayheadShadowBlurPx,
+            playheadWidthPx: state.general.trackmapPlayheadWidthPx,
+            rungAlpha: state.general.trackmapRungAlpha,
+            rungSpacingPx: state.general.trackmapRungSpacingPx,
+            strandCrispAlpha: state.general.trackmapStrandCrispAlpha,
+            strandHaloAlpha: state.general.trackmapStrandHaloAlpha,
+        })),
+    );
+
+/** The shape of the advanced-knobs slice — exported for the canvas + UI. */
+export type TrackmapAdvancedSettings = ReturnType<typeof useTrackmapAdvanced>;
