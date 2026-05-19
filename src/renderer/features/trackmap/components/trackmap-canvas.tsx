@@ -160,7 +160,15 @@ export const TrackmapCanvas = () => {
             ctx2d.clearRect(0, 0, w, h);
 
             const trackmap = dataRef.current;
-            if (!trackmap || styleRef.current !== 'glow') {
+            // Defensive: trackmap must exist, the style must match, AND the
+            // bins must have content. A zero-length bins array would make
+            // `binCount - 1 = -1` and produce NaN coordinates downstream.
+            if (
+                !trackmap ||
+                styleRef.current !== 'glow' ||
+                !trackmap.bins ||
+                trackmap.bins.length < 2
+            ) {
                 if (isAnimating) rafId = requestAnimationFrame(draw);
                 return;
             }
