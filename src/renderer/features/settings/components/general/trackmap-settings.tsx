@@ -106,19 +106,30 @@ const TrackmapJsonControls = () => {
             return;
         }
 
-        // Only apply keys we know about — the schema validation in the
-        // persist middleware would silently drop unknowns anyway, but pulling
-        // them out here means we can surface "applied N settings" cleanly
-        // and ignore noise from full settings blobs (people might paste the
-        // whole general:{} object).
+        // Only apply keys we know about, and only when the value's basic
+        // type matches the schema. Pasted garbage (numbers in color slots,
+        // strings in numeric slots, null) is silently skipped rather than
+        // poisoning the store. The merge layer also drops undefined, so a
+        // value that fails the type guard is left at its current setting.
         const known = parsed as Record<string, unknown>;
         const patch: Partial<Record<TrackmapKey, unknown>> = {};
         let count = 0;
         for (const key of TRACKMAP_KEYS) {
-            if (key in known) {
-                patch[key] = known[key];
-                count += 1;
+            if (!(key in known)) continue;
+            const value = known[key];
+            if (value === null || value === undefined) continue;
+            const isColor = key.startsWith('trackmapColor');
+            const isStyle = key === 'trackmapStyle';
+            const isBool = key === 'trackmapEnabled' || key === 'trackmapOnlyOverLan';
+            if (isColor || isStyle) {
+                if (typeof value !== 'string') continue;
+            } else if (isBool) {
+                if (typeof value !== 'boolean') continue;
+            } else if (typeof value !== 'number' || !Number.isFinite(value)) {
+                continue;
             }
+            patch[key] = value;
+            count += 1;
         }
         if (count === 0) {
             toast.error({ message: t('setting.trackmapJsonInvalid') });
