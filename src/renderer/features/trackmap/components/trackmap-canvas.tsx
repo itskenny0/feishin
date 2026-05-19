@@ -386,7 +386,10 @@ export const TrackmapCanvas = () => {
                     ctx2d.lineCap = 'round';
                     ctx2d.lineJoin = 'round';
                     ctx2d.lineWidth = Math.max(2, 2.4 * dpr);
-                    ctx2d.shadowBlur = adv.haloBlurPx * glowFactor;
+                    // shadowBlur is in device pixels; the user-facing setting
+                    // is in CSS pixels so multiply by dpr to keep retina
+                    // displays visually consistent with non-retina.
+                    ctx2d.shadowBlur = adv.haloBlurPx * glowFactor * dpr;
 
                     ctx2d.strokeStyle = rgbStr(strandA, haloA);
                     ctx2d.shadowColor = rgbStr(strandA);
@@ -460,7 +463,7 @@ export const TrackmapCanvas = () => {
                     ctx2d.globalCompositeOperation = 'lighter';
                     ctx2d.fillStyle = rgbStr(strandA, phA);
                     ctx2d.shadowColor = rgbStr(strandA);
-                    ctx2d.shadowBlur = adv.playheadShadowBlurPx * glowFactor;
+                    ctx2d.shadowBlur = adv.playheadShadowBlurPx * glowFactor * dpr;
                     const phWidth = Math.max(2, adv.playheadWidthPx * dpr);
                     ctx2d.fillRect(playheadX - phWidth / 2, 0, phWidth, h);
                     ctx2d.restore();
