@@ -264,7 +264,11 @@
         "serverRequired": "Server required",
         "sessionExpiredError": "Your session has expired",
         "systemFontError": "An error occurred when trying to get system fonts",
-        "settingsSyncError": "Discrepancies were found between the settings in the renderer and the main process. Restart the application to apply the changes"
+        "settingsSyncError": "Discrepancies were found between the settings in the renderer and the main process. Restart the application to apply the changes",
+        "networkErrorFriendly": "Could not reach the server. Check your network and try again.",
+        "authError": "Your session may have expired. Try signing in again.",
+        "serverError": "The server had trouble with that request. Try again in a moment.",
+        "unknownError": "Something went wrong."
     },
     "filter": {
         "album": "$t(entity.album, {\"count\": 1})",
