@@ -1,9 +1,13 @@
+import { useSuspenseQuery } from '@tanstack/react-query';
 import { lazy, Suspense, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { useListContext } from '/@/renderer/context/list-context';
+import { EmptyState, EmptyStateProps } from '/@/renderer/features/shared/components/empty-state';
 import { ListFilters, ListFiltersTitle } from '/@/renderer/features/shared/components/list-filters';
 import { ListWithSidebarContainer } from '/@/renderer/features/shared/components/list-with-sidebar-container';
 import { SaveAsCollectionButton } from '/@/renderer/features/shared/components/save-as-collection-button';
+import { songsQueries } from '/@/renderer/features/songs/api/songs-api';
 import { useSongListFilters } from '/@/renderer/features/songs/hooks/use-song-list-filters';
 import { ItemListSettings, useCurrentServer, useListSettings } from '/@/renderer/store';
 import { ScrollArea } from '/@/shared/components/scroll-area/scroll-area';
@@ -81,12 +85,17 @@ export type OverrideSongListQuery = Omit<Partial<SongListQuery>, 'limit' | 'star
 
 export const SongListView = ({
     display,
+    emptyState,
     grid,
     itemsPerPage,
     overrideQuery,
     pagination,
     table,
-}: ItemListSettings & { overrideQuery?: OverrideSongListQuery }) => {
+}: ItemListSettings & {
+    emptyState?: EmptyStateProps;
+    overrideQuery?: OverrideSongListQuery;
+}) => {
+    const { t } = useTranslation();
     const server = useCurrentServer();
     const { pageKey } = useListContext();
 
@@ -104,6 +113,24 @@ export const SongListView = ({
             sortOrder: overrideQuery.sortOrder || query.sortOrder,
         };
     }, [query, overrideQuery]);
+
+    const countQuery = useSuspenseQuery(
+        songsQueries.listCount({
+            query: { ...mergedQuery, limit: itemsPerPage },
+            serverId: server.id,
+        }),
+    );
+
+    if (countQuery.data === 0) {
+        const fallback: EmptyStateProps = {
+            description: t('emptyState.songsDescription', {
+                defaultValue: 'Try a broader filter or scan your music library.',
+            }),
+            icon: 'itemSong',
+            title: t('emptyState.songsTitle', { defaultValue: 'No songs found' }),
+        };
+        return <EmptyState {...fallback} {...emptyState} />;
+    }
 
     switch (display) {
         case ListDisplayType.GRID: {

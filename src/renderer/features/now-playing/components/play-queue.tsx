@@ -1,5 +1,6 @@
 import clsx from 'clsx';
 import { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import styles from './play-queue.module.css';
 
@@ -14,6 +15,7 @@ import { ItemListHandle } from '/@/renderer/components/item-list/types';
 import { eventEmitter } from '/@/renderer/events/event-emitter';
 import { useActivePlayerSource } from '/@/renderer/features/jellyfin-remote-target/hooks/use-active-player-source';
 import { useIsPlayerFetching, usePlayer } from '/@/renderer/features/player/context/player-context';
+import { EmptyState } from '/@/renderer/features/shared/components/empty-state';
 import { searchLibraryItems } from '/@/renderer/features/shared/utils';
 import { useDragDrop } from '/@/renderer/hooks/use-drag-drop';
 import { useHotkeys } from '/@/renderer/hooks/use-hotkeys';
@@ -259,6 +261,7 @@ export const PlayQueue = forwardRef<ItemListHandle, QueueProps>(
 );
 
 const EmptyQueueDropZone = () => {
+    const { t } = useTranslation();
     const playerContext = usePlayer();
 
     const { isDraggedOver, ref } = useDragDrop<HTMLDivElement>({
@@ -420,6 +423,15 @@ const EmptyQueueDropZone = () => {
             justify="center"
             ref={ref}
             w="100%"
-        />
+        >
+            <EmptyState
+                description={t('emptyState.queueDescription', {
+                    defaultValue:
+                        'Pick a song from the library and the queue will pick up from there.',
+                })}
+                icon="playlistAdd"
+                title={t('emptyState.queueTitle', { defaultValue: 'Your queue is empty' })}
+            />
+        </Flex>
     );
 };
