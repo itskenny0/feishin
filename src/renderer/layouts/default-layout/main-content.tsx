@@ -8,6 +8,7 @@ import styles from './main-content.module.css';
 
 import { ExpandedListContainer } from '/@/renderer/components/item-list/expanded-list-container';
 import { ExpandedListItem } from '/@/renderer/components/item-list/expanded-list-item';
+import { RouteSkeleton } from '/@/renderer/features/shared/components/route-skeleton';
 import { FullScreenOverlay } from '/@/renderer/layouts/default-layout/full-screen-overlay';
 import { FullScreenVisualizerOverlay } from '/@/renderer/layouts/default-layout/full-screen-visualizer-overlay';
 import { LeftSidebar } from '/@/renderer/layouts/default-layout/left-sidebar';
@@ -20,7 +21,6 @@ import {
     useSideQueueType,
 } from '/@/renderer/store';
 import { constrainRightSidebarWidth, constrainSidebarWidth } from '/@/renderer/utils';
-import { Spinner } from '/@/shared/components/spinner/spinner';
 
 const MINIMUM_SIDEBAR_WIDTH = 260;
 
@@ -236,7 +236,7 @@ function MainContentBody() {
     return (
         <div className={styles.mainContentBody}>
             <div className={styles.mainContentBodyScroll}>
-                <Suspense fallback={<Spinner container />}>
+                <Suspense fallback={<RouteSkeleton />}>
                     <Outlet />
                 </Suspense>
             </div>

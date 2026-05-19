@@ -5,11 +5,11 @@ import { AlbumListView } from '/@/renderer/features/albums/components/album-list
 import { useFuzzyGenreIds } from '/@/renderer/features/genres/api/genres-api';
 import { ListFilters, ListFiltersTitle } from '/@/renderer/features/shared/components/list-filters';
 import { ListWithSidebarContainer } from '/@/renderer/features/shared/components/list-with-sidebar-container';
+import { RouteSkeleton } from '/@/renderer/features/shared/components/route-skeleton';
 import { SaveAsCollectionButton } from '/@/renderer/features/shared/components/save-as-collection-button';
 import { SongListView } from '/@/renderer/features/songs/components/song-list-content';
 import { GenreTarget, useGenreTarget, useListSettings } from '/@/renderer/store';
 import { ScrollArea } from '/@/shared/components/scroll-area/scroll-area';
-import { Spinner } from '/@/shared/components/spinner/spinner';
 import { Stack } from '/@/shared/components/stack/stack';
 import { LibraryItem } from '/@/shared/types/domain-types';
 import { ItemListKey } from '/@/shared/types/types';
@@ -81,11 +81,11 @@ function GenreDetailContentAlbums() {
     // as 'no filter' (especially on Jellyfin) and would render the entire
     // library for a render or two during context init.
     if (fuzzyIds.length === 0) {
-        return <Spinner container />;
+        return <RouteSkeleton />;
     }
 
     return (
-        <Suspense fallback={<Spinner container />}>
+        <Suspense fallback={<RouteSkeleton />}>
             <AlbumListView
                 display={display}
                 grid={grid}
@@ -110,11 +110,11 @@ function GenreDetailContentSongs() {
     }, [fuzzyIds]);
 
     if (fuzzyIds.length === 0) {
-        return <Spinner container />;
+        return <RouteSkeleton />;
     }
 
     return (
-        <Suspense fallback={<Spinner container />}>
+        <Suspense fallback={<RouteSkeleton />}>
             <SongListView
                 display={display}
                 grid={grid}

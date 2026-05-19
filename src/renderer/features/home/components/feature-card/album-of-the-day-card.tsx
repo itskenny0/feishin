@@ -13,6 +13,7 @@ import { AppRoute } from '/@/renderer/router/routes';
 import { useCurrentServer } from '/@/renderer/store';
 import { Button } from '/@/shared/components/button/button';
 import { Icon } from '/@/shared/components/icon/icon';
+import { Skeleton } from '/@/shared/components/skeleton/skeleton';
 import { Album, AlbumListSort, LibraryItem, SortOrder } from '/@/shared/types/domain-types';
 import { Play } from '/@/shared/types/types';
 
@@ -162,9 +163,15 @@ export const AlbumOfTheDayCard = () => {
             <div aria-hidden className={styles.scrim} />
             <div className={styles.content}>
                 {isEmpty ? (
-                    <div className={styles.skeletonCover} />
+                    <Skeleton
+                        borderRadius="var(--theme-radius-md)"
+                        containerClassName={styles.skeletonCover}
+                    />
                 ) : showSkeleton || !featured ? (
-                    <div className={styles.skeletonCover} />
+                    <Skeleton
+                        borderRadius="var(--theme-radius-md)"
+                        containerClassName={styles.skeletonCover}
+                    />
                 ) : (
                     <Link
                         aria-label={featured.name}

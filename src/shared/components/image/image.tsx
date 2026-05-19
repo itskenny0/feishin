@@ -57,7 +57,7 @@ export const FALLBACK_SVG =
 export function BaseImage({
     className,
     containerClassName,
-    enableAnimation = false,
+    enableAnimation = true,
     enableDebounce = false,
     enableViewport = true,
     fetchPriority,

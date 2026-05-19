@@ -46,7 +46,7 @@ export const SettingsContent = () => {
         <LibraryContainer>
             <div style={{ height: '100%', overflow: 'scroll', padding: '1rem', width: '100%' }}>
                 <Tabs
-                    keepMounted={false}
+                    keepMounted={true}
                     onChange={(e) => e && setSettings({ tab: e })}
                     orientation="horizontal"
                     value={currentTab}
