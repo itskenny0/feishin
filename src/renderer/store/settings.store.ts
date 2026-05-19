@@ -1174,6 +1174,39 @@ const getPlatformDefaultWindowBarStyle = (): Platform => {
 
 const platformDefaultWindowBarStyle: Platform = getPlatformDefaultWindowBarStyle();
 
+/**
+ * Defaults for every advanced trackmap visual knob — the values reflect
+ * what the user gets out of the box and what the "Reset advanced" button
+ * in Settings → General → Trackmap snaps back to. The six primary knobs
+ * (enabled / onlyOverLan / style / height / glow / sensitivity) are NOT
+ * here because they sit above the Advanced toggle and are owned by the
+ * user, not the design.
+ */
+export const TRACKMAP_ADVANCED_DEFAULTS = {
+    trackmapBgGlowAlpha: 16,
+    trackmapBreathAmplitudePct: 3,
+    trackmapBreathPeriodSec: 7,
+    trackmapColorBgGlow: '#7c3aed',
+    trackmapColorCool: '#9b59f6',
+    trackmapColorStrandB: '#f472b6',
+    trackmapColorWarm: '',
+    trackmapDimMaskMin: 48,
+    trackmapDimMaskTransitionPx: 30,
+    trackmapEnvelopeFillAlpha: 30,
+    trackmapEnvelopeOutlineAlpha: 65,
+    trackmapEnvelopeOutlineWidthPx: 1,
+    trackmapHaloBlurPx: 14,
+    trackmapHelixCycles: 6,
+    trackmapHelixRotationSec: 0,
+    trackmapPlayheadGlowAlpha: 40,
+    trackmapPlayheadShadowBlurPx: 12,
+    trackmapPlayheadWidthPx: 3,
+    trackmapRungAlpha: 35,
+    trackmapRungSpacingPx: 22,
+    trackmapStrandCrispAlpha: 90,
+    trackmapStrandHaloAlpha: 65,
+} as const;
+
 const initialState: SettingsState = {
     autoDJ: {
         enabled: false,
@@ -1298,33 +1331,12 @@ const initialState: SettingsState = {
         theme: AppTheme.DEFAULT_DARK,
         themeDark: AppTheme.DEFAULT_DARK,
         themeLight: AppTheme.DEFAULT_LIGHT,
-        trackmapBgGlowAlpha: 16,
-        trackmapBreathAmplitudePct: 3,
-        trackmapBreathPeriodSec: 7,
-        trackmapColorBgGlow: '#7c3aed',
-        trackmapColorCool: '#9b59f6',
-        trackmapColorStrandB: '#f472b6',
-        trackmapColorWarm: '',
-        trackmapDimMaskMin: 48,
-        trackmapDimMaskTransitionPx: 30,
+        ...TRACKMAP_ADVANCED_DEFAULTS,
         trackmapEnabled: true,
-        trackmapEnvelopeFillAlpha: 30,
-        trackmapEnvelopeOutlineAlpha: 65,
-        trackmapEnvelopeOutlineWidthPx: 1,
         trackmapGlow: 70,
-        trackmapHaloBlurPx: 14,
         trackmapHeight: 60,
-        trackmapHelixCycles: 6,
-        trackmapHelixRotationSec: 0,
         trackmapOnlyOverLan: false,
-        trackmapPlayheadGlowAlpha: 40,
-        trackmapPlayheadShadowBlurPx: 12,
-        trackmapPlayheadWidthPx: 3,
-        trackmapRungAlpha: 35,
-        trackmapRungSpacingPx: 22,
         trackmapSensitivity: 50,
-        trackmapStrandCrispAlpha: 90,
-        trackmapStrandHaloAlpha: 65,
         trackmapStyle: 'glow',
         useThemeAccentColor: false,
         useThemePrimaryShade: true,
@@ -2799,39 +2811,16 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
 
                 if (version <= 43) {
                     // Trackmap advanced knobs — populate any missing field
-                    // from the matching initial-state default. Users get the
-                    // current behaviour out of the box and can tune from
-                    // there in Settings → General → Trackmap → Advanced.
-                    const trackmapAdvancedKeys = [
-                        'trackmapBgGlowAlpha',
-                        'trackmapBreathAmplitudePct',
-                        'trackmapBreathPeriodSec',
-                        'trackmapColorBgGlow',
-                        'trackmapColorCool',
-                        'trackmapColorStrandB',
-                        'trackmapColorWarm',
-                        'trackmapDimMaskMin',
-                        'trackmapDimMaskTransitionPx',
-                        'trackmapEnvelopeFillAlpha',
-                        'trackmapEnvelopeOutlineAlpha',
-                        'trackmapEnvelopeOutlineWidthPx',
-                        'trackmapHaloBlurPx',
-                        'trackmapHelixCycles',
-                        'trackmapHelixRotationSec',
-                        'trackmapPlayheadGlowAlpha',
-                        'trackmapPlayheadShadowBlurPx',
-                        'trackmapPlayheadWidthPx',
-                        'trackmapRungAlpha',
-                        'trackmapRungSpacingPx',
-                        'trackmapStrandCrispAlpha',
-                        'trackmapStrandHaloAlpha',
-                    ] as const;
-                    for (const k of trackmapAdvancedKeys) {
+                    // from the matching TRACKMAP_ADVANCED_DEFAULTS entry so
+                    // upgraders get the current visual out of the box. The
+                    // same constant powers the "Reset advanced" button.
+                    for (const k of Object.keys(TRACKMAP_ADVANCED_DEFAULTS) as Array<
+                        keyof typeof TRACKMAP_ADVANCED_DEFAULTS
+                    >) {
                         if (state.general[k] === undefined) {
                             // The cast is safe because every advanced key has
-                            // a matching default of the same type in
-                            // initialState.general above.
-                            (state.general as any)[k] = (initialState.general as any)[k];
+                            // a matching default of the same type.
+                            (state.general as any)[k] = TRACKMAP_ADVANCED_DEFAULTS[k];
                         }
                     }
                 }

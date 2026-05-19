@@ -1305,6 +1305,7 @@
         "trackmapPlayheadWidthPx": "Playhead width",
         "trackmapPlayheadWidthPx_description": "Thickness of the playhead bar, in CSS pixels",
         "trackmapResetAdvanced": "Reset advanced to defaults",
+        "trackmapResetAdvanced_description": "Snap every value below back to the bundled default — useful when you want to start tweaking from a known baseline",
         "trackmapRungAlpha": "Rung alpha",
         "trackmapRungAlpha_description": "Opacity of the DNA-style vertical connectors between the two strands",
         "trackmapRungSpacingPx": "Rung spacing",

@@ -5,7 +5,11 @@ import {
     SettingOption,
     SettingsSection,
 } from '/@/renderer/features/settings/components/settings-section';
-import { useGeneralSettings, useSettingsStoreActions } from '/@/renderer/store';
+import {
+    TRACKMAP_ADVANCED_DEFAULTS,
+    useGeneralSettings,
+    useSettingsStoreActions,
+} from '/@/renderer/store';
 import { Button } from '/@/shared/components/button/button';
 import { ColorInput } from '/@/shared/components/color-input/color-input';
 import { Group } from '/@/shared/components/group/group';
@@ -329,6 +333,32 @@ export const TrackmapSettings = memo(() => {
             indent: true,
             isHidden: !settings.trackmapEnabled,
             title: t('setting.trackmapAdvanced'),
+        },
+        {
+            control: (
+                <Button
+                    onClick={() => {
+                        setSettings({
+                            general: {
+                                ...TRACKMAP_ADVANCED_DEFAULTS,
+                            },
+                        });
+                        toast.info({ message: t('setting.trackmapResetAdvanced') });
+                    }}
+                    size="compact-sm"
+                    variant="default"
+                >
+                    {t('setting.trackmapResetAdvanced')}
+                </Button>
+            ),
+            description: t('setting.trackmapResetAdvanced', {
+                context: 'description',
+                defaultValue:
+                    'Snap every value below back to the bundled default — useful when you want to start tweaking from a known baseline.',
+            }),
+            indent: true,
+            isHidden: !settings.trackmapEnabled || !showAdvanced,
+            title: t('setting.trackmapResetAdvanced'),
         },
 
         // Colors first — they're the most visually impactful knobs and the
