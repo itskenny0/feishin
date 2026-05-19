@@ -1,12 +1,12 @@
 import formatDuration from 'format-duration';
 import { lazy, Suspense } from 'react';
+import { ErrorBoundary } from 'react-error-boundary';
 
 import { PlayerbarSeekSlider } from './playerbar-seek-slider';
 import styles from './playerbar-slider.module.css';
 
 import { useActivePlayerSource } from '/@/renderer/features/jellyfin-remote-target/hooks/use-active-player-source';
 import { ScrobbleStatus } from '/@/renderer/features/player/components/scrobble-status';
-import { ComponentErrorBoundary } from '/@/renderer/features/shared/components/component-error-boundary';
 import { TrackmapCanvas } from '/@/renderer/features/trackmap';
 import { useAppStore, useAppStoreActions, usePlayerTimestamp } from '/@/renderer/store';
 import {
@@ -92,9 +92,13 @@ export const PlayerbarSlider = () => {
                 ) : (
                     <>
                         {trackmapEnabled && (
-                            <ComponentErrorBoundary>
+                            // The trackmap is purely decorative; if it errors,
+                            // silently degrade to no-trackmap rather than
+                            // jamming a fallback error message into the
+                            // 20-px slider gutter.
+                            <ErrorBoundary fallback={null}>
                                 <TrackmapCanvas />
-                            </ComponentErrorBoundary>
+                            </ErrorBoundary>
                         )}
                         <div style={{ position: 'relative', width: '100%', zIndex: 1 }}>
                             <PlayerbarSeekSlider max={songDuration} min={0} />
