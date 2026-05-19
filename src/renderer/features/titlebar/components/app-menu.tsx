@@ -1,4 +1,4 @@
-import { openModal } from '@mantine/modals';
+import { openContextModal, openModal } from '@mantine/modals';
 import isElectron from 'is-electron';
 import { Fragment, ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -25,6 +25,7 @@ import { DropdownMenu, MenuItemProps } from '/@/shared/components/dropdown-menu/
 import { Group } from '/@/shared/components/group/group';
 import { Icon } from '/@/shared/components/icon/icon';
 import { toast } from '/@/shared/components/toast/toast';
+import { ServerType } from '/@/shared/types/types';
 
 const browser = isElectron() ? window.api.browser : null;
 
@@ -217,6 +218,24 @@ export const AppMenu = () => {
         {
             id: 'divider-2',
             type: 'divider',
+        },
+        {
+            condition: currentServer?.type === ServerType.JELLYFIN,
+            id: 'folder-playlist-migration',
+            item: {
+                icon: 'playlistAdd',
+                label: t('page.appMenu.folderPlaylistMigration'),
+                onClick: () => {
+                    openContextModal({
+                        innerProps: {},
+                        modal: 'folderPlaylistMigration',
+                        size: 'xl',
+                        title: t('folderPlaylistMigration.title'),
+                    });
+                },
+                type: 'item',
+            },
+            type: 'conditional-item',
         },
         {
             condition: !isServerLock(),
