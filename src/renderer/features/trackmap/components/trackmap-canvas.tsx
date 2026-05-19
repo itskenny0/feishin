@@ -496,6 +496,15 @@ export const TrackmapCanvas = () => {
         };
     }, [data, glow, height, playerStatus, style, currentSong?.id]);
 
+    // Settings live-preview: whenever any advanced knob changes, schedule
+    // a single redraw. The main rAF chain only re-arms while playing, and
+    // subscribePlayerProgress only fires on timestamp change — without this
+    // effect, tweaking sliders while paused would leave the trackmap stale
+    // until the user pressed play again.
+    useEffect(() => {
+        scheduleDrawRef.current?.();
+    }, [advanced]);
+
     return (
         <div className={styles.container} ref={containerRef}>
             <canvas className={styles.canvas} ref={canvasRef} />
