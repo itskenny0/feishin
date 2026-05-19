@@ -8,23 +8,6 @@
     inset: -10px 0;
     z-index: 0;
     pointer-events: none;
-
-    /* Fade-on-play. Paused = trackmap fully hidden; playing = fully visible.
-       The TSX flips `data-playing` on the container; the easing is symmetric
-       so it reads as the visualisation gently waking up / settling down with
-       the music. */
-    opacity: 0;
-    transition: opacity 600ms ease-in-out;
-}
-
-.container[data-playing='true'] {
-    opacity: 1;
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .container {
-        transition: opacity 0s;
-    }
 }
 
 .canvas {

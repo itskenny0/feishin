@@ -62,37 +62,9 @@ const parseColor = (input: string): null | Rgb => {
 const STRAND_B: Rgb = { b: 182, g: 114, r: 244 }; // #f472b6 (Tailwind pink-400)
 /** Background ribbon glow — deep violet. */
 const BG_GLOW = 'rgba(124, 58, 237'; // #7c3aed (Tailwind violet-600), alpha appended
-/** Cool / "slow" color for the envelope-fill energy gradient (low intensity). */
-const COOL_COLOR: Rgb = { b: 246, g: 89, r: 155 }; // ≈ #9b59f6 — soft purple
 
 const rgbStr = (c: Rgb, a?: number): string =>
     a === undefined ? `rgb(${c.r}, ${c.g}, ${c.b})` : `rgba(${c.r}, ${c.g}, ${c.b}, ${a})`;
-
-/**
- * Build a horizontal gradient whose color at each bin position interpolates
- * between the cool (low-intensity) anchor and the theme accent (high-
- * intensity) using `bins[i]` as the weight. Used by the envelope-fill pass
- * so the silhouette reads the song's mood spatially: slow / quiet sections
- * fill with purple, energetic peaks fill with the theme accent.
- */
-const buildEnergyGradient = (
-    ctx: CanvasRenderingContext2D,
-    w: number,
-    bins: Float32Array,
-    warm: Rgb,
-): CanvasGradient => {
-    const grad = ctx.createLinearGradient(0, 0, w, 0);
-    const n = bins.length;
-    for (let i = 0; i < n; i += 1) {
-        const t = i / (n - 1);
-        const k = bins[i];
-        const r = Math.round(COOL_COLOR.r + (warm.r - COOL_COLOR.r) * k);
-        const g = Math.round(COOL_COLOR.g + (warm.g - COOL_COLOR.g) * k);
-        const b = Math.round(COOL_COLOR.b + (warm.b - COOL_COLOR.b) * k);
-        grad.addColorStop(t, `rgb(${r}, ${g}, ${b})`);
-    }
-    return grad;
-};
 
 /**
  * Draws a double-helix "data tape" behind the seek slider. The intensity
@@ -246,7 +218,7 @@ export const TrackmapCanvas = () => {
             {
                 const bgGrad = ctx2d.createLinearGradient(0, yCenter - halfH, 0, yCenter + halfH);
                 bgGrad.addColorStop(0, `${BG_GLOW}, 0)`);
-                bgGrad.addColorStop(0.5, `${BG_GLOW}, 0.16)`);
+                bgGrad.addColorStop(0.5, `${BG_GLOW}, 0.22)`);
                 bgGrad.addColorStop(1, `${BG_GLOW}, 0)`);
                 ctx2d.save();
                 ctx2d.fillStyle = bgGrad;
@@ -254,44 +226,7 @@ export const TrackmapCanvas = () => {
                 ctx2d.restore();
             }
 
-            // === Pass 2: envelope-fill silhouette ==========================
-            // The DATA layer — a clear mirrored wave outline filled with the
-            // per-bin energy gradient (purple at quiet sections, theme accent
-            // at peaks). This is what lets the eye read amplitude at a
-            // glance: drops, choruses, bridges all jump out as clear shapes
-            // even before the helix's motion catches your attention.
-            //
-            // Path is built fresh each frame because the breath factor
-            // modulates `halfH` slightly. At 1 device pixel per step,
-            // 1200-pixel-wide canvas = ~1200 lineTo calls — well within
-            // Canvas2D's budget at 60 fps.
-            {
-                const step = Math.max(1, Math.floor(dpr));
-                ctx2d.save();
-                ctx2d.fillStyle = buildEnergyGradient(ctx2d, w, bins, strandA);
-                ctx2d.globalAlpha = 0.24;
-                ctx2d.beginPath();
-                // Trace the upper edge left-to-right.
-                for (let px = 0; px <= w; px += step) {
-                    const xFrac = px / w;
-                    const intensity = sampleBin(xFrac);
-                    const y = yCenter - intensity * halfH;
-                    if (px === 0) ctx2d.moveTo(px, y);
-                    else ctx2d.lineTo(px, y);
-                }
-                // Trace the lower edge right-to-left to close the polygon.
-                for (let px = w; px >= 0; px -= step) {
-                    const xFrac = px / w;
-                    const intensity = sampleBin(xFrac);
-                    const y = yCenter + intensity * halfH;
-                    ctx2d.lineTo(px, y);
-                }
-                ctx2d.closePath();
-                ctx2d.fill();
-                ctx2d.restore();
-            }
-
-            // === Pass 3: DNA base-pair rungs ================================
+            // === Pass 2: DNA base-pair rungs ================================
             // Thin vertical connectors between the two strands every ~22 px.
             // Opacity scales with |cos(phi)| so rungs fade out at crossings
             // (where the strands meet) and brighten at max separation.
@@ -310,7 +245,7 @@ export const TrackmapCanvas = () => {
                     const yB = yCenter + envelope * cosphi;
                     const visibility = Math.abs(cosphi);
                     if (visibility < 0.15) continue;
-                    ctx2d.strokeStyle = rgbStr(STRAND_B, 0.35 * visibility);
+                    ctx2d.strokeStyle = rgbStr(STRAND_B, 0.45 * visibility);
                     ctx2d.beginPath();
                     ctx2d.moveTo(xR, yA);
                     ctx2d.lineTo(xR, yB);
@@ -319,7 +254,7 @@ export const TrackmapCanvas = () => {
                 ctx2d.restore();
             }
 
-            // === Pass 4: strand halos (additive blend, blurred shadow) =====
+            // === Pass 3: strand halos (additive blend, blurred shadow) =====
             // The halo gives each strand its luminous "neon tube" appearance.
             // Additive blending means where the two halos overlap (at
             // crossings) they brighten to white — the natural cyberpunk glow.
@@ -350,12 +285,12 @@ export const TrackmapCanvas = () => {
                 ctx2d.lineWidth = Math.max(2, 2.4 * dpr);
                 ctx2d.shadowBlur = 14 * glowFactor;
 
-                ctx2d.strokeStyle = rgbStr(strandA, 0.65 * glowFactor);
+                ctx2d.strokeStyle = rgbStr(strandA, 0.85 * glowFactor);
                 ctx2d.shadowColor = rgbStr(strandA);
                 drawStrandPath(-1);
                 ctx2d.stroke();
 
-                ctx2d.strokeStyle = rgbStr(STRAND_B, 0.65 * glowFactor);
+                ctx2d.strokeStyle = rgbStr(STRAND_B, 0.85 * glowFactor);
                 ctx2d.shadowColor = rgbStr(STRAND_B);
                 drawStrandPath(1);
                 ctx2d.stroke();
@@ -363,10 +298,8 @@ export const TrackmapCanvas = () => {
                 ctx2d.restore();
             }
 
-            // === Pass 5: crisp strands on top of the halos =================
-            // Near-full-opacity lines, no shadow, still additive so crossings
-            // glow. Pulled back slightly from full 1.0 to keep the data layer
-            // beneath them readable.
+            // === Pass 4: crisp strands on top of the halos =================
+            // Full-opacity lines, no shadow, still additive so crossings glow.
             ctx2d.save();
             ctx2d.globalCompositeOperation = 'lighter';
             ctx2d.lineCap = 'round';
@@ -374,36 +307,35 @@ export const TrackmapCanvas = () => {
             ctx2d.lineWidth = Math.max(1.5, 1.8 * dpr);
             ctx2d.shadowBlur = 0;
 
-            ctx2d.strokeStyle = rgbStr(strandA, 0.9);
+            ctx2d.strokeStyle = rgbStr(strandA);
             drawStrandPath(-1);
             ctx2d.stroke();
 
-            ctx2d.strokeStyle = rgbStr(STRAND_B, 0.9);
+            ctx2d.strokeStyle = rgbStr(STRAND_B);
             drawStrandPath(1);
             ctx2d.stroke();
 
             ctx2d.restore();
 
-            // === Pass 6: unplayed dim mask =================================
-            // Settled at 0.48 — between the original 0.40 (too dim) and the
-            // cyberpunk-pass 0.55 (too bright). Still clearly distinguishes
-            // played vs. unplayed without making either side ignorable.
+            // === Pass 5: unplayed dim mask =================================
+            // Less aggressive than before — cyberpunk wants the whole strip
+            // visible. Played: full alpha. Unplayed: 0.55 (was 0.40).
             ctx2d.save();
             ctx2d.globalCompositeOperation = 'destination-in';
             const dimGrad = ctx2d.createLinearGradient(playheadX, 0, playheadX + 30, 0);
             dimGrad.addColorStop(0, 'rgba(0,0,0,1)');
-            dimGrad.addColorStop(1, 'rgba(0,0,0,0.48)');
+            dimGrad.addColorStop(1, 'rgba(0,0,0,0.55)');
             ctx2d.fillStyle = dimGrad;
             ctx2d.fillRect(0, 0, w, h);
             ctx2d.restore();
 
-            // === Pass 7: playhead glow strip ===============================
+            // === Pass 6: playhead glow strip ===============================
             // Bright vertical bar at the playhead. Additive blend so it
             // pops over the strands rather than masking them.
             if (!reducedMotion && glowFactor > 0) {
                 ctx2d.save();
                 ctx2d.globalCompositeOperation = 'lighter';
-                ctx2d.fillStyle = rgbStr(strandA, 0.4 * glowFactor);
+                ctx2d.fillStyle = rgbStr(strandA, 0.5 * glowFactor);
                 ctx2d.shadowColor = rgbStr(strandA);
                 ctx2d.shadowBlur = 12 * glowFactor;
                 const phWidth = Math.max(2, 3 * dpr);
@@ -438,11 +370,7 @@ export const TrackmapCanvas = () => {
     }, [data, glow, height, playerStatus, style, currentSong?.id]);
 
     return (
-        <div
-            className={styles.container}
-            data-playing={playerStatus === PlayerStatus.PLAYING ? 'true' : 'false'}
-            ref={containerRef}
-        >
+        <div className={styles.container} ref={containerRef}>
             <canvas className={styles.canvas} ref={canvasRef} />
         </div>
     );
