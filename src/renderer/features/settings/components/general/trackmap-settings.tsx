@@ -191,7 +191,9 @@ export const TrackmapSettings = memo(() => {
     /**
      * Helper for the dense advanced slider rows — all share the same
      * shape (controlled value, write on change-end, indent + hide when
-     * trackmap is off or advanced is collapsed).
+     * trackmap is off or advanced is collapsed). The title includes the
+     * current numeric value so users can see what each knob is set to
+     * without hovering or dragging to surface the Mantine tooltip.
      */
     const sliderRow = (
         key: TrackmapKey,
@@ -215,7 +217,7 @@ export const TrackmapSettings = memo(() => {
         description: t(`setting.${labelKey}`, { context: 'description' }),
         indent: true,
         isHidden: !settings.trackmapEnabled || !showAdvanced,
-        title: t(`setting.${labelKey}`),
+        title: `${t(`setting.${labelKey}`)} (${settings[key]})`,
     });
 
     /** Most colors are required; trackmapColorWarm uniquely treats empty as
@@ -321,7 +323,7 @@ export const TrackmapSettings = memo(() => {
             description: t('setting.trackmapHeight', { context: 'description' }),
             indent: true,
             isHidden: !settings.trackmapEnabled,
-            title: t('setting.trackmapHeight'),
+            title: `${t('setting.trackmapHeight')} (${settings.trackmapHeight})`,
         },
         {
             control: (
@@ -337,7 +339,7 @@ export const TrackmapSettings = memo(() => {
             description: t('setting.trackmapGlow', { context: 'description' }),
             indent: true,
             isHidden: !settings.trackmapEnabled,
-            title: t('setting.trackmapGlow'),
+            title: `${t('setting.trackmapGlow')} (${settings.trackmapGlow})`,
         },
         {
             control: (
@@ -356,7 +358,7 @@ export const TrackmapSettings = memo(() => {
             indent: true,
             isHidden: !settings.trackmapEnabled,
             note: t('setting.trackmapSensitivity_note'),
-            title: t('setting.trackmapSensitivity'),
+            title: `${t('setting.trackmapSensitivity')} (${settings.trackmapSensitivity})`,
         },
         {
             control: (
