@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { HashRouter, Route, Routes } from 'react-router';
 
+import { FolderPlaylistMigrationModal } from '/@/renderer/features/folders/components/folder-playlist-migration-modal';
 import { ShuffleAllContextModal } from '/@/renderer/features/player/components/shuffle-all-modal';
 import { RouterErrorBoundary } from '/@/renderer/features/shared/components/router-error-boundary';
 import { AuthenticationOutlet } from '/@/renderer/layouts/authentication-outlet';
@@ -178,6 +179,7 @@ const VisualizerSettingsContextModal = (props: any) => (
 const appRouterModals = {
     addToPlaylist: AddToPlaylistContextModal,
     base: BaseContextModal,
+    folderPlaylistMigration: FolderPlaylistMigrationModal,
     lyricsSettings: LyricsSettingsContextModal,
     saveAndReplace: SaveAndReplaceContextModal,
     settings: SettingsContextModal,
