@@ -243,7 +243,10 @@ export const TrackmapCanvas = () => {
             const breathAmp = Math.max(0, Math.min(0.3, adv.breathAmplitudePct / 100));
             const breathPeriodMs = Math.max(500, adv.breathPeriodSec * 1000);
             const breath = 1 + breathAmp * Math.sin((now / breathPeriodMs) * Math.PI * 2);
-            const halfH = baseHalfH * breath;
+            // Clamp to yCenter so a wide height + amplified breath doesn't
+            // clip to a flat top against the canvas edge — strands and
+            // envelope alike just hit the lid instead of overflowing.
+            const halfH = Math.min(yCenter, baseHalfH * breath);
 
             const helixCycles = Math.max(1, adv.helixCycles);
             // helixRotationSec = 0 ⇒ static (rot stays 0).
