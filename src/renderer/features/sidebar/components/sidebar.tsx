@@ -126,10 +126,12 @@ export const Sidebar = () => {
 
     return (
         <div
+            aria-label={t('common.sidebar', { defaultValue: 'Sidebar navigation' })}
             className={clsx(styles.container, {
                 [styles.customBar]: isCustomWindowBar,
             })}
             id="left-sidebar"
+            role="navigation"
         >
             <Group grow id="global-search-container" style={{ flexShrink: 0 }}>
                 <ActionBar />

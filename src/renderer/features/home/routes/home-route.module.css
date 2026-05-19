@@ -1,0 +1,29 @@
+/*
+ * Subtle staggered fade-in for the home page widgets. Each row is rendered
+ * with an animation-delay proportional to its index so the dashboard
+ * "assembles" itself rather than popping in all at once. Keeps the page
+ * feel deliberate without slowing down navigation — the total stagger
+ * for ~6 rows lands well under half a second.
+ */
+.row {
+    animation: home-row-fade-in 320ms ease-out both;
+}
+
+@keyframes home-row-fade-in {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Respect the OS-level reduced-motion preference: no fade, no slide. */
+@media (prefers-reduced-motion: reduce) {
+    .row {
+        animation: none;
+    }
+}

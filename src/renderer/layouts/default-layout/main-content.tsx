@@ -234,13 +234,13 @@ function GlobalExpandedPanel() {
 
 function MainContentBody() {
     return (
-        <div className={styles.mainContentBody}>
+        <main className={styles.mainContentBody}>
             <div className={styles.mainContentBodyScroll}>
                 <Suspense fallback={<RouteSkeleton />}>
                     <Outlet />
                 </Suspense>
             </div>
             <GlobalExpandedPanel />
-        </div>
+        </main>
     );
 }
