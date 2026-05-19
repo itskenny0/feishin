@@ -62,9 +62,36 @@ const parseColor = (input: string): null | Rgb => {
 const STRAND_B: Rgb = { b: 182, g: 114, r: 244 }; // #f472b6 (Tailwind pink-400)
 /** Background ribbon glow — deep violet. */
 const BG_GLOW = 'rgba(124, 58, 237'; // #7c3aed (Tailwind violet-600), alpha appended
+/** Cool / "slow" anchor for the envelope-fill energy gradient. */
+const COOL_COLOR: Rgb = { b: 246, g: 89, r: 155 }; // ≈ #9b59f6 — soft purple
 
 const rgbStr = (c: Rgb, a?: number): string =>
     a === undefined ? `rgb(${c.r}, ${c.g}, ${c.b})` : `rgba(${c.r}, ${c.g}, ${c.b}, ${a})`;
+
+/**
+ * Build a horizontal gradient whose color at each bin position interpolates
+ * between the cool anchor (low intensity) and the theme accent (high
+ * intensity) using `bins[i]` as the weight. Used by the envelope-fill pass
+ * so the silhouette reads the song's mood spatially.
+ */
+const buildEnergyGradient = (
+    ctx: CanvasRenderingContext2D,
+    w: number,
+    bins: Float32Array,
+    warm: Rgb,
+): CanvasGradient => {
+    const grad = ctx.createLinearGradient(0, 0, w, 0);
+    const n = bins.length;
+    for (let i = 0; i < n; i += 1) {
+        const t = i / (n - 1);
+        const k = bins[i];
+        const r = Math.round(COOL_COLOR.r + (warm.r - COOL_COLOR.r) * k);
+        const g = Math.round(COOL_COLOR.g + (warm.g - COOL_COLOR.g) * k);
+        const b = Math.round(COOL_COLOR.b + (warm.b - COOL_COLOR.b) * k);
+        grad.addColorStop(t, `rgb(${r}, ${g}, ${b})`);
+    }
+    return grad;
+};
 
 /**
  * Draws a double-helix "data tape" behind the seek slider. The intensity
@@ -186,9 +213,15 @@ export const TrackmapCanvas = () => {
             const breath = 1 + 0.03 * Math.sin((now / 7000) * Math.PI * 2);
             const halfH = baseHalfH * breath;
 
-            // Helix parameters.
+            // Helix parameters. The rotation has been slowed since the user
+            // reported the previous rightward drift was smearing the spatial
+            // information — the eye couldn't latch onto "where in the song
+            // we are now" because the helix kept shifting. Combined with
+            // the envelope-fill pass above (which provides a stable amplitude
+            // silhouette regardless of helix phase), this slow rotation now
+            // reads as ambient motion rather than disorienting flow.
             const helixCycles = 6; // how many full twists span the canvas width
-            const helixOmega = (Math.PI * 2) / 6000; // rad/ms, one rotation per 6 s
+            const helixOmega = (Math.PI * 2) / 14000; // rad/ms, one rotation per 14 s
             const rot = now * helixOmega;
 
             const bins = trackmap.bins;
@@ -231,6 +264,36 @@ export const TrackmapCanvas = () => {
                 ctx2d.save();
                 ctx2d.fillStyle = bgGrad;
                 ctx2d.fillRect(0, 0, w, h);
+                ctx2d.restore();
+            }
+
+            // === Pass 1.5: envelope-fill silhouette =========================
+            // The DATA layer — a clear mirrored wave outline filled with the
+            // per-bin energy gradient (purple at quiet sections, theme accent
+            // at peaks). Lets the eye read amplitude at a glance: drops,
+            // choruses, bridges all jump out as clear shapes even before
+            // the helix's motion catches your attention.
+            {
+                const stepEnv = Math.max(1, Math.floor(dpr));
+                ctx2d.save();
+                ctx2d.fillStyle = buildEnergyGradient(ctx2d, w, bins, strandA);
+                ctx2d.globalAlpha = 0.24;
+                ctx2d.beginPath();
+                for (let px = 0; px <= w; px += stepEnv) {
+                    const xFrac = px / w;
+                    const intensity = sampleBin(xFrac);
+                    const y = yCenter - intensity * halfH;
+                    if (px === 0) ctx2d.moveTo(px, y);
+                    else ctx2d.lineTo(px, y);
+                }
+                for (let px = w; px >= 0; px -= stepEnv) {
+                    const xFrac = px / w;
+                    const intensity = sampleBin(xFrac);
+                    const y = yCenter + intensity * halfH;
+                    ctx2d.lineTo(px, y);
+                }
+                ctx2d.closePath();
+                ctx2d.fill();
                 ctx2d.restore();
             }
 
