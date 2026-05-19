@@ -6,6 +6,7 @@ import styles from './playerbar-slider.module.css';
 
 import { useActivePlayerSource } from '/@/renderer/features/jellyfin-remote-target/hooks/use-active-player-source';
 import { ScrobbleStatus } from '/@/renderer/features/player/components/scrobble-status';
+import { ComponentErrorBoundary } from '/@/renderer/features/shared/components/component-error-boundary';
 import { TrackmapCanvas } from '/@/renderer/features/trackmap';
 import { useAppStore, useAppStoreActions, usePlayerTimestamp } from '/@/renderer/store';
 import {
@@ -90,7 +91,11 @@ export const PlayerbarSlider = () => {
                     </Suspense>
                 ) : (
                     <>
-                        {trackmapEnabled && <TrackmapCanvas />}
+                        {trackmapEnabled && (
+                            <ComponentErrorBoundary>
+                                <TrackmapCanvas />
+                            </ComponentErrorBoundary>
+                        )}
                         <div style={{ position: 'relative', width: '100%', zIndex: 1 }}>
                             <PlayerbarSeekSlider max={songDuration} min={0} />
                         </div>
