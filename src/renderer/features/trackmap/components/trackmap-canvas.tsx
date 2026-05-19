@@ -277,19 +277,24 @@ export const TrackmapCanvas = () => {
             const effectivePlayheadMs = progressTimestampMs + wallElapsed;
             const playheadFrac =
                 timelineMs > 0 ? Math.min(1, Math.max(0, effectivePlayheadMs / timelineMs)) : 0;
-            // Match the Mantine slider's thumb-center coordinates. The
-            // slider root has padding-inline: var(--slider-size) (6 CSS px
-            // for the playerbar's size={6}), and the thumb's left: ${pct}%
-            // is taken inside that padding, so the thumb center travels
-            // from +6 to width-6 — not 0 to width. Without this inset, the
-            // playhead is visibly +6px ahead of the thumb near the start
-            // and -6px behind near the end, which the user reads as the
-            // seek knob 'ahead of' the trackmap line by a few seconds. 6
-            // matches the size value passed to CustomPlayerbarSlider in
-            // playerbar-slider.tsx; keep them in sync.
-            const SLIDER_PADDING_CSS_PX = 6;
-            const padPx = SLIDER_PADDING_CSS_PX * dpr;
-            const playheadX = padPx + playheadFrac * Math.max(0, w - 2 * padPx);
+            // Align with the slider's BAR right edge — that's the visible
+            // "current position" marker because the playerbar's thumb has
+            // opacity: 0 until hover (see playerbar-slider.module.css).
+            //
+            // Mantine renders the bar as:
+            //   width:               position% + 2 * var(--slider-size)
+            //   inset-inline-start:  -var(--slider-size)
+            // inside the Track, which itself starts at +var(--slider-size)
+            // due to the slider root's padding-inline. Net: the bar's right
+            // edge in slider-wrapper coordinates is
+            //   12px + frac * (root_width - 12px)
+            // where 12 = 2 * --slider-size and --slider-size = 6 CSS px for
+            // the playerbar's size={6}. Match that exactly. Keep
+            // SLIDER_SIZE_CSS_PX in sync with the size prop passed to
+            // CustomPlayerbarSlider in playerbar-slider.tsx.
+            const SLIDER_SIZE_CSS_PX = 6;
+            const insetPx = 2 * SLIDER_SIZE_CSS_PX * dpr;
+            const playheadX = insetPx + playheadFrac * Math.max(0, w - insetPx);
 
             // === Pass 1: background ribbon glow =============================
             {
