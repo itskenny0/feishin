@@ -13,6 +13,9 @@ import { TRACKMAP_DATA_VERSION, type TrackmapData } from '/@/renderer/features/t
 
 export interface TrackmapWorkerRequest {
     monoSamples: Float32Array;
+    /** Monotonic ID from the main thread; the worker echoes it back so the
+     * caller can ignore responses for stale (superseded) requests. */
+    requestId: number;
     sampleRate: number;
     sensitivity: number;
     type: 'analyze';
@@ -21,6 +24,8 @@ export interface TrackmapWorkerRequest {
 export interface TrackmapWorkerResponse {
     data?: TrackmapData;
     message?: string;
+    /** Echoed from the matching {@link TrackmapWorkerRequest.requestId}. */
+    requestId: number;
     type: 'error' | 'result';
 }
 
@@ -40,11 +45,20 @@ ctx.onmessage = (event: MessageEvent<TrackmapWorkerRequest>) => {
             version: TRACKMAP_DATA_VERSION,
         };
 
-        ctx.postMessage({ data: result, type: 'result' } satisfies TrackmapWorkerResponse, [
-            bins.buffer,
-        ]);
+        ctx.postMessage(
+            {
+                data: result,
+                requestId: req.requestId,
+                type: 'result',
+            } satisfies TrackmapWorkerResponse,
+            [bins.buffer],
+        );
     } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        ctx.postMessage({ message, type: 'error' } satisfies TrackmapWorkerResponse);
+        ctx.postMessage({
+            message,
+            requestId: req.requestId,
+            type: 'error',
+        } satisfies TrackmapWorkerResponse);
     }
 };
