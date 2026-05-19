@@ -116,27 +116,40 @@ const useSleepTimer = () => {
 
     const status = usePlayerStatus();
 
-    const handleOnPlayerProgress = useCallback(() => {
-        if (!active) {
-            return;
-        }
-
-        if (status !== PlayerStatus.PLAYING) {
-            return;
-        }
-
-        // Count down in timed mode
-        if (mode === 'timed') {
-            const remaining = useSleepTimerStore.getState().remaining;
-
-            if (remaining <= 0) {
-                cancelTimer();
-                pauseWithOptionalFade();
-            } else {
-                setRemaining(Math.max(0, remaining - 1));
+    const handleOnPlayerProgress = useCallback(
+        (properties: { timestamp: number }, prev: { timestamp: number }) => {
+            if (!active) {
+                return;
             }
-        }
-    }, [active, cancelTimer, mode, pauseWithOptionalFade, setRemaining, status]);
+
+            if (status !== PlayerStatus.PLAYING) {
+                return;
+            }
+
+            // Skip seek-induced progress events. Normal playback advances
+            // the timestamp by ~1 second per emission; anything bigger is a
+            // seek that should not consume sleep-timer budget. We use 2 s
+            // as the threshold so genuine multi-second progress hiccups
+            // (e.g. a network stall on a streamed song) still decrement.
+            const delta = Math.abs(properties.timestamp - prev.timestamp);
+            if (delta > 2) {
+                return;
+            }
+
+            // Count down in timed mode
+            if (mode === 'timed') {
+                const remaining = useSleepTimerStore.getState().remaining;
+
+                if (remaining <= 0) {
+                    cancelTimer();
+                    pauseWithOptionalFade();
+                } else {
+                    setRemaining(Math.max(0, remaining - 1));
+                }
+            }
+        },
+        [active, cancelTimer, mode, pauseWithOptionalFade, setRemaining, status],
+    );
 
     usePlayerEvents(
         {
