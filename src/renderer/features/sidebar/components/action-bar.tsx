@@ -10,6 +10,7 @@ import { DropdownMenu } from '/@/shared/components/dropdown-menu/dropdown-menu';
 import { Grid } from '/@/shared/components/grid/grid';
 import { Group } from '/@/shared/components/group/group';
 import { Icon } from '/@/shared/components/icon/icon';
+import { Kbd } from '/@/shared/components/kbd/kbd';
 import { TextInput } from '/@/shared/components/text-input/text-input';
 
 export const ActionBar = () => {
@@ -50,13 +51,20 @@ export const ActionBar = () => {
                         }}
                         placeholder={t('common.search')}
                         readOnly
+                        // Permanent hint so users discover the command-
+                        // palette shortcut without trawling the settings.
+                        // "Mod+K" matches the hotkey string Mantine /
+                        // mousetrap uses internally (mod = Ctrl on
+                        // Windows/Linux, ⌘ on macOS).
+                        rightSection={<Kbd size="xs">Mod+K</Kbd>}
+                        rightSectionWidth={70}
                     />
                 </Grid.Col>
                 <Grid.Col span={5}>
                     <Group gap="sm" grow wrap="nowrap">
                         <DropdownMenu position="bottom-start">
                             <DropdownMenu.Target>
-                                <Button p="0">
+                                <Button aria-label={t('common.menu')} p="0">
                                     <Icon icon="menu" size="lg" />
                                 </Button>
                             </DropdownMenu.Target>

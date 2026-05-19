@@ -1,4 +1,5 @@
 import clsx from 'clsx';
+import { t } from 'i18next';
 import { motion } from 'motion/react';
 import { memo, MouseEvent, useMemo } from 'react';
 
@@ -14,7 +15,7 @@ import { useIsMutatingRating } from '/@/renderer/features/shared/mutations/set-r
 import { animationVariants } from '/@/shared/components/animations/animation-variants';
 import { AppIcon, Icon, IconProps } from '/@/shared/components/icon/icon';
 import { Rating } from '/@/shared/components/rating/rating';
-import { Tooltip } from '/@/shared/components/tooltip/tooltip';
+import { Tooltip, TooltipProps } from '/@/shared/components/tooltip/tooltip';
 import {
     Album,
     AlbumArtist,
@@ -307,6 +308,7 @@ export const ItemCardControls = ({
                     icon="ellipsisHorizontal"
                     onClick={moreHandler}
                     onDoubleClick={moreDoubleClickHandler}
+                    tooltip={{ label: t('common.more') as string }}
                 />
             )}
             {controls?.onExpand && enableExpansion && (
@@ -314,6 +316,7 @@ export const ItemCardControls = ({
                     className={styles.expand}
                     icon="arrowDownS"
                     onClick={expandHandler}
+                    tooltip={{ label: t('common.expand') as string }}
                 />
             )}
         </motion.div>
@@ -347,6 +350,7 @@ const FavoriteButton = memo(
                 icon="favorite"
                 iconProps={favoriteIconProps}
                 onClick={onClick}
+                tooltip={{ label: t('common.favorite') as string }}
             />
         );
     },
@@ -386,6 +390,7 @@ interface SecondaryButtonProps {
     disabled?: boolean;
     icon: keyof typeof AppIcon;
     onClick?: (e: MouseEvent<HTMLButtonElement>) => void;
+    tooltip?: Omit<TooltipProps, 'children'>;
 }
 
 const SecondaryButton = memo(
@@ -396,6 +401,7 @@ const SecondaryButton = memo(
         iconProps,
         onClick,
         onDoubleClick,
+        tooltip,
     }: SecondaryButtonProps & {
         iconProps?: Partial<IconProps>;
         onDoubleClick?: (e: MouseEvent<HTMLButtonElement>) => void;
@@ -417,8 +423,15 @@ const SecondaryButton = memo(
             e.preventDefault();
         };
 
-        return (
+        // Derive aria-label from the tooltip label so screen readers
+        // also benefit from the tooltip text. Mirrors the player-button
+        // pattern in src/renderer/features/player/components/player-button.tsx.
+        const ariaLabel =
+            typeof tooltip?.label === 'string' ? (tooltip.label as string) : undefined;
+
+        const buttonElement = (
             <button
+                aria-label={ariaLabel}
                 className={clsx(styles.secondaryButton, className)}
                 disabled={disabled}
                 onClick={handleClick}
@@ -428,5 +441,15 @@ const SecondaryButton = memo(
                 <Icon icon={icon} size="lg" {...iconProps} />
             </button>
         );
+
+        if (tooltip) {
+            return (
+                <Tooltip openDelay={400} withinPortal {...tooltip}>
+                    {buttonElement}
+                </Tooltip>
+            );
+        }
+
+        return buttonElement;
     },
 );
