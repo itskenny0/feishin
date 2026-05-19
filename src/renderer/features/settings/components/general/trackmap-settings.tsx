@@ -10,6 +10,7 @@ import {
     useGeneralSettings,
     useSettingsStoreActions,
 } from '/@/renderer/store';
+import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Button } from '/@/shared/components/button/button';
 import { ColorInput } from '/@/shared/components/color-input/color-input';
 import { Group } from '/@/shared/components/group/group';
@@ -217,13 +218,38 @@ export const TrackmapSettings = memo(() => {
         title: t(`setting.${labelKey}`),
     });
 
-    const colorRow = (key: TrackmapKey, labelKey: string): SettingOption => ({
+    /** Most colors are required; trackmapColorWarm uniquely treats empty as
+     *  "use the theme accent", so we let users clear that one via a right-
+     *  section X button. Mantine's ColorInput has no built-in clearable
+     *  affordance — `rightSection` is the supported escape hatch. */
+    const colorRow = (
+        key: TrackmapKey,
+        labelKey: string,
+        options?: { clearable?: boolean },
+    ): SettingOption => ({
         control: (
             <ColorInput
                 aria-label={t(`setting.${labelKey}`)}
+                closeOnColorSwatchClick
                 format="hex"
                 onChangeEnd={(value) =>
                     setSettings({ general: { [key]: value } as Record<string, string> })
+                }
+                rightSection={
+                    options?.clearable && (settings[key] as string).length > 0 ? (
+                        <ActionIcon
+                            aria-label={t('common.clear', { defaultValue: 'Clear' })}
+                            onClick={() =>
+                                setSettings({
+                                    general: { [key]: '' } as Record<string, string>,
+                                })
+                            }
+                            size="sm"
+                            variant="subtle"
+                        >
+                            ✕
+                        </ActionIcon>
+                    ) : undefined
                 }
                 value={settings[key] as string}
             />
@@ -376,7 +402,7 @@ export const TrackmapSettings = memo(() => {
         // ones a user is likeliest to want to tweak when they open the panel.
         colorRow('trackmapColorBgGlow', 'trackmapColorBgGlow'),
         colorRow('trackmapColorCool', 'trackmapColorCool'),
-        colorRow('trackmapColorWarm', 'trackmapColorWarm'),
+        colorRow('trackmapColorWarm', 'trackmapColorWarm', { clearable: true }),
         colorRow('trackmapColorStrandB', 'trackmapColorStrandB'),
 
         // Envelope (the silhouette that traces the wave's energy)
