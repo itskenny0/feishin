@@ -25,7 +25,10 @@ export const AnimatedPage = forwardRef(
               };
 
         return (
-            <motion.main
+            // Renders as a plain <div>: the semantic <main> landmark lives
+            // in default-layout/main-content.tsx so it stays stable across
+            // route transitions and we don't end up with nested <main>s.
+            <motion.div
                 className={styles.animatedPage}
                 ref={ref}
                 // 0.5s with `anticipate` easing was visibly slow for what is
@@ -35,7 +38,7 @@ export const AnimatedPage = forwardRef(
                 {...transitionProps}
             >
                 {children}
-            </motion.main>
+            </motion.div>
         );
     },
 );

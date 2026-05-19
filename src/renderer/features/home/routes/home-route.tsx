@@ -1,5 +1,7 @@
-import { Suspense, useRef } from 'react';
+import { CSSProperties, ReactNode, Suspense, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+
+import styles from './home-route.module.css';
 
 import { useGridCarouselContainerQuery } from '/@/renderer/components/grid-carousel/grid-carousel-v2';
 import { NativeScrollArea } from '/@/renderer/components/native-scroll-area/native-scroll-area';
@@ -101,6 +103,110 @@ const HomeRoute = () => {
             uniqueId: item.id,
         }));
 
+    // Each rendered row knows its slot index so the CSS stagger lines up
+    // with painted order, not the source order of the `if` branches above.
+    // We compute the rows up-front, then `.map` them with a running index.
+    const rows: ReactNode[] = [];
+
+    if (homeFeature && homeFeatureStyle === HomeFeatureStyle.SINGLE) {
+        rows.push(
+            <ComponentErrorBoundary key="feature-single">
+                <FeatureCardPicker />
+                <FeatureCard variant={homeFeatureContent} />
+            </ComponentErrorBoundary>,
+        );
+    }
+
+    if (homeFeature && homeFeatureStyle === HomeFeatureStyle.MULTIPLE) {
+        rows.push(
+            <ComponentErrorBoundary key="feature-multiple">
+                <AlbumInfiniteFeatureCarousel />
+            </ComponentErrorBoundary>,
+        );
+    }
+
+    if (homeFeelingLucky) {
+        rows.push(
+            <ComponentErrorBoundary key="feeling-lucky">
+                <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+                    <FeelingLuckyButton />
+                </div>
+            </ComponentErrorBoundary>,
+        );
+    }
+
+    for (const item of sortedItems) {
+        if (item.id === HomeItem.GENRES) {
+            rows.push(
+                <ComponentErrorBoundary key="featured-genres">
+                    <FeaturedGenres />
+                </ComponentErrorBoundary>,
+            );
+            continue;
+        }
+
+        if (item.id === HomeItem.LIBRARY_STATS) {
+            rows.push(
+                <ComponentErrorBoundary key="library-stats">
+                    <LibraryStats />
+                </ComponentErrorBoundary>,
+            );
+            continue;
+        }
+
+        if (item.id === HomeItem.QUICK_FILTERS) {
+            rows.push(
+                <ComponentErrorBoundary key="quick-filters">
+                    <QuickFilterChips />
+                </ComponentErrorBoundary>,
+            );
+            continue;
+        }
+
+        if (item.id === HomeItem.NEW_SINCE_LAST_VISIT) {
+            rows.push(
+                <ComponentErrorBoundary key="new-since-last-visit">
+                    <NewSinceLastVisit />
+                </ComponentErrorBoundary>,
+            );
+            continue;
+        }
+
+        const carousel = sortedCarousel.find((c) => c.uniqueId === item.id);
+        if (!carousel) continue;
+
+        const carouselKey = `carousel-${carousel.uniqueId}`;
+        if (carousel.itemType === LibraryItem.ALBUM) {
+            rows.push(
+                <ComponentErrorBoundary key={carouselKey}>
+                    <AlbumInfiniteCarousel
+                        containerQuery={containerQuery}
+                        enableRefresh={carousel.enableRefresh}
+                        queryKey={['home', 'album', carousel.uniqueId] as const}
+                        rowCount={1}
+                        sortBy={carousel.sortBy as AlbumListSort}
+                        sortOrder={carousel.sortOrder}
+                        title={carousel.title}
+                    />
+                </ComponentErrorBoundary>,
+            );
+        } else if (carousel.itemType === LibraryItem.SONG) {
+            rows.push(
+                <ComponentErrorBoundary key={carouselKey}>
+                    <SongInfiniteCarousel
+                        containerQuery={containerQuery}
+                        enableRefresh={carousel.enableRefresh}
+                        queryKey={['home', 'song', carousel.uniqueId] as const}
+                        rowCount={1}
+                        sortBy={carousel.sortBy as SongListSort}
+                        sortOrder={carousel.sortOrder}
+                        title={carousel.title}
+                    />
+                </ComponentErrorBoundary>,
+            );
+        }
+    }
+
     return (
         <AnimatedPage>
             <NativeScrollArea
@@ -129,101 +235,36 @@ const HomeRoute = () => {
                             specific carousel) doesn't black-hole the entire
                             home page via PageErrorBoundary below. Each widget
                             gets its own boundary; the rest keep rendering. */}
-                        {homeFeature && homeFeatureStyle === HomeFeatureStyle.SINGLE && (
-                            <ComponentErrorBoundary>
-                                <FeatureCardPicker />
-                                <FeatureCard variant={homeFeatureContent} />
-                            </ComponentErrorBoundary>
-                        )}
-                        {homeFeature && homeFeatureStyle === HomeFeatureStyle.MULTIPLE && (
-                            <ComponentErrorBoundary>
-                                <AlbumInfiniteFeatureCarousel />
-                            </ComponentErrorBoundary>
-                        )}
-                        {homeFeelingLucky && (
-                            <ComponentErrorBoundary>
-                                <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
-                                    <FeelingLuckyButton />
-                                </div>
-                            </ComponentErrorBoundary>
-                        )}
-                        {sortedItems.map((item) => {
-                            if (item.id === HomeItem.GENRES) {
-                                return (
-                                    <ComponentErrorBoundary key="featured-genres">
-                                        <FeaturedGenres />
-                                    </ComponentErrorBoundary>
-                                );
-                            }
-
-                            if (item.id === HomeItem.LIBRARY_STATS) {
-                                return (
-                                    <ComponentErrorBoundary key="library-stats">
-                                        <LibraryStats />
-                                    </ComponentErrorBoundary>
-                                );
-                            }
-
-                            if (item.id === HomeItem.QUICK_FILTERS) {
-                                return (
-                                    <ComponentErrorBoundary key="quick-filters">
-                                        <QuickFilterChips />
-                                    </ComponentErrorBoundary>
-                                );
-                            }
-
-                            if (item.id === HomeItem.NEW_SINCE_LAST_VISIT) {
-                                return (
-                                    <ComponentErrorBoundary key="new-since-last-visit">
-                                        <NewSinceLastVisit />
-                                    </ComponentErrorBoundary>
-                                );
-                            }
-
-                            const carousel = sortedCarousel.find((c) => c.uniqueId === item.id);
-                            if (!carousel) {
-                                return null;
-                            }
-
-                            const carouselKey = `carousel-${carousel.uniqueId}`;
-                            if (carousel.itemType === LibraryItem.ALBUM) {
-                                return (
-                                    <ComponentErrorBoundary key={carouselKey}>
-                                        <AlbumInfiniteCarousel
-                                            containerQuery={containerQuery}
-                                            enableRefresh={carousel.enableRefresh}
-                                            queryKey={['home', 'album', carousel.uniqueId] as const}
-                                            rowCount={1}
-                                            sortBy={carousel.sortBy as AlbumListSort}
-                                            sortOrder={carousel.sortOrder}
-                                            title={carousel.title}
-                                        />
-                                    </ComponentErrorBoundary>
-                                );
-                            }
-
-                            if (carousel.itemType === LibraryItem.SONG) {
-                                return (
-                                    <ComponentErrorBoundary key={carouselKey}>
-                                        <SongInfiniteCarousel
-                                            containerQuery={containerQuery}
-                                            enableRefresh={carousel.enableRefresh}
-                                            queryKey={['home', 'song', carousel.uniqueId] as const}
-                                            rowCount={1}
-                                            sortBy={carousel.sortBy as SongListSort}
-                                            sortOrder={carousel.sortOrder}
-                                            title={carousel.title}
-                                        />
-                                    </ComponentErrorBoundary>
-                                );
-                            }
-
-                            return null;
-                        })}
+                        {rows.map((row, index) => (
+                            <HomeRow
+                                index={index}
+                                // The row already carries a stable React key
+                                // because each ComponentErrorBoundary above is
+                                // keyed; reuse it on the wrapper so the
+                                // animation also keys consistently.
+                                key={(row as { key?: string }).key ?? `home-row-${index}`}
+                            >
+                                {row}
+                            </HomeRow>
+                        ))}
                     </Stack>
                 </LibraryContainer>
             </NativeScrollArea>
         </AnimatedPage>
+    );
+};
+
+/**
+ * Single-row wrapper that applies the staggered fade-in. The CSS keyframe
+ * lives in `home-route.module.css`; the per-row `animation-delay` is
+ * computed here so we don't need a CSS variable round-trip.
+ */
+const HomeRow = ({ children, index }: { children: ReactNode; index: number }) => {
+    const style: CSSProperties = { animationDelay: `${index * 80}ms` };
+    return (
+        <div className={styles.row} style={style}>
+            {children}
+        </div>
     );
 };
 

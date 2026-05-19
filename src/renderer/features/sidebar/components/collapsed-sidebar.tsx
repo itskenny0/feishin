@@ -72,11 +72,13 @@ export const CollapsedSidebar = () => {
 
     return (
         <motion.div
+            aria-label={t('common.sidebar', { defaultValue: 'Sidebar navigation' })}
             className={clsx({
                 [styles.linux]: windowBarStyle === Platform.LINUX,
                 [styles.sidebarContainer]: true,
                 [styles.web]: windowBarStyle === Platform.WEB,
             })}
+            role="navigation"
         >
             <ScrollArea>
                 {sidebarCollapsedNavigation && (
