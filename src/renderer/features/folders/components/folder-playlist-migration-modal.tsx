@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { FolderPlaylistMigrationTree } from './folder-playlist-migration-tree';
 
 import { api } from '/@/renderer/api';
+import { useFolderPlaylistMigration } from '/@/renderer/features/folders/hooks/use-folder-playlist-migration';
 import { useCurrentServer } from '/@/renderer/store';
 import { Button } from '/@/shared/components/button/button';
 import { Group } from '/@/shared/components/group/group';
@@ -39,6 +40,20 @@ function collectDescendantIds(nodes: TreeNode[], rootId: string): string[] {
     };
     root.childFolders.forEach(walk);
     return out;
+}
+
+function computeBranchRoots(nodes: TreeNode[], selected: Set<string>): string[] {
+    const result: string[] = [];
+    const walk = (n: TreeNode, ancestorSelected: boolean) => {
+        if (selected.has(n.id) && !ancestorSelected) {
+            result.push(n.id);
+            if (n.childFolders) n.childFolders.forEach((c) => walk(c, true));
+        } else if (n.childFolders) {
+            n.childFolders.forEach((c) => walk(c, ancestorSelected));
+        }
+    };
+    nodes.forEach((n) => walk(n, false));
+    return result;
 }
 
 function findNode(nodes: TreeNode[], id: string): TreeNode | undefined {
@@ -82,6 +97,20 @@ export const FolderPlaylistMigrationModal = (
     const [rootsLoadingError, setRootsLoadingError] = useState<string | undefined>();
     const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
     const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+
+    const { start, status } = useFolderPlaylistMigration();
+
+    const handleCreate = () => {
+        const branchRoots = computeBranchRoots(rootFolders, selectedIds);
+        void start({
+            branchRootIds: branchRoots,
+            isPublic,
+            onDone: () => {
+                closeAllModals();
+            },
+            playlistName: playlistName.trim(),
+        });
+    };
 
     const fetchRoots = useCallback(async () => {
         if (!serverId) return;
@@ -253,15 +282,52 @@ export const FolderPlaylistMigrationModal = (
                 )}
             </ScrollArea>
             <Group justify="space-between">
-                <Text isMuted size="sm">
-                    {t('folderPlaylistMigration.selectedFolders', { count: selectedIds.size })}
-                </Text>
+                <Stack gap={0}>
+                    <Text isMuted size="sm">
+                        {t('folderPlaylistMigration.selectedFolders', {
+                            count: selectedIds.size,
+                        })}
+                    </Text>
+                    {status.kind === 'collecting' && (
+                        <Text isMuted size="sm">
+                            {t('folderPlaylistMigration.statusCollecting', {
+                                current: status.collected + 1,
+                                total: status.total,
+                            })}
+                        </Text>
+                    )}
+                    {status.kind === 'creating' && (
+                        <Text isMuted size="sm">
+                            {t('folderPlaylistMigration.statusCreating')}
+                        </Text>
+                    )}
+                    {status.kind === 'adding' && (
+                        <Text isMuted size="sm">
+                            {t('folderPlaylistMigration.statusAdding', {
+                                added: status.addedSongs,
+                                total: status.totalSongs,
+                            })}
+                        </Text>
+                    )}
+                </Stack>
                 <Group gap="xs">
                     <Button onClick={() => closeAllModals()} variant="default">
                         {t('folderPlaylistMigration.cancel')}
                     </Button>
                     <Button
-                        disabled={selectedIds.size === 0 || playlistName.trim().length === 0}
+                        disabled={
+                            selectedIds.size === 0 ||
+                            playlistName.trim().length === 0 ||
+                            status.kind === 'collecting' ||
+                            status.kind === 'creating' ||
+                            status.kind === 'adding'
+                        }
+                        loading={
+                            status.kind === 'collecting' ||
+                            status.kind === 'creating' ||
+                            status.kind === 'adding'
+                        }
+                        onClick={handleCreate}
                         variant="filled"
                     >
                         {t('folderPlaylistMigration.create')}
