@@ -48,11 +48,17 @@ const getWorker = (): Worker => {
 };
 
 // Single in-flight job — we don't parallelise; concurrent calls supersede.
+// `requestId` correlates worker responses with the job that asked for them,
+// so a slow analysis whose song was switched away from cannot poison the
+// cache by being delivered to a later (different-song) listener.
 let currentJob: null | {
     aborted: boolean;
     reject: (e: Error) => void;
+    requestId: number;
     resolve: (d: TrackmapData) => void;
 } = null;
+
+let nextRequestId = 1;
 
 /** Downmix any-channel AudioBuffer to a single mono Float32Array. */
 const downmixToMono = (audioBuffer: AudioBuffer): Float32Array => {
@@ -116,14 +122,24 @@ export const analyzeSong = async (args: AnalyzeArgs): Promise<null | TrackmapDat
         currentJob.reject(new DOMException('superseded', 'AbortError'));
     }
 
+    const requestId = nextRequestId;
+    nextRequestId += 1;
+
     const w = getWorker();
     const data = await new Promise<TrackmapData>((resolve, reject) => {
-        const thisJob = { aborted: false, reject, resolve };
+        const thisJob = { aborted: false, reject, requestId, resolve };
         currentJob = thisJob;
 
         const onMessage = (event: MessageEvent<TrackmapWorkerResponse>) => {
-            if (thisJob.aborted) return;
             const res = event.data;
+            // Ignore late responses from a superseded job. Without this
+            // guard, the new listener would happily resolve with the
+            // previous song's data and poison the cache under the new
+            // song's key (the worker is single-threaded, so an in-flight
+            // analysis from a song-switch-away can fire here before the
+            // current job's response).
+            if (res.requestId !== thisJob.requestId) return;
+            if (thisJob.aborted) return;
             w.removeEventListener('message', onMessage);
             if (res.type === 'result' && res.data) {
                 resolve(res.data);
@@ -143,6 +159,7 @@ export const analyzeSong = async (args: AnalyzeArgs): Promise<null | TrackmapDat
 
         const req: TrackmapWorkerRequest = {
             monoSamples,
+            requestId,
             sampleRate: audioBuffer.sampleRate,
             sensitivity,
             type: 'analyze',
