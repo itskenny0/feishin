@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+
 import type { TreeNode } from './folder-playlist-migration-modal';
 
 import { Checkbox } from '/@/shared/components/checkbox/checkbox';
@@ -38,6 +40,7 @@ export const FolderPlaylistMigrationTree = (props: FolderPlaylistMigrationTreePr
         selectedIds,
         selectedViaParentTooltip,
     } = props;
+    const { t } = useTranslation();
 
     const isDirectlySelected = selectedIds.has(node.id);
     const isEffectivelySelected = ancestorSelected || isDirectlySelected;
@@ -110,7 +113,7 @@ export const FolderPlaylistMigrationTree = (props: FolderPlaylistMigrationTreePr
             {isExpanded && node.isLoadingChildren && (
                 <Group gap="xs" style={{ paddingLeft: `${(depth + 1) * 20}px` }}>
                     <Text isMuted size="sm">
-                        Loading…
+                        {t('folderPlaylistMigration.loadingChildren')}
                     </Text>
                 </Group>
             )}
