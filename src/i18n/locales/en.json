@@ -1295,7 +1295,7 @@
         "trackmapRungSpacingPx_description": "Spacing between consecutive rungs, in CSS pixels",
         "trackmapSensitivity": "Sensitivity",
         "trackmapSensitivity_description": "Onset detector strictness — higher values produce a busier, more reactive curve",
-        "trackmapSensitivity_note": "Changing this re-analyzes each song on next play",
+        "trackmapSensitivity_note": "Re-analyzes the current song immediately; new entries are written to the cache for each sensitivity value",
         "trackmapStrandCrispAlpha": "Strand crisp alpha",
         "trackmapStrandCrispAlpha_description": "Opacity of the crisp strand lines drawn on top of the halos",
         "trackmapStrandHaloAlpha": "Strand halo alpha",
