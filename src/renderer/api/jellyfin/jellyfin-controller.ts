@@ -841,6 +841,42 @@ export const JellyfinController: InternalControllerEndpoint = {
 
         return folder;
     },
+    getFolderSongsRecursive: async (args) => {
+        const { apiClientProps, query } = args;
+        const userId = apiClientProps.server?.userId;
+
+        if (!userId) throw new Error('No userId found');
+
+        const res = await jfApiClient(apiClientProps).getFolder({
+            params: {
+                userId,
+            },
+            query: {
+                Fields: JF_FIELDS.SONG,
+                IncludeItemTypes: 'Audio',
+                ParentId: query.folderId,
+                Recursive: true,
+                SortBy: 'ParentIndexNumber,IndexNumber,SortName',
+            },
+        });
+
+        if (res.status !== 200) {
+            throw new Error('Failed to get folder songs');
+        }
+
+        const items = res.body.Items || [];
+
+        return items
+            .filter((item) => item.Type === 'Audio')
+            .map((item) =>
+                jfNormalize.song(
+                    item as unknown as z.infer<typeof jfType._response.song>,
+                    apiClientProps.server,
+                    args.context?.pathReplace,
+                    args.context?.pathReplaceWith,
+                ),
+            );
+    },
     getGenreList: async (args) => {
         const { apiClientProps, query } = args;
 

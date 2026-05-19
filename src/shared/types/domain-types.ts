@@ -285,6 +285,14 @@ export interface FolderQuery extends BaseQuery<SongListSort> {
 
 export type FolderResponse = Folder;
 
+export type FolderSongsRecursiveArgs = BaseEndpointArgs & { query: FolderSongsRecursiveQuery };
+
+export interface FolderSongsRecursiveQuery {
+    folderId: string;
+}
+
+export type FolderSongsRecursiveResponse = Song[];
+
 export type GainInfo = {
     album?: number;
     track?: number;
@@ -1499,6 +1507,9 @@ export type ControllerEndpoint = {
     getArtistRadio: (args: ArtistRadioArgs) => Promise<Song[]>;
     getDownloadUrl: (args: DownloadArgs) => string;
     getFolder: (args: FolderArgs) => Promise<FolderResponse>;
+    getFolderSongsRecursive?: (
+        args: FolderSongsRecursiveArgs,
+    ) => Promise<FolderSongsRecursiveResponse>;
     getGenreList: (args: GenreListArgs) => Promise<GenreListResponse>;
     getImageRequest: (args: ImageArgs) => ImageRequest | null;
     getImageUrl: (args: ImageArgs) => null | string;
@@ -1647,6 +1658,9 @@ export type InternalControllerEndpoint = {
     getArtistRadio: (args: ReplaceApiClientProps<ArtistRadioArgs>) => Promise<Song[]>;
     getDownloadUrl: (args: ReplaceApiClientProps<DownloadArgs>) => string;
     getFolder: (args: ReplaceApiClientProps<FolderArgs>) => Promise<FolderResponse>;
+    getFolderSongsRecursive?: (
+        args: ReplaceApiClientProps<FolderSongsRecursiveArgs>,
+    ) => Promise<FolderSongsRecursiveResponse>;
     getGenreList: (args: ReplaceApiClientProps<GenreListArgs>) => Promise<GenreListResponse>;
     getImageRequest: (args: ReplaceApiClientProps<ImageArgs>) => ImageRequest | null;
     getImageUrl: (args: ReplaceApiClientProps<ImageArgs>) => null | string;
