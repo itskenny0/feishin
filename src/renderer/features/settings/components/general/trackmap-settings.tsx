@@ -417,24 +417,19 @@ export const TrackmapSettings = memo(() => {
         colorRow('trackmapColorBgGlow', 'trackmapColorBgGlow'),
         colorRow('trackmapColorCool', 'trackmapColorCool'),
         colorRow('trackmapColorWarm', 'trackmapColorWarm', { clearable: true }),
-        colorRow('trackmapColorStrandB', 'trackmapColorStrandB'),
 
-        // Envelope (the silhouette that traces the wave's energy)
+        // Envelope (the silhouette that traces the wave's energy — the
+        // visualization's data layer)
         sliderRow('trackmapBgGlowAlpha', 'trackmapBgGlowAlpha', 0, 100),
         sliderRow('trackmapEnvelopeFillAlpha', 'trackmapEnvelopeFillAlpha', 0, 100),
         sliderRow('trackmapEnvelopeOutlineAlpha', 'trackmapEnvelopeOutlineAlpha', 0, 100),
         sliderRow('trackmapEnvelopeOutlineWidthPx', 'trackmapEnvelopeOutlineWidthPx', 0, 10),
 
-        // Helix strands
-        sliderRow('trackmapStrandHaloAlpha', 'trackmapStrandHaloAlpha', 0, 100),
-        sliderRow('trackmapStrandCrispAlpha', 'trackmapStrandCrispAlpha', 0, 100),
-        sliderRow('trackmapHaloBlurPx', 'trackmapHaloBlurPx', 0, 50),
-        sliderRow('trackmapHelixCycles', 'trackmapHelixCycles', 1, 12),
-        sliderRow('trackmapHelixRotationSec', 'trackmapHelixRotationSec', 0, 120),
-
-        // DNA rungs
-        sliderRow('trackmapRungAlpha', 'trackmapRungAlpha', 0, 100),
-        sliderRow('trackmapRungSpacingPx', 'trackmapRungSpacingPx', 4, 100),
+        // The strand / helix / rung settings that used to live here drove a
+        // DNA-style overlay that read as ornamental noise on top of the
+        // envelope. The settings keys remain in the schema so any
+        // user-saved JSON snapshots still load cleanly, but the canvas no
+        // longer reads them and the UI no longer exposes them.
 
         // Breath (idle pulse)
         sliderRow('trackmapBreathAmplitudePct', 'trackmapBreathAmplitudePct', 0, 30),
