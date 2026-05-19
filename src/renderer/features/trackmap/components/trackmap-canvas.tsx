@@ -534,7 +534,10 @@ export const TrackmapCanvas = () => {
     }, [advanced]);
 
     return (
-        <div className={styles.container} ref={containerRef}>
+        // aria-hidden: the trackmap is purely decorative — the seek slider
+        // it sits behind is the actual interactive control screen readers
+        // should reach.
+        <div aria-hidden="true" className={styles.container} ref={containerRef}>
             <canvas className={styles.canvas} ref={canvasRef} />
         </div>
     );
