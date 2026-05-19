@@ -157,67 +157,25 @@ export const AppMenu = () => {
           ]
         : [];
 
-    const menuConfig: MenuItem[] = [
-        ...serverHeaderMenuItems,
+    // Menu is grouped into at most four sections with dividers between them.
+    // Conditional groups gate their own divider so we never emit a ghost
+    // divider when every item in the group is hidden.
+    //
+    //   Group 1: Server (header + selector)        - shown only when a server is selected
+    //   Group 2: Library actions                   - palette + jellyfin migration + manage servers
+    //   Group 3: Window / sidebar (collapsed only) - back/forward + expand sidebar
+    //   Group 4: App                               - settings, private mode, version, devtools, quit, layout
+    //
+    // Group 1's leading divider is folded into `serverHeaderMenuItems` above,
+    // so we only emit three more dividers here.
+
+    const libraryActionItems: MenuItem[] = [
         {
             icon: 'search',
             id: 'command-palette',
             label: t('page.appMenu.commandPalette'),
             onClick: openCommandPalette,
             type: 'item',
-        },
-        {
-            id: 'divider-1',
-            type: 'divider',
-        },
-        {
-            condition: collapsed,
-            id: 'navigation-group',
-            items: [
-                {
-                    icon: 'arrowLeftS',
-                    id: 'go-back',
-                    label: t('page.appMenu.goBack'),
-                    onClick: () => navigate(-1),
-                    type: 'item',
-                },
-                {
-                    icon: 'arrowRightS',
-                    id: 'go-forward',
-                    label: t('page.appMenu.goForward'),
-                    onClick: () => navigate(1),
-                    type: 'item',
-                },
-            ],
-            type: 'conditional-group',
-        },
-        {
-            condition: collapsed,
-            id: 'sidebar-expand',
-            item: {
-                icon: 'panelRightOpen',
-                id: 'expand-sidebar',
-                label: t('page.appMenu.expandSidebar'),
-                onClick: handleExpandSidebar,
-                type: 'item',
-            },
-            type: 'conditional-item',
-        },
-        {
-            condition: !collapsed,
-            id: 'sidebar-collapse',
-            item: {
-                icon: 'panelRightClose',
-                id: 'collapse-sidebar',
-                label: t('page.appMenu.collapseSidebar'),
-                onClick: handleCollapseSidebar,
-                type: 'item',
-            },
-            type: 'conditional-item',
-        },
-        {
-            id: 'divider-2',
-            type: 'divider',
         },
         {
             condition: currentServer?.type === ServerType.JELLYFIN,
@@ -248,9 +206,54 @@ export const AppMenu = () => {
             },
             type: 'conditional-item',
         },
+    ];
+
+    const windowItems: MenuItem[] = collapsed
+        ? [
+              {
+                  id: 'divider-window',
+                  type: 'divider',
+              },
+              {
+                  icon: 'arrowLeftS',
+                  id: 'go-back',
+                  label: t('page.appMenu.goBack'),
+                  onClick: () => navigate(-1),
+                  type: 'item',
+              },
+              {
+                  icon: 'arrowRightS',
+                  id: 'go-forward',
+                  label: t('page.appMenu.goForward'),
+                  onClick: () => navigate(1),
+                  type: 'item',
+              },
+              {
+                  icon: 'panelRightOpen',
+                  id: 'expand-sidebar',
+                  label: t('page.appMenu.expandSidebar'),
+                  onClick: handleExpandSidebar,
+                  type: 'item',
+              },
+          ]
+        : [
+              // When the sidebar is expanded the only "window" control is the
+              // collapse toggle. We keep it in the App group below so the
+              // window divider doesn't appear by itself.
+          ];
+
+    const appItems: MenuItem[] = [
         {
-            id: 'divider-3',
-            type: 'divider',
+            condition: !collapsed,
+            id: 'sidebar-collapse',
+            item: {
+                icon: 'panelRightClose',
+                id: 'collapse-sidebar',
+                label: t('page.appMenu.collapseSidebar'),
+                onClick: handleCollapseSidebar,
+                type: 'item',
+            },
+            type: 'conditional-item',
         },
         {
             icon: 'settings',
@@ -281,10 +284,6 @@ export const AppMenu = () => {
                 type: 'item',
             },
             type: 'conditional-item',
-        },
-        {
-            id: 'divider-4',
-            type: 'divider',
         },
         {
             icon: 'brandGitHub',
@@ -319,10 +318,6 @@ export const AppMenu = () => {
                 type: 'item',
             },
             type: 'conditional-item',
-        },
-        {
-            id: 'divider-5',
-            type: 'divider',
         },
         {
             condition: settings.sideQueueType === 'sideQueue',
@@ -377,6 +372,17 @@ export const AppMenu = () => {
             ],
             type: 'conditional-group',
         },
+    ];
+
+    const menuConfig: MenuItem[] = [
+        ...serverHeaderMenuItems,
+        ...libraryActionItems,
+        ...windowItems,
+        {
+            id: 'divider-app',
+            type: 'divider',
+        },
+        ...appItems,
     ];
 
     const renderMenuItem = (item: MenuItem): ReactNode => {

@@ -1,6 +1,6 @@
 import clsx from 'clsx';
 import { forwardRef, ReactNode } from 'react';
-import { useMatch } from 'react-router';
+import { useLocation } from 'react-router';
 
 import styles from './collapsed-sidebar-item.module.css';
 
@@ -18,8 +18,14 @@ interface CollapsedSidebarItemProps {
 
 const _CollapsedSidebarItem = forwardRef<HTMLDivElement, CollapsedSidebarItemProps>(
     ({ activeIcon, disabled, icon, label, route, ...props }: CollapsedSidebarItemProps, ref) => {
-        const match = useMatch(route || '/null');
-        const isMatch = Boolean(match);
+        const location = useLocation();
+        // Highlight sub-routes too (e.g. /library/albums/123 lights up Albums).
+        // Home '/' is an exact-match special case so it doesn't claim every path.
+        const isMatch = route
+            ? route === '/'
+                ? location.pathname === '/'
+                : location.pathname.startsWith(route)
+            : false;
 
         return (
             <Flex

@@ -7,14 +7,78 @@ import type {
 } from '@tanstack/react-query';
 
 import { QueryCache, QueryClient } from '@tanstack/react-query';
+import i18n from 'i18next';
 
 import { toast } from '/@/shared/components/toast/toast';
+
+type ErrorCategory = 'auth' | 'network' | 'server' | 'unknown';
+
+// Raw "Failed to <whatever>" controller strings are noisy and unhelpful for
+// users. We classify by message contents and surface a single user-friendly
+// line per category. Defaults are inlined so we never show an untranslated
+// key if the locale file is older than this code.
+const classifyError = (error: Error): { category: ErrorCategory; userMessage: string } => {
+    const msg = error.message ?? '';
+    const lowered = msg.toLowerCase();
+
+    if (
+        lowered.includes('failed to fetch') ||
+        lowered.includes('load failed') ||
+        lowered.includes('network') ||
+        lowered.includes('econnrefused') ||
+        lowered.includes('etimedout') ||
+        lowered.includes('fetch')
+    ) {
+        return {
+            category: 'network',
+            userMessage: i18n.t('error.networkErrorFriendly', {
+                defaultValue: 'Could not reach the server. Check your network and try again.',
+            }),
+        };
+    }
+
+    if (
+        lowered.includes('unauthorized') ||
+        lowered.includes('forbidden') ||
+        lowered.includes('401') ||
+        lowered.includes('403')
+    ) {
+        return {
+            category: 'auth',
+            userMessage: i18n.t('error.authError', {
+                defaultValue: 'Your session may have expired. Try signing in again.',
+            }),
+        };
+    }
+
+    if (
+        lowered.includes('500') ||
+        lowered.includes('502') ||
+        lowered.includes('503') ||
+        lowered.includes('failed to')
+    ) {
+        return {
+            category: 'server',
+            userMessage: i18n.t('error.serverError', {
+                defaultValue: 'The server had trouble with that request. Try again in a moment.',
+            }),
+        };
+    }
+
+    return {
+        category: 'unknown',
+        userMessage: msg || i18n.t('error.unknownError', { defaultValue: 'Something went wrong.' }),
+    };
+};
 
 const queryCache = new QueryCache({
     onError: (error: any, query) => {
         if (query.state.data !== undefined) {
+            // Keep the raw error in devtools so debugging isn't hindered by
+            // the friendlier surface copy.
             console.error(error);
-            toast.show({ message: `${error.message}`, type: 'error' });
+            const { userMessage } = classifyError(error as Error);
+            toast.show({ message: userMessage, type: 'error' });
         }
     },
 });

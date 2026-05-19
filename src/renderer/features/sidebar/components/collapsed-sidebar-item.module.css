@@ -23,6 +23,11 @@
 }
 
 .container.active {
+    /* Subtle background tint so the active item reads as a distinct surface
+       in the narrow collapsed strip — icon-fill alone is hard to spot on
+       muted themes. */
+    background-color: var(--mantine-color-default-hover, rgb(255 255 255 / 6%));
+
     svg {
         fill: var(--theme-colors-primary-filled);
     }

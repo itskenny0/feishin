@@ -47,6 +47,12 @@
     position: relative;
     font-weight: 700;
     color: var(--theme-colors-primary-filled);
+
+    /* Subtle background tint so the active row reads as a distinct surface
+       and not just a recolored label. Mantine's default-hover variable
+       follows the active theme; the rgba fallback covers themes that don't
+       define it. */
+    background-color: var(--mantine-color-default-hover, rgb(255 255 255 / 6%));
 }
 
 /* 3px accent stripe on the leading edge — the previous active-state only
