@@ -200,7 +200,14 @@ export const TrackmapCanvas = () => {
         // momentarily snap the playhead back to the start before the first
         // progress event arrives. subscribePlayerProgress only fires on
         // change, not on subscribe.
-        let lastPlayheadMs = useTimestampStoreBase.getState().timestamp * 1000;
+        //
+        // The audio engines all call setTimestamp(timestamp.toFixed(0)) so
+        // progress events only fire ~once per second on whole-second
+        // boundaries. We interpolate between them using performance.now()
+        // so the playhead moves at frame rate instead of jumping in 1-px
+        // steps once a second.
+        let progressTimestampMs = useTimestampStoreBase.getState().timestamp * 1000;
+        let progressUpdatedAtMs = performance.now();
         let rafId: null | number = null;
         let unsub: (() => void) | null = null;
 
@@ -268,8 +275,18 @@ export const TrackmapCanvas = () => {
 
             const timelineMs =
                 songDurationMsRef.current > 0 ? songDurationMsRef.current : trackmap.durationMs;
+            // While playing, drift the playhead by the wall-clock elapsed
+            // since the last progress event so it advances smoothly between
+            // the 1-Hz updates the audio engine emits. The clamp to
+            // progressTimestampMs + 1100ms guards against runaway drift if
+            // the engine ever skips an update — the playhead stalls instead
+            // of overshooting the actual playback position.
+            const wallElapsed = isAnimating
+                ? Math.min(1100, Math.max(0, performance.now() - progressUpdatedAtMs))
+                : 0;
+            const effectivePlayheadMs = progressTimestampMs + wallElapsed;
             const playheadFrac =
-                timelineMs > 0 ? Math.min(1, Math.max(0, lastPlayheadMs / timelineMs)) : 0;
+                timelineMs > 0 ? Math.min(1, Math.max(0, effectivePlayheadMs / timelineMs)) : 0;
             const playheadX = playheadFrac * w;
 
             // === Pass 1: background ribbon glow =============================
@@ -491,7 +508,8 @@ export const TrackmapCanvas = () => {
         schedule();
 
         unsub = subscribePlayerProgress(({ timestamp }) => {
-            lastPlayheadMs = timestamp * 1000;
+            progressTimestampMs = timestamp * 1000;
+            progressUpdatedAtMs = performance.now();
             schedule();
         });
 
