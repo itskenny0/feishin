@@ -201,12 +201,16 @@ export const TrackmapCanvas = () => {
         // progress event arrives. subscribePlayerProgress only fires on
         // change, not on subscribe.
         //
-        // The audio engines all call setTimestamp(timestamp.toFixed(0)) so
-        // progress events only fire ~once per second on whole-second
-        // boundaries. We interpolate between them using performance.now()
-        // so the playhead moves at frame rate instead of jumping in 1-px
-        // steps once a second.
-        let progressTimestampMs = useTimestampStoreBase.getState().timestamp * 1000;
+        // The audio engines all call setTimestamp(currentTime.toFixed(0)) on
+        // a 500 ms setInterval, which means progress events only fire on
+        // whole-second boundaries — and V8's toFixed rounds half *up*, so
+        // emitted timestamps lead actual playback by ~500 ms on average. We
+        // interpolate between events using performance.now() (for frame-rate
+        // smooth motion) and shift the anchor back by ROUNDING_BIAS_MS so the
+        // playhead tracks the audio instead of running ahead of it.
+        const ROUNDING_BIAS_MS = 500;
+        let progressTimestampMs =
+            useTimestampStoreBase.getState().timestamp * 1000 - ROUNDING_BIAS_MS;
         let progressUpdatedAtMs = performance.now();
         let rafId: null | number = null;
         let unsub: (() => void) | null = null;
@@ -508,7 +512,7 @@ export const TrackmapCanvas = () => {
         schedule();
 
         unsub = subscribePlayerProgress(({ timestamp }) => {
-            progressTimestampMs = timestamp * 1000;
+            progressTimestampMs = timestamp * 1000 - ROUNDING_BIAS_MS;
             progressUpdatedAtMs = performance.now();
             schedule();
         });
