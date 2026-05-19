@@ -265,6 +265,7 @@ export const LeftControls = () => {
                                         )}
                                     {isSongDefined && (
                                         <ActionIcon
+                                            aria-label={t('common.more')}
                                             icon="ellipsisVertical"
                                             onClick={(e) => {
                                                 e.preventDefault();
