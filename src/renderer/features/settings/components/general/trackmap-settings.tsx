@@ -112,12 +112,24 @@ const TrackmapJsonControls = () => {
         // strings in numeric slots, null) is silently skipped rather than
         // poisoning the store. The merge layer also drops undefined, so a
         // value that fails the type guard is left at its current setting.
+        //
+        // Accept either a flat trackmap snapshot (what our Copy button
+        // produces) or a wrapped { general: { ... } } shape, so users can
+        // paste back a full settings export and have just the trackmap
+        // slice load.
         const known = parsed as Record<string, unknown>;
+        const trackmapSlice =
+            'general' in known &&
+            typeof known.general === 'object' &&
+            known.general !== null &&
+            !Array.isArray(known.general)
+                ? (known.general as Record<string, unknown>)
+                : known;
         const patch: Partial<Record<TrackmapKey, unknown>> = {};
         let count = 0;
         for (const key of TRACKMAP_KEYS) {
-            if (!(key in known)) continue;
-            const value = known[key];
+            if (!(key in trackmapSlice)) continue;
+            const value = trackmapSlice[key];
             if (value === null || value === undefined) continue;
             const isColor = key.startsWith('trackmapColor');
             const isStyle = key === 'trackmapStyle';
