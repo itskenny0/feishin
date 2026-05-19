@@ -157,7 +157,29 @@ export const TrackmapCanvas = () => {
         sync();
         const ro = new ResizeObserver(sync);
         ro.observe(container);
-        return () => ro.disconnect();
+
+        // Also catch device-pixel-ratio changes that don't change the CSS
+        // size (e.g. user drags the window to a Retina monitor). Without
+        // this, the canvas backing store stays at the old DPR and renders
+        // blurry. We watch a matchMedia query pinned to the current DPR;
+        // when it stops matching, DPR has changed — sync and re-arm.
+        let mq: MediaQueryList | null = null;
+        const armDprWatcher = () => {
+            const dpr = window.devicePixelRatio || 1;
+            mq = window.matchMedia(`(resolution: ${dpr}dppx)`);
+            mq.addEventListener('change', onDprChange);
+        };
+        function onDprChange() {
+            mq?.removeEventListener('change', onDprChange);
+            sync();
+            armDprWatcher();
+        }
+        armDprWatcher();
+
+        return () => {
+            ro.disconnect();
+            mq?.removeEventListener('change', onDprChange);
+        };
     }, []);
 
     // Continuous draw loop while playing — every frame is a `performance.now()`
