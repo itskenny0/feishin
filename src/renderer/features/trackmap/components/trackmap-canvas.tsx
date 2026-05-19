@@ -69,9 +69,15 @@ const rgbStr = (c: Rgb, a?: number): string =>
     a === undefined ? `rgb(${c.r}, ${c.g}, ${c.b})` : `rgba(${c.r}, ${c.g}, ${c.b}, ${a})`;
 
 /**
- * Build a horizontal gradient whose color at each bin position interpolates
- * between the cool anchor (low intensity) and a warm anchor (high
- * intensity) using `bins[i]` as the weight.
+ * Build a horizontal gradient whose color at each canvas position interpolates
+ * between the cool anchor (low intensity) and a warm anchor (high intensity).
+ *
+ * Stops are placed uniformly along the canvas; the bin sampled at each stop
+ * is shifted by `audioToCanvasRatio = metadataMs / decodedMs` so the
+ * 256 bins (which span the *decoded* audio length, often longer than the
+ * song's metadata duration because of transcode-introduced trailing
+ * silence) end up at the canvas X corresponding to their actual song time
+ * — not visibly frontrun the audio by several seconds.
  */
 const buildEnergyGradient = (
     ctx: CanvasRenderingContext2D,
@@ -79,16 +85,29 @@ const buildEnergyGradient = (
     bins: Float32Array,
     cool: Rgb,
     warm: Rgb,
+    audioToCanvasRatio: number,
 ): CanvasGradient => {
     const grad = ctx.createLinearGradient(0, 0, w, 0);
     const n = bins.length;
     for (let i = 0; i < n; i += 1) {
-        const t = i / (n - 1);
-        const k = bins[i];
+        const canvasFrac = i / (n - 1);
+        const scaled = canvasFrac * audioToCanvasRatio;
+        let k: number;
+        if (scaled <= 0) {
+            k = bins[0];
+        } else if (scaled >= 1) {
+            k = bins[n - 1];
+        } else {
+            const f = scaled * (n - 1);
+            const lo = Math.floor(f);
+            const hi = Math.min(n - 1, lo + 1);
+            const tt = f - lo;
+            k = bins[lo] * (1 - tt) + bins[hi] * tt;
+        }
         const r = Math.round(cool.r + (warm.r - cool.r) * k);
         const g = Math.round(cool.g + (warm.g - cool.g) * k);
         const b = Math.round(cool.b + (warm.b - cool.b) * k);
-        grad.addColorStop(t, `rgb(${r}, ${g}, ${b})`);
+        grad.addColorStop(canvasFrac, `rgb(${r}, ${g}, ${b})`);
     }
     return grad;
 };
@@ -127,6 +146,9 @@ export const TrackmapCanvas = () => {
     const advancedRef = useRef<TrackmapAdvancedSettings>(advanced);
     const songDurationMsRef = useRef<number>(0);
     const scheduleDrawRef = useRef<(() => void) | null>(null);
+    /** Cursor X in canvas device pixels, or null when not hovering the
+     *  playerbar. Drives the unplayed-side spotlight in the dim mask. */
+    const cursorXRef = useRef<null | number>(null);
 
     heightRef.current = height;
     glowRef.current = glow;
@@ -171,6 +193,49 @@ export const TrackmapCanvas = () => {
         return () => {
             ro.disconnect();
             mq?.removeEventListener('change', onDprChange);
+        };
+    }, []);
+
+    // Cursor tracking for the unplayed-side spotlight. The canvas itself has
+    // pointer-events: none so the seek slider underneath receives clicks; we
+    // attach the move/leave listeners to the slider-wrapper (the canvas
+    // container's parent) which DOES receive events. mousemove translates
+    // the cursor's clientX into canvas device pixels and stashes it in
+    // cursorXRef; mouseleave clears it. Both schedule a redraw via the
+    // existing rAF-deduped path so hovering with the mouse never causes
+    // more than one paint per frame.
+    useEffect(() => {
+        const container = containerRef.current;
+        const canvas = canvasRef.current;
+        const sliderWrapper = container?.parentElement;
+        if (!container || !canvas || !sliderWrapper) return;
+
+        const handleMove = (e: MouseEvent) => {
+            const rect = container.getBoundingClientRect();
+            const xCss = e.clientX - rect.left;
+            if (xCss < 0 || xCss > rect.width || rect.width <= 0) {
+                if (cursorXRef.current !== null) {
+                    cursorXRef.current = null;
+                    scheduleDrawRef.current?.();
+                }
+                return;
+            }
+            cursorXRef.current = xCss * (canvas.width / rect.width);
+            scheduleDrawRef.current?.();
+        };
+        const handleLeave = () => {
+            if (cursorXRef.current !== null) {
+                cursorXRef.current = null;
+                scheduleDrawRef.current?.();
+            }
+        };
+
+        sliderWrapper.addEventListener('mousemove', handleMove);
+        sliderWrapper.addEventListener('mouseleave', handleLeave);
+
+        return () => {
+            sliderWrapper.removeEventListener('mousemove', handleMove);
+            sliderWrapper.removeEventListener('mouseleave', handleLeave);
         };
     }, []);
 
@@ -247,6 +312,13 @@ export const TrackmapCanvas = () => {
             const breathAmp = Math.max(0, Math.min(0.3, adv.breathAmplitudePct / 100));
             const breathPeriodMs = Math.max(500, adv.breathPeriodSec * 1000);
             const breath = 1 + breathAmp * Math.sin((now / breathPeriodMs) * Math.PI * 2);
+
+            // Ambient idle pulse on the bg glow's alpha — a very slight
+            // breathing of the violet wash, slower than the vertical breath
+            // and phase-offset by 60° so the two modulations never lock
+            // visually. Frozen to 1.0 when paused (`now` stays at 0).
+            const ambientPulse =
+                1 + 0.18 * Math.sin((now / (breathPeriodMs * 1.5)) * Math.PI * 2 + Math.PI / 3);
             // Clamp to yCenter so a wide height + amplified breath doesn't
             // clip to a flat top against the canvas edge — strands and
             // envelope alike just hit the lid instead of overflowing.
@@ -255,16 +327,35 @@ export const TrackmapCanvas = () => {
             const bins = trackmap.bins;
             const binCount = bins.length;
 
+            // The 256 intensity bins are computed over the DECODED audio's
+            // duration (trackmap.durationMs), which often includes trailing
+            // silence from the 64 kbps MP3 transcode used for analysis. The
+            // canvas X axis represents the song's METADATA duration (what
+            // the seek slider reports as max). Without scaling, bin N sits
+            // at canvasFrac = N/binCount on a metadata timeline that is
+            // shorter than the decoded one — every bin shows up earlier
+            // than its audio actually plays, and the loud transient that
+            // starts the song appears as a "misplaced glow" at the very
+            // left edge of the canvas. Scale the bin index by
+            // metadata/decoded so bin N lands at the canvas X corresponding
+            // to its actual song time.
+            const metadataMs =
+                songDurationMsRef.current > 0 ? songDurationMsRef.current : trackmap.durationMs;
+            const decodedMs = trackmap.durationMs > 0 ? trackmap.durationMs : metadataMs;
+            const audioToCanvasRatio = decodedMs > 0 ? metadataMs / decodedMs : 1;
+
             const sampleBin = (xFrac: number): number => {
-                const f = xFrac * (binCount - 1);
+                const scaled = xFrac * audioToCanvasRatio;
+                if (scaled <= 0) return bins[0];
+                if (scaled >= 1) return bins[binCount - 1];
+                const f = scaled * (binCount - 1);
                 const lo = Math.floor(f);
                 const hi = Math.min(binCount - 1, lo + 1);
                 const t = f - lo;
                 return bins[lo] * (1 - t) + bins[hi] * t;
             };
 
-            const timelineMs =
-                songDurationMsRef.current > 0 ? songDurationMsRef.current : trackmap.durationMs;
+            const timelineMs = metadataMs;
             // While playing, drift the playhead by the wall-clock elapsed
             // since the last progress event so it advances smoothly between
             // the 1-Hz updates the audio engine emits. The clamp to
@@ -298,7 +389,7 @@ export const TrackmapCanvas = () => {
 
             // === Pass 1: background ribbon glow =============================
             {
-                const a = adv.bgGlowAlpha / 100;
+                const a = Math.min(1, Math.max(0, (adv.bgGlowAlpha / 100) * ambientPulse));
                 if (a > 0) {
                     const bgGrad = ctx2d.createLinearGradient(
                         0,
@@ -319,7 +410,14 @@ export const TrackmapCanvas = () => {
             // === Pass 2: envelope fill + outline ============================
             {
                 const stepEnv = Math.max(1, Math.floor(dpr));
-                const energyGrad = buildEnergyGradient(ctx2d, w, bins, coolColor, warmColor);
+                const energyGrad = buildEnergyGradient(
+                    ctx2d,
+                    w,
+                    bins,
+                    coolColor,
+                    warmColor,
+                    audioToCanvasRatio,
+                );
                 ctx2d.beginPath();
                 for (let px = 0; px <= w; px += stepEnv) {
                     const xFrac = px / w;
@@ -358,29 +456,76 @@ export const TrackmapCanvas = () => {
             }
 
             // === Pass 3: unplayed dim mask ==================================
+            //
+            // One full-width horizontal gradient drives the whole mask so the
+            // played side, the soft fade across the playhead, AND the
+            // cursor-hover spotlight on the unplayed side all share a single
+            // destination-in source. (Doing it as separate fillRects with
+            // destination-in would erase the canvas everywhere the source
+            // doesn't cover — destination-in keeps dest only where the
+            // source has alpha.)
+            //
+            // The spotlight is a triangular dim→full→dim peak centered on
+            // cursorXRef, only added when the cursor is on the unplayed
+            // side. createLinearGradient extrapolates outside its line, so
+            // the leading 0 / trailing 1 anchors keep the played and far-
+            // unplayed regions at their resolved alpha even when the spot
+            // stops sit far inside the canvas.
             {
                 const dimMin = Math.max(0, Math.min(1, adv.dimMaskMin / 100));
                 const transition = Math.max(0, adv.dimMaskTransitionPx * dpr);
+                const fullAlpha = 'rgba(0,0,0,1)';
+                const dimAlpha = `rgba(0,0,0,${dimMin})`;
+
                 ctx2d.save();
                 ctx2d.globalCompositeOperation = 'destination-in';
-                if (transition <= 0) {
-                    // Hard edge: opaque on the played side, dimMin on the unplayed.
-                    ctx2d.fillStyle = 'rgba(0,0,0,1)';
-                    ctx2d.fillRect(0, 0, playheadX, h);
-                    ctx2d.fillStyle = `rgba(0,0,0,${dimMin})`;
-                    ctx2d.fillRect(playheadX, 0, w - playheadX, h);
-                } else {
-                    const dimGrad = ctx2d.createLinearGradient(
-                        playheadX,
-                        0,
-                        playheadX + transition,
-                        0,
-                    );
-                    dimGrad.addColorStop(0, 'rgba(0,0,0,1)');
-                    dimGrad.addColorStop(1, `rgba(0,0,0,${dimMin})`);
-                    ctx2d.fillStyle = dimGrad;
-                    ctx2d.fillRect(0, 0, w, h);
+
+                const dimGrad = ctx2d.createLinearGradient(0, 0, w, 0);
+                const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
+                // Played region — full alpha all the way up to the playhead.
+                dimGrad.addColorStop(0, fullAlpha);
+                const playheadFrac01 = clamp01(playheadX / w);
+                const transitionEndFrac = clamp01((playheadX + transition) / w);
+                if (transition > 0) {
+                    if (playheadFrac01 > 0) dimGrad.addColorStop(playheadFrac01, fullAlpha);
+                    if (transitionEndFrac > playheadFrac01)
+                        dimGrad.addColorStop(transitionEndFrac, dimAlpha);
+                } else if (playheadFrac01 > 0 && playheadFrac01 < 1) {
+                    // Hard edge: jump straight from full to dim at the
+                    // playhead. CanvasGradient needs strictly-increasing
+                    // offsets, so nudge the second stop by an epsilon.
+                    dimGrad.addColorStop(playheadFrac01, fullAlpha);
+                    dimGrad.addColorStop(Math.min(1, playheadFrac01 + 0.0001), dimAlpha);
                 }
+
+                // Cursor spotlight on the unplayed side. Triangular alpha
+                // peak from dimMin → 1 → dimMin over [cursor - r, cursor + r].
+                // Skipped if the cursor isn't past the dim transition or
+                // there's no room left in the gradient.
+                const cursorX = cursorXRef.current;
+                const SPOT_RADIUS_CSS_PX = 70;
+                if (cursorX !== null && cursorX > playheadX + transition && cursorX < w) {
+                    const radius = SPOT_RADIUS_CSS_PX * dpr;
+                    const cursorFrac = clamp01(cursorX / w);
+                    const safeStart = Math.max(
+                        transitionEndFrac + 0.0001,
+                        clamp01((cursorX - radius) / w),
+                    );
+                    const safeEnd = clamp01((cursorX + radius) / w);
+                    if (safeStart < cursorFrac && cursorFrac < 1) {
+                        dimGrad.addColorStop(safeStart, dimAlpha);
+                        dimGrad.addColorStop(cursorFrac, fullAlpha);
+                        if (safeEnd > cursorFrac && safeEnd < 1) {
+                            dimGrad.addColorStop(safeEnd, dimAlpha);
+                        }
+                    }
+                }
+
+                // Trailing anchor — far-unplayed stays at dimMin.
+                dimGrad.addColorStop(1, dimAlpha);
+
+                ctx2d.fillStyle = dimGrad;
+                ctx2d.fillRect(0, 0, w, h);
                 ctx2d.restore();
             }
 
