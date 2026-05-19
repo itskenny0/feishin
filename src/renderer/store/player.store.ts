@@ -1161,6 +1161,13 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                     set((state) => {
                         state.player.seekToTimestamp = uniqueSeekToTimestamp(timestamp);
                     });
+                    // Propagate the new position to the timestamp store
+                    // immediately. The audio engine's setInterval would
+                    // otherwise leave every consumer (seek slider, scrobble
+                    // status, trackmap playhead) lagging the actual seek by
+                    // up to 500 ms. The interval will still emit on its
+                    // next tick and re-anchor with the engine's reality.
+                    setTimestampStore(timestamp);
                 },
                 mediaSkipBackward: (offset?: number) => {
                     const offsetFromSettings =
@@ -1172,6 +1179,8 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                     set((state) => {
                         state.player.seekToTimestamp = uniqueSeekToTimestamp(newTimestamp);
                     });
+                    // Same propagation as mediaSeekToTimestamp.
+                    setTimestampStore(newTimestamp);
                 },
                 mediaSkipForward: (offset?: number) => {
                     const state = get();
@@ -1193,6 +1202,8 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                     set((state) => {
                         state.player.seekToTimestamp = uniqueSeekToTimestamp(newTimestamp);
                     });
+                    // Same propagation as mediaSeekToTimestamp.
+                    setTimestampStore(newTimestamp);
                 },
                 mediaStop: (options?: { reset?: boolean }) => {
                     const reset = options?.reset !== false;
