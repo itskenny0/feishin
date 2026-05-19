@@ -51,15 +51,7 @@ export const SettingsOptions = memo(
                             </Text>
                         )}
                     </Stack>
-                    {/* minWidth gives Slider controls something to size against.
-                        Without it, Mantine Slider's intrinsic width: 100% resolves
-                        to 0 because the parent flex item has no defined width, so
-                        the slider becomes a thumb-on-a-line with no track. Switches,
-                        Selects, ColorInputs etc. have their own intrinsic widths
-                        and just right-align inside this area. */}
-                    <Group justify="flex-end" style={{ minWidth: '14rem' }}>
-                        {control}
-                    </Group>
+                    <Group justify="flex-end">{control}</Group>
                 </Group>
             </>
         );

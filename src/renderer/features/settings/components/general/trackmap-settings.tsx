@@ -224,6 +224,7 @@ export const TrackmapSettings = memo(() => {
                 }
                 step={step}
                 value={settings[key] as number}
+                w={200}
             />
         ),
         description: t(`setting.${labelKey}`, { context: 'description' }),
@@ -330,6 +331,7 @@ export const TrackmapSettings = memo(() => {
                     onChangeEnd={(value) => setSettings({ general: { trackmapHeight: value } })}
                     step={1}
                     value={settings.trackmapHeight}
+                    w={200}
                 />
             ),
             description: t('setting.trackmapHeight', { context: 'description' }),
@@ -346,6 +348,7 @@ export const TrackmapSettings = memo(() => {
                     onChangeEnd={(value) => setSettings({ general: { trackmapGlow: value } })}
                     step={1}
                     value={settings.trackmapGlow}
+                    w={200}
                 />
             ),
             description: t('setting.trackmapGlow', { context: 'description' }),
@@ -364,6 +367,7 @@ export const TrackmapSettings = memo(() => {
                     }
                     step={1}
                     value={settings.trackmapSensitivity}
+                    w={200}
                 />
             ),
             description: t('setting.trackmapSensitivity', { context: 'description' }),
