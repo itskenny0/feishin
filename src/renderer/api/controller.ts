@@ -419,6 +419,22 @@ export const controller: GeneralController = {
             }),
         );
     },
+    getFolderSongsRecursive(args) {
+        const server = getServerById(args.apiClientProps.serverId);
+
+        if (!server) {
+            throw new Error(`${i18n.t('error.apiRouteError')}: getFolderSongsRecursive`);
+        }
+
+        if (server.type !== ServerType.JELLYFIN) {
+            throw new Error('getFolderSongsRecursive is only available on Jellyfin servers');
+        }
+
+        return apiController(
+            'getFolderSongsRecursive',
+            server.type,
+        )?.(addContext({ ...args, apiClientProps: { ...args.apiClientProps, server } }));
+    },
     getGenreList(args) {
         const server = getServerById(args.apiClientProps.serverId);
 
