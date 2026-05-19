@@ -333,7 +333,6 @@
     "folderPlaylistMigration": {
         "title": "Folder playlist migration",
         "playlistName": "Playlist name",
-        "playlistNamePlaceholder": "Migrated {{date}}",
         "isPublic": "Public playlist",
         "isPublicDescription": "Anyone on the server can see this playlist",
         "folderTree": "Folders",
@@ -354,7 +353,6 @@
         "successToast_one": "Created \"{{name}}\" with {{count}} song",
         "successToast_other": "Created \"{{name}}\" with {{count}} songs",
         "errorToast": "Could not create the playlist.",
-        "partialToast": "Created \"{{name}}\" but only added {{added}} of {{total}} songs.",
         "emptyToast": "No songs found in the selected folders."
     },
     "form": {
