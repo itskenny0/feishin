@@ -267,17 +267,17 @@ export const TrackmapCanvas = () => {
                 ctx2d.restore();
             }
 
-            // === Pass 1.5: envelope-fill silhouette =========================
-            // The DATA layer — a clear mirrored wave outline filled with the
+            // === Pass 1.5: envelope-fill + outline silhouette ===============
+            // The DATA layer — a clear mirrored wave shape filled with the
             // per-bin energy gradient (purple at quiet sections, theme accent
-            // at peaks). Lets the eye read amplitude at a glance: drops,
-            // choruses, bridges all jump out as clear shapes even before
-            // the helix's motion catches your attention.
+            // at peaks), AND stroked with a faint outline so the wave's
+            // edge stays defined even where the helix sits low. Lets the
+            // eye read amplitude at a glance: drops, choruses, bridges
+            // all jump out as clear shapes regardless of helix phase.
             {
                 const stepEnv = Math.max(1, Math.floor(dpr));
-                ctx2d.save();
-                ctx2d.fillStyle = buildEnergyGradient(ctx2d, w, bins, strandA);
-                ctx2d.globalAlpha = 0.24;
+                const envGradient = buildEnergyGradient(ctx2d, w, bins, strandA);
+                // Build the closed envelope path once and reuse it for fill + stroke.
                 ctx2d.beginPath();
                 for (let px = 0; px <= w; px += stepEnv) {
                     const xFrac = px / w;
@@ -293,7 +293,22 @@ export const TrackmapCanvas = () => {
                     ctx2d.lineTo(px, y);
                 }
                 ctx2d.closePath();
+
+                // Fill the area at modest opacity for visual mass.
+                ctx2d.save();
+                ctx2d.fillStyle = envGradient;
+                ctx2d.globalAlpha = 0.3;
                 ctx2d.fill();
+                ctx2d.restore();
+
+                // Stroke the outline at higher opacity so the wave edge
+                // reads even when the fill is competing with the helix.
+                ctx2d.save();
+                ctx2d.strokeStyle = envGradient;
+                ctx2d.globalAlpha = 0.65;
+                ctx2d.lineWidth = Math.max(1, dpr);
+                ctx2d.lineJoin = 'round';
+                ctx2d.stroke();
                 ctx2d.restore();
             }
 
