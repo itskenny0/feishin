@@ -247,7 +247,15 @@ export const TrackmapSettings = memo(() => {
                 aria-label={t(`setting.${labelKey}`)}
                 closeOnColorSwatchClick
                 format="hex"
-                onChangeEnd={(value) =>
+                // Mantine's ColorInput swatch click fires onChange (with the
+                // popover then auto-closing via closeOnColorSwatchClick), NOT
+                // onChangeEnd. Wiring only onChangeEnd meant picking a swatch
+                // never committed — the picker closed and the value bounced
+                // back to the previous store value. Use onChange so every
+                // swatch click and saturation/hue drag tick lands in the
+                // store; the live-preview effect repaints the canvas on the
+                // next frame either way.
+                onChange={(value) =>
                     setSettings({ general: { [key]: value } as Record<string, string> })
                 }
                 rightSection={
