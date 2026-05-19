@@ -11,7 +11,7 @@ import {
     useTrackmapHeight,
     useTrackmapStyle,
 } from '/@/renderer/store/settings.store';
-import { subscribePlayerProgress } from '/@/renderer/store/timestamp.store';
+import { subscribePlayerProgress, useTimestampStoreBase } from '/@/renderer/store/timestamp.store';
 import { PlayerStatus } from '/@/shared/types/types';
 
 interface Rgb {
@@ -195,7 +195,12 @@ export const TrackmapCanvas = () => {
 
         const isAnimating = playerStatus === PlayerStatus.PLAYING && !reducedMotion;
 
-        let lastPlayheadMs = 0;
+        // Seed the playhead from the current store value so a re-run of this
+        // effect (e.g. pause → playerStatus changes → effect re-runs) doesn't
+        // momentarily snap the playhead back to the start before the first
+        // progress event arrives. subscribePlayerProgress only fires on
+        // change, not on subscribe.
+        let lastPlayheadMs = useTimestampStoreBase.getState().timestamp * 1000;
         let rafId: null | number = null;
         let unsub: (() => void) | null = null;
 
