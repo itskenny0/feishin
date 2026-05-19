@@ -14,8 +14,8 @@ import {
     usePlayerbarSlider,
     useTrackmapEnabled,
 } from '/@/renderer/store/settings.store';
+import { Skeleton } from '/@/shared/components/skeleton/skeleton';
 import { Slider, SliderProps } from '/@/shared/components/slider/slider';
-import { Spinner } from '/@/shared/components/spinner/spinner';
 import { Text } from '/@/shared/components/text/text';
 import { PlaybackSelectors } from '/@/shared/constants/playback-selectors';
 
@@ -86,7 +86,7 @@ export const PlayerbarSlider = () => {
             </div>
             <div className={styles.sliderWrapper}>
                 {isWaveform ? (
-                    <Suspense fallback={<Spinner />}>
+                    <Suspense fallback={<Skeleton enableAnimation height={30} width="100%" />}>
                         <PlayerbarWaveform />
                     </Suspense>
                 ) : (

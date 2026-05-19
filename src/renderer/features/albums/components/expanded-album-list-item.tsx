@@ -21,6 +21,7 @@ import { ItemListItem } from '/@/renderer/components/item-list/types';
 import { albumQueries } from '/@/renderer/features/albums/api/album-api';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
 import { PlayButtonGroup } from '/@/renderer/features/shared/components/play-button-group';
+import { RouteSkeleton } from '/@/renderer/features/shared/components/route-skeleton';
 import { useFastAverageColor } from '/@/renderer/hooks';
 import { useDragDrop } from '/@/renderer/hooks/use-drag-drop';
 import { useSetGlobalExpanded } from '/@/renderer/store';
@@ -260,7 +261,7 @@ const ExpandedAlbumListItemContent = ({ albumData }: ExpandedAlbumListItemConten
     );
 
     if (color.isLoading) {
-        return <Spinner container />;
+        return <RouteSkeleton />;
     }
 
     const songs = albumData.songs ?? null;

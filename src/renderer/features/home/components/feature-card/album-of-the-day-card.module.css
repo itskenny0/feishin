@@ -133,23 +133,7 @@
 .skeleton-cover {
     width: clamp(160px, 22vw, 240px);
     aspect-ratio: 1;
-    background: rgb(255 255 255 / 8%);
     border-radius: var(--theme-radius-md);
-    animation: shimmer 1.6s linear infinite;
-}
-
-@keyframes shimmer {
-    0% {
-        opacity: 0.4;
-    }
-
-    50% {
-        opacity: 0.7;
-    }
-
-    100% {
-        opacity: 0.4;
-    }
 }
 
 @media (width <= 720px) {

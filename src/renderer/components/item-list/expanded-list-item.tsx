@@ -4,7 +4,7 @@ import styles from './expanded-list-item.module.css';
 
 import { ItemListStateItem } from '/@/renderer/components/item-list/helpers/item-list-state';
 import { ExpandedAlbumListItem } from '/@/renderer/features/albums/components/expanded-album-list-item';
-import { Spinner } from '/@/shared/components/spinner/spinner';
+import { RouteSkeleton } from '/@/renderer/features/shared/components/route-skeleton';
 import { LibraryItem } from '/@/shared/types/domain-types';
 
 interface ExpandedListItemProps {
@@ -20,7 +20,7 @@ export const ExpandedListItem = ({ item, itemType }: ExpandedListItemProps) => {
     return (
         <div className={styles.container}>
             <div className={styles.inner}>
-                <Suspense fallback={<Spinner container />}>
+                <Suspense fallback={<RouteSkeleton />}>
                     <SelectedItem item={item} itemType={itemType} />
                 </Suspense>
             </div>

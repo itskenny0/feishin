@@ -7,9 +7,9 @@ import { useItemListColumnResize } from '/@/renderer/components/item-list/helper
 import { ItemTableList } from '/@/renderer/components/item-list/item-table-list/item-table-list';
 import { ItemTableListColumn } from '/@/renderer/components/item-list/item-table-list/item-table-list-column';
 import { ErrorFallback } from '/@/renderer/features/action-required/components/error-fallback';
+import { RouteSkeleton } from '/@/renderer/features/shared/components/route-skeleton';
 import { songsQueries } from '/@/renderer/features/songs/api/songs-api';
 import { useListSettings } from '/@/renderer/store';
-import { Spinner } from '/@/shared/components/spinner/spinner';
 import { LibraryItem, Song } from '/@/shared/types/domain-types';
 import { ItemListKey } from '/@/shared/types/types';
 
@@ -49,7 +49,7 @@ export const SimilarSongsList = ({ count, song }: SimilarSongsListProps) => {
     }, [songQuery.data]);
 
     if (songQuery.isLoading || songQuery.isRefetching) {
-        return <Spinner container size={25} />;
+        return <RouteSkeleton />;
     }
 
     return (
