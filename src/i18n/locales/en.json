@@ -353,7 +353,22 @@
         "successToast_one": "Created \"{{name}}\" with {{count}} song",
         "successToast_other": "Created \"{{name}}\" with {{count}} songs",
         "errorToast": "Could not create the playlist.",
-        "emptyToast": "No songs found in the selected folders."
+        "emptyToast": "No songs found in the selected folders.",
+        "combineMode": "Combine into a single playlist",
+        "combineMode_description": "Off (default): create one playlist per top-level selected folder, named after that folder. On: combine every selected folder's songs into the one playlist you name above.",
+        "namePrefix": "Playlist name prefix",
+        "namePrefix_description": "Optional. Each per-folder playlist is named after its source folder; this prefix is prepended.",
+        "folderSummary": "{{folders}} folder(s) selected → {{playlists}} playlist(s)",
+        "perFolderProgress": "Processing {{current}} / {{total}}: {{folderName}} — {{phase}}",
+        "phase": {
+            "collecting": "collecting songs",
+            "creating": "creating playlist",
+            "adding": "adding songs"
+        },
+        "perFolderSuccessToast_one": "Created {{count}} playlist with {{songs}} songs",
+        "perFolderSuccessToast_other": "Created {{count}} playlists with {{songs}} songs total",
+        "perFolderPartialToast": "Created {{success}} of {{total}} playlists ({{songs}} songs total). Some folders failed.",
+        "allFailedToast": "No playlists could be created."
     },
     "form": {
         "addServer": {

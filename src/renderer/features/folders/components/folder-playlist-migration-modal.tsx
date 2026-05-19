@@ -1,7 +1,7 @@
 import type { ContextModalProps } from '@mantine/modals';
 
 import { closeAllModals } from '@mantine/modals';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { FolderPlaylistMigrationTree } from './folder-playlist-migration-tree';
@@ -42,11 +42,14 @@ function collectDescendantIds(nodes: TreeNode[], rootId: string): string[] {
     return out;
 }
 
-function computeBranchRoots(nodes: TreeNode[], selected: Set<string>): string[] {
-    const result: string[] = [];
+function computeBranchRoots(
+    nodes: TreeNode[],
+    selected: Set<string>,
+): Array<{ id: string; name: string }> {
+    const result: Array<{ id: string; name: string }> = [];
     const walk = (n: TreeNode, ancestorSelected: boolean) => {
         if (selected.has(n.id) && !ancestorSelected) {
-            result.push(n.id);
+            result.push({ id: n.id, name: n.name });
             if (n.childFolders) n.childFolders.forEach((c) => walk(c, true));
         } else if (n.childFolders) {
             n.childFolders.forEach((c) => walk(c, ancestorSelected));
@@ -88,9 +91,11 @@ export const FolderPlaylistMigrationModal = (
     const currentServer = useCurrentServer();
     const serverId = currentServer?.id;
 
+    const [mode, setMode] = useState<'combined' | 'per-folder'>('per-folder');
     const [playlistName, setPlaylistName] = useState(
         () => `Migrated ${new Date().toLocaleDateString()}`,
     );
+    const [namePrefix, setNamePrefix] = useState('');
     const [isPublic, setIsPublic] = useState(false);
     const [rootFolders, setRootFolders] = useState<TreeNode[]>([]);
     const [rootsLoading, setRootsLoading] = useState(true);
@@ -100,11 +105,17 @@ export const FolderPlaylistMigrationModal = (
 
     const { start, status } = useFolderPlaylistMigration();
 
+    const branchRoots = useMemo(
+        () => computeBranchRoots(rootFolders, selectedIds),
+        [rootFolders, selectedIds],
+    );
+
     const handleCreate = () => {
-        const branchRoots = computeBranchRoots(rootFolders, selectedIds);
         void start({
-            branchRootIds: branchRoots,
+            branchRoots,
             isPublic,
+            mode,
+            namePrefix,
             onDone: () => {
                 closeAllModals();
             },
@@ -229,12 +240,27 @@ export const FolderPlaylistMigrationModal = (
 
     return (
         <Stack gap="md">
-            <TextInput
-                label={t('folderPlaylistMigration.playlistName')}
-                onChange={(e) => setPlaylistName(e.currentTarget.value)}
-                required
-                value={playlistName}
+            <Switch
+                checked={mode === 'combined'}
+                description={t('folderPlaylistMigration.combineMode_description')}
+                label={t('folderPlaylistMigration.combineMode')}
+                onChange={(e) => setMode(e.currentTarget.checked ? 'combined' : 'per-folder')}
             />
+            {mode === 'combined' ? (
+                <TextInput
+                    label={t('folderPlaylistMigration.playlistName')}
+                    onChange={(e) => setPlaylistName(e.currentTarget.value)}
+                    required
+                    value={playlistName}
+                />
+            ) : (
+                <TextInput
+                    description={t('folderPlaylistMigration.namePrefix_description')}
+                    label={t('folderPlaylistMigration.namePrefix')}
+                    onChange={(e) => setNamePrefix(e.currentTarget.value)}
+                    value={namePrefix}
+                />
+            )}
             <Switch
                 checked={isPublic}
                 description={t('folderPlaylistMigration.isPublicDescription')}
@@ -284,8 +310,9 @@ export const FolderPlaylistMigrationModal = (
             <Group justify="space-between">
                 <Stack gap={0}>
                     <Text isMuted size="sm">
-                        {t('folderPlaylistMigration.selectedFolders', {
-                            count: selectedIds.size,
+                        {t('folderPlaylistMigration.folderSummary', {
+                            folders: selectedIds.size,
+                            playlists: mode === 'combined' ? 1 : branchRoots.length,
                         })}
                     </Text>
                     {status.kind === 'collecting' && (
@@ -309,6 +336,16 @@ export const FolderPlaylistMigrationModal = (
                             })}
                         </Text>
                     )}
+                    {status.kind === 'per-folder' && (
+                        <Text isMuted size="sm">
+                            {t('folderPlaylistMigration.perFolderProgress', {
+                                current: status.current,
+                                folderName: status.folderName,
+                                phase: t(`folderPlaylistMigration.phase.${status.phase}`),
+                                total: status.total,
+                            })}
+                        </Text>
+                    )}
                 </Stack>
                 <Group gap="xs">
                     <Button onClick={() => closeAllModals()} variant="default">
@@ -317,15 +354,17 @@ export const FolderPlaylistMigrationModal = (
                     <Button
                         disabled={
                             selectedIds.size === 0 ||
-                            playlistName.trim().length === 0 ||
+                            (mode === 'combined' && playlistName.trim().length === 0) ||
                             status.kind === 'collecting' ||
                             status.kind === 'creating' ||
-                            status.kind === 'adding'
+                            status.kind === 'adding' ||
+                            status.kind === 'per-folder'
                         }
                         loading={
                             status.kind === 'collecting' ||
                             status.kind === 'creating' ||
-                            status.kind === 'adding'
+                            status.kind === 'adding' ||
+                            status.kind === 'per-folder'
                         }
                         onClick={handleCreate}
                         variant="filled"
