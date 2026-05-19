@@ -235,16 +235,16 @@ export const TrackmapCanvas = () => {
             const breath = 1 + 0.03 * Math.sin((now / 7000) * Math.PI * 2);
             const halfH = baseHalfH * breath;
 
-            // Helix parameters. The rotation has been slowed since the user
-            // reported the previous rightward drift was smearing the spatial
-            // information — the eye couldn't latch onto "where in the song
-            // we are now" because the helix kept shifting. Combined with
-            // the envelope-fill pass above (which provides a stable amplitude
-            // silhouette regardless of helix phase), this slow rotation now
-            // reads as ambient motion rather than disorienting flow.
+            // Helix parameters. No rotation — the user reported any
+            // horizontal motion (even at 14 s/turn) "moves the scale around
+            // and invalidates the data". With the helix static, every x
+            // position on the canvas corresponds 1:1 to a fixed audio time,
+            // and you can pin "this is the drop" to a specific pixel without
+            // it drifting away on the next frame. The strands still appear
+            // as an intertwined pattern (they're cos and -cos of a spatial
+            // phase that varies along x), but the pattern is now stationary.
             const helixCycles = 6; // how many full twists span the canvas width
-            const helixOmega = (Math.PI * 2) / 14000; // rad/ms, one rotation per 14 s
-            const rot = now * helixOmega;
+            const rot = 0; // no temporal rotation — the strands stay put
 
             const bins = trackmap.bins;
             const binCount = bins.length;
