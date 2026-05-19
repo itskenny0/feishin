@@ -218,7 +218,7 @@ export const TrackmapCanvas = () => {
             {
                 const bgGrad = ctx2d.createLinearGradient(0, yCenter - halfH, 0, yCenter + halfH);
                 bgGrad.addColorStop(0, `${BG_GLOW}, 0)`);
-                bgGrad.addColorStop(0.5, `${BG_GLOW}, 0.22)`);
+                bgGrad.addColorStop(0.5, `${BG_GLOW}, 0.16)`);
                 bgGrad.addColorStop(1, `${BG_GLOW}, 0)`);
                 ctx2d.save();
                 ctx2d.fillStyle = bgGrad;
@@ -245,7 +245,7 @@ export const TrackmapCanvas = () => {
                     const yB = yCenter + envelope * cosphi;
                     const visibility = Math.abs(cosphi);
                     if (visibility < 0.15) continue;
-                    ctx2d.strokeStyle = rgbStr(STRAND_B, 0.45 * visibility);
+                    ctx2d.strokeStyle = rgbStr(STRAND_B, 0.35 * visibility);
                     ctx2d.beginPath();
                     ctx2d.moveTo(xR, yA);
                     ctx2d.lineTo(xR, yB);
@@ -285,12 +285,12 @@ export const TrackmapCanvas = () => {
                 ctx2d.lineWidth = Math.max(2, 2.4 * dpr);
                 ctx2d.shadowBlur = 14 * glowFactor;
 
-                ctx2d.strokeStyle = rgbStr(strandA, 0.85 * glowFactor);
+                ctx2d.strokeStyle = rgbStr(strandA, 0.65 * glowFactor);
                 ctx2d.shadowColor = rgbStr(strandA);
                 drawStrandPath(-1);
                 ctx2d.stroke();
 
-                ctx2d.strokeStyle = rgbStr(STRAND_B, 0.85 * glowFactor);
+                ctx2d.strokeStyle = rgbStr(STRAND_B, 0.65 * glowFactor);
                 ctx2d.shadowColor = rgbStr(STRAND_B);
                 drawStrandPath(1);
                 ctx2d.stroke();
@@ -307,24 +307,25 @@ export const TrackmapCanvas = () => {
             ctx2d.lineWidth = Math.max(1.5, 1.8 * dpr);
             ctx2d.shadowBlur = 0;
 
-            ctx2d.strokeStyle = rgbStr(strandA);
+            ctx2d.strokeStyle = rgbStr(strandA, 0.9);
             drawStrandPath(-1);
             ctx2d.stroke();
 
-            ctx2d.strokeStyle = rgbStr(STRAND_B);
+            ctx2d.strokeStyle = rgbStr(STRAND_B, 0.9);
             drawStrandPath(1);
             ctx2d.stroke();
 
             ctx2d.restore();
 
             // === Pass 5: unplayed dim mask =================================
-            // Less aggressive than before — cyberpunk wants the whole strip
-            // visible. Played: full alpha. Unplayed: 0.55 (was 0.40).
+            // Middle ground — between the original 0.40 (too ignorable) and
+            // the cyberpunk-max 0.55. Still clearly distinguishes played
+            // from unplayed without either side disappearing.
             ctx2d.save();
             ctx2d.globalCompositeOperation = 'destination-in';
             const dimGrad = ctx2d.createLinearGradient(playheadX, 0, playheadX + 30, 0);
             dimGrad.addColorStop(0, 'rgba(0,0,0,1)');
-            dimGrad.addColorStop(1, 'rgba(0,0,0,0.55)');
+            dimGrad.addColorStop(1, 'rgba(0,0,0,0.48)');
             ctx2d.fillStyle = dimGrad;
             ctx2d.fillRect(0, 0, w, h);
             ctx2d.restore();
@@ -335,7 +336,7 @@ export const TrackmapCanvas = () => {
             if (!reducedMotion && glowFactor > 0) {
                 ctx2d.save();
                 ctx2d.globalCompositeOperation = 'lighter';
-                ctx2d.fillStyle = rgbStr(strandA, 0.5 * glowFactor);
+                ctx2d.fillStyle = rgbStr(strandA, 0.4 * glowFactor);
                 ctx2d.shadowColor = rgbStr(strandA);
                 ctx2d.shadowBlur = 12 * glowFactor;
                 const phWidth = Math.max(2, 3 * dpr);
