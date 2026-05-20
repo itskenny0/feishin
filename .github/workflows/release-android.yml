@@ -1,0 +1,120 @@
+# Builds an unsigned Android debug APK for a `v*-itskenny0-*` tag and uploads
+# it to the matching GitHub Release. The APK wraps the existing `pnpm
+# build:web` output via Capacitor — see ANDROID.md for the design overview
+# and known limitations.
+#
+# Trigger: push a tag like `v1.11.0-itskenny0-2026.05.20a` to this fork.
+# Re-trigger via the Actions UI ("Run workflow") with an existing tag name.
+name: Release Android (fork)
+
+on:
+    push:
+        tags:
+            - 'v*-itskenny0-*'
+    workflow_dispatch:
+        inputs:
+            tag:
+                description: 'Existing git tag to (re-)build the Android APK for'
+                required: true
+                type: string
+
+permissions:
+    contents: write
+
+concurrency:
+    group: release-android-${{ github.event.inputs.tag || github.ref }}
+    cancel-in-progress: false
+
+jobs:
+    prepare:
+        if: github.repository == 'itskenny0/feishin'
+        runs-on: ubuntu-latest
+        outputs:
+            tag: ${{ steps.tag.outputs.tag }}
+            packageVersion: ${{ steps.tag.outputs.packageVersion }}
+        steps:
+            - uses: actions/checkout@v6
+              with:
+                  fetch-depth: 0
+            - name: Resolve tag and derive artifact version
+              id: tag
+              run: |
+                  if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+                      tag="${{ github.event.inputs.tag }}"
+                  else
+                      tag="${GITHUB_REF#refs/tags/}"
+                  fi
+                  echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+
+                  # Strip the leading semver so we are left with the
+                  # fork-specific suffix (e.g. itskenny0-2026.05.20a).
+                  rawSuffix="${tag#v*.*.*-}"
+                  sanitizedSuffix="${rawSuffix//./-}"
+
+                  baseVersion="$(node -p "require('./package.json').version")"
+                  if [ "${rawSuffix}" != "${tag}" ] && [ -n "${rawSuffix}" ]; then
+                      packageVersion="${baseVersion}-${sanitizedSuffix}"
+                  else
+                      packageVersion="${baseVersion}"
+                  fi
+                  echo "packageVersion=${packageVersion}" >> "$GITHUB_OUTPUT"
+                  echo "Using artifact version: ${packageVersion}"
+
+    android:
+        needs: prepare
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v6
+              with:
+                  ref: ${{ needs.prepare.outputs.tag }}
+            - uses: pnpm/action-setup@v4
+              with:
+                  version: 10
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: pnpm
+            - uses: actions/setup-java@v5
+              with:
+                  distribution: temurin
+                  java-version: '17'
+            - uses: android-actions/setup-android@v3
+            - uses: gradle/actions/setup-gradle@v3
+            - name: Install dependencies
+              run: pnpm install --frozen-lockfile
+            - name: Set artifact version
+              run: npm pkg set version="${{ needs.prepare.outputs.packageVersion }}"
+            - name: Build web bundle
+              run: pnpm build:web
+            - name: Sync Capacitor android project
+              run: npx cap sync android
+            - name: Assemble debug APK
+              working-directory: android
+              run: ./gradlew assembleDebug --no-daemon
+            - name: Rename APK with version
+              id: apk
+              run: |
+                  src="android/app/build/outputs/apk/debug/app-debug.apk"
+                  dst="dist/feishin-${{ needs.prepare.outputs.packageVersion }}-android.apk"
+                  mkdir -p dist
+                  cp "$src" "$dst"
+                  echo "path=$dst" >> "$GITHUB_OUTPUT"
+            - name: Ensure release exists
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  TAG: ${{ needs.prepare.outputs.tag }}
+              run: |
+                  if ! gh release view "$TAG" >/dev/null 2>&1; then
+                      gh release create "$TAG" \
+                          --title "Feishin $TAG" \
+                          --generate-notes \
+                          --target "$(git rev-parse HEAD)"
+                  fi
+            - name: Upload APK to release
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  TAG: ${{ needs.prepare.outputs.tag }}
+              run: |
+                  gh release upload "$TAG" \
+                      "${{ steps.apk.outputs.path }}" \
+                      --clobber

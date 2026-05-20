@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Feishin</string>
+    <string name="title_activity_main">Feishin</string>
+    <string name="package_name">cat.kenny.feishin</string>
+    <string name="custom_url_scheme">cat.kenny.feishin</string>
+</resources>
