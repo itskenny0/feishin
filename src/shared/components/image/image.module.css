@@ -20,6 +20,12 @@
     animation: fade-in 0.2s ease-in;
 }
 
+@media (prefers-reduced-motion: reduce) {
+    .image.animated {
+        animation: none;
+    }
+}
+
 .loader {
     width: 100%;
     height: 100%;

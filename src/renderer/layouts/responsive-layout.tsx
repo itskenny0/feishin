@@ -1,5 +1,7 @@
+import { openContextModal } from '@mantine/modals';
 import isElectron from 'is-electron';
 import { useCallback, useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router';
 
 import { useAppTracker } from '/@/renderer/features/analytics/hooks/use-app-tracker';
@@ -46,6 +48,7 @@ export const ResponsiveLayout = ({ shell }: ResponsiveLayoutProps) => {
 const localSettings = isElectron() ? window.api.localSettings : null;
 
 const LayoutHotkeys = () => {
+    const { t } = useTranslation();
     const navigate = useNavigate();
     const zoomFactor = useZoomFactor();
     const { setSettings } = useSettingsStoreActions();
@@ -82,12 +85,26 @@ const LayoutHotkeys = () => {
         }
     }, [zoomFactor]);
 
+    const openShortcutsHelp = useCallback(() => {
+        openContextModal({
+            innerProps: {},
+            modal: 'shortcutsHelp',
+            size: 'md',
+            title: t('shortcuts.title', { defaultValue: 'Keyboard shortcuts' }),
+        });
+    }, [t]);
+
     const hotkeys = useMemo<HotkeyItem[]>(
         () => [
             [bindings.globalSearch.hotkey, open],
             [bindings.browserBack.hotkey, () => navigate(-1)],
             [bindings.browserForward.hotkey, () => navigate(1)],
             [bindings.navigateHome.hotkey, () => navigate(AppRoute.HOME)],
+            // "?" key opens a help overlay listing every bound shortcut.
+            // Uses physical-key matching so it works regardless of layout:
+            // shift+slash on QWERTY produces "?", but the parser keys off
+            // the physical Slash code so non-US keyboards still work.
+            ['shift+slash', openShortcutsHelp, { preventDefault: true, usePhysicalKeys: true }],
             ...(localSettings
                 ? ([
                       [bindings.zoomIn.hotkey, () => updateZoom(5)],
@@ -95,7 +112,7 @@ const LayoutHotkeys = () => {
                   ] as HotkeyItem[])
                 : []),
         ],
-        [bindings, navigate, open, updateZoom],
+        [bindings, navigate, open, openShortcutsHelp, updateZoom],
     );
 
     const modalProps = useMemo(

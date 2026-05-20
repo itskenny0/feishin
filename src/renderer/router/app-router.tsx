@@ -4,6 +4,7 @@ import { HashRouter, Route, Routes } from 'react-router';
 import { FolderPlaylistMigrationModal } from '/@/renderer/features/folders/components/folder-playlist-migration-modal';
 import { ShuffleAllContextModal } from '/@/renderer/features/player/components/shuffle-all-modal';
 import { RouterErrorBoundary } from '/@/renderer/features/shared/components/router-error-boundary';
+import { ShortcutsHelpContextModal } from '/@/renderer/features/shortcuts/components/shortcuts-help-modal';
 import { AuthenticationOutlet } from '/@/renderer/layouts/authentication-outlet';
 import { ResponsiveLayout } from '/@/renderer/layouts/responsive-layout';
 import { AppOutlet } from '/@/renderer/router/app-outlet';
@@ -184,6 +185,7 @@ const appRouterModals = {
     saveAndReplace: SaveAndReplaceContextModal,
     settings: SettingsContextModal,
     shareItem: ShareItemContextModal,
+    shortcutsHelp: ShortcutsHelpContextModal,
     shuffleAll: ShuffleAllContextModal,
     updatePlaylist: UpdatePlaylistContextModal,
     visualizerSettings: VisualizerSettingsContextModal,
