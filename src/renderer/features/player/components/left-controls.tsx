@@ -172,6 +172,12 @@ export const LeftControls = () => {
                                             <Icon color="muted" icon="radio" size="40%" />
                                         </Center>
                                     ) : (
+                                        // Key off the song id so the image element
+                                        // remounts when the playing song changes and
+                                        // the .animated fade-in keyframe replays. Without
+                                        // this the <img> just swaps its src and snaps to
+                                        // the new cover with no transition. Honors
+                                        // prefers-reduced-motion via the underlying CSS.
                                         <ItemImage
                                             className={clsx(
                                                 styles.playerbarImage,
@@ -183,6 +189,7 @@ export const LeftControls = () => {
                                             fetchPriority="high"
                                             id={currentSong?.imageId}
                                             itemType={LibraryItem.SONG}
+                                            key={currentSong?.id ?? 'playerbar-empty'}
                                             serverId={currentSong?._serverId}
                                             type="table"
                                         />

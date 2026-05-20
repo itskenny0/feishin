@@ -1515,6 +1515,10 @@
         "error_readingFile": "There has been an issue reading the file: {{errorMessage}}",
         "mainText": "Drop a file here"
     },
+    "shortcuts": {
+        "title": "Keyboard shortcuts",
+        "noneBound": "No keyboard shortcuts are currently bound. Configure them in Settings."
+    },
     "visualizer": {
         "systemAudioConsentAllow": "Allow",
         "systemAudioConsentBody": "The visualizer requires access to the system audio to work",
