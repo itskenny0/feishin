@@ -90,6 +90,14 @@ jobs:
               run: npm pkg set version="${{ needs.prepare.outputs.packageVersion }}"
             - name: Build web bundle
               run: pnpm build:web
+            - name: Generate stub settings.js
+              # settings.js.template is the Docker-deploy runtime-config file;
+              # an APK ships it statically. envsubst with no env set replaces
+              # every ${VAR} with an empty string, which the renderer
+              # tolerates (every read site falls back to a sensible default).
+              # Without this file the WebView shows index.html's 404 in the
+              # console; the bundle still boots, but it's noise we don't need.
+              run: envsubst < settings.js.template > out/web/settings.js
             - name: Sync Capacitor android project
               run: npx cap sync android
             - name: Assemble debug APK
