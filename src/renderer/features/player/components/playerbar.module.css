@@ -56,3 +56,19 @@
     height: 100%;
     overflow: hidden;
 }
+
+/*
+ * Touch-target audit: on pointer:coarse devices (touch) every interactive
+ * control inside the playerbar - in any of the three grid columns - gets
+ * a 44×44 minimum hit area to satisfy WCAG AA / iOS HIG / Material 48dp.
+ * The visible icon dimensions are untouched; only the hit zone grows via
+ * min-width/min-height on the buttons themselves.
+ */
+@media (pointer: coarse) {
+    .left-grid-item button,
+    .center-grid-item button,
+    .right-grid-item button {
+        min-width: 44px;
+        min-height: 44px;
+    }
+}
