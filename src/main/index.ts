@@ -56,8 +56,12 @@ const ALPHA_UPDATER_CONFIG: {
     provider: 's3',
 };
 
+// Point the desktop autoUpdater at the fork's releases rather than upstream
+// jeffvli/feishin so users on this build actually receive the fork's updates.
+// The web/Android side polls the same repo via use-github-releases-updater.ts
+// so every platform converges on a single source of truth.
 const GITHUB_UPDATER_CONFIG = {
-    owner: 'jeffvli',
+    owner: 'itskenny0',
     provider: 'github' as const,
     repo: 'feishin',
 };

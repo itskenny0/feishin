@@ -18,6 +18,7 @@ import {
     useAndroidStatusBar,
 } from '/@/renderer/hooks/use-android-native';
 import { useCheckForUpdates } from '/@/renderer/hooks/use-check-for-updates';
+import { useGithubReleasesUpdater } from '/@/renderer/hooks/use-github-releases-updater';
 import { useNativeMenuSync } from '/@/renderer/hooks/use-native-menu-sync';
 import { useSyncSettingsToMain } from '/@/renderer/hooks/use-sync-settings-to-main';
 import { AppRouter } from '/@/renderer/router/app-router';
@@ -123,7 +124,11 @@ const SyncSettingsEffect = () => {
 };
 
 const UpdateCheckEffect = () => {
+    // Electron path — points at the fork's release feed.
     useCheckForUpdates();
+    // Web + Capacitor Android path — polls GitHub releases directly and
+    // surfaces a toast when a newer build is published. No-ops in Electron.
+    useGithubReleasesUpdater();
 
     return null;
 };
