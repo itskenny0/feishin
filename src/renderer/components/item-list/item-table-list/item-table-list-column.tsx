@@ -60,6 +60,7 @@ import { useItemDragDropState } from '/@/renderer/components/item-list/item-tabl
 import { TableItemProps } from '/@/renderer/components/item-list/item-table-list/item-table-list';
 import { useItemTableListColumnResizeLive } from '/@/renderer/components/item-list/item-table-list/item-table-list-context';
 import { ItemControls, ItemListItem } from '/@/renderer/components/item-list/types';
+import { useLongPress } from '/@/renderer/hooks/use-long-press';
 import { Flex } from '/@/shared/components/flex/flex';
 import { Icon } from '/@/shared/components/icon/icon';
 import { Skeleton } from '/@/shared/components/skeleton/skeleton';
@@ -508,8 +509,17 @@ export const TableColumnTextContainer = (
         }
     };
 
+    // See sibling component above for why we mirror contextmenu via
+    // long-press: Android WebView's native long-press → contextmenu
+    // synthesis isn't reliable on these table cells.
+    const longPressHandlers = useLongPress({
+        onLongPress: (event) =>
+            handleContextMenu(event as unknown as React.MouseEvent<HTMLDivElement>),
+    });
+
     return (
         <div
+            {...longPressHandlers}
             className={clsx(styles.container, props.containerClassName, {
                 [styles.alternateRowEven]:
                     props.enableAlternateRowColors && isDataRow && dataIndex % 2 === 0,
@@ -669,8 +679,19 @@ export const TableColumnContainer = (
         }
     };
 
+    // Touch surfaces don't fire `contextmenu` consistently on every WebView
+    // (Android Capacitor 8 in particular ignores it inside grid cells with
+    // touch-action: manipulation up the tree). Mirror the handler explicitly
+    // via a 500ms long-press; PointerEvent extends MouseEvent so we can hand
+    // it to the same callback shape onMore expects.
+    const longPressHandlers = useLongPress({
+        onLongPress: (event) =>
+            handleContextMenu(event as unknown as React.MouseEvent<HTMLDivElement>),
+    });
+
     return (
         <div
+            {...longPressHandlers}
             className={clsx(styles.container, props.className, {
                 [styles.alternateRowEven]:
                     props.enableAlternateRowColors && isDataRow && dataIndex % 2 === 0,
