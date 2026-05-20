@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import styles from './mobile-fullscreen-player.module.css';
 
 import { SONG_TABLE_COLUMNS } from '/@/renderer/components/item-list/item-table-list/default-columns';
+import { SleepTimerButton } from '/@/renderer/features/player/components/sleep-timer-button';
 import {
     ListConfigMenu,
     SONG_DISPLAY_TYPES,
@@ -347,6 +348,11 @@ export const MobileFullscreenPlayerHeader = memo(
                     }}
                     tableColumnsData={SONG_TABLE_COLUMNS}
                 />
+                {/* Sleep timer is desktop-only otherwise — mobile users
+                    couldn't start one from the playerbar (which is
+                    collapsed) or anywhere else. Surface it in the
+                    fullscreen player header where there's room. */}
+                <SleepTimerButton />
             </div>
         );
     },
