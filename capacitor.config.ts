@@ -23,7 +23,15 @@ const config: CapacitorConfig = {
         // Allow plain HTTP traffic to Jellyfin / Subsonic servers on the local
         // network. Production deployments behind HTTPS still work; this just
         // doesn't reject http:// URLs the user might enter in the server form.
-        androidScheme: 'https',
+        //
+        // androidScheme is 'http' (not 'https') because the v20h/v20i builds
+        // showed a persistent black-page boot under https://localhost — a
+        // known interaction between the `crossorigin` attribute Vite emits on
+        // the production module script and Capacitor's https custom scheme
+        // handler. Outbound requests to user-network media servers can still
+        // be https:// (or http:// with cleartext); only the in-app WebView's
+        // origin changes.
+        androidScheme: 'http',
         cleartext: true,
     },
     webDir: 'out/web',
