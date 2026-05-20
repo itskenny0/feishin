@@ -21,7 +21,17 @@ import {
 import { LibraryItem, QueueSong } from '/@/shared/types/domain-types';
 import { PlayerStatus, PlayerType } from '/@/shared/types/types';
 
-const mediaSession = navigator.mediaSession;
+// `navigator.mediaSession` is missing in some Android System WebView builds
+// (Capacitor APKs land in one of them — the v20j boot-error overlay
+// pinpointed an unguarded setActionHandler on undefined). MediaMetadata
+// is similarly gated. Read both with a guard so the bundle can boot on a
+// WebView that lacks the API; lock-screen controls just won't work, which
+// is acceptable for the tech-demo phase.
+const mediaSession: MediaSession | undefined =
+    typeof navigator !== 'undefined' ? navigator.mediaSession : undefined;
+const hasMediaSession = Boolean(mediaSession);
+const MediaMetadataCtor: typeof MediaMetadata | undefined =
+    typeof window !== 'undefined' ? window.MediaMetadata : undefined;
 
 export const useMediaSession = () => {
     const { mediaSession: mediaSessionEnabled } = usePlaybackSettings();
@@ -66,6 +76,12 @@ export const useMediaSession = () => {
     }, [stationName]);
 
     const isMediaSessionEnabled = useMemo(() => {
+        // If the host WebView doesn't expose navigator.mediaSession, nothing
+        // we do in this hook can work — bail before touching the API.
+        if (!hasMediaSession) {
+            return false;
+        }
+
         // Always enable media session on web
         if (!isElectron()) {
             return true;
@@ -82,6 +98,10 @@ export const useMediaSession = () => {
     // enabling the setting after mount correctly registers handlers instead of
     // silently no-oping because the [] effect already ran.
     useEffect(() => {
+        // `mediaSession` is guaranteed non-null inside this branch by the
+        // `hasMediaSession` short-circuit above, but TS needs the narrow.
+        if (!mediaSession) return;
+
         if (!isMediaSessionEnabled) {
             mediaSession.setActionHandler('nexttrack', null);
             mediaSession.setActionHandler('pause', null);
@@ -177,12 +197,19 @@ export const useMediaSession = () => {
                 return;
             }
 
+            // hasMediaSession implies both `mediaSession` and the
+            // MediaMetadata constructor are defined; the explicit guard
+            // here narrows the union for TS and is also a safety net.
+            if (!mediaSession || !MediaMetadataCtor) {
+                return;
+            }
+
             // Handle radio metadata when radio is active and playing
             if (isRadioActiveRef.current && isRadioPlayingRef.current) {
                 const title = radioMetadataRef.current?.title || stationNameRef.current || 'Radio';
                 const artist = radioMetadataRef.current?.artist || stationNameRef.current || '';
 
-                mediaSession.metadata = new MediaMetadata({
+                mediaSession.metadata = new MediaMetadataCtor({
                     album: stationNameRef.current || '',
                     artist: artist,
                     artwork: [],
@@ -203,7 +230,7 @@ export const useMediaSession = () => {
                 type: 'itemCard',
             });
 
-            mediaSession.metadata = new MediaMetadata({
+            mediaSession.metadata = new MediaMetadataCtor({
                 album: song?.album ?? '',
                 artist: song?.artistName ?? '',
                 artwork: imageUrl ? [{ src: imageUrl, type: 'image/png' }] : [],
@@ -260,7 +287,7 @@ export const useMediaSession = () => {
         });
 
         const unsubscribeStatus = subscribePlayerStatus(({ status }) => {
-            if (!isMediaSessionEnabledRef.current) {
+            if (!isMediaSessionEnabledRef.current || !mediaSession) {
                 return;
             }
 
