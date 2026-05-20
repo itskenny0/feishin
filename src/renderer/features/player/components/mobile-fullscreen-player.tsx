@@ -298,14 +298,31 @@ const BackgroundImageOverlay = memo(
 
 BackgroundImageOverlay.displayName = 'BackgroundImageOverlay';
 
+interface DismissibleMobilePlayerContainerProps extends MobilePlayerContainerProps {
+    /** True while the player face (cover/metadata/transport) is the active tab. */
+    isPlayerTab: boolean;
+    onDismiss: () => void;
+}
+
 interface MobilePlayerContainerProps {
     children: ReactNode;
     dynamicBackground: boolean | undefined;
     dynamicIsImage: boolean | undefined;
+    /**
+     * Fired when the user drags the fullscreen player downward past the
+     * dismiss threshold or flicks it down fast — closes the overlay.
+     */
+    onDismiss?: () => void;
 }
 
 const MobilePlayerContainer = memo(
-    ({ children, dynamicBackground, dynamicIsImage }: MobilePlayerContainerProps) => {
+    ({
+        children,
+        dynamicBackground,
+        dynamicIsImage,
+        isPlayerTab,
+        onDismiss,
+    }: DismissibleMobilePlayerContainerProps) => {
         const currentSong = usePlayerSong();
         const imageUrl = useItemImageUrl({
             id: currentSong?.imageId || undefined,
@@ -337,8 +354,26 @@ const MobilePlayerContainer = memo(
             <motion.div
                 animate="open"
                 className={styles.container}
+                // Swipe-down to dismiss is only available on the main
+                // player tab — when the user is browsing queue or
+                // lyrics those tabs own the vertical gesture (scrolling),
+                // and we don't want a stray drag from the top of those
+                // pages collapsing the whole overlay.
+                drag={isPlayerTab ? 'y' : false}
+                // Only let the user pull DOWN (positive y) — pulling up
+                // would expose the page beneath, which the user can't
+                // see anyway because the overlay is full-viewport.
+                dragConstraints={{ bottom: 0, left: 0, right: 0, top: 0 }}
+                dragElastic={{ bottom: 0.6, top: 0 }}
                 exit="closed"
                 initial="closed"
+                // Past ~140px of downward drag (or a fast flick), dismiss.
+                // Below that we snap back to the resting position.
+                onDragEnd={(_, info) => {
+                    if (info.offset.y > 140 || info.velocity.y > 500) {
+                        onDismiss();
+                    }
+                }}
                 style={{
                     backgroundColor,
                 }}
@@ -455,6 +490,8 @@ export const MobileFullscreenPlayer = () => {
         <MobilePlayerContainer
             dynamicBackground={effectiveDynamicBackground}
             dynamicIsImage={dynamicIsImage}
+            isPlayerTab={isPlayerState}
+            onDismiss={handleToggleFullScreenPlayer}
         >
             <BackgroundImageOverlay
                 dynamicBackground={effectiveDynamicBackground}
