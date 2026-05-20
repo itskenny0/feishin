@@ -7,3 +7,25 @@
     margin-left: var(--theme-spacing-md);
     border-left: 2px solid var(--theme-colors-surface);
 }
+
+/*
+ * Sub-section headers within a settings list — used by trackmap's
+ * advanced panel to chunk ~15 sliders into "Colors", "Envelope", etc.
+ * The 1px hairline under the label visually separates each group from
+ * its preceding rows. Letter-spacing makes the uppercase title read as
+ * a label rather than a row title.
+ */
+.subheader,
+.subheader-indented {
+    align-items: center;
+    padding-bottom: var(--theme-spacing-xs);
+    letter-spacing: 0.04em;
+    border-bottom: 1px solid var(--theme-colors-surface);
+    opacity: 0.75;
+}
+
+.subheader-indented {
+    padding-left: var(--theme-spacing-lg);
+    margin-left: var(--theme-spacing-md);
+    border-left: 2px solid var(--theme-colors-surface);
+}
