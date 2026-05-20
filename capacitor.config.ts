@@ -11,6 +11,11 @@ const config: CapacitorConfig = {
         // foreground service in this tech demo; audio may pause when the
         // WebView is backgrounded. That's documented in ANDROID.md.
         backgroundColor: '#000000',
+        // Surfaces the WebView to chrome://inspect on a connected dev
+        // machine — useful for diagnosing the boot of a fresh APK install.
+        // Flip back to false (Capacitor default) before any signed Play
+        // Store build.
+        webContentsDebuggingEnabled: true,
     },
     appId: 'cat.kenny.feishin',
     appName: 'Feishin',

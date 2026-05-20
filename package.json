@@ -22,7 +22,7 @@
     "main": "./out/main/index.js",
     "scripts": {
         "android:open": "npx cap open android",
-        "android:sync": "pnpm build:web && npx cap sync android",
+        "android:sync": "pnpm build:web && envsubst < settings.js.template > out/web/settings.js && npx cap sync android",
         "build": "pnpm run build:electron && pnpm run build:remote",
         "build:electron": "electron-vite build",
         "build:remote": "vite build --config remote.vite.config.ts",
