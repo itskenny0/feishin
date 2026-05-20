@@ -42,6 +42,12 @@
     border-width: 1px;
     opacity: 0;
     transition: opacity 0.2s ease-in-out;
+
+    @media (pointer: coarse) {
+        width: 28px;
+        height: 28px;
+        opacity: 1;
+    }
 }
 
 .track {

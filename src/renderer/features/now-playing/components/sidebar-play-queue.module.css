@@ -72,6 +72,16 @@
         transform: translateY(-50%);
         transition: opacity 0.2s ease;
     }
+
+    @media (pointer: coarse) {
+        padding: 12px 0;
+        margin: -12px 0;
+        touch-action: none;
+
+        &::before {
+            height: 2px;
+        }
+    }
 }
 
 .panel-reorder-controls {

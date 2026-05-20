@@ -191,6 +191,40 @@
     opacity: 1;
 }
 
+@media (pointer: coarse) {
+    .resize-handle {
+        width: 24px;
+        margin-right: -12px;
+        touch-action: none;
+        background: transparent;
+        opacity: 1;
+    }
+
+    .resize-handle::before {
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        width: 2px;
+        content: '';
+        background-color: var(--theme-colors-border);
+    }
+
+    .resize-handle-left {
+        margin-right: 0;
+        margin-left: -12px;
+    }
+
+    .resize-handle-left::before {
+        right: auto;
+        left: 0;
+    }
+
+    .resize-handle-right {
+        margin-right: -12px;
+    }
+}
+
 .row {
     display: grid;
     grid-template-columns: 240px 1fr;
