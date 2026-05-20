@@ -16,12 +16,14 @@ import { ActionIcon, ActionIconGroup } from '/@/shared/components/action-icon/ac
 import { Stack } from '/@/shared/components/stack/stack';
 import { Text } from '/@/shared/components/text/text';
 import { useLongPress } from '/@/shared/hooks/use-long-press';
+import { useMediaQuery } from '/@/shared/hooks/use-media-query';
 import { LibraryItem } from '/@/shared/types/domain-types';
 import { DragOperation, DragTarget, DragTargetMap } from '/@/shared/types/drag-and-drop';
 
 const PlaylistReorderColumnBase = (props: ItemTableListInnerColumn) => {
     const { t } = useTranslation();
     const { playlistId } = useParams() as { playlistId?: string };
+    const isTouch = useMediaQuery('(pointer: coarse)');
     const isHeaderEnabled = !!props.enableHeader;
     const isDataRow = isHeaderEnabled ? props.rowIndex > 0 : true;
     const item = isDataRow
@@ -349,11 +351,12 @@ const PlaylistReorderColumnBase = (props: ItemTableListInnerColumn) => {
                 />
                 <ActionIcon
                     icon="dragVertical"
-                    iconProps={{ size: 'md' }}
+                    iconProps={{ size: isTouch ? 'lg' : 'md' }}
                     ref={dragRef}
-                    size="xs"
+                    size={isTouch ? 'md' : 'xs'}
                     style={{
                         cursor: isPlaylistSong ? 'grab' : 'default',
+                        touchAction: 'none',
                     }}
                     variant="default"
                 />

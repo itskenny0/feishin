@@ -4,6 +4,11 @@
 
 .thumb {
     background: var(--theme-colors-foreground);
+
+    @media (pointer: coarse) {
+        width: 28px;
+        height: 28px;
+    }
 }
 
 .label {
