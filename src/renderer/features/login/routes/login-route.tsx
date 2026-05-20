@@ -242,6 +242,7 @@ const LoginRoute = () => {
 
                             <Stack gap="md">
                                 <TextInput
+                                    autoFocus
                                     data-autofocus
                                     label={t('form.addServer.input', {
                                         context: 'username',
