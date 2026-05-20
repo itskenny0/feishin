@@ -24,6 +24,7 @@ import { MobileFullscreenPlayerControls } from '/@/renderer/features/player/comp
 import { MobileFullscreenPlayerHeader } from '/@/renderer/features/player/components/mobile-fullscreen-player-header';
 import { MobileFullscreenPlayerMetadata } from '/@/renderer/features/player/components/mobile-fullscreen-player-metadata';
 import { MobileFullscreenPlayerProgress } from '/@/renderer/features/player/components/mobile-fullscreen-player-progress';
+import { MobileFullscreenPlayerVolume } from '/@/renderer/features/player/components/mobile-fullscreen-player-volume';
 import {
     useIsRadioActive,
     useRadioPlayer,
@@ -485,6 +486,7 @@ export const MobileFullscreenPlayer = () => {
                     showRating={showRating}
                 />
                 <MobileFullscreenPlayerProgress currentSong={currentSong} />
+                <MobileFullscreenPlayerVolume />
                 <MobileFullscreenPlayerControls currentSong={currentSong} />
                 <MobileFullscreenPlayerBottomControls
                     isLyricsActive={isLyricsState}
