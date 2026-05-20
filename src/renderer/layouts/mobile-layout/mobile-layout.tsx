@@ -10,6 +10,7 @@ import { FullScreenVisualizer } from '/@/renderer/features/player/components/ful
 import { MobileFullscreenPlayer } from '/@/renderer/features/player/components/mobile-fullscreen-player';
 import { RouteSkeleton } from '/@/renderer/features/shared/components/route-skeleton';
 import { MobileSidebar } from '/@/renderer/features/sidebar/components/mobile-sidebar';
+import { useEdgeSwipe } from '/@/renderer/hooks/use-edge-swipe';
 import { PlayerBar } from '/@/renderer/layouts/default-layout/player-bar';
 import { BottomTabBar } from '/@/renderer/layouts/mobile-layout/bottom-tab-bar';
 import { WindowBar } from '/@/renderer/layouts/window-bar';
@@ -29,6 +30,17 @@ export const MobileLayout = ({ shell }: MobileLayoutProps) => {
         visualizerExpanded: isFullScreenVisualizerExpanded,
     } = useFullScreenPlayerOverlayState();
     const windowBarStyle = useWindowBarStyle();
+
+    // Edge-swipe to open the side drawer: a finger landing within 24px of
+    // the left edge and dragging inward past 60px opens the drawer. Mirrors
+    // Android's standard navigation-drawer gesture. Disabled while the
+    // drawer is already open (close gesture is the drawer's own backdrop
+    // tap / dismiss) and while the fullscreen player is up (otherwise the
+    // user's swipe-down-to-dismiss gestures would also poke the drawer).
+    useEdgeSwipe({
+        disabled: sidebarOpened || isFullScreenPlayerExpanded || isFullScreenVisualizerExpanded,
+        onSwipeOpen: openSidebar,
+    });
 
     // On Android (Capacitor) the WindowBar's native min/max/close controls are
     // meaningless and just steal vertical space — Platform.WEB is what we get
