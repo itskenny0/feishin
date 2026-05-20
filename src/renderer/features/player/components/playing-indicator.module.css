@@ -24,7 +24,11 @@
 
 .bar {
     width: 3px;
-    background-color: var(--theme-colors-primary-filled);
+
+    /* Picks up the playerbar's album-art accent when set, otherwise the
+       theme primary. Lets the EQ pulse subtly match the cover of the
+       currently-playing track without standing out as a separate motif. */
+    background-color: var(--playerbar-art-accent, var(--theme-colors-primary-filled));
     border-radius: 1px;
     animation-name: bar-pulse;
     animation-duration: 450ms;

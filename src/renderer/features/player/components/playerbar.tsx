@@ -31,10 +31,19 @@ export const Playerbar = () => {
     const currentSong = usePlayerSong();
     const { color } = useDominantColor(currentSong?.imageUrl);
 
-    const tintStyle = useMemo<CSSProperties>(
-        () => ({ ['--playerbar-art-tint' as string]: color ?? 'transparent' }),
-        [color],
-    );
+    // Two related CSS variables for descendants. `--playerbar-art-tint` is
+    // used by the background gradient and stays `transparent` when there's
+    // no art / CORS blocked the read. `--playerbar-art-accent` is the same
+    // colour OR the theme primary when there's no tint, so descendants that
+    // need a *visible* accent (the EQ pulse bars) can read it
+    // unconditionally and still get a sensible colour in the fallback case.
+    const tintStyle = useMemo<CSSProperties>(() => {
+        const accent = color ?? 'var(--theme-colors-primary-filled)';
+        return {
+            ['--playerbar-art-accent' as string]: accent,
+            ['--playerbar-art-tint' as string]: color ?? 'transparent',
+        };
+    }, [color]);
 
     const handleToggleFullScreenPlayer = (e?: KeyboardEvent | MouseEvent<HTMLDivElement>) => {
         e?.stopPropagation();
