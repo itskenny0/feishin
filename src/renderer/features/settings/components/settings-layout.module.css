@@ -1,0 +1,182 @@
+/*
+ * Android-Settings-style layout.
+ *
+ * Two-pane on tablet+ (sidebar | content), single column with drill-down
+ * on the mobile shell (<768px). The sidebar uses the existing theme
+ * background-alternate so it visually anchors against the page chrome
+ * and reads as primary navigation, not as another panel of content.
+ */
+
+.layout {
+    display: grid;
+    grid-template-columns: 320px minmax(0, 1fr);
+    gap: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: var(--theme-colors-background);
+}
+
+/* Phone shell: single column. .mobile.phoneDetail flips the row to show
+   the content; otherwise the list is shown full-width. */
+.layout.mobile {
+    grid-template-columns: 1fr;
+}
+
+.sidebar {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow-y: auto;
+    background: var(--theme-colors-background-alternate, transparent);
+    border-right: 1px solid var(--theme-colors-border);
+    -webkit-overflow-scrolling: touch;
+}
+
+.layout.mobile .sidebar {
+    border-right: none;
+}
+
+.category-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    padding: 0.75rem 0.5rem;
+    margin: 0;
+    list-style: none;
+}
+
+.category-item {
+    display: flex;
+    gap: 0.85rem;
+    align-items: flex-start;
+    width: 100%;
+    min-height: 64px;
+    padding: 0.75rem 0.85rem;
+    color: var(--theme-colors-foreground);
+    text-align: left;
+    cursor: pointer;
+    background: transparent;
+    border: none;
+    border-radius: 12px;
+    transition:
+        background 140ms ease,
+        color 140ms ease;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.category-item:hover,
+.category-item:focus-visible {
+    outline: none;
+    background: color-mix(in srgb, var(--theme-colors-foreground) 6%, transparent);
+}
+
+.category-item:focus-visible {
+    box-shadow: inset 0 0 0 2px var(--theme-colors-primary-filled);
+}
+
+.category-item.active {
+    background: color-mix(in srgb, var(--theme-colors-primary-filled) 18%, transparent);
+}
+
+.category-icon {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 1.6rem;
+    height: 1.6rem;
+    color: var(--theme-colors-primary-filled);
+}
+
+.category-item:not(.active) .category-icon {
+    color: color-mix(in srgb, var(--theme-colors-foreground) 78%, transparent);
+}
+
+.category-meta {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 0.18rem;
+    min-width: 0;
+}
+
+.category-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.95rem;
+    font-weight: 600;
+    line-height: 1.25;
+    white-space: nowrap;
+}
+
+.category-description {
+    /* Two-line clamp keeps the row height predictable. */
+    display: -webkit-box;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    -webkit-line-clamp: 2;
+    font-size: 0.78rem;
+    line-height: 1.3;
+    color: color-mix(in srgb, var(--theme-colors-foreground) 60%, transparent);
+    -webkit-box-orient: vertical;
+}
+
+.category-chevron {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    align-self: center;
+    justify-content: center;
+    color: color-mix(in srgb, var(--theme-colors-foreground) 55%, transparent);
+}
+
+.content {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    height: 100%;
+    overflow: hidden;
+}
+
+.content-inner {
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: 1rem 1.25rem;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.back-button {
+    display: flex;
+    flex-shrink: 0;
+    gap: 0.5rem;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--theme-colors-foreground);
+    cursor: pointer;
+    background: var(--theme-colors-background-alternate, transparent);
+    border: none;
+    border-bottom: 1px solid var(--theme-colors-border);
+    -webkit-tap-highlight-color: transparent;
+}
+
+.back-button:hover,
+.back-button:focus-visible {
+    outline: none;
+    background: color-mix(in srgb, var(--theme-colors-foreground) 6%, transparent);
+}
+
+.back-hotkey-hint {
+    margin-left: auto;
+    color: color-mix(in srgb, var(--theme-colors-foreground) 50%, transparent);
+}
+
+/* Hide hotkey hint on touch — there's no Esc key. */
+@media (pointer: coarse) {
+    .back-hotkey-hint {
+        display: none;
+    }
+}

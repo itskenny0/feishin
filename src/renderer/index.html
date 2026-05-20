@@ -31,18 +31,43 @@
              devtools. Useful when debugging an Android APK on a tablet
              that hasn't been hooked up via chrome://inspect yet. The
              whole block is web-only — the Electron build doesn't need
-             it because it has F12 and Sentry-style instrumentation. -->
-        <div id="boot-error-overlay" style="display:none;position:fixed;inset:0;z-index:99999;padding:20px;background:#1a0000;color:#ff8a80;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:13px;line-height:1.45;overflow:auto;white-space:pre-wrap;word-break:break-word;"></div>
+             it because it has F12 and Sentry-style instrumentation.
+
+             Two important properties to preserve:
+             1. The overlay is ONLY active until React has mounted into
+                #root. Once createRoot() flushes, the overlay closes and
+                stops accepting new errors so a single later scrobble
+                failure (or any other post-boot rejection) doesn't slap a
+                red full-screen panel over a working app — that was the
+                bug in v20j where the entire UI looked black with only
+                error lines visible.
+             2. The overlay is tap-to-dismiss as a fallback, so even if a
+                pre-mount error fires the user can clear it manually. -->
+        <div id="boot-error-overlay" style="display:none;position:fixed;inset:0;z-index:99999;padding:20px;background:#1a0000;color:#ff8a80;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:13px;line-height:1.45;overflow:auto;white-space:pre-wrap;word-break:break-word;cursor:pointer;"></div>
         <script>
             (function () {
                 var overlay = document.getElementById('boot-error-overlay');
                 var lines = [];
+                // Once React has mounted we stop intercepting events.
+                // `disabled` flips to true on first observed render so
+                // post-boot rejections don't resurrect the overlay.
+                var disabled = false;
                 function show(label, info) {
+                    if (disabled) return;
                     var stamp = new Date().toISOString().slice(11, 23);
                     lines.push('[' + stamp + '] ' + label + ': ' + info);
-                    overlay.textContent = lines.join('\n\n');
+                    overlay.textContent =
+                        lines.join('\n\n') +
+                        '\n\n— Tap anywhere to dismiss this overlay —';
                     overlay.style.display = 'block';
                 }
+                function hide() {
+                    overlay.style.display = 'none';
+                    overlay.textContent = '';
+                    lines = [];
+                    disabled = true;
+                }
+                overlay.addEventListener('click', hide);
                 window.addEventListener(
                     'error',
                     function (e) {
@@ -62,6 +87,24 @@
                         (reason && (reason.stack || reason.message)) || String(reason);
                     show('UNHANDLED REJECTION', msg);
                 });
+
+                // Poll for React mount. As soon as #root has a child node
+                // we know createRoot has run and the rest of the app is
+                // the right place to surface errors (toasts, etc.). The
+                // overlay disables itself, which keeps later runtime
+                // rejections from re-covering the UI.
+                var mountInterval = setInterval(function () {
+                    var root = document.getElementById('root');
+                    if (root && root.childNodes.length > 0) {
+                        // If the overlay is currently showing (a pre-mount
+                        // error happened), leave it visible so the user can
+                        // still read what went wrong — they can tap to
+                        // dismiss. We only stop *accepting new errors*.
+                        disabled = true;
+                        clearInterval(mountInterval);
+                    }
+                }, 100);
+
                 // If React hasn't mounted into #root after 5s, dump a
                 // diagnostic block so we know the bundle never reached
                 // createRoot(). The page is black until then anyway, so
