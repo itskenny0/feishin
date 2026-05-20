@@ -21,6 +21,8 @@
     },
     "main": "./out/main/index.js",
     "scripts": {
+        "android:open": "npx cap open android",
+        "android:sync": "pnpm build:web && npx cap sync android",
         "build": "pnpm run build:electron && pnpm run build:remote",
         "build:electron": "electron-vite build",
         "build:remote": "vite build --config remote.vite.config.ts",
@@ -76,6 +78,10 @@
         "@atlaskit/pragmatic-drag-and-drop": "1.7.7",
         "@atlaskit/pragmatic-drag-and-drop-auto-scroll": "^2.1.5",
         "@atlaskit/pragmatic-drag-and-drop-hitbox": "^1.1.0",
+        "@capacitor/android": "^8.3.4",
+        "@capacitor/app": "^8.1.0",
+        "@capacitor/core": "^8.3.4",
+        "@capacitor/status-bar": "^8.0.2",
         "@electron-toolkit/preload": "^3.0.2",
         "@electron-toolkit/utils": "^4.0.0",
         "@mantine/colors-generator": "^9.1.1",
@@ -144,6 +150,7 @@
         "zustand": "^5.0.12"
     },
     "devDependencies": {
+        "@capacitor/cli": "^8.3.4",
         "@electron-toolkit/eslint-config-prettier": "^3.0.0",
         "@electron-toolkit/eslint-config-ts": "^3.1.0",
         "@electron-toolkit/tsconfig": "^2.0.0",

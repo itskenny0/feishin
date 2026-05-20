@@ -6,7 +6,10 @@ import eslintPluginReactHooks from 'eslint-plugin-react-hooks';
 import eslintPluginReactRefresh from 'eslint-plugin-react-refresh';
 
 export default tseslint.config(
-    { ignores: ['**/node_modules', '**/dist', '**/out'] },
+    // android/ holds the Capacitor-scaffolded native project — manifests,
+    // gradle scripts, kotlin source. None of it is application TS/TSX, and
+    // walking that tree slows the eslint cache by an order of magnitude.
+    { ignores: ['**/node_modules', '**/dist', '**/out', '**/android'] },
     tseslint.configs.recommended,
     perfectionist.configs['recommended-natural'],
     eslintPluginReact.configs.flat.recommended,
