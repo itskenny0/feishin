@@ -19,6 +19,17 @@ const config: CapacitorConfig = {
     },
     appId: 'cat.kenny.feishin',
     appName: 'Feishin',
+    plugins: {
+        SplashScreen: {
+            androidScaleType: 'CENTER_CROP',
+            backgroundColor: '#15103a',
+            launchAutoHide: true,
+            launchShowDuration: 1500,
+            showSpinner: false,
+            splashFullScreen: true,
+            splashImmersive: false,
+        },
+    },
     server: {
         // Allow plain HTTP traffic to Jellyfin / Subsonic servers on the local
         // network. Production deployments behind HTTPS still work; this just
