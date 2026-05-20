@@ -201,9 +201,17 @@
 .title {
     display: flex;
     margin: 0;
-    font-size: clamp(1.75rem, 3dvw, 2.75rem);
+
+    /* Spotify-style display title: large, dense, tight tracking.
+       3.5rem ceiling lets desktop hero pages read as editorial cover-
+       art labels rather than UI chrome; 2rem floor keeps phone titles
+       readable without crushing into the album-art on portrait. The
+       sizes calculated by calculateTitleSize() in library-header.tsx
+       override this baseline when the title is unusually long. */
+    font-size: clamp(2rem, 4dvw, 3.5rem);
     font-weight: 800;
-    line-height: 1.2;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
     word-break: keep-all;
     text-wrap: pretty;
 }

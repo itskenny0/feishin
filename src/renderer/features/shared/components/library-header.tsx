@@ -306,41 +306,45 @@ export const calculateWeightedLength = (str: string): number => {
 
 export const calculateTitleSize = (title: string) => {
     const titleLength = calculateWeightedLength(title);
-    let baseSize = '3dvw';
+    // Bumped baseline + ceiling for the Spotify-style hero look. Long
+    // titles still ramp the dvw multiplier down so very long names don't
+    // overflow the header; the floor/ceiling stay synchronised with the
+    // baseline rule in library-header.module.css .title.
+    let baseSize = '4dvw';
 
     if (titleLength > 20) {
-        baseSize = '2.5dvw';
+        baseSize = '3.4dvw';
     }
 
     if (titleLength > 30) {
-        baseSize = '2.25dvw';
+        baseSize = '3dvw';
     }
 
     if (titleLength > 40) {
-        baseSize = '2dvw';
+        baseSize = '2.6dvw';
     }
 
     if (titleLength > 50) {
-        baseSize = '1.875dvw';
+        baseSize = '2.4dvw';
     }
 
     if (titleLength > 60) {
-        baseSize = '1.75dvw';
+        baseSize = '2.2dvw';
     }
 
     if (titleLength > 70) {
-        baseSize = '1.5dvw';
+        baseSize = '1.9dvw';
     }
 
     if (titleLength > 80) {
-        baseSize = '1.4dvw';
+        baseSize = '1.7dvw';
     }
 
     if (titleLength > 90) {
-        baseSize = '1.3dvw';
+        baseSize = '1.5dvw';
     }
 
-    return `clamp(1.75rem, ${baseSize}, 2.75rem)`;
+    return `clamp(2rem, ${baseSize}, 3.5rem)`;
 };
 
 interface LibraryHeaderMenuProps {
