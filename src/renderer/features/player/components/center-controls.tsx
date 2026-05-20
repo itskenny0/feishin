@@ -1,3 +1,4 @@
+import clsx from 'clsx';
 import { useTranslation } from 'react-i18next';
 
 import styles from './center-controls.module.css';
@@ -84,7 +85,15 @@ const RadioCenterPlayButton = ({ disabled }: { disabled?: boolean }) => {
         }
     };
 
-    return <MainPlayButton disabled={disabled} isPaused={!isPlayingRadio} onClick={handleClick} />;
+    return (
+        <div
+            className={clsx(styles.playButtonWrapper, {
+                [styles.playButtonPlaying]: isPlayingRadio,
+            })}
+        >
+            <MainPlayButton disabled={disabled} isPaused={!isPlayingRadio} onClick={handleClick} />
+        </div>
+    );
 };
 
 const RadioStopButton = ({ disabled }: { disabled?: boolean }) => {
@@ -208,13 +217,21 @@ const CenterPlayButton = ({ disabled }: { disabled?: boolean }) => {
     const { mediaTogglePlayPause } = usePlayer();
     const canPlayPause = useTransportEnabled('PlayPause');
 
+    const isPlaying = currentSongId !== undefined && !isPaused;
+
     return (
-        <MainPlayButton
-            disabled={disabled || currentSongId === undefined || !canPlayPause}
-            isPaused={isPaused}
-            onClick={mediaTogglePlayPause}
-            style={{ opacity: canPlayPause ? undefined : 0.4 }}
-        />
+        <div
+            className={clsx(styles.playButtonWrapper, {
+                [styles.playButtonPlaying]: isPlaying,
+            })}
+        >
+            <MainPlayButton
+                disabled={disabled || currentSongId === undefined || !canPlayPause}
+                isPaused={isPaused}
+                onClick={mediaTogglePlayPause}
+                style={{ opacity: canPlayPause ? undefined : 0.4 }}
+            />
+        </div>
     );
 };
 

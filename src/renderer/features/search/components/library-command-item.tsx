@@ -4,6 +4,7 @@ import styles from './library-command-item.module.css';
 
 import { ItemImage } from '/@/renderer/components/item-image/item-image';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
+import { HighlightedText } from '/@/renderer/features/shared/components/highlighted-text';
 import {
     LONG_PRESS_PLAY_BEHAVIOR,
     PlayTooltip,
@@ -37,6 +38,8 @@ const createPlayKeyDownHandler = (
 interface LibraryCommandItemProps {
     disabled?: boolean;
     explicitStatus?: ExplicitStatus | null;
+    /** Search term to highlight inside `title` and `subtitle`. Optional. */
+    highlightQuery?: string;
     id: string;
     imageId: null | string;
     imageUrl: null | string;
@@ -50,6 +53,7 @@ interface LibraryCommandItemProps {
 export const LibraryCommandItem = ({
     disabled,
     explicitStatus,
+    highlightQuery,
     id,
     imageId,
     imageUrl,
@@ -130,9 +134,11 @@ export const LibraryCommandItem = ({
                     />
                 </div>
                 <div className={styles.metadataWrapper}>
-                    <Text overflow="hidden">{title}</Text>
+                    <Text overflow="hidden">
+                        <HighlightedText query={highlightQuery} text={title} />
+                    </Text>
                     <Text isMuted overflow="hidden" size="sm">
-                        {subtitle}
+                        <HighlightedText query={highlightQuery} text={subtitle} />
                     </Text>
                 </div>
             </div>
