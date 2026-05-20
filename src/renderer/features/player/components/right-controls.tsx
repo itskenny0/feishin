@@ -136,6 +136,11 @@ const QueueButton = () => {
     const isSidebarRightExpanded = useSidebarRightExpanded();
     const { setSideBar } = useAppStoreActions();
     const sideQueueType = useSideQueueType();
+    // Surface queue size on the toggle button itself via a small numeric
+    // badge — saves a click for "how many tracks are queued?". usePlayerData
+    // is already memoised with shallow equality so this doesn't add a
+    // re-render hot path.
+    const { queueLength } = usePlayerData();
 
     const { bindings } = useHotkeySettings();
 
@@ -179,19 +184,26 @@ const QueueButton = () => {
 
     if (sideQueueType === 'sideQueue') {
         return (
-            <ActionIcon
-                icon={isSidebarRightExpanded ? 'panelRightClose' : 'panelRightOpen'}
-                iconProps={{
-                    size: 'lg',
-                }}
-                onClick={handleClick}
-                size="sm"
-                tooltip={{
-                    label: t('player.viewQueue'),
-                    openDelay: 400,
-                }}
-                variant="subtle"
-            />
+            <div className={styles.queueButtonWrapper}>
+                <ActionIcon
+                    icon={isSidebarRightExpanded ? 'panelRightClose' : 'panelRightOpen'}
+                    iconProps={{
+                        size: 'lg',
+                    }}
+                    onClick={handleClick}
+                    size="sm"
+                    tooltip={{
+                        label: t('player.viewQueue'),
+                        openDelay: 400,
+                    }}
+                    variant="subtle"
+                />
+                {queueLength > 0 && (
+                    <span aria-hidden className={styles.queueBadge}>
+                        {queueLength > 99 ? '99+' : queueLength}
+                    </span>
+                )}
+            </div>
         );
     }
 
@@ -203,6 +215,7 @@ const QueueButton = () => {
                 handleToggleQueue();
             }}
             opened={popoverOpened}
+            queueLength={queueLength}
         />
     );
 };

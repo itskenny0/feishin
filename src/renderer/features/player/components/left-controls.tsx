@@ -20,6 +20,7 @@ import {
     useIsRadioActive,
     useRadioPlayer,
 } from '/@/renderer/features/radio/hooks/use-radio-player';
+import { useTruncationDetection } from '/@/renderer/features/shared/components/truncated-text';
 import { useHotkeys } from '/@/renderer/hooks/use-hotkeys';
 import { prefetchAlbumDetail, preloadRoute } from '/@/renderer/router/route-preloaders';
 import { AppRoute } from '/@/renderer/router/routes';
@@ -44,7 +45,7 @@ import { Icon } from '/@/shared/components/icon/icon';
 import { Text } from '/@/shared/components/text/text';
 import { Tooltip } from '/@/shared/components/tooltip/tooltip';
 import { PlaybackSelectors } from '/@/shared/constants/playback-selectors';
-import { LibraryItem } from '/@/shared/types/domain-types';
+import { LibraryItem, Song } from '/@/shared/types/domain-types';
 import { albumFolderFromSongPath } from '/@/shared/utils/album-folder-from-path';
 import { isPlausibleReleaseYear } from '/@/shared/utils/release-year';
 
@@ -255,31 +256,11 @@ export const LeftControls = () => {
                             <div className={styles.lineItem} onClick={stopPropagation}>
                                 <Group align="center" gap="xs" wrap="nowrap">
                                     <PlayingIndicator />
-                                    <Text
-                                        className={PlaybackSelectors.songTitle}
-                                        component={Link}
-                                        fw={500}
-                                        isLink
+                                    <PlayerbarTitle
+                                        currentSong={currentSong}
                                         onContextMenu={handleToggleContextMenu}
-                                        onFocus={preloadNowPlaying}
-                                        onMouseEnter={preloadNowPlaying}
-                                        overflow="hidden"
-                                        // Allow the title to shrink in a wrap:nowrap Group so the
-                                        // year chip + ellipsis menu (flex-shrink:0) stay visible
-                                        // on long titles. Without minWidth:0 a long title pushes
-                                        // both off-screen on narrow playerbars.
-                                        style={{ flex: '1 1 auto', minWidth: 0 }}
-                                        to={AppRoute.NOW_PLAYING}
-                                    >
-                                        {title || '—'}
-                                        {currentSong?.trackSubtitle && (
-                                            <Text component="span" isMuted size="sm">
-                                                {' ('}
-                                                {currentSong.trackSubtitle}
-                                                {')'}
-                                            </Text>
-                                        )}
-                                    </Text>
+                                        title={title}
+                                    />
                                     {showYearChip &&
                                         isPlausibleReleaseYear(currentSong?.releaseYear) && (
                                             <span
@@ -317,63 +298,190 @@ export const LeftControls = () => {
                                     )}
                                 </Group>
                             </div>
-                            <div
-                                className={clsx(
-                                    styles.lineItem,
-                                    styles.secondary,
-                                    PlaybackSelectors.songArtist,
-                                )}
-                                onClick={stopPropagation}
-                            >
-                                <JoinedArtists
-                                    artistName={currentSong?.artistName || ''}
-                                    artists={artists || []}
-                                    linkProps={{
-                                        ...JOINED_ARTISTS_MUTED_PROPS.linkProps,
-                                        size: 'md',
-                                    }}
-                                    rootTextProps={{
-                                        ...JOINED_ARTISTS_MUTED_PROPS.rootTextProps,
-                                        size: 'md',
-                                    }}
-                                />
-                            </div>
-                            <div
-                                className={clsx(
-                                    styles.lineItem,
-                                    styles.secondary,
-                                    PlaybackSelectors.songAlbum,
-                                )}
-                                onClick={stopPropagation}
-                            >
-                                <Text
-                                    component={Link}
-                                    fw={500}
-                                    isLink
-                                    onFocus={preloadAlbumDetail}
-                                    onMouseEnter={preloadAlbumDetail}
-                                    onPointerDown={
-                                        currentSong?.albumId
-                                            ? () => prefetchAlbumDetail(currentSong.albumId!)
-                                            : undefined
-                                    }
-                                    overflow="hidden"
-                                    size="md"
-                                    to={
-                                        currentSong?.albumId
-                                            ? generatePath(AppRoute.LIBRARY_ALBUMS_DETAIL, {
-                                                  albumId: currentSong.albumId,
-                                              })
-                                            : ''
-                                    }
-                                >
-                                    {albumDisplayName}
-                                </Text>
-                            </div>
+                            <PlayerbarArtistLine
+                                artistName={currentSong?.artistName || ''}
+                                artists={artists || []}
+                                stopPropagation={stopPropagation}
+                            />
+                            <PlayerbarAlbumLine
+                                albumDisplayName={albumDisplayName}
+                                albumId={currentSong?.albumId}
+                                stopPropagation={stopPropagation}
+                            />
                         </>
                     )}
                 </div>
             </LayoutGroup>
         </div>
+    );
+};
+
+// Title line of the playerbar metadata stack. The title can include a
+// parenthesised track subtitle, which is rendered inline in a muted
+// span. When the visible portion overflows and gets ellipsised, a
+// tooltip shows the full title (plus subtitle if present) so the user
+// can still read long names without expanding the player.
+interface PlayerbarTitleProps {
+    currentSong: null | Song;
+    onContextMenu: (e: MouseEvent<HTMLDivElement>) => void;
+    title: string | undefined;
+}
+
+const PlayerbarTitle = ({ currentSong, onContextMenu, title }: PlayerbarTitleProps) => {
+    const displayTitle = title || '—';
+    const subtitle = currentSong?.trackSubtitle;
+    const fullLabel = subtitle ? `${displayTitle} (${subtitle})` : displayTitle;
+
+    const { isTruncated, ref } = useTruncationDetection<HTMLSpanElement>([fullLabel]);
+
+    // The Text+Link is the actual anchored element. The detection
+    // <span> sits inside it and measures the rendered text — both have
+    // overflow:hidden so the inner span's scrollWidth reflects the
+    // pre-clip width of the title text.
+    const titleNode = (
+        <Text
+            className={PlaybackSelectors.songTitle}
+            component={Link}
+            fw={500}
+            isLink
+            onContextMenu={onContextMenu}
+            onFocus={preloadNowPlaying}
+            onMouseEnter={preloadNowPlaying}
+            overflow="hidden"
+            style={{ flex: '1 1 auto', minWidth: 0 }}
+            to={AppRoute.NOW_PLAYING}
+        >
+            <span
+                ref={ref}
+                style={{
+                    display: 'block',
+                    minWidth: 0,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                }}
+            >
+                {displayTitle}
+                {subtitle && (
+                    <Text component="span" isMuted size="sm">
+                        {' ('}
+                        {subtitle}
+                        {')'}
+                    </Text>
+                )}
+            </span>
+        </Text>
+    );
+
+    if (!isTruncated) return titleNode;
+
+    return (
+        <Tooltip label={fullLabel} openDelay={500} position="top" withinPortal>
+            {titleNode}
+        </Tooltip>
+    );
+};
+
+// Artist line. JoinedArtists renders multiple inline Text spans
+// (matching album-artist names against the artistName string), so
+// truncation lives on the surrounding line container. The plain
+// artistName string is the tooltip label — that's the full text
+// users want to read on hover.
+interface PlayerbarArtistLineProps {
+    artistName: string;
+    artists: Song['artists'];
+    stopPropagation: (e?: MouseEvent) => void;
+}
+
+const PlayerbarArtistLine = ({
+    artistName,
+    artists,
+    stopPropagation,
+}: PlayerbarArtistLineProps) => {
+    const { isTruncated, ref } = useTruncationDetection<HTMLDivElement>([artistName]);
+
+    const node = (
+        <div
+            className={clsx(styles.lineItem, styles.secondary, PlaybackSelectors.songArtist)}
+            onClick={stopPropagation}
+            ref={ref}
+        >
+            <JoinedArtists
+                artistName={artistName}
+                artists={artists || []}
+                linkProps={{
+                    ...JOINED_ARTISTS_MUTED_PROPS.linkProps,
+                    size: 'md',
+                }}
+                rootTextProps={{
+                    ...JOINED_ARTISTS_MUTED_PROPS.rootTextProps,
+                    size: 'md',
+                }}
+            />
+        </div>
+    );
+
+    if (!isTruncated || !artistName) return node;
+
+    return (
+        <Tooltip label={artistName} openDelay={500} position="top" withinPortal>
+            {node}
+        </Tooltip>
+    );
+};
+
+// Album line. Plain Text + Link with the same ellipsis recipe as the
+// other two. Tooltip only fires when the visible name is clipped.
+interface PlayerbarAlbumLineProps {
+    albumDisplayName: string;
+    albumId: string | undefined;
+    stopPropagation: (e?: MouseEvent) => void;
+}
+
+const PlayerbarAlbumLine = ({
+    albumDisplayName,
+    albumId,
+    stopPropagation,
+}: PlayerbarAlbumLineProps) => {
+    const { isTruncated, ref } = useTruncationDetection<HTMLSpanElement>([albumDisplayName]);
+
+    const node = (
+        <div
+            className={clsx(styles.lineItem, styles.secondary, PlaybackSelectors.songAlbum)}
+            onClick={stopPropagation}
+        >
+            <Text
+                component={Link}
+                fw={500}
+                isLink
+                onFocus={preloadAlbumDetail}
+                onMouseEnter={preloadAlbumDetail}
+                onPointerDown={albumId ? () => prefetchAlbumDetail(albumId) : undefined}
+                overflow="hidden"
+                size="md"
+                to={albumId ? generatePath(AppRoute.LIBRARY_ALBUMS_DETAIL, { albumId }) : ''}
+            >
+                <span
+                    ref={ref}
+                    style={{
+                        display: 'block',
+                        minWidth: 0,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                    }}
+                >
+                    {albumDisplayName}
+                </span>
+            </Text>
+        </div>
+    );
+
+    if (!isTruncated || !albumDisplayName || albumDisplayName === '—') return node;
+
+    return (
+        <Tooltip label={albumDisplayName} openDelay={500} position="top" withinPortal>
+            {node}
+        </Tooltip>
     );
 };

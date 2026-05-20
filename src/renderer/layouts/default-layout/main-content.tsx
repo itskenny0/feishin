@@ -9,6 +9,7 @@ import styles from './main-content.module.css';
 import { ExpandedListContainer } from '/@/renderer/components/item-list/expanded-list-container';
 import { ExpandedListItem } from '/@/renderer/components/item-list/expanded-list-item';
 import { RouteSkeleton } from '/@/renderer/features/shared/components/route-skeleton';
+import { ScrollToTopButton } from '/@/renderer/features/shared/components/scroll-to-top-button';
 import { FullScreenOverlay } from '/@/renderer/layouts/default-layout/full-screen-overlay';
 import { FullScreenVisualizerOverlay } from '/@/renderer/layouts/default-layout/full-screen-visualizer-overlay';
 import { LeftSidebar } from '/@/renderer/layouts/default-layout/left-sidebar';
@@ -233,13 +234,20 @@ function GlobalExpandedPanel() {
 }
 
 function MainContentBody() {
+    // Ref points at the body's scrollable container. The
+    // ScrollToTopButton attaches a capture-phase scroll listener so
+    // it also fires for descendant overflow containers (e.g. the
+    // virtualised lists in albums / songs / search results).
+    const scrollRef = useRef<HTMLDivElement | null>(null);
+
     return (
         <main className={styles.mainContentBody}>
-            <div className={styles.mainContentBodyScroll}>
+            <div className={styles.mainContentBodyScroll} ref={scrollRef}>
                 <Suspense fallback={<RouteSkeleton />}>
                     <Outlet />
                 </Suspense>
             </div>
+            <ScrollToTopButton targetRef={scrollRef} />
             <GlobalExpandedPanel />
         </main>
     );

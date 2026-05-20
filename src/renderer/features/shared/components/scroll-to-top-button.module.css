@@ -1,0 +1,39 @@
+/*
+ * Floating "scroll to top" affordance for long routes. Anchored to
+ * the bottom-right of the viewport (well above the playerbar so the
+ * two never overlap) with a subtle drop shadow + circular border to
+ * read as a floating action button. Fades + slides in so its
+ * appearance doesn't feel like a layout glitch.
+ */
+
+.fab {
+    position: fixed;
+    right: 24px;
+
+    /* The playerbar at the bottom is ~90px tall, plus extra breathing
+     * room. Sits clear of the play queue toggle in the corner of the
+     * right controls so the two don't fight visually. */
+    bottom: 120px;
+    z-index: 30;
+    border-radius: 50%;
+    box-shadow: 0 4px 12px rgb(0 0 0 / 24%);
+    animation: fab-fade-in 200ms ease-out both;
+}
+
+@keyframes fab-fade-in {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .fab {
+        animation: none;
+    }
+}
