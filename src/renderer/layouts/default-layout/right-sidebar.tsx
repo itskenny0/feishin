@@ -72,7 +72,11 @@ export const RightSidebar = forwardRef(
                     >
                         <ResizeHandle
                             isResizing={isResizingRight}
-                            onMouseDown={(e) => {
+                            // pointerdown (not mousedown) so the gesture fires
+                            // on touch devices too. PointerEvent extends
+                            // MouseEvent, so startResizing's nativeEvent
+                            // signature stays compatible.
+                            onPointerDown={(e) => {
                                 e.preventDefault();
                                 startResizing(isVerticalLayout ? 'top' : 'right', e.nativeEvent);
                             }}
