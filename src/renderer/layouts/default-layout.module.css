@@ -1,23 +1,53 @@
+/*
+ * Desktop layout grid.
+ *
+ * Three stacked rows: optional native title row (30px on Win/Mac, 0 elsewhere),
+ * main content, and player. Heights below subtract the title + player rows
+ * from the viewport so the middle row is exactly the remaining space.
+ *
+ * The --safe-top / --safe-bottom variables fall through to the iOS/Android
+ * safe-area-inset env() values when the WebView paints edge-to-edge (most
+ * Capacitor builds, since the platform doesn't always honour Android's
+ * fitsSystemWindows attribute). On environments without insets these are 0,
+ * so desktop electron rendering is unchanged.
+ *
+ * The seek-slider was getting overlapped by the Android gesture-pill at the
+ * bottom of the screen before — the player row now grows by safe-bottom so
+ * the controls stay above the system UI on whatever ROM the user is on.
+ */
+
 .layout {
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --window-bar-height: 0px;
+    --player-bar-height: 90px;
+
     display: grid;
     grid-template-areas:
         'window-bar'
         'main-content'
         'player';
-    grid-template-rows: 0 calc(100vh - 90px) 90px;
-    grid-template-rows: 0 calc(100dvh - 90px) 90px;
+    grid-template-rows:
+        calc(var(--window-bar-height) + var(--safe-top))
+        calc(
+            100vh - var(--window-bar-height) - var(--safe-top) - var(--player-bar-height) -
+                var(--safe-bottom)
+        )
+        calc(var(--player-bar-height) + var(--safe-bottom));
+    grid-template-rows:
+        calc(var(--window-bar-height) + var(--safe-top))
+        calc(
+            100dvh - var(--window-bar-height) - var(--safe-top) - var(--player-bar-height) -
+                var(--safe-bottom)
+        )
+        calc(var(--player-bar-height) + var(--safe-bottom));
     grid-template-columns: 1fr;
     gap: 0;
     height: 100%;
     overflow: hidden;
 }
 
-.windows {
-    grid-template-rows: 30px calc(100vh - 120px) 90px;
-    grid-template-rows: 30px calc(100dvh - 120px) 90px;
-}
-
+.windows,
 .macos {
-    grid-template-rows: 30px calc(100vh - 120px) 90px;
-    grid-template-rows: 30px calc(100dvh - 120px) 90px;
+    --window-bar-height: 30px;
 }

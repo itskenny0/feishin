@@ -1730,67 +1730,94 @@ export const JellyfinController: InternalControllerEndpoint = {
             VolumeLevel: playerState.player.volume,
         };
 
+        // Fire-and-forget scrobble calls intentionally aren't awaited (we
+        // don't want them blocking playback), but ts-rest's client returns
+        // a promise that rejects on network failure. Without a catch
+        // those rejections bubble up as unhandled-rejection events, which
+        // the renderer's boot-error overlay (and any production telemetry)
+        // treats as crashes. Swallow them — scrobble failures are an
+        // expected steady-state condition on flaky networks and aren't
+        // actionable in this layer.
+        const swallowScrobbleError = (err: unknown) => {
+            // Keep a debug-level breadcrumb for anyone with devtools open;
+            // upgrade to console.warn would be too loud given how often
+            // this fires on cellular.
+            if (typeof console !== 'undefined') {
+                console.debug('[scrobble] dropped:', err);
+            }
+        };
+
         if (query.submission) {
             // Checked by jellyfin-plugin-lastfm for whether or not to send the "finished" scrobble (uses PositionTicks)
-            jfApiClient(apiClientProps).scrobbleStopped({
-                body: {
-                    IsPaused: true,
-                    ItemId: query.id,
-                    PositionTicks: position,
-                    ...queueFields,
-                },
-            });
+            jfApiClient(apiClientProps)
+                .scrobbleStopped({
+                    body: {
+                        IsPaused: true,
+                        ItemId: query.id,
+                        PositionTicks: position,
+                        ...queueFields,
+                    },
+                })
+                .catch(swallowScrobbleError);
 
             return null;
         }
 
         if (query.event === 'start') {
-            jfApiClient(apiClientProps).scrobblePlaying({
-                body: {
-                    ItemId: query.id,
-                    PositionTicks: position,
-                    ...queueFields,
-                },
-            });
+            jfApiClient(apiClientProps)
+                .scrobblePlaying({
+                    body: {
+                        ItemId: query.id,
+                        PositionTicks: position,
+                        ...queueFields,
+                    },
+                })
+                .catch(swallowScrobbleError);
 
             return null;
         }
 
         if (query.event === 'pause') {
-            jfApiClient(apiClientProps).scrobbleProgress({
-                body: {
-                    EventName: query.event,
-                    IsPaused: true,
-                    ItemId: query.id,
-                    PositionTicks: position,
-                    ...queueFields,
-                },
-            });
+            jfApiClient(apiClientProps)
+                .scrobbleProgress({
+                    body: {
+                        EventName: query.event,
+                        IsPaused: true,
+                        ItemId: query.id,
+                        PositionTicks: position,
+                        ...queueFields,
+                    },
+                })
+                .catch(swallowScrobbleError);
 
             return null;
         }
 
         if (query.event === 'unpause') {
-            jfApiClient(apiClientProps).scrobbleProgress({
-                body: {
-                    EventName: query.event,
-                    IsPaused: false,
-                    ItemId: query.id,
-                    PositionTicks: position,
-                    ...queueFields,
-                },
-            });
+            jfApiClient(apiClientProps)
+                .scrobbleProgress({
+                    body: {
+                        EventName: query.event,
+                        IsPaused: false,
+                        ItemId: query.id,
+                        PositionTicks: position,
+                        ...queueFields,
+                    },
+                })
+                .catch(swallowScrobbleError);
 
             return null;
         }
 
-        jfApiClient(apiClientProps).scrobbleProgress({
-            body: {
-                ItemId: query.id,
-                PositionTicks: position,
-                ...queueFields,
-            },
-        });
+        jfApiClient(apiClientProps)
+            .scrobbleProgress({
+                body: {
+                    ItemId: query.id,
+                    PositionTicks: position,
+                    ...queueFields,
+                },
+            })
+            .catch(swallowScrobbleError);
 
         return null;
     },

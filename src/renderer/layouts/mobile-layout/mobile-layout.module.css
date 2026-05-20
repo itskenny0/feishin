@@ -7,20 +7,24 @@
  *   - tab bar     (persistent bottom navigation)
  *
  * Heights:
- *   - Player bar 78px (was 90px on desktop; trimmed slightly to leave room
- *     for the tab bar without crushing the metadata stack).
- *   - Tab bar    56px (Material guideline, also includes safe-area inset).
+ *   - Player bar 90px (matches .container in mobile-playerbar.module.css)
+ *   - Tab bar    56px (Material guideline, plus safe-area-inset-bottom for
+ *                       the iOS home-indicator / Android gesture pill).
  *
  * 100dvh is preferred over 100vh so the iOS URL bar doesn't push our
  * controls below the visible viewport. Both are kept (with the 100dvh
  * declaration second) so older WebViews fall back to 100vh.
+ *
+ * --safe-top / --safe-bottom are the safe-area-inset env() values from the
+ * platform. When the WebView paints edge-to-edge (which Capacitor often
+ * does even with windowOptOutEdgeToEdgeEnforcement set, because vendor
+ * Androids like crDroid don't all honour the attribute), these push the
+ * layout away from the status bar / clock at the top and the gesture pill
+ * at the bottom so neither overlaps the UI.
  */
 
 :root {
-    /* Keep aligned with .container height in mobile-playerbar.module.css
-       (currently 90px). Variable is exported so other components nearby
-       (e.g. the drawer button while we still had one) could position
-       themselves above the player chrome. */
+    /* Keep aligned with .container height in mobile-playerbar.module.css. */
     --mobile-playerbar-height: 90px;
 
     /* Spotify's tab bar is ~50px; we round up to 56px to satisfy the
@@ -30,6 +34,9 @@
 }
 
 .layout {
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+
     position: relative;
     display: grid;
     grid-template-areas:
@@ -38,15 +45,23 @@
         'player'
         'tab-bar';
     grid-template-rows:
-        var(--mobile-window-bar-height)
-        calc(100vh - var(--mobile-playerbar-height) - var(--mobile-tab-bar-height) - var(--mobile-window-bar-height))
+        calc(var(--mobile-window-bar-height) + var(--safe-top))
+        calc(
+            100vh - var(--mobile-window-bar-height) - var(--safe-top) -
+                var(--mobile-playerbar-height) - var(--mobile-tab-bar-height) -
+                var(--safe-bottom)
+        )
         var(--mobile-playerbar-height)
-        var(--mobile-tab-bar-height);
+        calc(var(--mobile-tab-bar-height) + var(--safe-bottom));
     grid-template-rows:
-        var(--mobile-window-bar-height)
-        calc(100dvh - var(--mobile-playerbar-height) - var(--mobile-tab-bar-height) - var(--mobile-window-bar-height))
+        calc(var(--mobile-window-bar-height) + var(--safe-top))
+        calc(
+            100dvh - var(--mobile-window-bar-height) - var(--safe-top) -
+                var(--mobile-playerbar-height) - var(--mobile-tab-bar-height) -
+                var(--safe-bottom)
+        )
         var(--mobile-playerbar-height)
-        var(--mobile-tab-bar-height);
+        calc(var(--mobile-tab-bar-height) + var(--safe-bottom));
     grid-template-columns: 1fr;
     gap: 0;
     width: 100vw;
@@ -59,7 +74,6 @@
 .windows,
 .macos {
     /* On desktop platforms a 30px native title row sits at the top. */
-
     --mobile-window-bar-height: 30px;
 }
 
@@ -79,4 +93,11 @@
     left: 0;
     z-index: 200;
     overflow: hidden;
+
+    /* The full-screen player needs to extend BENEATH the system bars (the
+       overlay covers the whole viewport visually) but its own controls
+       should stay inside the safe area. Children that touch the edges
+       use these vars to inset their content. */
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
