@@ -118,6 +118,7 @@ export function SearchAlbumArtistsSection({
                             {({ isHighlighted }) => (
                                 <LibraryCommandItem
                                     disabled={artist?.albumCount === 0}
+                                    highlightQuery={debouncedQuery}
                                     id={artist.id}
                                     imageId={artist.imageId}
                                     imageUrl={artist.imageUrl}

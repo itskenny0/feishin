@@ -1,0 +1,10 @@
+.mark {
+    padding: 0 2px;
+    color: inherit;
+    background-color: color-mix(
+        in srgb,
+        var(--theme-colors-primary-filled, #ffd60a) 35%,
+        transparent
+    );
+    border-radius: 2px;
+}

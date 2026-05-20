@@ -118,6 +118,7 @@ export function SearchSongsSection({
                             {({ isHighlighted }) => (
                                 <LibraryCommandItem
                                     explicitStatus={song.explicitStatus}
+                                    highlightQuery={debouncedQuery}
                                     id={song.id}
                                     imageId={song.imageId}
                                     imageUrl={song.imageUrl}

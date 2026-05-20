@@ -20,3 +20,52 @@
         }
     }
 }
+
+/* Wrapper around the main play/pause button that hosts the ambient
+ * playing-glow ring. The ring itself is the wrapper's ::after — it sits
+ * underneath the button face (z-index 0) and is pointer-events: none so
+ * it doesn't intercept clicks.
+ */
+.play-button-wrapper {
+    position: relative;
+    display: inline-flex;
+    border-radius: 50%;
+}
+
+.play-button-wrapper > * {
+    position: relative;
+    z-index: 1;
+}
+
+.play-button-wrapper.play-button-playing::after {
+    position: absolute;
+    inset: -4px;
+    z-index: 0;
+    pointer-events: none;
+    content: '';
+    border: 2px solid var(--theme-colors-primary-filled, currentColor);
+    border-radius: 50%;
+    opacity: 0;
+    animation: play-button-glow 2400ms ease-in-out infinite;
+}
+
+@keyframes play-button-glow {
+    0%,
+    100% {
+        opacity: 0;
+        transform: scale(1);
+    }
+
+    50% {
+        opacity: 0.55;
+        transform: scale(1.08);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .play-button-wrapper.play-button-playing::after {
+        opacity: 0.3;
+        transform: none;
+        animation: none;
+    }
+}
