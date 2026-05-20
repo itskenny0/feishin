@@ -16,7 +16,31 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        // A stable debug keystore checked into the repo. Without it, Gradle
+        // generates an ephemeral debug keystore at $HOME/.android/debug.keystore
+        // on every machine — including each fresh GitHub Actions runner —
+        // and Android treats the resulting APKs as different apps because
+        // their signing certificates differ. Sideloading a new version then
+        // refuses to install over the old one. Pinning the keystore here
+        // makes every CI APK share the same SHA-256 fingerprint so they
+        // install as updates.
+        //
+        // This is intentionally NOT a release-grade key: debug keystores
+        // are public by convention (the password is the standard 'android').
+        // A real Play Store release would use a separate, secret keystore
+        // injected via a GitHub Actions secret.
+        debug {
+            storeFile file('debug.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+    }
     buildTypes {
+        debug {
+            signingConfig signingConfigs.debug
+        }
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
