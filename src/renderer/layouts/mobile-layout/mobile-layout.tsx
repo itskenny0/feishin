@@ -1,7 +1,6 @@
 import clsx from 'clsx';
 import { AnimatePresence } from 'motion/react';
 import { Suspense } from 'react';
-import { useTranslation } from 'react-i18next';
 import { Outlet } from 'react-router';
 
 import styles from './mobile-layout.module.css';
@@ -12,9 +11,9 @@ import { MobileFullscreenPlayer } from '/@/renderer/features/player/components/m
 import { RouteSkeleton } from '/@/renderer/features/shared/components/route-skeleton';
 import { MobileSidebar } from '/@/renderer/features/sidebar/components/mobile-sidebar';
 import { PlayerBar } from '/@/renderer/layouts/default-layout/player-bar';
+import { BottomTabBar } from '/@/renderer/layouts/mobile-layout/bottom-tab-bar';
 import { WindowBar } from '/@/renderer/layouts/window-bar';
 import { useFullScreenPlayerOverlayState, useWindowBarStyle } from '/@/renderer/store';
-import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Drawer } from '/@/shared/components/drawer/drawer';
 import { useDisclosure } from '/@/shared/hooks/use-disclosure';
 import { Platform } from '/@/shared/types/types';
@@ -24,13 +23,20 @@ interface MobileLayoutProps {
 }
 
 export const MobileLayout = ({ shell }: MobileLayoutProps) => {
-    const { t } = useTranslation();
     const [sidebarOpened, { close: closeSidebar, open: openSidebar }] = useDisclosure(false);
     const {
         expanded: isFullScreenPlayerExpanded,
         visualizerExpanded: isFullScreenVisualizerExpanded,
     } = useFullScreenPlayerOverlayState();
     const windowBarStyle = useWindowBarStyle();
+
+    // On Android (Capacitor) the WindowBar's native min/max/close controls are
+    // meaningless and just steal vertical space — Platform.WEB is what we get
+    // inside the WebView, and the bar's own render guard handles that. We add
+    // a layout-side class that pulls the bar row to 0 anyway, so themes that
+    // do render the bar on web (e.g. PWA on iOS) still get the correct grid.
+    const showWindowBar =
+        !shell && (windowBarStyle === Platform.MACOS || windowBarStyle === Platform.WINDOWS);
 
     return (
         <>
@@ -41,25 +47,17 @@ export const MobileLayout = ({ shell }: MobileLayoutProps) => {
                 })}
                 id="mobile-layout"
             >
-                {!shell && <WindowBar />}
-                <ActionIcon
-                    aria-label={t('common.menu', { defaultValue: 'Menu' })}
-                    className={styles.drawerButton}
-                    icon="menu"
-                    onClick={openSidebar}
-                    size="lg"
-                    tooltip={{
-                        label: t('common.menu', { defaultValue: 'Menu' }),
-                        openDelay: 400,
-                    }}
-                    variant="subtle"
-                />
+                {showWindowBar && <WindowBar />}
                 <main className={styles.mainContent}>
                     <Suspense fallback={<RouteSkeleton />}>
                         <Outlet />
                     </Suspense>
                 </main>
                 <PlayerBar />
+                <BottomTabBar
+                    drawerOpen={sidebarOpened}
+                    onMoreTab={sidebarOpened ? closeSidebar : openSidebar}
+                />
             </div>
             <Drawer
                 onClose={closeSidebar}

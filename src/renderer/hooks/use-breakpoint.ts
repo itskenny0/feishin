@@ -1,0 +1,59 @@
+import { useMediaQuery } from '@mantine/hooks';
+
+/**
+ * Named breakpoints for the responsive redesign.
+ *
+ *   phone   — small phones, portrait                   (< 480px)
+ *   phablet — large phones or small landscape phones   (480–767px)
+ *   tablet  — tablets and narrow desktop windows       (768–1199px)
+ *   desktop — comfortable desktop                       (≥ 1200px)
+ *
+ * 768px stays the boundary between "mobile shell" (bottom tabs + mini-player +
+ * fullscreen-route variants) and "desktop shell" (sidebar + queue sidebar +
+ * docked playerbar) so existing `useIsMobile()` semantics are preserved.
+ *
+ * The phone/phablet split exists so layouts can tighten a touch more at <480px
+ * (e.g. drop two-column album grids) without affecting the broader phablet
+ * range; the tablet/desktop split exists so we can widen grid columns at
+ * ≥1200px without regressing 13"-laptop windows.
+ *
+ * Add CSS-side breakpoints in /shared/styles/global.css under the same names
+ * if you need to branch from CSS — keep both definitions in sync.
+ */
+export type Breakpoint = 'desktop' | 'phablet' | 'phone' | 'tablet';
+
+export const BREAKPOINT_QUERIES: Record<Breakpoint, string> = {
+    desktop: '(min-width: 1200px)',
+    phablet: '(min-width: 480px) and (max-width: 767px)',
+    phone: '(max-width: 479px)',
+    tablet: '(min-width: 768px) and (max-width: 1199px)',
+};
+
+/**
+ * Returns the currently active named breakpoint.
+ *
+ * SSR-safe: useMediaQuery returns false on the server, so we fall back to
+ * `desktop` (the densest layout) to avoid mobile UI flashing on hydration
+ * for desktop users.
+ */
+export const useBreakpoint = (): Breakpoint => {
+    const isPhone = useMediaQuery(BREAKPOINT_QUERIES.phone);
+    const isPhablet = useMediaQuery(BREAKPOINT_QUERIES.phablet);
+    const isTablet = useMediaQuery(BREAKPOINT_QUERIES.tablet);
+    if (isPhone) return 'phone';
+    if (isPhablet) return 'phablet';
+    if (isTablet) return 'tablet';
+    return 'desktop';
+};
+
+/** True for phone + phablet (i.e. anything below the desktop shell). */
+export const useIsMobileShell = () => useMediaQuery('(max-width: 767px)');
+
+/** True for phone-sized screens only — use sparingly, prefer useBreakpoint. */
+export const useIsPhone = () => useMediaQuery(BREAKPOINT_QUERIES.phone);
+
+/** True for tablet or smaller — useful for hiding the queue sidebar. */
+export const useIsTabletOrSmaller = () => useMediaQuery('(max-width: 1199px)');
+
+/** True for genuine pointer:coarse devices (touch). Pair with breakpoint checks. */
+export const useIsTouch = () => useMediaQuery('(pointer: coarse)');

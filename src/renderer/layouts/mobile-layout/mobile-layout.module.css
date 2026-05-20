@@ -1,12 +1,52 @@
+/*
+ * Mobile shell layout grid.
+ *
+ * Three stacked rows above the optional window-bar:
+ *   - main content (scroll container, fills the rest)
+ *   - player bar  (mini-player; tap album art to expand fullscreen)
+ *   - tab bar     (persistent bottom navigation)
+ *
+ * Heights:
+ *   - Player bar 78px (was 90px on desktop; trimmed slightly to leave room
+ *     for the tab bar without crushing the metadata stack).
+ *   - Tab bar    56px (Material guideline, also includes safe-area inset).
+ *
+ * 100dvh is preferred over 100vh so the iOS URL bar doesn't push our
+ * controls below the visible viewport. Both are kept (with the 100dvh
+ * declaration second) so older WebViews fall back to 100vh.
+ */
+
+:root {
+    /* Keep aligned with .container height in mobile-playerbar.module.css
+       (currently 90px). Variable is exported so other components nearby
+       (e.g. the drawer button while we still had one) could position
+       themselves above the player chrome. */
+    --mobile-playerbar-height: 90px;
+
+    /* Spotify's tab bar is ~50px; we round up to 56px to satisfy the
+       Material 48dp touch-target minimum with comfortable label padding. */
+    --mobile-tab-bar-height: 56px;
+    --mobile-window-bar-height: 0px;
+}
+
 .layout {
     position: relative;
     display: grid;
     grid-template-areas:
         'window-bar'
         'main-content'
-        'player';
-    grid-template-rows: 0 calc(100vh - 90px) 90px;
-    grid-template-rows: 0 calc(100dvh - 90px) 90px;
+        'player'
+        'tab-bar';
+    grid-template-rows:
+        var(--mobile-window-bar-height)
+        calc(100vh - var(--mobile-playerbar-height) - var(--mobile-tab-bar-height) - var(--mobile-window-bar-height))
+        var(--mobile-playerbar-height)
+        var(--mobile-tab-bar-height);
+    grid-template-rows:
+        var(--mobile-window-bar-height)
+        calc(100dvh - var(--mobile-playerbar-height) - var(--mobile-tab-bar-height) - var(--mobile-window-bar-height))
+        var(--mobile-playerbar-height)
+        var(--mobile-tab-bar-height);
     grid-template-columns: 1fr;
     gap: 0;
     width: 100vw;
@@ -18,24 +58,9 @@
 
 .windows,
 .macos {
-    grid-template-rows: 30px calc(100vh - 120px) 90px;
-    grid-template-rows: 30px calc(100dvh - 120px) 90px;
-}
+    /* On desktop platforms a 30px native title row sits at the top. */
 
-.drawer-button {
-    position: absolute;
-    bottom: calc(90px + 0.75rem);
-    left: 0.75rem;
-    z-index: 100;
-    background: color-mix(in srgb, var(--theme-colors-background) 90%, transparent);
-    border: 1px solid var(--theme-colors-border);
-    backdrop-filter: blur(10px);
-}
-
-@media (height < 192px) {
-    .drawer-button {
-        display: none;
-    }
+    --mobile-window-bar-height: 30px;
 }
 
 .main-content {
