@@ -31,6 +31,7 @@ export enum AppTheme {
     SHADES_OF_PURPLE = 'shadesOfPurple',
     SOLARIZED_DARK = 'solarizedDark',
     SOLARIZED_LIGHT = 'solarizedLight',
+    SPOTIFY = 'spotify',
     TOKYO_NIGHT = 'tokyoNight',
     VSCODE_DARK_PLUS = 'vscodeDarkPlus',
     VSCODE_LIGHT_PLUS = 'vscodeLightPlus',

@@ -32,6 +32,7 @@ import { rosePine } from '/@/shared/themes/rose-pine/rose-pine';
 import { shadesOfPurple } from '/@/shared/themes/shades-of-purple/shades-of-purple';
 import { solarizedDark } from '/@/shared/themes/solarized-dark/solarized-dark';
 import { solarizedLight } from '/@/shared/themes/solarized-light/solarized-light';
+import { spotify } from '/@/shared/themes/spotify/spotify';
 import { tokyoNight } from '/@/shared/themes/tokyo-night/tokyo-night';
 import { vscodeDarkPlus } from '/@/shared/themes/vscode-dark-plus/vscode-dark-plus';
 import { vscodeLightPlus } from '/@/shared/themes/vscode-light-plus/vscode-light-plus';
@@ -65,6 +66,7 @@ export const appTheme: Record<AppTheme, AppThemeConfiguration> = {
     [AppTheme.SHADES_OF_PURPLE]: shadesOfPurple,
     [AppTheme.SOLARIZED_DARK]: solarizedDark,
     [AppTheme.SOLARIZED_LIGHT]: solarizedLight,
+    [AppTheme.SPOTIFY]: spotify,
     [AppTheme.TOKYO_NIGHT]: tokyoNight,
     [AppTheme.VSCODE_DARK_PLUS]: vscodeDarkPlus,
     [AppTheme.VSCODE_LIGHT_PLUS]: vscodeLightPlus,

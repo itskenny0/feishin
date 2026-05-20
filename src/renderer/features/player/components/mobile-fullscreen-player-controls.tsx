@@ -5,6 +5,7 @@ import styles from './mobile-fullscreen-player.module.css';
 
 import { MainPlayButton, PlayerButton } from '/@/renderer/features/player/components/player-button';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
+import { triggerHaptic } from '/@/renderer/hooks/use-haptic';
 import { usePlayerRepeat, usePlayerShuffle, usePlayerStatus } from '/@/renderer/store';
 import { Icon } from '/@/shared/components/icon/icon';
 import { QueueSong } from '/@/shared/types/domain-types';
@@ -89,7 +90,13 @@ export const MobileFullscreenPlayerControls = memo(
                 <MainPlayButton
                     disabled={currentSongId === undefined}
                     isPaused={status === PlayerStatus.PAUSED}
-                    onClick={mediaTogglePlayPause}
+                    onClick={() => {
+                        // A firmer impact pulse on play/pause — the main
+                        // transport action gets a slightly heavier tick
+                        // than the surrounding tertiary controls.
+                        triggerHaptic('impact');
+                        mediaTogglePlayPause();
+                    }}
                     style={{
                         height: '50px',
                         width: '50px',

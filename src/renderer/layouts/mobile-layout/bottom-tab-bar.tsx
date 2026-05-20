@@ -16,6 +16,7 @@ import { generatePath, useLocation, useNavigate } from 'react-router';
 
 import styles from './bottom-tab-bar.module.css';
 
+import { useHaptic } from '/@/renderer/hooks/use-haptic';
 import { AppRoute } from '/@/renderer/router/routes';
 import { LibraryItem } from '/@/shared/types/domain-types';
 
@@ -56,6 +57,7 @@ export const BottomTabBar = ({ drawerOpen, onMoreTab }: BottomTabBarProps) => {
     const { t } = useTranslation();
     const location = useLocation();
     const navigate = useNavigate();
+    const haptic = useHaptic();
 
     // Pre-computed for the active-state check so we don't pay the generatePath
     // cost on every render or for every tab comparison.
@@ -115,7 +117,12 @@ export const BottomTabBar = ({ drawerOpen, onMoreTab }: BottomTabBarProps) => {
                         aria-selected={active}
                         className={clsx(styles.tab, { [styles.active]: active })}
                         key={tab.key}
-                        onClick={tab.onClick}
+                        onClick={() => {
+                            // Tiny tick on tab switch, but skip if already
+                            // active — re-tapping shouldn't buzz the device.
+                            if (!active) haptic('selection');
+                            tab.onClick();
+                        }}
                         role="tab"
                         type="button"
                     >
