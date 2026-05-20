@@ -26,6 +26,64 @@
     </head>
 
     <body style="background-color: #000">
+        <% if (web) { %>
+        <!-- Boot-error overlay: makes runtime crashes visible without
+             devtools. Useful when debugging an Android APK on a tablet
+             that hasn't been hooked up via chrome://inspect yet. The
+             whole block is web-only — the Electron build doesn't need
+             it because it has F12 and Sentry-style instrumentation. -->
+        <div id="boot-error-overlay" style="display:none;position:fixed;inset:0;z-index:99999;padding:20px;background:#1a0000;color:#ff8a80;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:13px;line-height:1.45;overflow:auto;white-space:pre-wrap;word-break:break-word;"></div>
+        <script>
+            (function () {
+                var overlay = document.getElementById('boot-error-overlay');
+                var lines = [];
+                function show(label, info) {
+                    var stamp = new Date().toISOString().slice(11, 23);
+                    lines.push('[' + stamp + '] ' + label + ': ' + info);
+                    overlay.textContent = lines.join('\n\n');
+                    overlay.style.display = 'block';
+                }
+                window.addEventListener(
+                    'error',
+                    function (e) {
+                        if (e.target && e.target !== window && e.target.tagName) {
+                            var src = e.target.src || e.target.href || '(no src)';
+                            show('RESOURCE LOAD FAILED', e.target.tagName + ' :: ' + src);
+                            return;
+                        }
+                        var msg = (e.error && (e.error.stack || e.error.message)) || e.message || String(e);
+                        show('ERROR', msg);
+                    },
+                    true,
+                );
+                window.addEventListener('unhandledrejection', function (e) {
+                    var reason = e.reason;
+                    var msg =
+                        (reason && (reason.stack || reason.message)) || String(reason);
+                    show('UNHANDLED REJECTION', msg);
+                });
+                // If React hasn't mounted into #root after 5s, dump a
+                // diagnostic block so we know the bundle never reached
+                // createRoot(). The page is black until then anyway, so
+                // overwriting the empty root with the overlay is harmless.
+                setTimeout(function () {
+                    var root = document.getElementById('root');
+                    if (root && root.childNodes.length === 0) {
+                        show(
+                            'BOOT TIMEOUT',
+                            'React did not mount within 5 s.\n' +
+                                '  href:         ' + location.href + '\n' +
+                                '  origin:       ' + location.origin + '\n' +
+                                '  userAgent:    ' + navigator.userAgent + '\n' +
+                                '  window.api:   ' + typeof window.api + '\n' +
+                                '  capacitor:    ' + typeof window.Capacitor + '\n' +
+                                '  serviceWorker:' + typeof navigator.serviceWorker,
+                        );
+                    }
+                }, 5000);
+            })();
+        </script>
+        <% } %>
         <div id="root">
             <script type="module" src="main.tsx"></script>
         </div>
