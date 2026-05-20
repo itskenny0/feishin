@@ -12,12 +12,26 @@ interface SettingsOptionProps {
     control: React.ReactNode;
     description?: React.ReactNode | string;
     indent?: boolean;
+    isSubheader?: boolean;
     note?: string;
     title: React.ReactNode | string;
 }
 
 export const SettingsOptions = memo(
-    ({ control, description, indent, note, title }: SettingsOptionProps) => {
+    ({ control, description, indent, isSubheader, note, title }: SettingsOptionProps) => {
+        if (isSubheader) {
+            // A "row" that's actually just a section header. Title-cased,
+            // muted, with a hairline under it so the eye can break dense
+            // option lists into chunks without us needing to spin up a
+            // whole separate SettingsSection per group.
+            return (
+                <Group className={indent ? styles.subheaderIndented : styles.subheader}>
+                    <Text fw={600} isNoSelect size="sm" tt="uppercase">
+                        {title}
+                    </Text>
+                </Group>
+            );
+        }
         return (
             <>
                 <Group

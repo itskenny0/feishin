@@ -424,15 +424,42 @@ export const TrackmapSettings = memo(() => {
             title: t('setting.trackmapResetAdvanced'),
         },
 
+        // Subsection headers (Colors / Background / Envelope / etc.) chunk
+        // the otherwise flat 15-row list into scannable groups. The header
+        // row honors the same isHidden gate as the rows that follow it, so
+        // a header never appears alone above hidden controls.
         // Colors first — they're the most visually impactful knobs and the
         // ones a user is likeliest to want to tweak when they open the panel.
+        {
+            control: null,
+            indent: true,
+            isHidden: !settings.trackmapEnabled || !showAdvanced,
+            isSubheader: true,
+            title: t('setting.trackmapSubheader_colors'),
+        },
         colorRow('trackmapColorBgGlow', 'trackmapColorBgGlow'),
         colorRow('trackmapColorCool', 'trackmapColorCool'),
         colorRow('trackmapColorWarm', 'trackmapColorWarm', { clearable: true }),
 
+        // Background wash behind the wave
+        {
+            control: null,
+            indent: true,
+            isHidden: !settings.trackmapEnabled || !showAdvanced,
+            isSubheader: true,
+            title: t('setting.trackmapSubheader_background'),
+        },
+        sliderRow('trackmapBgGlowAlpha', 'trackmapBgGlowAlpha', 0, 100),
+
         // Envelope (the silhouette that traces the wave's energy — the
         // visualization's data layer)
-        sliderRow('trackmapBgGlowAlpha', 'trackmapBgGlowAlpha', 0, 100),
+        {
+            control: null,
+            indent: true,
+            isHidden: !settings.trackmapEnabled || !showAdvanced,
+            isSubheader: true,
+            title: t('setting.trackmapSubheader_envelope'),
+        },
         sliderRow('trackmapEnvelopeFillAlpha', 'trackmapEnvelopeFillAlpha', 0, 100),
         sliderRow('trackmapEnvelopeOutlineAlpha', 'trackmapEnvelopeOutlineAlpha', 0, 100),
         sliderRow('trackmapEnvelopeOutlineWidthPx', 'trackmapEnvelopeOutlineWidthPx', 0, 10),
@@ -444,14 +471,35 @@ export const TrackmapSettings = memo(() => {
         // longer reads them and the UI no longer exposes them.
 
         // Breath (idle pulse)
+        {
+            control: null,
+            indent: true,
+            isHidden: !settings.trackmapEnabled || !showAdvanced,
+            isSubheader: true,
+            title: t('setting.trackmapSubheader_idleAnimation'),
+        },
         sliderRow('trackmapBreathAmplitudePct', 'trackmapBreathAmplitudePct', 0, 30),
         sliderRow('trackmapBreathPeriodSec', 'trackmapBreathPeriodSec', 1, 30),
 
         // Unplayed-side dim mask
+        {
+            control: null,
+            indent: true,
+            isHidden: !settings.trackmapEnabled || !showAdvanced,
+            isSubheader: true,
+            title: t('setting.trackmapSubheader_dimMask'),
+        },
         sliderRow('trackmapDimMaskMin', 'trackmapDimMaskMin', 0, 100),
         sliderRow('trackmapDimMaskTransitionPx', 'trackmapDimMaskTransitionPx', 0, 100),
 
         // Playhead
+        {
+            control: null,
+            indent: true,
+            isHidden: !settings.trackmapEnabled || !showAdvanced,
+            isSubheader: true,
+            title: t('setting.trackmapSubheader_playhead'),
+        },
         sliderRow('trackmapPlayheadGlowAlpha', 'trackmapPlayheadGlowAlpha', 0, 100),
         sliderRow('trackmapPlayheadShadowBlurPx', 'trackmapPlayheadShadowBlurPx', 0, 50),
         sliderRow('trackmapPlayheadWidthPx', 'trackmapPlayheadWidthPx', 1, 20),

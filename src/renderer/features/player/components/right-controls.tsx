@@ -1,6 +1,8 @@
 import { t } from 'i18next';
-import { useCallback, useEffect, useState, WheelEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, WheelEvent } from 'react';
 import { useTranslation } from 'react-i18next';
+
+import styles from './right-controls.module.css';
 
 import { DevicePickerButton } from '/@/renderer/features/jellyfin-remote-target/components/device-picker-button';
 import {
@@ -246,6 +248,27 @@ const FavoriteButton = () => {
     const addToFavoritesMutation = useCreateFavorite({});
     const removeFromFavoritesMutation = useDeleteFavorite({});
 
+    // Track the previous favorite state so we can fire a one-shot "pulse"
+    // animation when the heart goes off -> on. The pulseOn flag is true
+    // for a single animation duration, then resets so the next favorite
+    // toggle (on a different song, say) can fire it again. Un-favoriting
+    // intentionally stays plain — a celebratory pulse for the destructive
+    // direction would read as noise.
+    const isFavorite = Boolean(currentSong?.userFavorite);
+    const prevFavoriteRef = useRef(isFavorite);
+    const [pulseOn, setPulseOn] = useState(false);
+
+    useEffect(() => {
+        const prev = prevFavoriteRef.current;
+        prevFavoriteRef.current = isFavorite;
+        if (!prev && isFavorite) {
+            setPulseOn(true);
+            const handle = window.setTimeout(() => setPulseOn(false), 320);
+            return () => window.clearTimeout(handle);
+        }
+        return undefined;
+    }, [isFavorite]);
+
     const handleAddToFavorites = (song: null | QueueSong | Song | undefined) => {
         if (!song?.id) return;
 
@@ -305,6 +328,7 @@ const FavoriteButton = () => {
         <ActionIcon
             icon="favorite"
             iconProps={{
+                className: pulseOn ? styles.heartPulse : undefined,
                 fill: currentSong?.userFavorite ? 'primary' : undefined,
                 size: 'lg',
             }}
