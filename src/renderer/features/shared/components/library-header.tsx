@@ -10,6 +10,7 @@ import styles from './library-header.module.css';
 
 import { getItemImageUrl, ItemImage } from '/@/renderer/components/item-image/item-image';
 import { useIsPlayerFetching } from '/@/renderer/features/player/context/player-context';
+import { useDominantColor } from '/@/renderer/features/player/hooks/use-dominant-color';
 import {
     PlayLastTextButton,
     PlayNextTextButton,
@@ -72,6 +73,17 @@ export const LibraryHeader = forwardRef(
     ) => {
         const { t } = useTranslation();
         const blurExplicitImages = useBlurExplicitImages();
+
+        // Hero gradient: extract the dominant colour from the cover so the
+        // header backdrop fades from the album's signature hue at the top
+        // into the page background below. Falls back to no gradient when
+        // the canvas read fails (CORS-tainted image, no album art).
+        const heroSourceUrl =
+            imageUrl ||
+            (item.imageId && item.type
+                ? getItemImageUrl({ id: item.imageId, itemType: item.type as LibraryItem })
+                : null);
+        const { color: heroColor } = useDominantColor(heroSourceUrl);
 
         const itemTypeString = (): string => {
             switch (item.type) {
@@ -160,7 +172,11 @@ export const LibraryHeader = forwardRef(
                     compact && styles.compact,
                 )}
                 ref={ref}
+                style={
+                    heroColor ? ({ '--hero-color': heroColor } as React.CSSProperties) : undefined
+                }
             >
+                {heroColor && <div aria-hidden className={styles.heroGradient} />}
                 {topRight && <div className={styles.topRight}>{topRight}</div>}
                 {onImageFileDrop ? (
                     <DragDropZone

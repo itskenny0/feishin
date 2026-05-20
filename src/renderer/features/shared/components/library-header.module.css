@@ -5,6 +5,40 @@
     z-index: 20;
 }
 
+/*
+ * Hero gradient backdrop.
+ *
+ * Sits absolutely behind the header content and fades the dominant colour of
+ * the album/artist/playlist cover (set via --hero-color on the host) from
+ * fully-opaque-ish at the top into the page background below. Picks up the
+ * theme background-noise SVG so the gradient doesn't look like a flat fill on
+ * large hero blocks — gives it that Spotify-like grain.
+ *
+ * Sized 110% tall + negative top so the gradient bleeds slightly above the
+ * header bounds (looks better against page-header chrome) and extends a
+ * touch below it so the colour transition into the list/grid that follows
+ * is gentle rather than a sharp cutoff.
+ */
+.hero-gradient {
+    position: absolute;
+    inset: -8% 0 -2%;
+    z-index: 0;
+    pointer-events: none;
+    background-image:
+        linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--hero-color, transparent) 70%, transparent) 0%,
+            color-mix(in srgb, var(--hero-color, transparent) 38%, transparent) 35%,
+            color-mix(in srgb, var(--hero-color, transparent) 14%, transparent) 70%,
+            transparent 100%
+        ),
+        var(--theme-background-noise);
+    background-repeat: no-repeat, repeat;
+    background-size: cover, auto;
+    opacity: 0.85;
+    transition: opacity 320ms ease;
+}
+
 .library-header {
     position: relative;
     display: grid;
