@@ -102,6 +102,32 @@
     box-shadow: 0 8px 24px rgb(0 0 0 / 30%);
 }
 
+/*
+ * Landscape: a 1:1 album art at 100% width swallows the entire viewport
+ * height and pushes the seek slider + transport controls off-screen on
+ * phones held sideways and on landscape tablets. Cap the cover at 38vh
+ * so the metadata + controls always remain visible. The cover keeps its
+ * 1:1 ratio so it doesn't look stretched - it just shrinks.
+ *
+ * On very-wide ratios (tablet landscape) we also drop max-width so the
+ * cover stays comfortably small instead of dominating.
+ */
+@media (orientation: landscape) and (height <= 600px) {
+    .image-container {
+        padding: 0.5rem 1rem;
+    }
+
+    .image {
+        max-width: 38vh;
+        max-height: 38vh;
+    }
+
+    .metadata-container {
+        padding-top: 0.5rem;
+        padding-bottom: 0.5rem;
+    }
+}
+
 .image-native-aspect-ratio {
     height: auto;
     max-height: 100%;
