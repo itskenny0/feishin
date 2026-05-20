@@ -20,7 +20,9 @@ on any 10" tablet.
 
 Prerequisites:
 
-- JDK 17 (Temurin recommended).
+- JDK 21 (Temurin recommended). Capacitor 8's Android module requires
+  source release 21; JDK 17 will fail mid-compile with `invalid source
+  release: 21`.
 - Android SDK with platform-tools and a recent `compileSdk` (Capacitor 8
   targets API 35 by default — Android Studio's SDK Manager will fetch it).
 - `pnpm` and Node 22.
