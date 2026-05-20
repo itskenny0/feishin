@@ -27,3 +27,16 @@
         animation: none;
     }
 }
+
+/* Time-aware greeting at the top of the home page. Subtle single-line
+   header: larger weight, tightened tracking, leading the carousels. */
+.greeting {
+    margin-bottom: var(--theme-spacing-md);
+}
+
+.greeting-text {
+    font-size: 1.75rem;
+    font-weight: 600;
+    line-height: 1.2;
+    letter-spacing: -0.02em;
+}

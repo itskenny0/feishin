@@ -74,6 +74,7 @@ export const MobileSidebar = () => {
                     }}
                     defaultValue={['library', 'playlists']}
                     multiple
+                    transitionDuration={150}
                 >
                     <Accordion.Item value="library">
                         <Accordion.Control>

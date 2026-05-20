@@ -146,6 +146,9 @@ export const Sidebar = () => {
                     }}
                     multiple
                     onChange={handleAccordionChange}
+                    // 150 ms is snappier than Mantine's default 200 ms but
+                    // long enough to read as a slide rather than a snap.
+                    transitionDuration={150}
                     value={
                         (sidebarExpanded.includes('__collapsed__')
                             ? []
