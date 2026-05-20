@@ -91,6 +91,14 @@
     border-radius: 999px;
 }
 
+/* Idle state shown in the metadata stack when no song is loaded — single
+   muted hint + icon. Vertically centered so the slot doesn't look ragged
+   next to the empty cover-art placeholder. */
+.idle-metadata {
+    color: var(--theme-colors-foreground-muted);
+    user-select: none;
+}
+
 .left-controls-container {
     display: flex;
     width: 100%;

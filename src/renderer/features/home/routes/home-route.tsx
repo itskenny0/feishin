@@ -33,6 +33,7 @@ import {
 } from '/@/renderer/store';
 import { Spinner } from '/@/shared/components/spinner/spinner';
 import { Stack } from '/@/shared/components/stack/stack';
+import { Text } from '/@/shared/components/text/text';
 import {
     AlbumListSort,
     LibraryItem,
@@ -102,6 +103,17 @@ const HomeRoute = () => {
             ...carousels[item.id],
             uniqueId: item.id,
         }));
+
+    // Time-aware greeting at the top of the home page. Computed once per
+    // render — the hour boundaries are coarse enough that "afternoon"
+    // shifting to "evening" mid-session is fine without a timer.
+    const hour = new Date().getHours();
+    let greetingKey: 'afternoon' | 'evening' | 'morning' | 'night';
+    if (hour < 5) greetingKey = 'night';
+    else if (hour < 12) greetingKey = 'morning';
+    else if (hour < 18) greetingKey = 'afternoon';
+    else greetingKey = 'evening';
+    const greeting = t(`page.home.greeting.${greetingKey}`);
 
     // Each rendered row knows its slot index so the CSS stagger lines up
     // with painted order, not the source order of the `if` branches above.
@@ -206,6 +218,13 @@ const HomeRoute = () => {
             );
         }
     }
+
+    // Slot the greeting at the very top so it leads the staggered fade-in.
+    rows.unshift(
+        <div className={styles.greeting} key="greeting">
+            <Text className={styles.greetingText}>{greeting}</Text>
+        </div>,
+    );
 
     return (
         <AnimatedPage>

@@ -232,6 +232,23 @@ export const LeftControls = () => {
                             onStopPropagation={stopPropagation}
                             onToggleContextMenu={handleToggleContextMenu}
                         />
+                    ) : !isSongDefined ? (
+                        // Idle state: nothing in the queue. Without this the
+                        // metadata stack rendered three empty/"—" rows which
+                        // read as a broken layout. A single muted hint with
+                        // an icon makes the empty slot read as intentional.
+                        <Group
+                            align="center"
+                            className={styles.idleMetadata}
+                            gap="xs"
+                            onClick={stopPropagation}
+                            wrap="nowrap"
+                        >
+                            <Icon color="muted" icon="emptySongImage" size="lg" />
+                            <Text isMuted size="sm">
+                                {t('player.noSongPlaying')}
+                            </Text>
+                        </Group>
                     ) : (
                         <>
                             <div className={styles.lineItem} onClick={stopPropagation}>

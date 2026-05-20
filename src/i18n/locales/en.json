@@ -747,6 +747,12 @@
             "quickFilter_tracks": "All tracks",
             "quickFilters_title": "Quick filters",
             "genres": "$t(entity.genre, {\"count\": 2})",
+            "greeting": {
+                "afternoon": "Good afternoon",
+                "evening": "Good evening",
+                "morning": "Good morning",
+                "night": "Up late?"
+            },
             "mostPlayed": "Most Played",
             "newlyAdded": "Newly added releases",
             "recentlyPlayed": "Recently played",
@@ -833,6 +839,7 @@
         "mute": "Mute",
         "muted": "Muted",
         "next": "Next",
+        "noSongPlaying": "No song playing",
         "volume": "Volume",
         "play": "Play",
         "playbackFetchCancel": "This is taking a while… close the notification to cancel",
