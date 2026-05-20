@@ -1,39 +1,4 @@
 /*
- * Micro-interaction for the playerbar favorite button: when the user goes
- * from un-favorited -> favorited, the heart briefly scales up and settles
- * back. Going the other direction stays plain — a "pop" for negative
- * actions reads as gratuitous.
- *
- * The 1.0 -> 1.25 -> 1.0 curve at 280ms with an overshoot easing gives
- * the heart a slight tactile bounce. Honors prefers-reduced-motion.
- */
-
-.heart-pulse {
-    transform-origin: center;
-    animation: heart-pulse 280ms cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-@keyframes heart-pulse {
-    0% {
-        transform: scale(1);
-    }
-
-    40% {
-        transform: scale(1.25);
-    }
-
-    100% {
-        transform: scale(1);
-    }
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .heart-pulse {
-        animation: none;
-    }
-}
-
-/*
  * Small numeric badge anchored to the top-right of the queue toggle
  * button in the playerbar. Hidden when the queue is empty so it never
  * adds visual noise to the empty-state. Pointer-events: none so the
