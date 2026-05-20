@@ -66,6 +66,7 @@ import { useIsMutatingCreateFavorite } from '/@/renderer/features/shared/mutatio
 import { useIsMutatingDeleteFavorite } from '/@/renderer/features/shared/mutations/delete-favorite-mutation';
 import { songsQueries } from '/@/renderer/features/songs/api/songs-api';
 import { useDragDrop } from '/@/renderer/hooks/use-drag-drop';
+import { useLongPress } from '/@/renderer/hooks/use-long-press';
 import { AppRoute } from '/@/renderer/router/routes';
 import { useSettingsStore, useShowRatings } from '/@/renderer/store';
 import { useShowFilesystemNameForAlbums } from '/@/renderer/store/settings.store';
@@ -420,8 +421,19 @@ const TrackRow = memo(
             [controls, internalState, isSongsLoading, song],
         );
 
+        // 500ms long-press → contextmenu on touch. Native synth of the
+        // contextmenu event from long-press isn't reliable inside the
+        // Android Capacitor WebView for these table rows, so we wire it
+        // explicitly. PointerEvent extends MouseEvent — pass-through cast
+        // keeps the existing handler shape intact.
+        const longPressHandlers = useLongPress({
+            onLongPress: (event) =>
+                handleContextMenu(event as unknown as React.MouseEvent<HTMLDivElement>),
+        });
+
         return (
             <div
+                {...longPressHandlers}
                 className={clsx(styles.trackRow, {
                     [styles.trackRowAlternateEven]: enableAlternateRowColors && rowIndex % 2 === 0,
                     [styles.trackRowAlternateOdd]: enableAlternateRowColors && rowIndex % 2 === 1,
