@@ -400,6 +400,7 @@ export const TrackmapSettings = memo(() => {
         {
             control: (
                 <Button
+                    color="red"
                     onClick={() => {
                         setSettings({
                             general: {
@@ -409,7 +410,7 @@ export const TrackmapSettings = memo(() => {
                         toast.info({ message: t('setting.trackmapResetAdvanced') });
                     }}
                     size="compact-sm"
-                    variant="default"
+                    variant="light"
                 >
                     {t('setting.trackmapResetAdvanced')}
                 </Button>

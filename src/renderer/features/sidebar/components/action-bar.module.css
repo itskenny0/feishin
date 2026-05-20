@@ -9,3 +9,23 @@
         -webkit-app-region: no-drag;
     }
 }
+
+.action-bar-button {
+    transition:
+        transform 150ms ease-out,
+        background-color 150ms ease-out;
+}
+
+.action-bar-button:hover {
+    transform: scale(1.05);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .action-bar-button {
+        transition: none;
+    }
+
+    .action-bar-button:hover {
+        transform: none;
+    }
+}

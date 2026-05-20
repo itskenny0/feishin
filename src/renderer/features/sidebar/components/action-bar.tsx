@@ -64,7 +64,11 @@ export const ActionBar = () => {
                     <Group gap="sm" grow wrap="nowrap">
                         <DropdownMenu position="bottom-start">
                             <DropdownMenu.Target>
-                                <Button aria-label={t('common.menu')} p="0">
+                                <Button
+                                    aria-label={t('common.menu')}
+                                    className={styles.actionBarButton}
+                                    p="0"
+                                >
                                     <Icon icon="menu" size="lg" />
                                 </Button>
                             </DropdownMenu.Target>
@@ -88,6 +92,7 @@ const NavigateButtons = () => {
         <>
             <Button
                 aria-label={t('common.back', { defaultValue: 'Back' })}
+                className={styles.actionBarButton}
                 onClick={() => navigate(-1)}
                 p="0"
             >
@@ -95,6 +100,7 @@ const NavigateButtons = () => {
             </Button>
             <Button
                 aria-label={t('common.forward', { defaultValue: 'Forward' })}
+                className={styles.actionBarButton}
                 onClick={() => navigate(1)}
                 p="0"
             >
