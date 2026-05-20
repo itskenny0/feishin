@@ -1131,31 +1131,37 @@ const DetailListColumnResizeHandle = ({
     useEffect(() => {
         if (!isDragging) return;
 
-        const handleMouseMove = (event: MouseEvent) => {
+        // PointerEvents fire for mouse + touch + pen uniformly; the
+        // previous mouse-only listeners never fired on Android Capacitor
+        // WebView, so column-resize did nothing on touch.
+        const handlePointerMove = (event: PointerEvent) => {
             const deltaX = event.clientX - startXRef.current;
             const newWidth = Math.min(Math.max(10, startWidthRef.current + deltaX), 1000);
             finalWidthRef.current = newWidth;
         };
 
-        const handleMouseUp = () => {
+        const handlePointerUp = () => {
             setIsDragging(false);
             document.body.style.cursor = '';
             document.body.style.userSelect = '';
-            document.removeEventListener('mousemove', handleMouseMove);
-            document.removeEventListener('mouseup', handleMouseUp);
+            document.removeEventListener('pointermove', handlePointerMove);
+            document.removeEventListener('pointerup', handlePointerUp);
+            document.removeEventListener('pointercancel', handlePointerUp);
             onResize(columnId, finalWidthRef.current);
         };
 
-        document.addEventListener('mousemove', handleMouseMove);
-        document.addEventListener('mouseup', handleMouseUp);
+        document.addEventListener('pointermove', handlePointerMove);
+        document.addEventListener('pointerup', handlePointerUp);
+        document.addEventListener('pointercancel', handlePointerUp);
 
         return () => {
-            document.removeEventListener('mousemove', handleMouseMove);
-            document.removeEventListener('mouseup', handleMouseUp);
+            document.removeEventListener('pointermove', handlePointerMove);
+            document.removeEventListener('pointerup', handlePointerUp);
+            document.removeEventListener('pointercancel', handlePointerUp);
         };
     }, [isDragging, columnId, onResize]);
 
-    const handleMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
+    const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
         if (disabled) {
             event.preventDefault();
             event.stopPropagation();
@@ -1178,7 +1184,7 @@ const DetailListColumnResizeHandle = ({
                 [styles.resizeHandleLeft]: side === 'left',
                 [styles.resizeHandleRight]: side === 'right',
             })}
-            onMouseDown={handleMouseDown}
+            onPointerDown={handlePointerDown}
             ref={handleRef}
         />
     );

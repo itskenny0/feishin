@@ -30,7 +30,10 @@ export const LeftSidebar = ({ isResizing, startResizing }: LeftSidebarProps) => 
         <aside className={styles.container} id="sidebar">
             <ResizeHandle
                 isResizing={isResizing}
-                onMouseDown={(e) => {
+                // pointerdown (not mousedown) so the gesture fires on touch
+                // devices too. preventDefault stops the browser from
+                // hijacking the gesture as a scroll on touch.
+                onPointerDown={(e) => {
                     e.preventDefault();
                     startResizing('left');
                 }}

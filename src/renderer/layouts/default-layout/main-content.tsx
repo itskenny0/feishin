@@ -180,12 +180,20 @@ export const MainContent = ({ shell }: { shell?: boolean }) => {
             return;
         }
 
-        window.addEventListener('mousemove', resize);
-        window.addEventListener('mouseup', stopResizing);
+        // pointer* events fire for mouse + touch + pen uniformly; mouse*
+        // doesn't fire (or fires unreliably) for touch in the Android
+        // Capacitor WebView, which is why drag-to-resize did nothing on
+        // tablets even with widened hit zones. The resize() callback only
+        // reads clientX / clientY, which PointerEvent has the same as
+        // MouseEvent — no other change needed.
+        window.addEventListener('pointermove', resize);
+        window.addEventListener('pointerup', stopResizing);
+        window.addEventListener('pointercancel', stopResizing);
 
         return () => {
-            window.removeEventListener('mousemove', resize);
-            window.removeEventListener('mouseup', stopResizing);
+            window.removeEventListener('pointermove', resize);
+            window.removeEventListener('pointerup', stopResizing);
+            window.removeEventListener('pointercancel', stopResizing);
         };
     }, [isResizing, isResizingRight, resize, stopResizing]);
 
