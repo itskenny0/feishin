@@ -1,0 +1,74 @@
+/*
+ * Three small vertical bars that pulse with staggered phases while audio
+ * is playing — a classic "this is the playing track" affordance lifted
+ * from Spotify / Apple Music / Tidal.
+ *
+ * Each bar uses a slightly different animation-duration (450 / 600 /
+ * 530ms) plus a small animation-delay so the cluster reads as organic
+ * sound rather than a metronome. animation-play-state on .paused
+ * freezes the bars in place when the user pauses; the component
+ * returns null when no song is loaded.
+ *
+ * Honors prefers-reduced-motion: the animation is suppressed and the
+ * bars hold at a static mid height so the affordance is still visible.
+ */
+
+.indicator {
+    display: inline-flex;
+    flex-shrink: 0;
+    gap: 2px;
+    align-items: flex-end;
+    width: 14px;
+    height: 12px;
+}
+
+.bar {
+    width: 3px;
+    background-color: var(--theme-colors-primary-filled);
+    border-radius: 1px;
+    animation-name: bar-pulse;
+    animation-duration: 450ms;
+    animation-timing-function: ease-in-out;
+    animation-iteration-count: infinite;
+}
+
+.bar:nth-child(1) {
+    animation-duration: 450ms;
+    animation-delay: 0ms;
+}
+
+.bar:nth-child(2) {
+    animation-duration: 600ms;
+    animation-delay: 150ms;
+}
+
+.bar:nth-child(3) {
+    animation-duration: 530ms;
+    animation-delay: 80ms;
+}
+
+.playing .bar {
+    animation-play-state: running;
+}
+
+.paused .bar {
+    animation-play-state: paused;
+}
+
+@keyframes bar-pulse {
+    0%,
+    100% {
+        height: 30%;
+    }
+
+    50% {
+        height: 100%;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .bar {
+        height: 60%;
+        animation: none !important;
+    }
+}

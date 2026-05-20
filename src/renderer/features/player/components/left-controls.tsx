@@ -14,6 +14,7 @@ import {
 } from '/@/renderer/features/albums/components/joined-artists';
 import { ContextMenuController } from '/@/renderer/features/context-menu/context-menu-controller';
 import { useActiveNowPlayingItem } from '/@/renderer/features/jellyfin-remote-target/hooks/use-active-player-source';
+import { PlayingIndicator } from '/@/renderer/features/player/components/playing-indicator';
 import { RadioMetadataDisplay } from '/@/renderer/features/player/components/radio-metadata-display';
 import {
     useIsRadioActive,
@@ -253,6 +254,7 @@ export const LeftControls = () => {
                         <>
                             <div className={styles.lineItem} onClick={stopPropagation}>
                                 <Group align="center" gap="xs" wrap="nowrap">
+                                    <PlayingIndicator />
                                     <Text
                                         className={PlaybackSelectors.songTitle}
                                         component={Link}
