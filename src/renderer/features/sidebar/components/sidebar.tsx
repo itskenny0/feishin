@@ -18,8 +18,10 @@ import { SidebarFavoriteAlbumsList } from '/@/renderer/features/sidebar/componen
 import { SidebarIcon } from '/@/renderer/features/sidebar/components/sidebar-icon';
 import { SidebarItem } from '/@/renderer/features/sidebar/components/sidebar-item';
 import {
+    SidebarPlaylistAddDragContext,
     SidebarPlaylistList,
     SidebarSharedPlaylistList,
+    useSidebarPlaylistAddDragMonitor,
 } from '/@/renderer/features/sidebar/components/sidebar-playlist-list';
 import {
     useAppStore,
@@ -47,6 +49,17 @@ import { Tooltip } from '/@/shared/components/tooltip/tooltip';
 import { useDisclosure } from '/@/shared/hooks/use-disclosure';
 import { ExplicitStatus, LibraryItem } from '/@/shared/types/domain-types';
 import { Platform } from '/@/shared/types/types';
+
+const SidebarPlaylistSection = () => {
+    const isAddDragActive = useSidebarPlaylistAddDragMonitor();
+
+    return (
+        <SidebarPlaylistAddDragContext.Provider value={isAddDragActive}>
+            <SidebarPlaylistList />
+            <SidebarSharedPlaylistList />
+        </SidebarPlaylistAddDragContext.Provider>
+    );
+};
 
 export const Sidebar = () => {
     const { t } = useTranslation();
@@ -175,12 +188,7 @@ export const Sidebar = () => {
                         </Accordion.Panel>
                     </Accordion.Item>
                     <SidebarCollectionList />
-                    {sidebarBottomSection === 'playlists' && (
-                        <>
-                            <SidebarPlaylistList />
-                            <SidebarSharedPlaylistList />
-                        </>
-                    )}
+                    {sidebarBottomSection === 'playlists' && <SidebarPlaylistSection />}
                     {sidebarBottomSection === 'favoriteAlbums' && <SidebarFavoriteAlbumsList />}
                 </Accordion>
             </ScrollArea>

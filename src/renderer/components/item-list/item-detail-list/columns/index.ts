@@ -28,6 +28,7 @@ import { PlayCountColumn } from './play-count-column';
 import { RatingColumn } from './rating-column';
 import { ReleaseDateColumn } from './release-date-column';
 import { RowIndexColumn } from './row-index-column';
+import { ItemDetailRowPlayControlCell } from './row-play-control-cell';
 import { SampleRateColumn } from './sample-rate-column';
 import { SizeColumn } from './size-column';
 import { TitleArtistColumn } from './title-artist-column';
@@ -114,6 +115,7 @@ export {
     GenreBadgeColumn,
     GenreColumn,
     ImageColumn,
+    ItemDetailRowPlayControlCell,
     LastPlayedColumn,
     PathColumn,
     PlayCountColumn,

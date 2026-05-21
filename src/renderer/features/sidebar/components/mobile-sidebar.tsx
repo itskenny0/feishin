@@ -8,8 +8,10 @@ import { SidebarFavoriteAlbumsList } from '/@/renderer/features/sidebar/componen
 import { SidebarIcon } from '/@/renderer/features/sidebar/components/sidebar-icon';
 import { SidebarItem } from '/@/renderer/features/sidebar/components/sidebar-item';
 import {
+    SidebarPlaylistAddDragContext,
     SidebarPlaylistList,
     SidebarSharedPlaylistList,
+    useSidebarPlaylistAddDragMonitor,
 } from '/@/renderer/features/sidebar/components/sidebar-playlist-list';
 import { useSwipeToClose } from '/@/renderer/hooks/use-swipe-to-close';
 import {
@@ -21,6 +23,17 @@ import { Accordion } from '/@/shared/components/accordion/accordion';
 import { Group } from '/@/shared/components/group/group';
 import { ScrollArea } from '/@/shared/components/scroll-area/scroll-area';
 import { Text } from '/@/shared/components/text/text';
+
+const MobileSidebarPlaylistSection = () => {
+    const isAddDragActive = useSidebarPlaylistAddDragMonitor();
+
+    return (
+        <SidebarPlaylistAddDragContext.Provider value={isAddDragActive}>
+            <SidebarPlaylistList />
+            <SidebarSharedPlaylistList />
+        </SidebarPlaylistAddDragContext.Provider>
+    );
+};
 
 interface MobileSidebarProps {
     /**
@@ -113,12 +126,7 @@ export const MobileSidebar = ({ onSwipeClose }: MobileSidebarProps = {}) => {
                             })}
                         </Accordion.Panel>
                     </Accordion.Item>
-                    {sidebarBottomSection === 'playlists' && (
-                        <>
-                            <SidebarPlaylistList />
-                            <SidebarSharedPlaylistList />
-                        </>
-                    )}
+                    {sidebarBottomSection === 'playlists' && <MobileSidebarPlaylistSection />}
                     {sidebarBottomSection === 'favoriteAlbums' && <SidebarFavoriteAlbumsList />}
                 </Accordion>
             </ScrollArea>

@@ -34,6 +34,7 @@ import styles from './item-detail-list.module.css';
 import { ItemCardControls } from '/@/renderer/components/item-card/item-card-controls';
 import { ItemImage } from '/@/renderer/components/item-image/item-image';
 import { getDraggedItems } from '/@/renderer/components/item-list/helpers/get-dragged-items';
+import { isRowPlayControlColumn } from '/@/renderer/components/item-list/helpers/get-row-play-control-column';
 import { useDefaultItemListControls } from '/@/renderer/components/item-list/helpers/item-list-controls';
 import {
     ItemListStateActions,
@@ -172,6 +173,7 @@ const textAlignFromAlign = (align: ItemTableListColumnConfig['align']) =>
 interface TrackCellProps {
     col: ItemTableListColumnConfig;
     colIndex: number;
+    columns: ItemTableListColumnConfig[];
     columnsLength: number;
     columnWidthPercent: number;
     controls?: ItemControls;
@@ -189,6 +191,7 @@ const TrackCell = memo(
     ({
         col,
         colIndex,
+        columns,
         columnsLength,
         columnWidthPercent,
         controls,
@@ -210,6 +213,7 @@ const TrackCell = memo(
         const isTitleColumn = col.id === TableColumn.TITLE;
         const isImageColumn = col.id === TableColumn.IMAGE;
         const isIconActionColumn = isNoHorizontalPaddingColumn(col.id);
+        const isPlayControlColumn = isRowPlayControlColumn(col.id, columns);
         const showHoverContent = shouldShowHoverOnlyColumnContent(col.id, isRowHovered, song);
 
         const content = isSongsLoading
@@ -217,6 +221,7 @@ const TrackCell = memo(
             : showHoverContent
               ? createElement(getDetailListCellComponent(col.id), {
                     columnId: col.id,
+                    columns,
                     controls,
                     internalState,
                     isMutatingFavorite,
@@ -235,6 +240,7 @@ const TrackCell = memo(
                     [styles.trackCellImage]: isImageColumn,
                     [styles.trackCellMuted]: !isTitleColumn,
                     [styles.trackCellNoHPadding]: isIconActionColumn,
+                    [styles.trackCellPlayControl]: isPlayControlColumn,
                     [styles.trackCellVerticalBorderVisible]: enableVerticalBorders && !isLastColumn,
                     [styles.trackCellWithVerticalBorder]: !isLastColumn,
                 })}
@@ -458,6 +464,7 @@ const TrackRow = memo(
                     <TrackCell
                         col={col}
                         colIndex={colIndex}
+                        columns={columns}
                         columnsLength={columns.length}
                         columnWidthPercent={columnWidthPercents[colIndex] ?? 0}
                         controls={controls}
