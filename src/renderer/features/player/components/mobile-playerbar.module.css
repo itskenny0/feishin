@@ -40,7 +40,18 @@
     gap: var(--theme-spacing-sm);
     align-items: center;
     min-width: 0;
+
+    /*
+     * touch-action: pan-y lets the browser claim vertical scrolling
+     * (so dragging the bar up/down still scrolls the page underneath)
+     * while horizontal movement is left untouched for our
+     * useHorizontalSwipe handler to interpret as a prev/next gesture.
+     * Without this declaration, Capacitor's WebView sometimes claims
+     * the horizontal pan for itself and the swipe handler never sees
+     * the pointermove events past the first ~10px.
+     */
     overflow: hidden;
+    touch-action: pan-y;
 }
 
 .image-wrapper {
