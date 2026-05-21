@@ -473,4 +473,21 @@
     .bottom-controls-group button {
         padding: 1.65rem 1.5rem;
     }
+
+    /* Queue / lyrics tab headers gain a touch more padding on big-
+       phone so the close + collapse chevrons feel like a deliberate
+       sticky header instead of squeezing the top-left corner. */
+    .queue-header,
+    .lyrics-header {
+        padding: 1.15rem 1.25rem 0.85rem;
+    }
+
+    /* Bigger gutters inside the queue/lyrics content area so the
+       PlayQueue table and synced lyrics read with more breathing
+       room. The grow factor on flex:1 keeps the column filling
+       the available height regardless. */
+    .queue-content,
+    .lyrics-content {
+        padding: 0.5rem 1.25rem 1.25rem;
+    }
 }
