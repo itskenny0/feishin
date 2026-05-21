@@ -238,6 +238,15 @@
     opacity: 1;
 }
 
+/* Touch devices never trigger hover, so the carousel nav arrows would
+   stay invisible. Show them by default on pointer:coarse so users have
+   tap targets to scroll the feature-card carousels. */
+@media (pointer: coarse) {
+    .nav-arrow {
+        opacity: 1;
+    }
+}
+
 .nav-arrow:hover {
     background: rgb(0 0 0 / 60%);
     transform: translateY(-50%) scale(1.07);

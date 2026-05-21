@@ -119,6 +119,15 @@
     opacity: 1;
 }
 
+/* No hover on touch — always show the play button group on
+   pointer:coarse so users can play albums from the expanded list
+   without it being invisible. */
+@media (pointer: coarse) {
+    .play-button-group {
+        opacity: 1;
+    }
+}
+
 .background-image {
     position: absolute;
     right: 0;
