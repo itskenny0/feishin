@@ -1,6 +1,6 @@
 import clsx from 'clsx';
-import { AnimatePresence, LayoutGroup, motion } from 'motion/react';
-import React, { memo, MouseEvent } from 'react';
+import { AnimatePresence, LayoutGroup, motion, useMotionValue } from 'motion/react';
+import React, { memo, MouseEvent, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { generatePath, Link } from 'react-router';
 
@@ -78,15 +78,41 @@ export const MobilePlayerbar = () => {
     // expand) and only past 60px so accidental drift on a tap doesn't
     // fire. The buttons (prev/play/next) sit outside this wrapper so
     // their clicks are unaffected.
+    //
+    // We also stream the live x-delta into a Motion value so the
+    // cover + metadata translate WITH the finger as it drags —
+    // exactly how Spotify's mini-player feels. Once the threshold is
+    // crossed (or the user lifts), the handler sends dx=0 which
+    // Motion's spring animates back to rest (or onto the next song,
+    // whichever the threshold crossing fired). The trans-X value is
+    // applied via `style={{ x: swipeX }}` on the content wrapper.
+    const swipeX = useMotionValue(0);
+    const handleSwipeMove = useCallback(
+        (dx: number) => {
+            // Light rubber-banding above 80px so the bar visibly resists
+            // very long drags — drags that mean "I changed my mind"
+            // shouldn't visually overshoot off-screen.
+            const cappedDx =
+                Math.abs(dx) > 80 ? Math.sign(dx) * (80 + (Math.abs(dx) - 80) * 0.35) : dx;
+            swipeX.set(cappedDx);
+        },
+        [swipeX],
+    );
     const swipeHandlers = useHorizontalSwipe({
         disabled: !isSongDefined,
         onSwipeLeft: mediaNext,
+        onSwipeMove: handleSwipeMove,
         onSwipeRight: mediaPrevious,
     });
 
     return (
         <div className={clsx(styles.container, PlaybackSelectors.mediaPlayer)}>
-            <div {...swipeHandlers} className={styles.contentWrapper}>
+            <motion.div
+                {...swipeHandlers}
+                className={styles.contentWrapper}
+                style={{ x: swipeX }}
+                transition={{ damping: 28, mass: 0.6, stiffness: 380, type: 'spring' }}
+            >
                 <LayoutGroup>
                     <AnimatePresence initial={false} mode="popLayout">
                         {currentSong?.id && (
@@ -218,7 +244,7 @@ export const MobilePlayerbar = () => {
                         </div>
                     </motion.div>
                 </LayoutGroup>
-            </div>
+            </motion.div>
             <div className={styles.controlsWrapper}>
                 <PlayerButton
                     icon={<Icon fill="default" icon="mediaPrevious" size="md" />}

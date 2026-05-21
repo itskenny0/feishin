@@ -17,6 +17,18 @@ import { triggerHaptic } from '/@/renderer/hooks/use-haptic';
 interface UseHorizontalSwipeOptions {
     disabled?: boolean;
     onSwipeLeft?: () => void;
+    /**
+     * Fired with the current x-delta while the finger is moving. Use this to
+     * translate the underlying content with the finger so the swipe feels
+     * tactile (Spotify's mini-player pattern). The hook hands you the raw
+     * dx in pixels; clamp / dampen / scale as needed at the call site.
+     *
+     * Fires with `dx = 0` when the pointer hasn't moved past the dead-zone
+     * yet and when the swipe is cancelled (vertical drift / pointer
+     * release without crossing the trigger), so the caller can animate
+     * the content back to rest.
+     */
+    onSwipeMove?: (dx: number) => void;
     onSwipeRight?: () => void;
     triggerPx?: number;
 }
@@ -24,6 +36,7 @@ interface UseHorizontalSwipeOptions {
 export const useHorizontalSwipe = ({
     disabled,
     onSwipeLeft,
+    onSwipeMove,
     onSwipeRight,
     triggerPx = 60,
 }: UseHorizontalSwipeOptions) => {
@@ -61,8 +74,14 @@ export const useHorizontalSwipe = ({
             // surrounding page rather than a horizontal swipe.
             if (dy > Math.abs(dx) * 1.2) {
                 startRef.current = null;
+                onSwipeMove?.(0);
                 return;
             }
+            // Stream the dx to the caller so the underlying content can
+            // track the finger. Fires every pointermove that has more
+            // horizontal than vertical drift; the consumer can decide
+            // whether to apply rubber-banding once dx exceeds triggerPx.
+            onSwipeMove?.(dx);
             if (Math.abs(dx) >= triggerPx) {
                 firedRef.current = true;
                 suppressNextClick.current = true;
@@ -73,18 +92,27 @@ export const useHorizontalSwipe = ({
                     onSwipeRight?.();
                 }
                 startRef.current = null;
+                // Reset the move so the consumer animates back to rest
+                // after we've fired the threshold crossing event.
+                onSwipeMove?.(0);
             }
         },
-        [onSwipeLeft, onSwipeRight, triggerPx],
+        [onSwipeLeft, onSwipeMove, onSwipeRight, triggerPx],
     );
 
     const onPointerUp = useCallback(() => {
+        if (startRef.current) {
+            onSwipeMove?.(0);
+        }
         startRef.current = null;
-    }, []);
+    }, [onSwipeMove]);
 
     const onPointerCancel = useCallback(() => {
+        if (startRef.current) {
+            onSwipeMove?.(0);
+        }
         startRef.current = null;
-    }, []);
+    }, [onSwipeMove]);
 
     // Capture-phase click handler that swallows the click immediately
     // after a swipe fires. Capture phase matters — by bubble phase
