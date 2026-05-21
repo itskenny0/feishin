@@ -1,0 +1,63 @@
+/*
+ * Touch-device overrides — kills the "sticky hover" pattern where a tapped
+ * button stays in its hover state because the WebView synthesises a
+ * hover event on tap but never emits the matching mouseleave when the
+ * finger lifts. Without this the buttons in the fullscreen player, the
+ * library header action row, the bottom tab bar, etc. all stay visually
+ * highlighted after the user taps them once.
+ *
+ * `@media (hover: none)` matches devices whose primary pointer can't
+ * hover — phones, tablets, touchscreens. Desktop browsers (mouse +
+ * touchpad) keep their full hover styling.
+ *
+ * Strategy: revert hover declarations that change BACKGROUND or
+ * TRANSFORM on the most common interactive elements. We don't touch
+ * :active — that's the right pseudo-class for "tap feedback" and we
+ * want it to keep firing. We also don't touch :focus — keyboard users
+ * (Bluetooth / OTG keyboards on tablets) still need a focus ring.
+ *
+ * The selectors target Mantine's root component classes (the data-*
+ * attrs Mantine ships on its primitives) plus the shared bare HTML
+ * elements. Anything else with custom :hover styling will need its own
+ * `@media (hover: hover)` wrapper.
+ */
+@media (hover: none) {
+    /*
+     * Mantine ActionIcon (used by every icon-only button in the app
+     * — playerbar transports, tab bar icons, library-header heart,
+     * fullscreen-player settings cog, etc.). Mantine sets background
+     * + transform on :hover.
+     */
+    [class*='mantine-ActionIcon-root']:hover {
+        background-color: transparent;
+        transform: none;
+    }
+
+    /*
+     * Mantine Button (used by the "Play / Next / Last" pills in the
+     * library-header action row, the playlist detail "Add / Edit /
+     * Name & details" pills, etc.). Hover normally darkens the fill
+     * or lightens the outline.
+     */
+    [class*='mantine-Button-root']:hover {
+        background-color: revert;
+        transform: none;
+    }
+
+    /*
+     * Plain anchors that act as buttons (sidebar nav links, breadcrumb
+     * buttons, etc.). The router applies background highlights via
+     * :hover on these.
+     */
+    a:hover {
+        text-decoration: revert;
+        background-color: revert;
+    }
+
+    /*
+     * Mantine NavLink (sidebar accordion items) — same pattern.
+     */
+    [class*='mantine-NavLink-root']:hover {
+        background-color: transparent;
+    }
+}
