@@ -1,11 +1,17 @@
 import formatDuration from 'format-duration';
 import { lazy, memo, Suspense } from 'react';
+import { ErrorBoundary } from 'react-error-boundary';
 
 import styles from './mobile-fullscreen-player.module.css';
 
 import { PlayerbarSeekSlider } from '/@/renderer/features/player/components/playerbar-seek-slider';
+import { TrackmapCanvas } from '/@/renderer/features/trackmap';
 import { usePlayerTimestamp } from '/@/renderer/store';
-import { PlayerbarSliderType, usePlayerbarSlider } from '/@/renderer/store/settings.store';
+import {
+    PlayerbarSliderType,
+    usePlayerbarSlider,
+    useTrackmapEnabled,
+} from '/@/renderer/store/settings.store';
 import { Spinner } from '/@/shared/components/spinner/spinner';
 import { Text } from '/@/shared/components/text/text';
 import { PlaybackSelectors } from '/@/shared/constants/playback-selectors';
@@ -30,6 +36,7 @@ export const MobileFullscreenPlayerProgress = memo(
         const formattedTime = formatDuration(currentTime * 1000 || 0);
 
         const isWaveform = playerbarSlider?.type === PlayerbarSliderType.WAVEFORM;
+        const trackmapEnabled = useTrackmapEnabled();
 
         return (
             <div className={styles.progressContainer}>
@@ -48,7 +55,23 @@ export const MobileFullscreenPlayerProgress = memo(
                             <PlayerbarWaveform />
                         </Suspense>
                     ) : (
-                        <PlayerbarSeekSlider max={songDuration} min={0} />
+                        <>
+                            {trackmapEnabled && (
+                                /*
+                                 * Trackmap on the mobile fullscreen player.
+                                 * The canvas paints behind the seek slider —
+                                 * same component the desktop playerbar uses;
+                                 * ErrorBoundary keeps a per-track parse
+                                 * failure from blowing up the whole row.
+                                 */
+                                <ErrorBoundary fallback={null}>
+                                    <TrackmapCanvas />
+                                </ErrorBoundary>
+                            )}
+                            <div style={{ position: 'relative', width: '100%', zIndex: 1 }}>
+                                <PlayerbarSeekSlider max={songDuration} min={0} />
+                            </div>
+                        </>
                     )}
                 </div>
                 <div className={styles.timeContainer}>

@@ -466,6 +466,7 @@
 }
 
 .slider-wrapper {
+    position: relative;
     flex: 1;
 }
 
