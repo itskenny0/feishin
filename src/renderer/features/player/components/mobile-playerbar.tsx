@@ -21,7 +21,10 @@ import {
     usePlayerStatus,
     useSetFullScreenPlayerStore,
 } from '/@/renderer/store';
-import { useShowFilesystemNameForAlbums } from '/@/renderer/store/settings.store';
+import {
+    useMobilePlayerbarShowNavButtons,
+    useShowFilesystemNameForAlbums,
+} from '/@/renderer/store/settings.store';
 import { useTimestampStoreBase } from '/@/renderer/store/timestamp.store';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Group } from '/@/shared/components/group/group';
@@ -46,6 +49,7 @@ export const MobilePlayerbar = () => {
     const artists = currentSong?.artists;
     const isSongDefined = Boolean(currentSong?.id);
     const useFsAlbumName = useShowFilesystemNameForAlbums();
+    const showNavButtons = useMobilePlayerbarShowNavButtons();
     const albumDisplayName =
         (useFsAlbumName ? albumFolderFromSongPath(currentSong?.path) : null) ||
         currentSong?.album ||
@@ -333,18 +337,20 @@ export const MobilePlayerbar = () => {
                 </LayoutGroup>
             </motion.div>
             <div className={styles.controlsWrapper}>
-                <PlayerButton
-                    icon={<Icon fill="default" icon="mediaPrevious" size="md" />}
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        mediaPrevious();
-                    }}
-                    tooltip={{
-                        label: t('player.previous'),
-                        openDelay: 400,
-                    }}
-                    variant="tertiary"
-                />
+                {showNavButtons && (
+                    <PlayerButton
+                        icon={<Icon fill="default" icon="mediaPrevious" size="md" />}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            mediaPrevious();
+                        }}
+                        tooltip={{
+                            label: t('player.previous'),
+                            openDelay: 400,
+                        }}
+                        variant="tertiary"
+                    />
+                )}
                 <MainPlayButton
                     disabled={currentSong?.id === undefined}
                     isPaused={status === PlayerStatus.PAUSED}
@@ -353,18 +359,20 @@ export const MobilePlayerbar = () => {
                         mediaTogglePlayPause();
                     }}
                 />
-                <PlayerButton
-                    icon={<Icon fill="default" icon="mediaNext" size="md" />}
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        mediaNext();
-                    }}
-                    tooltip={{
-                        label: t('player.next'),
-                        openDelay: 400,
-                    }}
-                    variant="tertiary"
-                />
+                {showNavButtons && (
+                    <PlayerButton
+                        icon={<Icon fill="default" icon="mediaNext" size="md" />}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            mediaNext();
+                        }}
+                        tooltip={{
+                            label: t('player.next'),
+                            openDelay: 400,
+                        }}
+                        variant="tertiary"
+                    />
+                )}
             </div>
             <MiniPlayerProgressStrip durationMs={currentSong?.duration ?? 0} />
         </div>

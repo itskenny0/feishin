@@ -1,6 +1,8 @@
 import { Capacitor } from '@capacitor/core';
 import { useMediaQuery } from '@mantine/hooks';
 
+import { useSettingsStore } from '/@/renderer/store/settings.store';
+
 /**
  * Named breakpoints for the responsive redesign.
  *
@@ -95,8 +97,18 @@ export const useBreakpoint = (): Breakpoint => {
 export const MOBILE_SHELL_QUERY =
     '(max-width: 767px), (orientation: landscape) and (max-height: 480px)';
 
-/** True for phone + phablet (i.e. anything below the desktop shell). */
-export const useIsMobileShell = () => useMediaQuery(MOBILE_SHELL_QUERY);
+/**
+ * True for phone + phablet (i.e. anything below the desktop shell), OR
+ * when the user has flipped the "force mobile view" override in settings.
+ * The override lets users opt into the touch-first Spotify-style UI on
+ * larger displays where the responsive media query would otherwise pick
+ * the desktop shell.
+ */
+export const useIsMobileShell = () => {
+    const matches = useMediaQuery(MOBILE_SHELL_QUERY);
+    const force = useSettingsStore((state) => state.general.mobileShellForce);
+    return matches || force;
+};
 
 /**
  * True for sub-360px viewports — Pixel 4a, Galaxy S10e, iPhone SE 1st gen,

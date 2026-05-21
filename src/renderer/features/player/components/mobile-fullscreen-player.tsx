@@ -1,9 +1,10 @@
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence, motion, useDragControls } from 'motion/react';
 import { Variants } from 'motion/react';
 import {
     CSSProperties,
     memo,
     MouseEvent,
+    PointerEvent as ReactPointerEvent,
     ReactNode,
     useCallback,
     useEffect,
@@ -348,6 +349,13 @@ interface DismissibleMobilePlayerContainerProps extends MobilePlayerContainerPro
     /** True while the player face (cover/metadata/transport) is the active tab. */
     isPlayerTab: boolean;
     onDismiss: () => void;
+    /**
+     * Ref to the scrollable card-stack inside the player. Used to gate the
+     * pull-to-dismiss gesture: drag-down only takes over when the inner
+     * scroll is already at the top, otherwise the user's pull becomes a
+     * scroll up through the lyrics / artist cards.
+     */
+    scrollableRef: React.RefObject<HTMLDivElement | null>;
 }
 
 interface MobilePlayerContainerProps {
@@ -368,6 +376,7 @@ const MobilePlayerContainer = memo(
         dynamicIsImage,
         isPlayerTab,
         onDismiss,
+        scrollableRef,
     }: DismissibleMobilePlayerContainerProps) => {
         const currentSong = usePlayerSong();
         const imageUrl = useItemImageUrl({
@@ -411,21 +420,84 @@ const MobilePlayerContainer = memo(
         const sourceLuminance = rgbLuminance(background);
         const overlayStrength = sourceLuminance !== null && sourceLuminance > 160 ? '0.72' : '0.42';
 
+        /*
+         * Pull-to-dismiss. The fullscreen player has a scrollable card
+         * stack (player face + lyrics + artist cards), so a naive
+         * `drag="y"` on the container competes with the inner scroll
+         * and the inner scroll always wins — that's the regression
+         * users reported after the scrollable cards landed.
+         *
+         * Fix: take manual control of the drag. Watch raw pointer
+         * events on the container. If the user starts pulling DOWN
+         * while the scroll surface is already at scrollTop=0, hand the
+         * gesture off to Motion (`dragControls.start`). Anything else
+         * (scrolling up, pulling on a non-player tab, or the inner
+         * scroll has already moved off the top) is left alone so the
+         * native scroll behaviour works as expected.
+         */
+        const dragControls = useDragControls();
+        const pullStartRef = useRef<null | { x: number; y: number }>(null);
+
+        const handlePointerDown = useCallback(
+            (event: ReactPointerEvent<HTMLDivElement>) => {
+                if (!isPlayerTab) {
+                    pullStartRef.current = null;
+                    return;
+                }
+                const scroll = scrollableRef.current;
+                if (scroll && scroll.scrollTop > 0) {
+                    pullStartRef.current = null;
+                    return;
+                }
+                pullStartRef.current = { x: event.clientX, y: event.clientY };
+            },
+            [isPlayerTab, scrollableRef],
+        );
+
+        const handlePointerMove = useCallback(
+            (event: ReactPointerEvent<HTMLDivElement>) => {
+                const start = pullStartRef.current;
+                if (!start) return;
+                const dy = event.clientY - start.y;
+                const dx = Math.abs(event.clientX - start.x);
+                // Only commit to a pull-to-dismiss once we've moved
+                // a noticeable distance vertically — small finger
+                // wobble shouldn't kick off a drag mid-tap.
+                if (dy < 8) {
+                    return;
+                }
+                // Bail if the user is moving more horizontally than
+                // vertically — the album-art cover swipe owns that
+                // gesture.
+                if (dx > dy) {
+                    pullStartRef.current = null;
+                    return;
+                }
+                pullStartRef.current = null;
+                dragControls.start(event.nativeEvent, { snapToCursor: false });
+            },
+            [dragControls],
+        );
+
+        const handlePointerUp = useCallback(() => {
+            pullStartRef.current = null;
+        }, []);
+
         return (
             <motion.div
                 animate="open"
                 className={styles.container}
-                // Swipe-down to dismiss is only available on the main
-                // player tab — when the user is browsing queue or
-                // lyrics those tabs own the vertical gesture (scrolling),
-                // and we don't want a stray drag from the top of those
-                // pages collapsing the whole overlay.
                 drag={isPlayerTab ? 'y' : false}
-                // Only let the user pull DOWN (positive y) — pulling up
-                // would expose the page beneath, which the user can't
-                // see anyway because the overlay is full-viewport.
                 dragConstraints={{ bottom: 0, left: 0, right: 0, top: 0 }}
+                dragControls={dragControls}
                 dragElastic={{ bottom: 0.6, top: 0 }}
+                // dragListener=false: don't auto-start drag on pointer
+                // events. We start it manually via dragControls in
+                // handlePointerMove when scrollTop is 0 and the user
+                // is moving downward. This is what lets the inner
+                // scrollable card stack keep ownership of the
+                // touch-move event until the user pulls past the top.
+                dragListener={false}
                 exit="closed"
                 initial="closed"
                 // Past ~140px of downward drag (or a fast flick), dismiss.
@@ -435,6 +507,9 @@ const MobilePlayerContainer = memo(
                         onDismiss();
                     }
                 }}
+                onPointerDown={handlePointerDown}
+                onPointerMove={handlePointerMove}
+                onPointerUp={handlePointerUp}
                 style={
                     {
                         '--mobile-fullscreen-overlay-strength': overlayStrength,
@@ -491,6 +566,7 @@ export const MobileFullscreenPlayer = () => {
     const setRating = useSetRating();
 
     const [isPageHovered, setIsPageHovered] = useState(false);
+    const playerStateRef = useRef<HTMLDivElement | null>(null);
 
     const handleToggleFullScreenPlayer = useCallback(() => {
         setFullScreenPlayerStore({ expanded: false });
@@ -556,6 +632,7 @@ export const MobileFullscreenPlayer = () => {
             dynamicIsImage={dynamicIsImage}
             isPlayerTab={isPlayerState}
             onDismiss={handleToggleFullScreenPlayer}
+            scrollableRef={playerStateRef}
         >
             <BackgroundImageOverlay
                 dynamicBackground={effectiveDynamicBackground}
@@ -569,6 +646,7 @@ export const MobileFullscreenPlayer = () => {
                 className={styles.playerState}
                 onMouseEnter={() => setIsPageHovered(true)}
                 onMouseLeave={() => setIsPageHovered(false)}
+                ref={playerStateRef}
                 transition={{ duration: 0.3, ease: 'easeInOut' }}
             >
                 {/*
@@ -642,9 +720,23 @@ export const MobileFullscreenPlayer = () => {
                  */}
                 {isSongDefined && (
                     <>
-                        <div className={styles.lyricsCard}>
+                        <div
+                            className={styles.lyricsCard}
+                            onClick={handleToggleLyrics}
+                            role="button"
+                            tabIndex={0}
+                        >
                             <div className={styles.lyricsCardHeader}>
-                                {t('page.fullscreenPlayer.lyrics', { defaultValue: 'Lyrics' })}
+                                <span>
+                                    {t('page.fullscreenPlayer.lyrics', {
+                                        defaultValue: 'Lyrics',
+                                    })}
+                                </span>
+                                <span className={styles.lyricsCardHeaderHint}>
+                                    {t('page.fullscreenPlayer.openLyrics', {
+                                        defaultValue: 'Tap to expand',
+                                    })}
+                                </span>
                             </div>
                             <div className={styles.lyricsCardBody}>
                                 <Lyrics fadeOutNoLyricsMessage />

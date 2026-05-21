@@ -75,6 +75,37 @@
     }
 
     /*
+     * Portrait phones (≤767px wide AND portrait orientation): on a 360–
+     * 430px phone in portrait the old hero header stacked a 220–250px
+     * cover above the metadata column, eating 35–45% of vertical
+     * viewport before the user saw any list rows. Drop to a tight 120px
+     * cover + a single-row layout so the playlist title, play button,
+     * and the first three or four rows of the song list are visible
+     * above the fold. Landscape phones and tablets keep the editorial
+     * hero — that's where it actually fits.
+     */
+    @media (max-width: 767px) and (orientation: portrait) {
+        grid-template-areas: 'image info';
+        grid-template-columns: 120px minmax(0, 1fr);
+        grid-template-rows: auto;
+        gap: var(--theme-spacing-sm);
+        align-items: center;
+        justify-items: flex-start;
+        padding: var(--theme-spacing-md) var(--theme-spacing-md) var(--theme-spacing-sm);
+        text-align: left;
+
+        .image {
+            width: 120px !important;
+            height: 120px;
+        }
+
+        :global(.item-image-placeholder) {
+            width: 120px !important;
+            height: 120px;
+        }
+    }
+
+    /*
      * Small-phone tier (≤360): a 250px cover with 2rem vertical padding
      * leaves less than half a 568px screen for the metadata + tracklist.
      * Drop the cover to 220px so the title, artist link, and the first

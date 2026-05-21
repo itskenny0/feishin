@@ -57,6 +57,18 @@
             }
         }
     }
+
+    /*
+     * Touch devices: skip the darken-on-hover. With the compact controls
+     * overlay hidden on touch there's nothing on top to need a contrast
+     * background, and on phones a tap-hold lingers long enough that the
+     * darken animation fires and looks like an unwanted modal.
+     */
+    @media (pointer: coarse) {
+        &:hover::before {
+            opacity: 0;
+        }
+    }
 }
 
 .image-container.is-round {

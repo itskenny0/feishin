@@ -157,12 +157,38 @@ export const SynchronizedLyrics = ({
             return;
         }
 
-        const container = document.getElementById(SCROLL_CONTAINER_ID);
+        /*
+         * The synced lyrics render in two surfaces: the full lyrics tab
+         * (overflowing the viewport via #sychronized-lyrics-scroll-container)
+         * and the mobile fullscreen player's preview card
+         * (max-height: 60vh overflow:auto, no id). Find the nearest
+         * scrollable ancestor walking up from the active line — that
+         * way the scroll-into-view works inside whichever container is
+         * actually clipping the lyric list. Fall back to the named
+         * container id for the desktop tab.
+         */
+        let container: HTMLElement | null = nextActive.parentElement;
+        while (container) {
+            const style = window.getComputedStyle(container);
+            const overflowY = style.overflowY;
+            const canScroll =
+                (overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay') &&
+                container.scrollHeight > container.clientHeight;
+            if (canScroll) break;
+            container = container.parentElement;
+        }
+        if (!container) {
+            container = document.getElementById(SCROLL_CONTAINER_ID);
+        }
         if (!container) {
             return;
         }
 
-        const targetTop = nextActive.offsetTop - container.clientHeight / 2;
+        const targetTop =
+            nextActive.offsetTop -
+            container.offsetTop -
+            container.clientHeight / 2 +
+            nextActive.clientHeight / 2;
 
         // Mark the upcoming scroll event chain as programmatic so the user
         // scroll handler doesn't mistake them for human input.

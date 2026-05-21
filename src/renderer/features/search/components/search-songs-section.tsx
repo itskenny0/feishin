@@ -4,11 +4,13 @@ import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createSearchParams, generatePath, useNavigate } from 'react-router';
 
+import { usePlayer } from '/@/renderer/features/player/context/player-context';
 import { searchQueries } from '/@/renderer/features/search/api/search-api';
 import { CollapsibleCommandGroup } from '/@/renderer/features/search/components/collapsible-command-group';
 import { CommandItemSelectable } from '/@/renderer/features/search/components/command-item-selectable';
 import { LibraryCommandItem } from '/@/renderer/features/search/components/library-command-item';
 import { FILTER_KEYS } from '/@/renderer/features/shared/utils';
+import { useIsTouch } from '/@/renderer/hooks/use-breakpoint';
 import { AppRoute } from '/@/renderer/router/routes';
 import { useCurrentServer } from '/@/renderer/store';
 import { Box } from '/@/shared/components/box/box';
@@ -16,6 +18,7 @@ import { Button } from '/@/shared/components/button/button';
 import { Spinner } from '/@/shared/components/spinner/spinner';
 import { Text } from '/@/shared/components/text/text';
 import { LibraryItem } from '/@/shared/types/domain-types';
+import { Play } from '/@/shared/types/types';
 
 interface SearchSongsSectionProps {
     debouncedQuery: string;
@@ -37,6 +40,8 @@ export function SearchSongsSection({
     const navigate = useNavigate();
     const server = useCurrentServer();
     const { t } = useTranslation();
+    const isTouch = useIsTouch();
+    const { addToQueueByData } = usePlayer();
 
     const { data, fetchNextPage, hasNextPage, isFetched, isFetchingNextPage, isLoading } =
         useInfiniteQuery(
@@ -106,11 +111,27 @@ export function SearchSongsSection({
                         <CommandItemSelectable
                             key={`search-song-${song.id}`}
                             onSelect={() => {
-                                navigate(
-                                    generatePath(AppRoute.LIBRARY_ALBUMS_DETAIL, {
-                                        albumId: song.albumId,
-                                    }),
-                                );
+                                /*
+                                 * Touch model: tapping a song row PLAYS the
+                                 * song immediately — that's what the user
+                                 * came to the search for on a phone. The
+                                 * desktop pattern of navigating to the album
+                                 * (to then click play there) is two extra
+                                 * taps and counter to how Spotify, Apple
+                                 * Music, etc. handle a tap in a search
+                                 * result list. On pointer:fine we keep the
+                                 * navigate-to-album behaviour so the cmdk
+                                 * still works as a quick-jump nav tool.
+                                 */
+                                if (isTouch && server?.id) {
+                                    addToQueueByData([song], Play.NOW);
+                                } else {
+                                    navigate(
+                                        generatePath(AppRoute.LIBRARY_ALBUMS_DETAIL, {
+                                            albumId: song.albumId,
+                                        }),
+                                    );
+                                }
                                 onSelectResult();
                             }}
                             value={`search-song-${song.id}`}

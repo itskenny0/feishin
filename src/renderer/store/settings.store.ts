@@ -532,6 +532,21 @@ export const GeneralSettingsSchema = z.object({
     mobileLibraryDestination: z
         .enum(['albums', 'album-artists', 'artists', 'songs', 'genres', 'folders', 'playlists'])
         .default('albums'),
+    /*
+     * Show explicit prev/next buttons in the mobile mini-player. With
+     * Motion-native horizontal swipe carrying the carousel commit, the
+     * row works fine with just the play/pause button. Hidden by default
+     * to give the song metadata more horizontal real estate; users who
+     * still want the buttons can flip this on.
+     */
+    mobilePlayerbarShowNavButtons: z.boolean().default(false),
+    /*
+     * "Force mobile shell" override for users who want the touch-first
+     * Spotify-style UI on larger displays (tablet in landscape, small
+     * laptops). When true, useIsMobileShell() returns true regardless of
+     * the actual viewport size, so the mobile layout is rendered.
+     */
+    mobileShellForce: z.boolean().default(false),
     musicBrainz: z.boolean(),
     nativeAspectRatio: z.boolean(),
     nativeSpotify: z.boolean(),
@@ -1159,7 +1174,20 @@ const homeItems = Object.values(HomeItem).map((item) => ({
     id: item,
 }));
 
-const artistItems = Object.values(ArtistItem).map((item) => ({
+/*
+ * Default render order on the artist detail page. Top songs sits before
+ * the recent-albums grid — what listeners want to see first when they
+ * land on an artist is the music they're most likely to play. Albums and
+ * everything else fall in below. Users can still re-order this in
+ * Settings → Artist page.
+ */
+const artistItems = [
+    ArtistItem.BIOGRAPHY,
+    ArtistItem.TOP_SONGS,
+    ArtistItem.RECENT_ALBUMS,
+    ArtistItem.SIMILAR_ARTISTS,
+    ArtistItem.FAVORITE_SONGS,
+].map((item) => ({
     disabled: false,
     id: item,
 }));
@@ -1289,6 +1317,8 @@ const initialState: SettingsState = {
         lastfmApiKey: '',
         listenBrainz: true,
         mobileLibraryDestination: 'albums',
+        mobilePlayerbarShowNavButtons: false,
+        mobileShellForce: false,
         musicBrainz: true,
         nativeAspectRatio: false,
         nativeSpotify: false,
@@ -1343,8 +1373,8 @@ const initialState: SettingsState = {
             skipForwardSeconds: 10,
         },
         spotify: true,
-        theme: AppTheme.DEFAULT_DARK,
-        themeDark: AppTheme.DEFAULT_DARK,
+        theme: AppTheme.SPOTIFY,
+        themeDark: AppTheme.SPOTIFY,
         themeLight: AppTheme.DEFAULT_LIGHT,
         ...TRACKMAP_ADVANCED_DEFAULTS,
         trackmapEnabled: true,
@@ -3034,6 +3064,12 @@ export const useSidebarBottomSection = () =>
 
 export const useMobileLibraryDestination = () =>
     useSettingsStore((state) => state.general.mobileLibraryDestination, shallow);
+
+export const useMobilePlayerbarShowNavButtons = () =>
+    useSettingsStore((state) => state.general.mobilePlayerbarShowNavButtons, shallow);
+
+export const useMobileShellForce = () =>
+    useSettingsStore((state) => state.general.mobileShellForce, shallow);
 
 export const useDetailSectionCollapsed = (key: string): boolean =>
     useSettingsStore((state) => Boolean(state.general.collapsedDetailSections?.[key]));

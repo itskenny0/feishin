@@ -92,6 +92,12 @@
     overscroll-behavior-y: contain;
     pointer-events: none;
     background: transparent;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.player-state::-webkit-scrollbar {
+    display: none;
 }
 
 /*
@@ -148,13 +154,24 @@
     }
 
     /*
-     * Cover takes the left half. Its image-container is already
-     * height-bound by the grid row; the .image inside keeps its
-     * aspect-ratio: 1 and shrinks to fit.
+     * Cover takes the left half. In the grid layout the
+     * .image-container is no longer in a flex column, so the existing
+     * `flex: 1 1 0` is a no-op — without an explicit height the
+     * .image inside (height: 100%) collapses to 0 and the album art
+     * disappears. Force the container to fill the grid row and let
+     * the inner .image's aspect-ratio: 1 + max-width clamp it into a
+     * square that fits.
      */
     .player-face-body :global(.image-container),
     .player-face-body > div:first-child {
+        align-self: stretch;
+        height: 100%;
         padding: 0;
+    }
+
+    .player-face-body .image {
+        max-width: 100%;
+        max-height: 100%;
     }
 }
 
@@ -164,26 +181,67 @@
  * its own padding, rounded corners, subtle background, and an eyebrow
  * label up top.
  */
+/*
+ * Lyrics preview card. The fullscreen player paints a dynamic background
+ * tinted by the album cover, so a translucent foreground-tinted card can
+ * end up light-on-light (yellow / cream covers) or dark-on-dark (black
+ * cover, dark theme). Anchor the card to a solid dark plate so the
+ * lyrics — which are always rendered in white inside this card — read
+ * consistently regardless of the cover. The plate sits on top of the
+ * cover backdrop, so the dynamic feel is preserved while readability is
+ * guaranteed.
+ */
 .lyrics-card {
+    cursor: pointer;
     padding: var(--theme-spacing-md);
     margin: var(--theme-spacing-md) var(--theme-spacing-md) calc(var(--theme-spacing-lg) * 2);
-    color: var(--theme-colors-foreground);
-    background: color-mix(in srgb, var(--theme-colors-foreground) 6%, transparent);
+    color: #fff;
+    background: rgb(0 0 0 / 55%);
     border-radius: var(--theme-radius-lg);
-    backdrop-filter: blur(12px);
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-tap-highlight-color: transparent;
 }
 
 .lyrics-card-header {
+    display: flex;
+    gap: 0.4rem;
+    align-items: center;
+    justify-content: space-between;
     margin-bottom: var(--theme-spacing-sm);
     font-size: 1.15rem;
     font-weight: 800;
+    color: #fff;
     letter-spacing: -0.01em;
 }
 
+.lyrics-card-header-hint {
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: rgb(255 255 255 / 70%);
+    text-transform: none;
+    letter-spacing: 0;
+}
+
 .lyrics-card-body {
+    position: relative;
     min-height: 12rem;
     max-height: 60vh;
     overflow-y: auto;
+    color: #fff;
+    /*
+     * Render the lyrics as display-only inside the preview card. A
+     * tap on the card opens the full-screen Lyrics tab (which IS
+     * interactive — seek to line, settings, copy, etc.). Without
+     * this, the inline LyricLine click handlers would seek the
+     * track every time the user tried to scroll inside the card.
+     */
+    pointer-events: none;
+    scrollbar-width: thin;
+}
+
+.lyrics-card-body * {
+    color: inherit !important;
+    text-shadow: 0 1px 2px rgb(0 0 0 / 60%);
 }
 
 /*
@@ -195,16 +253,17 @@
 .artist-card {
     padding: var(--theme-spacing-md);
     margin: 0 var(--theme-spacing-md) calc(var(--theme-spacing-lg) * 2);
-    color: var(--theme-colors-foreground);
-    background: color-mix(in srgb, var(--theme-colors-foreground) 6%, transparent);
+    color: #fff;
+    background: rgb(0 0 0 / 55%);
     border-radius: var(--theme-radius-lg);
-    backdrop-filter: blur(12px);
+    backdrop-filter: blur(14px) saturate(140%);
 }
 
 .artist-card-header {
     margin-bottom: var(--theme-spacing-md);
     font-size: 1.15rem;
     font-weight: 800;
+    color: #fff;
     letter-spacing: -0.01em;
 }
 
@@ -547,6 +606,17 @@
 .slider-wrapper {
     position: relative;
     flex: 1;
+    /*
+     * Tell the browser: pointer events inside the slider wrapper are
+     * for the slider only, not for scrolling the parent. Without this,
+     * a finger that lands on the seek slider and drags horizontally
+     * also kicks off the vertical scroll of the .player-state — the
+     * scroll happens to lock onto the gesture before the slider gets
+     * its move events, so the user fights both at once. touch-action:
+     * none disables every default browser gesture in this area, so the
+     * Mantine seek-slider's pointer handlers see the gesture cleanly.
+     */
+    touch-action: none;
 }
 
 .controls-container {

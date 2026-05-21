@@ -25,15 +25,19 @@
 }
 
 /*
- * Touch devices never trigger the hover state that flips .visible, so
- * the compact controls (play / favorite / more) stayed permanently
- * invisible. On pointer:coarse force them to the visible state so
- * users have a visible affordance on tap.
+ * Touch devices: hide the hover-controls overlay entirely. The play /
+ * favorite / more buttons that fade in on desktop hover make sense for a
+ * pointer that previews content before clicking, but on touch they
+ * either (a) sit permanently on top of every cover, blocking tap targets
+ * and visually competing with the artwork, or (b) only appear on the
+ * first tap (an awkward two-tap pattern that doesn't match any platform
+ * convention). On phones the gesture model is simple: tap to navigate,
+ * long-press to get the context menu. Suppress the overlay here; the
+ * long-press handler on the card surfaces the action menu instead.
  */
 @media (pointer: coarse) {
-    .container.compact {
-        opacity: 1;
-        transform: scale(1);
+    .container {
+        display: none;
     }
 }
 

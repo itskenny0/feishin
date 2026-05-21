@@ -285,7 +285,7 @@ function SubmenuContent(props: SubmenuContentProps) {
 
 function SubmenuTarget(props: SubmenuTargetProps) {
     const { children } = props;
-    const { cancelCloseTimeout, disabled, setCloseTimeout, setOpen } = useContext(
+    const { cancelCloseTimeout, disabled, open, setCloseTimeout, setOpen } = useContext(
         SubmenuContext,
     ) as SubmenuContext;
     const openTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -325,12 +325,51 @@ function SubmenuTarget(props: SubmenuTargetProps) {
         setCloseTimeout(timeout);
     };
 
+    /*
+     * Touch handling. Radix's SubTrigger relies on `mouseenter` to open
+     * the submenu, which never fires reliably on touch — the click event
+     * arrives first and, because the SubTrigger is a focusable
+     * menu item, Radix interprets the tap as a `select` and closes the
+     * whole context menu. The result on a phone was: tap the "Play"
+     * row in the menu, the menu vanishes, and nothing happens.
+     *
+     * Override that here: when the user taps a SubTrigger, cancel the
+     * default select behaviour (`event.preventDefault()`) and explicitly
+     * toggle the submenu open. A second tap on the same trigger collapses
+     * it. The opening also fires the mouse-enter timer, so we cancel it
+     * here so we don't double-fire.
+     */
+    const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+        if (disabled) return;
+        if (event.pointerType !== 'mouse') {
+            event.preventDefault();
+            event.stopPropagation();
+            cancelCloseTimeout();
+            if (openTimeoutRef.current) {
+                clearTimeout(openTimeoutRef.current);
+                openTimeoutRef.current = null;
+            }
+            setOpen(!open);
+        }
+    };
+
+    const handleClick = (event: React.MouseEvent<HTMLDivElement>) => {
+        if (disabled) return;
+        // Suppress the synthesised click on touch — pointerdown already
+        // toggled the submenu and Radix would otherwise route the click
+        // through to the parent menu's onSelect.
+        event.preventDefault();
+        event.stopPropagation();
+    };
+
     return (
         <RadixContextMenu.SubTrigger
             className={clsx({ [styles.disabled]: disabled })}
             disabled={disabled}
+            onClick={handleClick}
             onMouseEnter={handleMouseEnter}
             onMouseLeave={handleMouseLeave}
+            onPointerDown={handlePointerDown}
         >
             {children}
         </RadixContextMenu.SubTrigger>

@@ -131,17 +131,36 @@
     gap: 0;
     justify-content: center;
     min-width: 0;
-    max-width: 50%;
+    max-width: 100%;
     overflow: hidden;
 }
 
 .line-item {
-    display: inline-block;
+    display: flex;
+    align-items: center;
     width: 100%;
+    min-width: 0;
+    max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     cursor: pointer;
+}
+
+/*
+ * Defensive truncation inside the metadata stack. The outer .line-item
+ * sets white-space: nowrap + ellipsis, but inner flex children (Mantine
+ * Text, react-router Link wrappers) can override the inherited
+ * white-space / min-width values and still cause the title to wrap onto
+ * a second line on long track names. Force the rules on every descendant
+ * so the row always truncates with an ellipsis.
+ */
+.metadata-stack .line-item > * {
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .line-item.secondary {

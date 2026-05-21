@@ -18,6 +18,7 @@ import {
     useRadioControls,
     useRadioPlayer,
 } from '/@/renderer/features/radio/hooks/use-radio-player';
+import { useIsBigTablet } from '/@/renderer/hooks/use-breakpoint';
 import {
     useButtonSize,
     usePlayerRepeat,
@@ -31,21 +32,37 @@ export const CenterControls = () => {
     const skip = useSkipButtons();
 
     const isRadioActive = useIsRadioActive();
+    /*
+     * Tablet-tier (835–1280): the right sidebar slides in as a 400px
+     * overlay, but the playerbar grid is still laid out as if the
+     * sidebar occupied its own column, so the center controls + slider
+     * have only ~300–400px of effective width. With nine buttons plus a
+     * full slider, the queue-toggle / volume / cast cluster on the right
+     * spills off-screen. Drop everything except prev / play / next in
+     * this range so the slider gets meaningful room and the right-side
+     * controls stay reachable. The buttons return to the desktop layout
+     * at ≥1281 and below 835 the mobile shell takes over.
+     */
+    const isCompactTablet = useIsBigTablet();
 
     if (isRadioActive) {
         return (
             <>
                 <div className={styles.controlsContainer}>
                     <div className={styles.buttonsContainer}>
-                        <RadioStopButton />
-                        <ShuffleButton disabled={isRadioActive} />
+                        {!isCompactTablet && <RadioStopButton />}
+                        {!isCompactTablet && <ShuffleButton disabled={isRadioActive} />}
                         <PreviousButton disabled={isRadioActive} />
-                        {skip?.enabled && <SkipBackwardButton disabled={isRadioActive} />}
+                        {!isCompactTablet && skip?.enabled && (
+                            <SkipBackwardButton disabled={isRadioActive} />
+                        )}
                         <RadioCenterPlayButton />
-                        {skip?.enabled && <SkipForwardButton disabled={isRadioActive} />}
+                        {!isCompactTablet && skip?.enabled && (
+                            <SkipForwardButton disabled={isRadioActive} />
+                        )}
                         <NextButton disabled={isRadioActive} />
-                        <RepeatButton disabled={isRadioActive} />
-                        <ShuffleAllButton disabled={isRadioActive} />
+                        {!isCompactTablet && <RepeatButton disabled={isRadioActive} />}
+                        {!isCompactTablet && <ShuffleAllButton disabled={isRadioActive} />}
                     </div>
                 </div>
             </>
@@ -56,15 +73,15 @@ export const CenterControls = () => {
         <>
             <div className={styles.controlsContainer}>
                 <div className={styles.buttonsContainer}>
-                    <StopButton />
-                    <ShuffleButton />
+                    {!isCompactTablet && <StopButton />}
+                    {!isCompactTablet && <ShuffleButton />}
                     <PreviousButton />
-                    {skip?.enabled && <SkipBackwardButton />}
+                    {!isCompactTablet && skip?.enabled && <SkipBackwardButton />}
                     <CenterPlayButton />
-                    {skip?.enabled && <SkipForwardButton />}
+                    {!isCompactTablet && skip?.enabled && <SkipForwardButton />}
                     <NextButton />
-                    <RepeatButton />
-                    <ShuffleAllButton />
+                    {!isCompactTablet && <RepeatButton />}
+                    {!isCompactTablet && <ShuffleAllButton />}
                 </div>
             </div>
             <PlayerbarSlider />

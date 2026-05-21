@@ -12,6 +12,7 @@ import {
     PlayTooltip,
 } from '/@/renderer/features/shared/components/play-button-group';
 import { usePlayButtonClick } from '/@/renderer/features/shared/hooks/use-play-button-click';
+import { useIsTouch } from '/@/renderer/hooks/use-breakpoint';
 import { useCurrentServer } from '/@/renderer/store';
 import { ActionIcon, ActionIconGroup } from '/@/shared/components/action-icon/action-icon';
 import { Flex } from '/@/shared/components/flex/flex';
@@ -145,8 +146,17 @@ export const LibraryCommandItem = ({
     }, [id, itemType, t]);
 
     const [isHovered, setIsHovered] = useState(false);
+    const isTouch = useIsTouch();
 
-    const showControls = isHighlighted || isHovered;
+    /*
+     * Touch model: hide the inline play/next/last/add-to-playlist buttons
+     * entirely. On touch a row tap PLAYS the song (see SearchSongsSection)
+     * and a long-press opens the existing context menu — duplicating
+     * those affordances as tiny ActionIcons makes the row noisy and
+     * encourages mis-taps. On desktop these still surface on hover or
+     * keyboard highlight.
+     */
+    const showControls = !isTouch && (isHighlighted || isHovered);
 
     return (
         <Flex
