@@ -11,6 +11,50 @@
 }
 
 /*
+ * Spotify-style album-art tint behind the mini-player.
+ *
+ * --playerbar-art-tint is set by the parent <Playerbar> from
+ * useDominantColor(currentSong.imageUrl). When a track plays the bar
+ * picks up a soft wash of the cover's dominant colour, which makes
+ * "Sweet Lemonade" by Rusty Cage feel red, "AWAKENING" feel blue,
+ * etc. The fallback `transparent` keeps the bar flat-themed when
+ * art is missing / CORS blocks the canvas read.
+ *
+ * Two stacked gradients give the effect depth:
+ *   1. A diagonal accent gradient mixing the tint at ~36% on the
+ *      left and fading to transparent at the right — anchors the
+ *      colour around the cover art so it reads as "this song's
+ *      colour" rather than a flat background fill.
+ *   2. A subtle linear darker-bottom overlay so the progress strip
+ *      at the bottom of the bar has contrast against the tint.
+ *
+ * `inset: 0` + ::before lets the gradient sit BEHIND the row content
+ * without affecting its layout. z-index: 0 stays below the content
+ * elements (which inherit position: static / relative).
+ */
+.container::before {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    content: '';
+    background:
+        linear-gradient(
+            105deg,
+            color-mix(in srgb, var(--playerbar-art-tint, transparent) 36%, transparent) 0%,
+            color-mix(in srgb, var(--playerbar-art-tint, transparent) 18%, transparent) 55%,
+            transparent 100%
+        ),
+        linear-gradient(180deg, transparent 60%, rgb(0 0 0 / 12%) 100%);
+    transition: background 500ms ease-out;
+}
+
+.container > * {
+    position: relative;
+    z-index: 1;
+}
+
+/*
  * Spotify-style thin progress strip at the bottom of the mini-player.
  * Sits absolutely anchored to the bar's bottom edge; the inner bar's
  * width is driven by --mobile-playerbar-progress (set inline from the

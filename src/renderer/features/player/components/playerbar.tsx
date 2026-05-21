@@ -53,7 +53,19 @@ export const Playerbar = () => {
     if (isMobile) {
         return (
             <Suspense fallback={<Spinner />}>
-                <MobilePlayerbar />
+                {/*
+                 * Push the album-art dominant colour into the mobile
+                 * mini-player too. Spotify tints its mini-player heavily
+                 * with the current track's dominant colour, and the
+                 * MobilePlayerbar CSS reads `--playerbar-art-tint` for a
+                 * soft horizontal gradient. Apply the same tintStyle the
+                 * desktop branch uses so descendants see a real colour
+                 * instead of falling back to `transparent` (the default
+                 * when nobody wires the vars up).
+                 */}
+                <div style={tintStyle}>
+                    <MobilePlayerbar />
+                </div>
             </Suspense>
         );
     }
