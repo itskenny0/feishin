@@ -55,6 +55,17 @@
     @media (768px <= width <= 834px) {
         grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.6fr) minmax(0, 0.7fr);
     }
+
+    /*
+     * Big-tablet (835–1280px) — give the center transport more breathing
+     * room so the seek bar stays prominent. Track metadata (left) and the
+     * volume/queue cluster (right) cede ~15% each to the center column.
+     * Gap trimmed to claw back overflow.
+     */
+    @media (835px <= width <= 1280px) {
+        grid-template-columns: minmax(0, 0.75fr) minmax(0, 1.5fr) minmax(0, 0.85fr);
+        gap: 0.5rem;
+    }
 }
 
 .right-grid-item {
