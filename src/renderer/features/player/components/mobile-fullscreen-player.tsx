@@ -570,31 +570,65 @@ export const MobileFullscreenPlayer = () => {
                 onMouseLeave={() => setIsPageHovered(false)}
                 transition={{ duration: 0.3, ease: 'easeInOut' }}
             >
-                <MobileFullscreenPlayerHeader
-                    currentSong={currentSong}
-                    isPageHovered={isPageHovered}
-                    onClose={handleToggleFullScreenPlayer}
-                />
-                <MobileFullscreenPlayerAlbumArt />
-                <MobileFullscreenPlayerMetadata
-                    currentSong={currentSong}
-                    onToggleFavorite={handleToggleFavorite}
-                    onUpdateRating={handleUpdateRating}
-                    radioArtist={isPlayingRadio ? (radioMetadata?.artist ?? undefined) : undefined}
-                    radioStationName={isPlayingRadio ? (stationName ?? undefined) : undefined}
-                    radioTitle={isPlayingRadio ? (radioMetadata?.title ?? undefined) : undefined}
-                    showRating={showRating}
-                />
-                <MobileFullscreenPlayerProgress currentSong={currentSong} />
-                <MobileFullscreenPlayerVolume />
-                <MobileFullscreenPlayerControls currentSong={currentSong} />
-                <MobileFullscreenPlayerBottomControls
-                    isLyricsActive={isLyricsState}
-                    isQueueActive={isQueueState}
-                    onToggleContextMenu={handleToggleContextMenu}
-                    onToggleLyrics={handleToggleLyrics}
-                    onToggleQueue={handleToggleQueue}
-                />
+                {/*
+                 * Spotify-style card layout: the player face fills the
+                 * viewport on first paint; scrolling down reveals
+                 * stacked cards (lyrics preview, future artist/about
+                 * card, etc.). The .playerFace div carries min-height:
+                 * 100% so the controls always sit at the viewport edge
+                 * on first paint regardless of how short the cover row
+                 * is. The .lyricsCard below it appears as the user
+                 * scrolls.
+                 */}
+                <div className={styles.playerFace}>
+                    <MobileFullscreenPlayerHeader
+                        currentSong={currentSong}
+                        isPageHovered={isPageHovered}
+                        onClose={handleToggleFullScreenPlayer}
+                    />
+                    <MobileFullscreenPlayerAlbumArt />
+                    <MobileFullscreenPlayerMetadata
+                        currentSong={currentSong}
+                        onToggleFavorite={handleToggleFavorite}
+                        onUpdateRating={handleUpdateRating}
+                        radioArtist={
+                            isPlayingRadio ? (radioMetadata?.artist ?? undefined) : undefined
+                        }
+                        radioStationName={isPlayingRadio ? (stationName ?? undefined) : undefined}
+                        radioTitle={
+                            isPlayingRadio ? (radioMetadata?.title ?? undefined) : undefined
+                        }
+                        showRating={showRating}
+                    />
+                    <MobileFullscreenPlayerProgress currentSong={currentSong} />
+                    <MobileFullscreenPlayerVolume />
+                    <MobileFullscreenPlayerControls currentSong={currentSong} />
+                    <MobileFullscreenPlayerBottomControls
+                        isLyricsActive={isLyricsState}
+                        isQueueActive={isQueueState}
+                        onToggleContextMenu={handleToggleContextMenu}
+                        onToggleLyrics={handleToggleLyrics}
+                        onToggleQueue={handleToggleQueue}
+                    />
+                </div>
+
+                {/*
+                 * Scroll-down card: full lyrics inline below the player.
+                 * Hidden when there's no song (no point in an empty
+                 * card on first launch / empty queue). The existing
+                 * fullscreen "Lyrics" tab still works for users who
+                 * prefer the dedicated immersive view.
+                 */}
+                {isSongDefined && (
+                    <div className={styles.lyricsCard}>
+                        <div className={styles.lyricsCardHeader}>
+                            {t('page.fullscreenPlayer.lyrics', { defaultValue: 'Lyrics' })}
+                        </div>
+                        <div className={styles.lyricsCardBody}>
+                            <Lyrics fadeOutNoLyricsMessage />
+                        </div>
+                    </div>
+                )}
             </motion.div>
 
             <AnimatePresence>

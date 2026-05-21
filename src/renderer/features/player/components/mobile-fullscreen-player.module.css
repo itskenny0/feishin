@@ -76,9 +76,65 @@
     display: flex;
     flex-direction: column;
     width: 100%;
-    overflow: hidden;
+
+    /*
+     * Spotify-style scrollable card stack: the player face (cover +
+     * metadata + controls) fills the viewport on first paint, then
+     * scrolling down reveals additional cards (Lyrics preview, future
+     * artist info / visualizer cards). overflow-y: auto on the
+     * .player-state lets the user scroll vertically through the cards;
+     * the .player-face child below uses min-height: 100% so the
+     * controls always sit at the viewport bottom on first paint
+     * regardless of cover height.
+     */
+    overflow-x: hidden;
+    overflow-y: auto;
     pointer-events: none;
     background: transparent;
+    overscroll-behavior-y: contain;
+}
+
+/*
+ * Player face — the always-visible-on-mount section that holds the
+ * cover, metadata, progress, and transport controls. min-height: 100%
+ * (parent is height-bound via .player-state's absolute top/bottom)
+ * ensures the bottom-controls row stays at the viewport edge on first
+ * paint, but the page can scroll below to reveal the cards.
+ */
+.player-face {
+    display: flex;
+    flex-shrink: 0;
+    flex-direction: column;
+    width: 100%;
+    min-height: 100%;
+}
+
+/*
+ * Lyrics card that appears below the player face when scrolled.
+ * Spotify-style "About / Lyrics preview" pattern: full-width card with
+ * its own padding, rounded corners, subtle background, and an eyebrow
+ * label up top.
+ */
+.lyrics-card {
+    margin: var(--theme-spacing-md) var(--theme-spacing-md) calc(var(--theme-spacing-lg) * 2);
+    padding: var(--theme-spacing-md);
+    color: var(--theme-colors-foreground);
+    background: color-mix(in srgb, var(--theme-colors-foreground) 6%, transparent);
+    border-radius: var(--theme-radius-lg);
+    backdrop-filter: blur(12px);
+}
+
+.lyrics-card-header {
+    margin-bottom: var(--theme-spacing-sm);
+    font-size: 1.15rem;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+}
+
+.lyrics-card-body {
+    min-height: 12rem;
+    max-height: 60vh;
+    overflow-y: auto;
 }
 
 .player-state[style*='z-index: 2'],
