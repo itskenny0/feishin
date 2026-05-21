@@ -66,32 +66,38 @@
     }
 }
 
-/* Time-aware greeting at the top of the home page. Subtle single-line
-   header: larger weight, tightened tracking, leading the carousels. */
+/*
+ * Time-aware greeting at the top of the home page. Spotify-style display
+ * heading: bold, tight tracking, oversized so it anchors the page as the
+ * editorial title (it's the user's first read on every Home visit).
+ *
+ * Mobile (≤ 599) gets 2.25rem so it lands at roughly the same on-screen
+ * size as Spotify's "Good morning" header; tablet (600–834) bumps to
+ * 2.5rem; desktop ≥ 835 lands at 2.75rem so the heading still feels
+ * like a magazine title rather than a chrome label at wide widths.
+ *
+ * Weight bumped from 600 → 800 to read as "display heading" rather than
+ * "form label" — matches the same fw=800 the library-header title uses.
+ */
 .greeting {
     margin-bottom: var(--theme-spacing-md);
 }
 
 .greeting-text {
-    font-size: 1.75rem;
-    font-weight: 600;
-    line-height: 1.2;
-    letter-spacing: -0.02em;
+    font-size: 2.25rem;
+    font-weight: 800;
+    line-height: 1.1;
+    letter-spacing: -0.025em;
 }
 
-/*
- * Bump the greeting size on tablet — the magazine-style greeting reads
- * better at 2.25rem when there's enough horizontal room for it to sit
- * comfortably above wider carousels.
- */
 @media (600px <= width <= 834px) {
     .greeting-text {
-        font-size: 2.25rem;
+        font-size: 2.5rem;
     }
 }
 
 @media (width >= 835px) {
     .greeting-text {
-        font-size: 2.5rem;
+        font-size: 2.75rem;
     }
 }

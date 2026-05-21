@@ -23,6 +23,25 @@
     cursor: grabbing;
 }
 
+/*
+ * Spotify-style section heading sizing on the mobile shell. The carousel
+ * uses `<TextTitle order={3}>` which renders as an h3 (~1.5rem default).
+ * Spotify's "Made For You" / "Recently played" / etc. section titles read
+ * closer to 1.5–1.75rem with much heavier weight; bump on touch to feel
+ * editorial instead of utilitarian.
+ *
+ * Scope to the .navigation row inside the grid-carousel so this only
+ * affects the section-title H3s, not every h3 in the app.
+ */
+@media (pointer: coarse) {
+    .navigation h3 {
+        font-size: 1.5rem;
+        font-weight: 800;
+        line-height: 1.15;
+        letter-spacing: -0.015em;
+    }
+}
+
 .custom-title-container {
     display: flex;
     gap: var(--theme-spacing-sm);
