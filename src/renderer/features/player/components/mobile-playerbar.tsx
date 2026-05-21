@@ -10,6 +10,7 @@ import { ItemImage } from '/@/renderer/components/item-image/item-image';
 import { ContextMenuController } from '/@/renderer/features/context-menu/context-menu-controller';
 import { MainPlayButton, PlayerButton } from '/@/renderer/features/player/components/player-button';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
+import { useHorizontalSwipe } from '/@/renderer/hooks/use-horizontal-swipe';
 import { AppRoute } from '/@/renderer/router/routes';
 import {
     useFullScreenPlayerStore,
@@ -71,9 +72,21 @@ export const MobilePlayerbar = () => {
 
     const stopPropagation = (e?: MouseEvent) => e?.stopPropagation();
 
+    // Horizontal swipe on the metadata/cover area skips next/previous,
+    // mirroring Spotify's mini-player behaviour. Drag-left advances,
+    // drag-right goes back. Only fires on touch (mouse keeps tap-to-
+    // expand) and only past 60px so accidental drift on a tap doesn't
+    // fire. The buttons (prev/play/next) sit outside this wrapper so
+    // their clicks are unaffected.
+    const swipeHandlers = useHorizontalSwipe({
+        disabled: !isSongDefined,
+        onSwipeLeft: mediaNext,
+        onSwipeRight: mediaPrevious,
+    });
+
     return (
         <div className={clsx(styles.container, PlaybackSelectors.mediaPlayer)}>
-            <div className={styles.contentWrapper}>
+            <div {...swipeHandlers} className={styles.contentWrapper}>
                 <LayoutGroup>
                     <AnimatePresence initial={false} mode="popLayout">
                         {currentSong?.id && (
