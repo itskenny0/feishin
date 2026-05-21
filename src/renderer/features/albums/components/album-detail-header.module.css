@@ -8,7 +8,10 @@
        next line instead of getting cut off by the page edge. */
     overflow-wrap: anywhere;
 
-    @container (min-width: $mantine-breakpoint-sm) {
+    /* Match the 600px hero-layout threshold in library-header.module.css —
+       once the cover snaps to the left side, the metadata row should
+       left-align too instead of clinging to the centred phone layout. */
+    @container (min-width: 600px) {
         justify-content: flex-start;
     }
 }
