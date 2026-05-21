@@ -69,8 +69,33 @@ export const useBreakpoint = (): Breakpoint => {
     return 'desktop';
 };
 
+/**
+ * Query that matches "this device should render the mobile shell" — i.e.
+ * a phone in either orientation.
+ *
+ * The first clause `(max-width: 767px)` catches every phone in portrait
+ * and small phones in landscape (≤ 767 wide). The second clause catches
+ * the missing case: modern phones in landscape, which run 800–1000px wide
+ * but only 350–480px tall. Without that clause a Pixel 9 Pro rotated
+ * sideways (994 × 448) would fall through to the desktop shell — collapsed
+ * sidebar, desktop playerbar grid, dual nav arrows — which looks broken
+ * on a phone screen.
+ *
+ * 480px is the height cutoff because no tablet in landscape is that short
+ * (iPad mini landscape is 744 tall; even foldables in book mode stay
+ * ≥ 600 tall) but every phone in landscape sits comfortably under it.
+ * Portrait tablets (iPad mini 744 × 1133) are never matched because their
+ * width is > 767 and they're not in landscape.
+ *
+ * Keep the corresponding CSS-side rules using the same combined expression
+ * (`@media (max-width: 767px), (orientation: landscape) and (max-height: 480px)`)
+ * so JS-gated rendering and CSS-gated styling line up.
+ */
+export const MOBILE_SHELL_QUERY =
+    '(max-width: 767px), (orientation: landscape) and (max-height: 480px)';
+
 /** True for phone + phablet (i.e. anything below the desktop shell). */
-export const useIsMobileShell = () => useMediaQuery('(max-width: 767px)');
+export const useIsMobileShell = () => useMediaQuery(MOBILE_SHELL_QUERY);
 
 /**
  * True for sub-360px viewports — Pixel 4a, Galaxy S10e, iPhone SE 1st gen,
