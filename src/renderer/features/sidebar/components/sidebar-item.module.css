@@ -74,3 +74,17 @@
     pointer-events: none;
     opacity: 0.6;
 }
+
+/*
+ * Touch devices need a generous tap target on sidebar entries. The
+ * mobile drawer renders SidebarItem as the primary navigation
+ * affordance, so 48px (Material guideline) keeps every entry
+ * comfortably tappable without changing the visual density on
+ * desktop pointer:fine devices.
+ */
+@media (pointer: coarse) {
+    .link {
+        min-height: 48px;
+        padding: 0.5rem var(--theme-spacing-sm);
+    }
+}
