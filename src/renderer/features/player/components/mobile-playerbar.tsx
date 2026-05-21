@@ -16,6 +16,7 @@ import {
     useFullScreenPlayerStoreActions,
     usePlayerSong,
     usePlayerStatus,
+    usePlayerTimestamp,
     useSetFullScreenPlayerStore,
 } from '/@/renderer/store';
 import { useShowFilesystemNameForAlbums } from '/@/renderer/store/settings.store';
@@ -70,8 +71,25 @@ export const MobilePlayerbar = () => {
 
     const stopPropagation = (e?: MouseEvent) => e?.stopPropagation();
 
+    // Thin Spotify-style progress strip across the bottom of the mini-
+    // player. Reads the timestamp store directly so we tick every second
+    // without going through the slower seek-bar machinery in the
+    // fullscreen player. Stays at 0% when there's no song or no
+    // duration so the strip is just an empty rail in that case.
+    const timestamp = usePlayerTimestamp();
+    const songDurationSec = currentSong?.duration ?? 0;
+    const progressPct =
+        songDurationSec > 0 ? Math.min(100, Math.max(0, (timestamp / songDurationSec) * 100)) : 0;
+
     return (
-        <div className={clsx(styles.container, PlaybackSelectors.mediaPlayer)}>
+        <div
+            className={clsx(styles.container, PlaybackSelectors.mediaPlayer)}
+            style={
+                {
+                    ['--mobile-playerbar-progress' as string]: `${progressPct}%`,
+                } as React.CSSProperties
+            }
+        >
             <div className={styles.contentWrapper}>
                 <LayoutGroup>
                     <AnimatePresence initial={false} mode="popLayout">
@@ -238,6 +256,9 @@ export const MobilePlayerbar = () => {
                     }}
                     variant="tertiary"
                 />
+            </div>
+            <div aria-hidden className={styles.progress}>
+                <div className={styles.progressFill} />
             </div>
         </div>
     );
