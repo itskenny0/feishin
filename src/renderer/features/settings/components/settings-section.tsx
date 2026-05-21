@@ -2,6 +2,7 @@ import { ReactNode } from 'react';
 
 import { SettingsOptions } from '/@/renderer/features/settings/components/settings-option';
 import { useSettingSearchContext } from '/@/renderer/features/settings/context/search-context';
+import { useIsMobileShell } from '/@/renderer/hooks/use-breakpoint';
 import { Stack } from '/@/shared/components/stack/stack';
 import { TextTitle } from '/@/shared/components/text-title/text-title';
 
@@ -31,6 +32,11 @@ interface SettingsSectionProps {
 export const SettingsSection = ({ extra, options, title }: SettingsSectionProps) => {
     const keyword = useSettingSearchContext();
     const hasKeyword = keyword !== '';
+    // Tablet+ keeps the existing roomy 2rem horizontal padding. On the
+    // mobile shell that wasted half the viewport on a 360px phone — drop
+    // to 0 so SettingsOptions get the full content width and the controls
+    // (toggles, sliders, dropdowns) don't squish past their natural size.
+    const isMobileShell = useIsMobileShell();
 
     // Subheaders are visual chunking only. When the user is filtering by a
     // keyword, hide them — a "Colors" header floating above an unrelated
@@ -50,7 +56,7 @@ export const SettingsSection = ({ extra, options, title }: SettingsSectionProps)
                     {title}
                 </TextTitle>
             )}
-            <Stack gap="xl" px="xl">
+            <Stack gap="xl" px={isMobileShell ? 0 : 'xl'}>
                 {values.map((option) => (
                     <SettingsOptions key={`option-${option.title}`} {...option} />
                 ))}
