@@ -1,3 +1,4 @@
+import { t } from 'i18next';
 import { motion, Variants } from 'motion/react';
 import { lazy, memo, ReactNode, Suspense, useLayoutEffect, useRef } from 'react';
 import { useLocation } from 'react-router';
@@ -13,6 +14,7 @@ import {
     useSettingsStore,
     useWindowSettings,
 } from '/@/renderer/store/settings.store';
+import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Platform } from '/@/shared/types/types';
 
 const AudioMotionAnalyzerVisualizer = lazy(() =>
@@ -154,6 +156,22 @@ export const FullScreenVisualizer = () => {
 
     return (
         <VisualizerContainer isMobile={isMobile} windowBarStyle={windowBarStyle}>
+            {/*
+             * Floating close button. Without this the visualizer overlay
+             * had no visible dismiss affordance on mobile (only Escape
+             * worked, which requires a keyboard). Positioned via CSS in
+             * the top-right with safe-area-top respected so it doesn't
+             * sit under the Android status-bar clock.
+             */}
+            <ActionIcon
+                aria-label={t('common.close', { defaultValue: 'Close' })}
+                className={styles.closeButton}
+                icon="x"
+                iconProps={{ size: 'xl' }}
+                onClick={handleCloseVisualizer}
+                size="lg"
+                variant="default"
+            />
             <div className={styles.visualizerContainer}>
                 {webAudio ? (
                     <Suspense fallback={<></>}>

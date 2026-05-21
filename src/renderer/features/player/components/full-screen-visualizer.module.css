@@ -20,8 +20,23 @@
      * edges (which is correct, the visuals fill everything), but the
      * back/close/etc buttons need to stay clear of the clock.
      */
-    padding-top: env(safe-area-inset-top, 0);
+    padding-top: max(env(safe-area-inset-top, 0px), var(--android-safe-top, 0px));
     background: rgb(var(--theme-colors-background-transparent), 80%);
+}
+
+/*
+ * Floating close-X in the top-right corner of the visualizer overlay.
+ * The visualizer otherwise has no visible dismiss path on mobile (no
+ * keyboard for Escape), so this is the user's primary exit. Positioned
+ * with safe-area-top inset so it clears the Android status-bar clock.
+ */
+.close-button {
+    position: absolute;
+    top: calc(1rem + max(env(safe-area-inset-top, 0px), var(--android-safe-top, 0px)));
+    right: 1rem;
+    z-index: 220;
+    background: rgb(0 0 0 / 50%);
+    backdrop-filter: blur(8px);
 }
 
 .visualizer-container {
