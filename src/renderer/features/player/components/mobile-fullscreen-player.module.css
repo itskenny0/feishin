@@ -268,9 +268,18 @@
 }
 
 .title {
+    /*
+     * Spotify-style display title in the mobile fullscreen player:
+     * forcibly larger than the Mantine order=3 h3 default so the song
+     * name reads as the editorial focus of the screen, not as section
+     * chrome. Roughly matches the 24–28px size Spotify uses on the
+     * iPhone fullscreen player.
+     */
     overflow: hidden;
     text-overflow: ellipsis;
+    font-size: 1.6rem;
     line-height: 1.15;
+    letter-spacing: -0.015em;
     white-space: nowrap;
 }
 
@@ -633,7 +642,7 @@
     }
 
     .title {
-        font-size: 1.55rem;
+        font-size: 1.75rem;
         line-height: 1.1;
         letter-spacing: -0.015em;
     }
