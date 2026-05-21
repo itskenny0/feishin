@@ -1,3 +1,4 @@
+import { Capacitor } from '@capacitor/core';
 import {
     PersistedClient,
     Persister,
@@ -8,6 +9,25 @@ import { createRoot } from 'react-dom/client';
 
 import { App } from '/@/renderer/app';
 import { queryClient } from '/@/renderer/lib/react-query';
+
+/*
+ * On a Capacitor Android cold start, the WebView often restores the
+ * last URL hash from its saved-instance state — so opening the app
+ * deep-drops the user back into a track-detail page or playlist they
+ * had open last week, which is disorienting. (Spotify, Apple Music
+ * and YouTube Music all cold-start on the Home tab.)
+ *
+ * Run BEFORE React mounts so the HashRouter reads `#/` for its first
+ * navigation event and never paints the stale route. The check is
+ * gated on Capacitor.getPlatform() === 'android' so Electron / web /
+ * iOS users keep their existing in-session hash (e.g. URL deep-links
+ * from notification taps or share sheets still work).
+ */
+if (Capacitor.getPlatform() === 'android') {
+    // Empty string clears the hash without leaving a stray '#' in the
+    // address bar. HashRouter treats no hash as the root route.
+    window.location.hash = '';
+}
 
 function createIDBPersister(idbValidKey: IDBValidKey = 'reactQuery') {
     return {
