@@ -18,6 +18,7 @@ import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { ContextMenuController } from '/@/renderer/features/context-menu/context-menu-controller';
 import { Lyrics } from '/@/renderer/features/lyrics/lyrics';
 import { PlayQueue } from '/@/renderer/features/now-playing/components/play-queue';
+import { MobileFullscreenArtistCard } from '/@/renderer/features/player/components/mobile-fullscreen-artist-card';
 import { MobileFullscreenPlayerAlbumArt } from '/@/renderer/features/player/components/mobile-fullscreen-player-album-art';
 import { MobileFullscreenPlayerBottomControls } from '/@/renderer/features/player/components/mobile-fullscreen-player-bottom-controls';
 import { MobileFullscreenPlayerControls } from '/@/renderer/features/player/components/mobile-fullscreen-player-controls';
@@ -632,21 +633,30 @@ export const MobileFullscreenPlayer = () => {
                 </div>
 
                 {/*
-                 * Scroll-down card: full lyrics inline below the player.
-                 * Hidden when there's no song (no point in an empty
-                 * card on first launch / empty queue). The existing
-                 * fullscreen "Lyrics" tab still works for users who
-                 * prefer the dedicated immersive view.
+                 * Scroll-down cards: lyrics + about-the-artist below the
+                 * player face. Hidden when there's no song (empty queue
+                 * on first launch). The existing fullscreen "Lyrics"
+                 * tab still works for users who prefer the dedicated
+                 * immersive view; this is the inline preview that
+                 * matches Spotify's scrollable card stack.
                  */}
                 {isSongDefined && (
-                    <div className={styles.lyricsCard}>
-                        <div className={styles.lyricsCardHeader}>
-                            {t('page.fullscreenPlayer.lyrics', { defaultValue: 'Lyrics' })}
+                    <>
+                        <div className={styles.lyricsCard}>
+                            <div className={styles.lyricsCardHeader}>
+                                {t('page.fullscreenPlayer.lyrics', { defaultValue: 'Lyrics' })}
+                            </div>
+                            <div className={styles.lyricsCardBody}>
+                                <Lyrics fadeOutNoLyricsMessage />
+                            </div>
                         </div>
-                        <div className={styles.lyricsCardBody}>
-                            <Lyrics fadeOutNoLyricsMessage />
-                        </div>
-                    </div>
+                        {!isPlayingRadio && (
+                            <MobileFullscreenArtistCard
+                                artistId={currentSong?.artists?.[0]?.id}
+                                artistName={currentSong?.artists?.[0]?.name}
+                            />
+                        )}
+                    </>
                 )}
             </motion.div>
 

@@ -186,6 +186,85 @@
     overflow-y: auto;
 }
 
+/*
+ * Spotify-style "About the artist" card. Shares the lyrics card's
+ * visual treatment (alpha-foreground background, rounded corners,
+ * backdrop blur, same outer margins) so the two cards read as a
+ * cohesive stack underneath the player face.
+ */
+.artist-card {
+    padding: var(--theme-spacing-md);
+    margin: 0 var(--theme-spacing-md) calc(var(--theme-spacing-lg) * 2);
+    color: var(--theme-colors-foreground);
+    background: color-mix(in srgb, var(--theme-colors-foreground) 6%, transparent);
+    border-radius: var(--theme-radius-lg);
+    backdrop-filter: blur(12px);
+}
+
+.artist-card-header {
+    margin-bottom: var(--theme-spacing-md);
+    font-size: 1.15rem;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+}
+
+/* Wrap the body in a Link → underline-free tappable surface. */
+.artist-card-body-link {
+    color: inherit;
+    text-decoration: none;
+}
+
+.artist-card-body {
+    display: flex;
+    gap: var(--theme-spacing-md);
+    align-items: flex-start;
+}
+
+.artist-card-image,
+.artist-card-image-placeholder {
+    flex-shrink: 0;
+    width: 96px;
+    height: 96px;
+    object-fit: cover;
+    border-radius: var(--theme-radius-md);
+}
+
+.artist-card-image-placeholder {
+    background: color-mix(in srgb, var(--theme-colors-foreground) 12%, transparent);
+}
+
+.artist-card-meta {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: var(--theme-spacing-xs);
+    min-width: 0;
+}
+
+.artist-card-name {
+    font-size: 1.1rem;
+    font-weight: 700;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+}
+
+.artist-card-stats {
+    font-size: 0.8rem;
+    color: color-mix(in srgb, var(--theme-colors-foreground) 60%, transparent);
+}
+
+/* Clamp the bio to ~5 lines on mobile so the card stays a preview, not
+   a wall of text. Users can tap through to the artist detail page for
+   the full thing. */
+.artist-card-bio {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-line-clamp: 5;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    -webkit-box-orient: vertical;
+}
+
 .player-state[style*='z-index: 2'],
 .queue-state[style*='z-index: 2'],
 .lyrics-state[style*='z-index: 2'] {
