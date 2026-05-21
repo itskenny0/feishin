@@ -445,7 +445,21 @@
     justify-content: center;
     width: 100%;
     margin-top: auto;
-    border-top: 1px solid var(--theme-colors-border);
+
+    /*
+     * Subtle separator above the action row instead of a hard border.
+     * Spotify uses no line at all — the rest of the page is dark enough
+     * that the icons read against the background — but we render a thin
+     * gradient fade so the row keeps a defined edge on light album
+     * covers (where the dynamic background gets brighter near the top).
+     */
+    background: linear-gradient(
+        180deg,
+        transparent 0%,
+        color-mix(in srgb, var(--theme-colors-foreground) 6%, transparent) 1px,
+        transparent 1px,
+        transparent 100%
+    );
 }
 
 .bottom-controls-group {
