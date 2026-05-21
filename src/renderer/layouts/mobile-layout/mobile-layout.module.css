@@ -85,6 +85,22 @@
     --mobile-window-bar-height: 30px;
 }
 
+/*
+ * Big-phone tier (361–430px): bump the tab-bar row to 64px so the
+ * iconography + intentional labels in bottom-tab-bar.module.css have
+ * breathing room and don't crowd the safe-area-inset-bottom underneath.
+ * The grid template already references this var so the main-content
+ * area shrinks by the same 8px — no overflow.
+ *
+ * Sub-360 and ≥431 keep the 56px default; this is purely a comfort bump
+ * for the big-phone sweet spot.
+ */
+@media (361px <= width <= 430px) {
+    .layout {
+        --mobile-tab-bar-height: 64px;
+    }
+}
+
 .main-content {
     position: relative;
     grid-area: main-content;
