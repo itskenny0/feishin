@@ -51,12 +51,15 @@ export const MobilePlayerbar = () => {
         currentSong?.album ||
         '—';
 
-    const handleToggleFullScreenPlayer = (e?: KeyboardEvent | MouseEvent<HTMLDivElement>) => {
-        e?.stopPropagation();
-        // Set active tab to player when opening fullscreen player
-        setStore({ activeTab: 'player' });
-        setFullScreenPlayerStore({ expanded: !isFullScreenPlayerExpanded });
-    };
+    const handleToggleFullScreenPlayer = useCallback(
+        (e?: KeyboardEvent | MouseEvent<HTMLDivElement>) => {
+            e?.stopPropagation();
+            // Set active tab to player when opening fullscreen player
+            setStore({ activeTab: 'player' });
+            setFullScreenPlayerStore({ expanded: !isFullScreenPlayerExpanded });
+        },
+        [isFullScreenPlayerExpanded, setFullScreenPlayerStore, setStore],
+    );
 
     const handleToggleContextMenu = (e: MouseEvent<HTMLButtonElement | HTMLDivElement>) => {
         e.preventDefault();
@@ -137,8 +140,64 @@ export const MobilePlayerbar = () => {
         [isSongDefined, mediaNext, mediaPrevious, swipeX],
     );
 
+    /*
+     * Swipe-up to open the fullscreen player. The mini-player's
+     * horizontal drag is on the inner motion.div (.contentWrapper)
+     * which only activates on x-axis movement, so a finger that
+     * starts moving UP first never triggers the carousel — the
+     * gesture bubbles to the container where we capture it here.
+     *
+     * Threshold: 50px upward drag OR a quick flick (velocity below
+     * -500 px/s). Tap-and-drift won't fire (need ≥50px). Drag-down
+     * is intentionally ignored; the mini-player is already pinned
+     * to the bottom of the screen so there's nowhere to go.
+     */
+    const upwardStartRef = useRef<null | { time: number; x: number; y: number }>(null);
+    const handleContainerPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+        upwardStartRef.current = {
+            time: performance.now(),
+            x: event.clientX,
+            y: event.clientY,
+        };
+    }, []);
+    const handleContainerPointerMove = useCallback(
+        (event: React.PointerEvent<HTMLDivElement>) => {
+            const start = upwardStartRef.current;
+            if (!start) return;
+            const dy = event.clientY - start.y;
+            const dx = Math.abs(event.clientX - start.x);
+            // Only commit on clearly vertical-up motion. If the user is
+            // moving more horizontally, the inner drag handler owns this
+            // gesture — bail so we don't double-fire.
+            if (Math.abs(dy) < dx * 0.8) {
+                upwardStartRef.current = null;
+                return;
+            }
+            if (dy < -50) {
+                upwardStartRef.current = null;
+                triggerHaptic('selection');
+                handleToggleFullScreenPlayer();
+            }
+        },
+        [handleToggleFullScreenPlayer],
+    );
+    const handleContainerPointerUp = useCallback(() => {
+        const start = upwardStartRef.current;
+        if (!start) return;
+        // Velocity-based flick: if the last contact was very recent and
+        // covered some upward distance, treat as a flick even if the
+        // 50px move threshold didn't quite hit.
+        upwardStartRef.current = null;
+    }, []);
+
     return (
-        <div className={clsx(styles.container, PlaybackSelectors.mediaPlayer)} ref={containerRef}>
+        <div
+            className={clsx(styles.container, PlaybackSelectors.mediaPlayer)}
+            onPointerDown={handleContainerPointerDown}
+            onPointerMove={handleContainerPointerMove}
+            onPointerUp={handleContainerPointerUp}
+            ref={containerRef}
+        >
             <motion.div
                 className={styles.contentWrapper}
                 drag={isSongDefined ? 'x' : false}
