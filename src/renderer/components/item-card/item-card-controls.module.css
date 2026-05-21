@@ -24,6 +24,19 @@
     transform: scale(1);
 }
 
+/*
+ * Touch devices never trigger the hover state that flips .visible, so
+ * the compact controls (play / favorite / more) stayed permanently
+ * invisible. On pointer:coarse force them to the visible state so
+ * users have a visible affordance on tap.
+ */
+@media (pointer: coarse) {
+    .container.compact {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
 .top-controls {
     display: flex;
     align-items: center;
