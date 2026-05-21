@@ -140,6 +140,26 @@
 }
 
 /*
+ * Tablet sweet-spot: at 600–834px portrait the 480px cover cap leaves
+ * ~130px of dead space on each side. Bump it to 560 (with the corner
+ * radius scaling to match) so the album art takes its rightful place as
+ * the centerpiece. Landscape phones still hit the (orientation:
+ * landscape) and (height <= 600px) rule above first, which clamps the
+ * cover to 38vh — this rule never wins over that one because the
+ * landscape rule comes after in source order.
+ */
+@media (600px <= width <= 834px) and (orientation: portrait) {
+    .image {
+        max-width: min(100%, 560px);
+        border-radius: 18px;
+    }
+
+    .image-container {
+        padding: 1.5rem 2rem 1rem;
+    }
+}
+
+/*
  * Landscape: a 1:1 album art at 100% width swallows the entire viewport
  * height and pushes the seek slider + transport controls off-screen on
  * phones held sideways and on landscape tablets. Cap the cover at 38vh
@@ -188,6 +208,23 @@
     align-items: stretch;
     width: 100%;
     padding: 0.75rem 1.25rem 0.5rem;
+}
+
+/*
+ * On portrait tablets the chrome below the cover (metadata + progress +
+ * transport + volume) shouldn't span the full 700–800px viewport — at
+ * that width the line lengths look stretched and the controls drift too
+ * far apart. Cap the inner chrome at 600px and centre it so the layout
+ * reads as a deliberate column instead of a wide band.
+ */
+@media (600px <= width <= 834px) and (orientation: portrait) {
+    .metadata-container,
+    .progress-container,
+    .controls-container {
+        max-width: 600px;
+        margin-right: auto;
+        margin-left: auto;
+    }
 }
 
 /*

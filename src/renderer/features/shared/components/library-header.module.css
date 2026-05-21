@@ -74,13 +74,36 @@
         height: 250px;
     }
 
-    @container (min-width: $mantine-breakpoint-sm) {
+    /*
+     * Tablet-tier side-by-side hero: triggers at 600px instead of the
+     * Mantine `sm` (768px) breakpoint so portrait tablets and large
+     * phones in landscape get the editorial cover-art-left layout
+     * instead of the stacked centred phone layout. Cover shrinks to
+     * 180px so the metadata column still has comfortable room.
+     */
+    @container (min-width: 600px) {
         grid-template-areas: 'image info';
         grid-template-rows: auto;
-        grid-template-columns: 225px minmax(0, 1fr);
+        grid-template-columns: 180px minmax(0, 1fr);
         align-items: flex-end;
         justify-items: start;
         height: auto;
+        min-height: 280px;
+        padding: 3.5rem 1.5rem 1.5rem;
+
+        .image {
+            width: 180px !important;
+            height: 180px;
+        }
+
+        :global(.item-image-placeholder) {
+            width: 180px !important;
+            height: 180px;
+        }
+    }
+
+    @container (min-width: $mantine-breakpoint-sm) {
+        grid-template-columns: 225px minmax(0, 1fr);
         min-height: 340px;
         padding: 5rem 2rem 2rem;
 
@@ -123,10 +146,26 @@
             height: 250px;
         }
 
-        @container (min-width: $mantine-breakpoint-sm) {
-            grid-template-columns: 200px minmax(0, 1fr);
+        /* Tablet tier kicks in at the same 600px threshold as the
+           full-height variant — keeps the two header sizes in sync. */
+        @container (min-width: 600px) {
+            grid-template-columns: 160px minmax(0, 1fr);
             min-height: unset;
             padding: var(--theme-spacing-md) var(--theme-spacing-sm);
+
+            .image {
+                width: 160px !important;
+                height: 160px;
+            }
+
+            :global(.item-image-placeholder) {
+                width: 160px !important;
+                height: 160px;
+            }
+        }
+
+        @container (min-width: $mantine-breakpoint-sm) {
+            grid-template-columns: 200px minmax(0, 1fr);
 
             .image {
                 width: 200px !important;
@@ -165,7 +204,9 @@
     justify-content: center;
     filter: drop-shadow(0 0 8px rgb(0 0 0 / 50%));
 
-    @container (min-width: $mantine-breakpoint-sm) {
+    /* 600px tablet threshold — must match the .library-header rule above
+       so the cover snaps to the side-aligned layout in lockstep. */
+    @container (min-width: 600px) {
         align-items: flex-end;
     }
 }
@@ -197,7 +238,9 @@
     height: 100%;
     text-align: center;
 
-    @container (min-width: $mantine-breakpoint-sm) {
+    /* 600px tablet threshold — must match the .library-header rule so
+       text alignment swaps in lockstep with the cover swap. */
+    @container (min-width: 600px) {
         align-items: flex-start;
         justify-content: flex-end;
         text-align: left;
@@ -239,7 +282,9 @@
     justify-content: center;
     width: 100%;
 
-    @container (min-width: $mantine-breakpoint-sm) {
+    /* 600px tablet threshold — the play / favourite / menu strip swaps
+       to a horizontal row whenever the header has gone side-by-side. */
+    @container (min-width: 600px) {
         display: flex;
         flex-direction: row;
         justify-content: space-between;

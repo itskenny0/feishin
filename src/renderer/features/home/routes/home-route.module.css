@@ -30,30 +30,24 @@
 
 /*
  * Horizontal padding for the home page content stack. Phone shell uses
- * the minimum to maximize the carousel viewport (1rem each side);
- * tablet+ keeps the 2rem we'd previously hardcoded via px="2rem".
+ * the minimum to maximize the carousel viewport (1rem each side); the
+ * tablet sweet-spot (600–834px) steps up to 1.5rem so the carousels
+ * don't bleed into the screen edges on portrait tablets while still
+ * giving the cover-art rows room to breathe. Desktop bumps to 2rem.
  */
 .content-stack {
     padding-right: 1rem;
     padding-left: 1rem;
 }
 
-/*
- * Big-phone tier (361–430px). Comfortable horizontal space lets the
- * content stack open up to 1.25rem side margin (vs. the 1rem we keep
- * for cramped sub-360 phones) — this matches the way Spotify pads its
- * home column on flagship-sized portrait devices: enough margin for
- * the eye to anchor, but still leaving plenty of room for the
- * carousels to extend toward the edge.
- */
-@media (361px <= width <= 430px) {
+@media (width >= 600px) {
     .content-stack {
-        padding-right: 1.25rem;
-        padding-left: 1.25rem;
+        padding-right: 1.5rem;
+        padding-left: 1.5rem;
     }
 }
 
-@media (width >= 768px) {
+@media (width >= 835px) {
     .content-stack {
         padding-right: 2rem;
         padding-left: 2rem;
@@ -74,20 +68,18 @@
 }
 
 /*
- * Big-phone tier (361–430px): the greeting is the editorial anchor for
- * the entire home dashboard. On comfortable portrait viewports it
- * deserves an h1 scale — bump to 2.1rem so it reads as a proper "Good
- * morning" title rather than another section header. Margin bumps so
- * the first carousel doesn't crowd it.
+ * Bump the greeting size on tablet — the magazine-style greeting reads
+ * better at 2.25rem when there's enough horizontal room for it to sit
+ * comfortably above wider carousels.
  */
-@media (361px <= width <= 430px) {
-    .greeting {
-        margin-bottom: var(--theme-spacing-lg);
-    }
-
+@media (600px <= width <= 834px) {
     .greeting-text {
-        font-size: 2.1rem;
-        font-weight: 700;
-        letter-spacing: -0.025em;
+        font-size: 2.25rem;
+    }
+}
+
+@media (width >= 835px) {
+    .greeting-text {
+        font-size: 2.5rem;
     }
 }
