@@ -75,6 +75,27 @@
     }
 
     /*
+     * Small-phone tier (≤360): a 250px cover with 2rem vertical padding
+     * leaves less than half a 568px screen for the metadata + tracklist.
+     * Drop the cover to 220px so the title, artist link, and the first
+     * three tracks are visible above the fold on iPhone SE and Pixel 4a.
+     */
+    @media (width <= 360px) {
+        gap: var(--theme-spacing-sm);
+        padding: 1.25rem 0.75rem;
+
+        .image {
+            width: 220px !important;
+            height: 220px;
+        }
+
+        :global(.item-image-placeholder) {
+            width: 175px !important;
+            height: 175px;
+        }
+    }
+
+    /*
      * Tablet-tier side-by-side hero: triggers at 600px instead of the
      * Mantine `sm` (768px) breakpoint so portrait tablets and large
      * phones in landscape get the editorial cover-art-left layout
