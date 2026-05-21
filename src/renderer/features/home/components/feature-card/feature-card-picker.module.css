@@ -16,3 +16,17 @@
 .picker-select {
     min-width: 220px;
 }
+
+/*
+ * Touch: the variant picker is rarely changed and reads as desktop
+ * chrome above the Featured Artist card. Spotify never exposes
+ * settings inline above its hero card — the user goes into the
+ * three-dot menu to change feed variants. Hide the inline picker on
+ * touch; the same setting is reachable via Settings → Home → Feature
+ * card.
+ */
+@media (pointer: coarse) {
+    .picker-row {
+        display: none;
+    }
+}
