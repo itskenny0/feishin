@@ -518,6 +518,20 @@ export const GeneralSettingsSchema = z.object({
     lastFM: z.boolean(),
     lastfmApiKey: z.string(),
     listenBrainz: z.boolean(),
+    /*
+     * Destination route for the mobile-shell "Library" bottom-tab. The bar
+     * navigates here when the user taps Library; defaults to Albums (the
+     * Spotify pattern). Values map to the corresponding /library/* routes;
+     * 'playlists' jumps to the dedicated /playlists tree instead.
+     *
+     * .default('albums') so existing settings files from before this field
+     * was added safeParse cleanly — without it, the strict schema would
+     * reject the loaded state and the user would silently land on the
+     * default-app defaults.
+     */
+    mobileLibraryDestination: z
+        .enum(['albums', 'album-artists', 'artists', 'songs', 'genres', 'folders', 'playlists'])
+        .default('albums'),
     musicBrainz: z.boolean(),
     nativeAspectRatio: z.boolean(),
     nativeSpotify: z.boolean(),
@@ -1274,6 +1288,7 @@ const initialState: SettingsState = {
         lastFM: true,
         lastfmApiKey: '',
         listenBrainz: true,
+        mobileLibraryDestination: 'albums',
         musicBrainz: true,
         nativeAspectRatio: false,
         nativeSpotify: false,
@@ -3016,6 +3031,9 @@ export const useSidebarPlaylistList = () =>
 
 export const useSidebarBottomSection = () =>
     useSettingsStore((state) => state.general.sidebarBottomSection, shallow);
+
+export const useMobileLibraryDestination = () =>
+    useSettingsStore((state) => state.general.mobileLibraryDestination, shallow);
 
 export const useDetailSectionCollapsed = (key: string): boolean =>
     useSettingsStore((state) => Boolean(state.general.collapsedDetailSections?.[key]));

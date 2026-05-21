@@ -36,6 +36,25 @@ export const SidebarSettings = memo(() => {
         });
     };
 
+    const handleSetMobileLibraryDestination = (value: null | string) => {
+        if (
+            value !== 'albums' &&
+            value !== 'album-artists' &&
+            value !== 'artists' &&
+            value !== 'songs' &&
+            value !== 'genres' &&
+            value !== 'folders' &&
+            value !== 'playlists'
+        ) {
+            return;
+        }
+        setSettings({
+            general: {
+                mobileLibraryDestination: value,
+            },
+        });
+    };
+
     const handleSetSidebarPlaylistFolders = (e: ChangeEvent<HTMLInputElement>) => {
         setSettings({
             general: {
@@ -156,6 +175,26 @@ export const SidebarSettings = memo(() => {
                 context: 'description',
             }),
             title: t('setting.sidebarBottomSection'),
+        },
+        {
+            control: (
+                <Select
+                    data={[
+                        { label: 'Albums', value: 'albums' },
+                        { label: 'Album artists', value: 'album-artists' },
+                        { label: 'Artists', value: 'artists' },
+                        { label: 'Songs', value: 'songs' },
+                        { label: 'Genres', value: 'genres' },
+                        { label: 'Folders', value: 'folders' },
+                        { label: 'Playlists', value: 'playlists' },
+                    ]}
+                    onChange={handleSetMobileLibraryDestination}
+                    value={settings.mobileLibraryDestination}
+                />
+            ),
+            description:
+                'Where the "Library" tab on the mobile bottom bar takes you. Default: Albums.',
+            title: 'Mobile Library tab destination',
         },
         {
             control: (

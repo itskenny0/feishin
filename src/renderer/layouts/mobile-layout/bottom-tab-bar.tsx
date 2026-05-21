@@ -20,6 +20,7 @@ import styles from './bottom-tab-bar.module.css';
 
 import { useHaptic } from '/@/renderer/hooks/use-haptic';
 import { AppRoute } from '/@/renderer/router/routes';
+import { useMobileLibraryDestination } from '/@/renderer/store/settings.store';
 import { LibraryItem } from '/@/shared/types/domain-types';
 
 interface BottomTabBarProps {
@@ -80,6 +81,24 @@ export const BottomTabBar = ({
     // cost on every render or for every tab comparison.
     const searchPath = generatePath(AppRoute.SEARCH, { itemType: LibraryItem.SONG });
 
+    /*
+     * User-configurable "Library" tab destination. Defaults to Albums
+     * (Spotify pattern) but the user can pick album-artists, songs,
+     * artists, genres, folders, or the dedicated /playlists tree via
+     * Settings → General. Map the enum to the matching AppRoute.
+     */
+    const libraryDestination = useMobileLibraryDestination();
+    const libraryRoute =
+        {
+            'album-artists': AppRoute.LIBRARY_ALBUM_ARTISTS,
+            albums: AppRoute.LIBRARY_ALBUMS,
+            artists: AppRoute.LIBRARY_ARTISTS,
+            folders: AppRoute.LIBRARY_FOLDERS,
+            genres: AppRoute.LIBRARY_GENRES,
+            playlists: AppRoute.PLAYLISTS,
+            songs: AppRoute.LIBRARY_SONGS,
+        }[libraryDestination] ?? AppRoute.LIBRARY_ALBUMS;
+
     const tabs: Tab[] = [
         {
             icon: (active) =>
@@ -110,7 +129,7 @@ export const BottomTabBar = ({
             isActive: (p) => p.startsWith('/library') || p.startsWith('/playlists'),
             key: 'library',
             label: t('page.sidebar.myLibrary', { defaultValue: 'Library' }),
-            onClick: () => navigate(AppRoute.LIBRARY_ALBUMS),
+            onClick: () => navigate(libraryRoute),
         },
         {
             // Settings as a first-class tab. The previous path was More →
