@@ -286,13 +286,22 @@
     gap: 0.5rem;
     align-items: center;
     width: 100%;
-    padding: 0.25rem 1rem 0.5rem;
+    padding: 0 1rem 0.25rem;
 }
 
 .volume-slider {
     flex: 1;
     min-width: 0;
 }
+
+/*
+ * On phones the mobile volume slider competes with the album cover
+ * for vertical space. Most users on Android adjust system volume via
+ * hardware buttons anyway, but the in-app slider stays available for
+ * web users and people on devices where the volume rocker controls
+ * media volume. Tighter padding here gives the album cover ~30px more
+ * vertical space.
+ */
 
 .bottom-controls-bar {
     display: flex;
