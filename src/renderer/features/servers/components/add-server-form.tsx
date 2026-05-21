@@ -13,6 +13,7 @@ import JellyfinIcon from '/@/renderer/features/servers/assets/jellyfin.png';
 import NavidromeIcon from '/@/renderer/features/servers/assets/navidrome.png';
 import SubsonicIcon from '/@/renderer/features/servers/assets/opensubsonic.png';
 import { IgnoreCorsSslSwitches } from '/@/renderer/features/servers/components/ignore-cors-ssl-switches';
+import { useIsMobileShell } from '/@/renderer/hooks/use-breakpoint';
 import { useAuthStoreActions, useServerList } from '/@/renderer/store';
 import { Checkbox } from '/@/shared/components/checkbox/checkbox';
 import { Divider } from '/@/shared/components/divider/divider';
@@ -100,6 +101,7 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
     const { addServer, setCurrentServer } = useAuthStoreActions();
     const serverList = useServerList();
     const { servers: discovered } = useAutodiscovery();
+    const isMobileShell = useIsMobileShell();
 
     const serverLock = isServerLock();
 
@@ -249,26 +251,52 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
                         withItemsBorders={false}
                         {...form.getInputProps('type')}
                     />
-                    <Group grow>
-                        <TextInput
-                            data-autofocus
-                            disabled={serverLock}
-                            label={t('form.addServer.input', {
-                                context: 'name',
-                            })}
-                            required
-                            {...form.getInputProps('name')}
-                        />
-                        <TextInput
-                            disabled={serverLock}
-                            label={t('form.addServer.input', {
-                                context: 'url',
-                            })}
-                            placeholder="https://music.example.com"
-                            required
-                            {...form.getInputProps('url')}
-                        />
-                    </Group>
+                    {isMobileShell ? (
+                        // On phones the name/url side-by-side made both
+                        // inputs uncomfortably narrow (especially since
+                        // URL placeholders are long). Stack vertically.
+                        <Stack gap="md">
+                            <TextInput
+                                data-autofocus
+                                disabled={serverLock}
+                                label={t('form.addServer.input', {
+                                    context: 'name',
+                                })}
+                                required
+                                {...form.getInputProps('name')}
+                            />
+                            <TextInput
+                                disabled={serverLock}
+                                label={t('form.addServer.input', {
+                                    context: 'url',
+                                })}
+                                placeholder="https://music.example.com"
+                                required
+                                {...form.getInputProps('url')}
+                            />
+                        </Stack>
+                    ) : (
+                        <Group grow>
+                            <TextInput
+                                data-autofocus
+                                disabled={serverLock}
+                                label={t('form.addServer.input', {
+                                    context: 'name',
+                                })}
+                                required
+                                {...form.getInputProps('name')}
+                            />
+                            <TextInput
+                                disabled={serverLock}
+                                label={t('form.addServer.input', {
+                                    context: 'url',
+                                })}
+                                placeholder="https://music.example.com"
+                                required
+                                {...form.getInputProps('url')}
+                            />
+                        </Group>
+                    )}
                     <TextInput
                         disabled={serverLock}
                         label={t('form.addServer.input', {

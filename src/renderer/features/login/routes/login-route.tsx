@@ -219,8 +219,8 @@ const LoginRoute = () => {
     return (
         <AnimatedPage>
             <PageHeader />
-            <Center style={{ height: '100%', width: '100vw' }}>
-                <Paper p="xl" style={{ maxWidth: '400px', width: '100%' }}>
+            <Center style={{ height: '100%', padding: '1rem', width: '100vw' }}>
+                <Paper p="lg" style={{ maxWidth: '420px', width: '100%' }}>
                     <form onSubmit={handleSubmit}>
                         <Stack gap="xl">
                             <Stack align="center" gap="md">

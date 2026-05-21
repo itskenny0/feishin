@@ -28,6 +28,23 @@
     }
 }
 
+/*
+ * Horizontal padding for the home page content stack. Phone shell uses
+ * the minimum to maximize the carousel viewport (1rem each side);
+ * tablet+ keeps the 2rem we'd previously hardcoded via px="2rem".
+ */
+.content-stack {
+    padding-right: 1rem;
+    padding-left: 1rem;
+}
+
+@media (width >= 768px) {
+    .content-stack {
+        padding-right: 2rem;
+        padding-left: 2rem;
+    }
+}
+
 /* Time-aware greeting at the top of the home page. Subtle single-line
    header: larger weight, tightened tracking, leading the carousels. */
 .greeting {
