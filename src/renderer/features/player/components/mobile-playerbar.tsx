@@ -2,7 +2,7 @@ import clsx from 'clsx';
 import { AnimatePresence, LayoutGroup, motion, useMotionValue } from 'motion/react';
 import React, { memo, MouseEvent, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { generatePath, Link } from 'react-router';
+import { Link } from 'react-router';
 
 import styles from './mobile-playerbar.module.css';
 
@@ -182,35 +182,28 @@ export const MobilePlayerbar = () => {
                                 )}
                             </Group>
                         </div>
+                        {/*
+                         * Spotify pattern: tapping the artist or album line
+                         * in the MINI-player surfaces the fullscreen player
+                         * — the same affordance as tapping the cover. The
+                         * artist/album detail pages are reachable via the
+                         * fullscreen player metadata (which IS linked) or
+                         * via the long-press context menu. Removing the
+                         * inline navigation here makes the whole content
+                         * row feel like one cohesive tap target.
+                         */}
                         <div
                             className={clsx(
                                 styles.lineItem,
                                 styles.secondary,
                                 PlaybackSelectors.songArtist,
                             )}
-                            onClick={stopPropagation}
+                            onClick={handleToggleFullScreenPlayer}
                         >
                             {artists?.map((artist, index) => (
                                 <React.Fragment key={`bar-${artist.id}`}>
                                     {index > 0 && <Separator />}
-                                    <Text
-                                        component={artist.id ? Link : undefined}
-                                        fw={500}
-                                        isLink={artist.id !== ''}
-                                        onClick={handleToggleFullScreenPlayer}
-                                        overflow="hidden"
-                                        size="xs"
-                                        to={
-                                            artist.id
-                                                ? generatePath(
-                                                      AppRoute.LIBRARY_ALBUM_ARTISTS_DETAIL,
-                                                      {
-                                                          albumArtistId: artist.id,
-                                                      },
-                                                  )
-                                                : undefined
-                                        }
-                                    >
+                                    <Text fw={500} overflow="hidden" size="xs">
                                         {artist.name || '—'}
                                     </Text>
                                 </React.Fragment>
@@ -222,23 +215,9 @@ export const MobilePlayerbar = () => {
                                 styles.secondary,
                                 PlaybackSelectors.songAlbum,
                             )}
-                            onClick={stopPropagation}
+                            onClick={handleToggleFullScreenPlayer}
                         >
-                            <Text
-                                component={Link}
-                                fw={500}
-                                isLink
-                                onClick={handleToggleFullScreenPlayer}
-                                overflow="hidden"
-                                size="xs"
-                                to={
-                                    currentSong?.albumId
-                                        ? generatePath(AppRoute.LIBRARY_ALBUMS_DETAIL, {
-                                              albumId: currentSong.albumId,
-                                          })
-                                        : ''
-                                }
-                            >
+                            <Text fw={500} overflow="hidden" size="xs">
                                 {albumDisplayName}
                             </Text>
                         </div>

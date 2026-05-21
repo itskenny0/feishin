@@ -89,9 +89,9 @@
      */
     overflow-x: hidden;
     overflow-y: auto;
+    overscroll-behavior-y: contain;
     pointer-events: none;
     background: transparent;
-    overscroll-behavior-y: contain;
 }
 
 /*
@@ -116,8 +116,8 @@
  * label up top.
  */
 .lyrics-card {
-    margin: var(--theme-spacing-md) var(--theme-spacing-md) calc(var(--theme-spacing-lg) * 2);
     padding: var(--theme-spacing-md);
+    margin: var(--theme-spacing-md) var(--theme-spacing-md) calc(var(--theme-spacing-lg) * 2);
     color: var(--theme-colors-foreground);
     background: color-mix(in srgb, var(--theme-colors-foreground) 6%, transparent);
     border-radius: var(--theme-radius-lg);
