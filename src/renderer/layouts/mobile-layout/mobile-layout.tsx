@@ -21,6 +21,7 @@ import { WindowBar } from '/@/renderer/layouts/window-bar';
 import {
     useCommandPaletteState,
     useFullScreenPlayerOverlayState,
+    usePlayerSong,
     useWindowBarStyle,
 } from '/@/renderer/store';
 import { Drawer } from '/@/shared/components/drawer/drawer';
@@ -44,6 +45,15 @@ export const MobileLayout = ({ shell }: MobileLayoutProps) => {
     const mainContentRef = useRef<HTMLElement>(null);
     const queryClient = useQueryClient();
     const { open: openCommandPalette } = useCommandPaletteState();
+    /*
+     * Hide the mobile mini-player when nothing is queued. Without this
+     * the grid still reserves --mobile-playerbar-height for an empty
+     * floating row (Spotify hides the bar entirely until a track is
+     * picked). Pair this with the .has-no-song layout-class below which
+     * collapses the player grid track to 0.
+     */
+    const currentSong = usePlayerSong();
+    const hasSong = Boolean(currentSong?.id);
 
     // Pull-to-refresh on the main content scroll container: invalidate all
     // active react-query queries so the current route refetches. The hook
@@ -94,6 +104,7 @@ export const MobileLayout = ({ shell }: MobileLayoutProps) => {
         <>
             <div
                 className={clsx(styles.layout, {
+                    [styles.hasNoSong]: !hasSong,
                     [styles.macos]: windowBarStyle === Platform.MACOS,
                     [styles.windows]: windowBarStyle === Platform.WINDOWS,
                 })}
@@ -123,7 +134,7 @@ export const MobileLayout = ({ shell }: MobileLayoutProps) => {
                         <Outlet />
                     </Suspense>
                 </main>
-                <PlayerBar />
+                {hasSong && <PlayerBar />}
                 <BottomTabBar
                     drawerOpen={sidebarOpened}
                     onMoreTab={sidebarOpened ? closeSidebar : openSidebar}

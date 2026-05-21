@@ -70,13 +70,33 @@
         )
         var(--mobile-playerbar-height)
         calc(var(--mobile-tab-bar-height) + var(--safe-bottom));
-    grid-template-columns: 1fr;
-    gap: 0;
-    width: 100vw;
-    height: 100vh;
-    height: 100dvh;
-    overflow: hidden;
-    background: var(--theme-colors-background);
+}
+
+/*
+ * Empty-state layout: nothing is queued, so the mini-player is hidden
+ * and the main-content row reclaims its vertical real estate. Same
+ * five grid areas, but the player track collapses to 0 and main grows
+ * by --mobile-playerbar-height. Two declarations (vh + dvh) match the
+ * default layout above so Android browsers without dvh support get the
+ * sane fallback.
+ */
+.layout.has-no-song {
+    grid-template-rows:
+        calc(var(--mobile-window-bar-height) + var(--safe-top))
+        calc(
+            100vh - var(--mobile-window-bar-height) - var(--safe-top) -
+                var(--mobile-tab-bar-height) - var(--safe-bottom)
+        )
+        0
+        calc(var(--mobile-tab-bar-height) + var(--safe-bottom));
+    grid-template-rows:
+        calc(var(--mobile-window-bar-height) + var(--safe-top))
+        calc(
+            100dvh - var(--mobile-window-bar-height) - var(--safe-top) -
+                var(--mobile-tab-bar-height) - var(--safe-bottom)
+        )
+        0
+        calc(var(--mobile-tab-bar-height) + var(--safe-bottom));
 }
 
 .windows,

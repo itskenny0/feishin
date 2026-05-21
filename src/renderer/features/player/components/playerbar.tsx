@@ -51,6 +51,17 @@ export const Playerbar = () => {
     };
 
     if (isMobile) {
+        /*
+         * Spotify-style empty state: hide the mini-player entirely when
+         * there's no song queued. Previously the bar still rendered with
+         * '—' placeholder lines for title/artist/album and a floating
+         * play button — looked broken on the action-required / empty
+         * library screens. The bottom-tab-bar fills in nicely without
+         * the gap above.
+         */
+        if (!currentSong?.id) {
+            return null;
+        }
         return (
             <Suspense fallback={<Spinner />}>
                 {/*
