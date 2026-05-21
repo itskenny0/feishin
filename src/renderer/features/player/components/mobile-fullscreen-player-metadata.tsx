@@ -1,10 +1,13 @@
 import clsx from 'clsx';
 import { t } from 'i18next';
 import { memo, MouseEvent } from 'react';
+import { generatePath, Link } from 'react-router';
 
 import styles from './mobile-fullscreen-player.module.css';
 
 import { triggerHaptic } from '/@/renderer/hooks/use-haptic';
+import { AppRoute } from '/@/renderer/router/routes';
+import { useSetFullScreenPlayerStore } from '/@/renderer/store';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Group } from '/@/shared/components/group/group';
 import { Rating } from '/@/shared/components/rating/rating';
@@ -36,6 +39,7 @@ export const MobileFullscreenPlayerMetadata = memo(
         showRating,
     }: MobileFullscreenPlayerMetadataProps) => {
         const isRadio = radioTitle !== undefined || radioStationName !== undefined;
+        const setFullScreenPlayerStore = useSetFullScreenPlayerStore();
 
         const title = isRadio ? radioTitle || radioStationName || 'Radio' : currentSong?.name;
         const artistsDisplay = isRadio
@@ -51,6 +55,23 @@ export const MobileFullscreenPlayerMetadata = memo(
 
         const hasMetadata = !isRadio && (container || year);
 
+        // Resolve nav targets: when the user taps an artist or album in the
+        // fullscreen player we want to close the overlay AND navigate to
+        // that detail page (matches Spotify's behaviour). artists[0] is
+        // the canonical link target if there are multiple - tapping into a
+        // collaboration's first artist is the conventional pick.
+        const primaryArtistId = !isRadio ? currentSong?.artists?.[0]?.id : undefined;
+        const albumId = !isRadio ? currentSong?.albumId : undefined;
+        const artistHref = primaryArtistId
+            ? generatePath(AppRoute.LIBRARY_ALBUM_ARTISTS_DETAIL, {
+                  albumArtistId: primaryArtistId,
+              })
+            : undefined;
+        const albumHref = albumId
+            ? generatePath(AppRoute.LIBRARY_ALBUMS_DETAIL, { albumId })
+            : undefined;
+        const collapseFullScreen = () => setFullScreenPlayerStore({ expanded: false });
+
         return (
             <div className={styles.metadataContainer}>
                 <div className={styles.titleRow}>
@@ -63,12 +84,40 @@ export const MobileFullscreenPlayerMetadata = memo(
                         {title || '—'}
                     </TextTitle>
                 </div>
-                <Text className={clsx(PlaybackSelectors.songArtist)} size="md" truncate>
-                    {artistsDisplay || '—'}
-                </Text>
-                <Text className={clsx(PlaybackSelectors.songAlbum)} size="md" truncate>
-                    {album || '—'}
-                </Text>
+                {artistHref ? (
+                    <Text
+                        className={clsx(PlaybackSelectors.songArtist)}
+                        component={Link}
+                        isLink
+                        onClick={collapseFullScreen}
+                        size="md"
+                        to={artistHref}
+                        truncate
+                    >
+                        {artistsDisplay || '—'}
+                    </Text>
+                ) : (
+                    <Text className={clsx(PlaybackSelectors.songArtist)} size="md" truncate>
+                        {artistsDisplay || '—'}
+                    </Text>
+                )}
+                {albumHref ? (
+                    <Text
+                        className={clsx(PlaybackSelectors.songAlbum)}
+                        component={Link}
+                        isLink
+                        onClick={collapseFullScreen}
+                        size="md"
+                        to={albumHref}
+                        truncate
+                    >
+                        {album || '—'}
+                    </Text>
+                ) : (
+                    <Text className={clsx(PlaybackSelectors.songAlbum)} size="md" truncate>
+                        {album || '—'}
+                    </Text>
+                )}
                 {hasMetadata && (
                     <Group align="center" className={styles.metadataRow} gap="xs" wrap="nowrap">
                         {container && <Text size="xs">{container}</Text>}
