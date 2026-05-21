@@ -85,23 +85,47 @@
 
 .image-container {
     display: flex;
+
+    /*
+     * Grow to fill the vertical space left over by the surrounding
+     * flex-shrink: 0 rows (header, metadata, progress, volume, controls,
+     * bottom-controls). flex-basis: 0 means it starts from 0 height and
+     * the flex-grow:1 expands it. Without flex-basis: 0 the natural
+     * intrinsic height of the .image inside (which depends on the
+     * container's height via aspect-ratio: 1) creates a circular
+     * dependency and the image collapsed under its container, getting
+     * clipped at the bottom of the available space.
+     */
+    flex: 1 1 0;
     align-items: center;
     justify-content: center;
     width: 100%;
     min-height: 0;
-    padding: 1rem;
-    padding-top: 0.5rem;
+    padding: 1rem 1.5rem 0.5rem;
 }
 
 .image {
+    /*
+     * Spotify-mobile sizing: max(min(container.width, container.height), 0).
+     * aspect-ratio: 1 keeps it square; max-width and max-height both at
+     * 100% means the image becomes the largest square that fits inside
+     * the .image-container, preserving the album art's native 1:1
+     * presentation rather than clipping or stretching.
+     */
     position: relative;
-    width: 100%;
-    max-width: 400px;
+    width: auto;
+    max-width: min(100%, 480px);
+    height: 100%;
     max-height: 100%;
     aspect-ratio: 1;
     overflow: hidden;
-    border-radius: 12px;
-    box-shadow: 0 8px 24px rgb(0 0 0 / 30%);
+    border-radius: 14px;
+
+    /* Deeper shadow with a touch of accent so the cover reads as a
+       floating object against the dynamic-color backdrop. */
+    box-shadow:
+        0 12px 32px rgb(0 0 0 / 40%),
+        0 4px 12px rgb(0 0 0 / 25%);
 }
 
 /*
@@ -120,7 +144,7 @@
     }
 
     .image {
-        max-width: 38vh;
+        max-width: min(100%, 38vh);
         max-height: 38vh;
     }
 
