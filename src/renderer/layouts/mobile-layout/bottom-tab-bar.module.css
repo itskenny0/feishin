@@ -7,6 +7,7 @@
  */
 
 .tab-bar {
+    position: relative;
     display: flex;
     grid-area: tab-bar;
     align-items: stretch;
@@ -17,6 +18,13 @@
     padding-bottom: env(safe-area-inset-bottom, 0);
     background: color-mix(in srgb, var(--theme-colors-background) 92%, transparent);
     border-top: 1px solid var(--theme-colors-border);
+
+    /*
+     * Subtle separator shadow that lifts the bar above the playerbar
+     * behind it. Sized to match the existing 1px top border so we get
+     * a clean edge with a soft glow on top.
+     */
+    box-shadow: 0 -4px 12px rgb(0 0 0 / 18%);
     backdrop-filter: blur(18px) saturate(160%);
 }
 
