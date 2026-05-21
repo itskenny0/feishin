@@ -3,3 +3,32 @@
     padding: var(--theme-spacing-xs);
     border-bottom: 1px solid var(--theme-colors-border);
 }
+
+/*
+ * Touch / narrow viewport: the filter bar children (Flex / Group rows
+ * of sort dropdowns, divider, filter button, refresh button, display-
+ * toggle, list-config menu) overflow horizontally past the viewport
+ * because each child is wrap=nowrap by default. Allow horizontal
+ * scrolling INSIDE the bar so the user can pan-x to reach off-screen
+ * controls without breaking the layout, while keeping the rest of the
+ * page non-scrolling. Doesn't affect desktop (the bar fits there).
+ *
+ * scrollbar-width: none + ::-webkit-scrollbar { display:none } hide
+ * the scrollbar — the row should feel like a strip the user pushes
+ * with a finger rather than a UI element that demands its own
+ * scrollbar gutter.
+ */
+@media (width < 768px) {
+    .filter-bar {
+        overflow-x: auto;
+        scrollbar-width: none;
+    }
+
+    .filter-bar > * {
+        flex-wrap: wrap;
+    }
+
+    .filter-bar::-webkit-scrollbar {
+        display: none;
+    }
+}
