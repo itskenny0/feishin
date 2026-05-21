@@ -299,6 +299,42 @@
 
 .favorite-action {
     flex-shrink: 0;
+    transition: transform 160ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/*
+ * Spotify / Apple Music heart-pulse on like. The favorited-state class
+ * (the icon's [aria-pressed='true'] mirrors the underlying favorite
+ * boolean) triggers a quick scale-up-then-snap-back animation so the
+ * tap feels satisfying. The cubic-bezier overshoots slightly so the
+ * heart "pops" rather than just inflates.
+ */
+.favorite-action[aria-pressed='true'] {
+    animation: favorite-pulse 360ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes favorite-pulse {
+    0% {
+        transform: scale(1);
+    }
+
+    35% {
+        transform: scale(1.32);
+    }
+
+    70% {
+        transform: scale(0.96);
+    }
+
+    100% {
+        transform: scale(1);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .favorite-action[aria-pressed='true'] {
+        animation: none;
+    }
 }
 
 .metadata-row {
