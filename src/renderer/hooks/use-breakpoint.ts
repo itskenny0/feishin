@@ -17,6 +17,10 @@ import { useMediaQuery } from '@mantine/hooks';
  * range; the tablet/desktop split exists so we can widen grid columns at
  * ≥1200px without regressing 13"-laptop windows.
  *
+ * Sub-tier hooks (`useIsSmallPhone`, `useIsBigPhone`, `useIsTabletRange`,
+ * `useIsBigTablet`) carve finer-grained ranges out of the named tiers
+ * above — pair each with a CSS media query at the same boundary.
+ *
  * Add CSS-side breakpoints in /shared/styles/global.css under the same names
  * if you need to branch from CSS — keep both definitions in sync.
  */
@@ -67,6 +71,15 @@ export const useBreakpoint = (): Breakpoint => {
 
 /** True for phone + phablet (i.e. anything below the desktop shell). */
 export const useIsMobileShell = () => useMediaQuery('(max-width: 767px)');
+
+/**
+ * True for sub-360px viewports — Pixel 4a, Galaxy S10e, iPhone SE 1st gen,
+ * older budget Androids, narrow foldable inner panes. Used to drop two-
+ * column grids, tighten chrome, and shrink fullscreen player gutters where
+ * every horizontal pixel matters. Keep paired with `@media (width <= 360px)`
+ * in CSS modules.
+ */
+export const useIsSmallPhone = () => useMediaQuery('(max-width: 360px)');
 
 /** True for phone-sized screens only — use sparingly, prefer useBreakpoint. */
 export const useIsPhone = () => useMediaQuery(BREAKPOINT_QUERIES.phone);
