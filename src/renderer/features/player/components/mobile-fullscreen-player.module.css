@@ -429,6 +429,51 @@
 }
 
 /*
+ * Small-phone tier (≤360px): 5 bottom-control icons × 1.5rem padding
+ * overflows a 320px viewport. Halve every horizontal gutter so the
+ * player still feels generous but the controls bar fits without
+ * horizontal scroll, and bring the metadata up tight against the
+ * album art so the song title is the second thing on screen after
+ * the cover.
+ */
+@media (width <= 360px) {
+    .header {
+        gap: 0.25rem;
+        padding: 0.5rem 0.75rem;
+    }
+
+    .image-container {
+        padding: 0.5rem 1rem;
+    }
+
+    .metadata-container {
+        gap: 0.375rem;
+        padding: 0.5rem 1rem 0.75rem;
+    }
+
+    .progress-container {
+        gap: 0.5rem;
+        padding: 0 0.75rem 1rem;
+    }
+
+    .controls-container {
+        gap: 0.5rem;
+        padding: 0 0.5rem 1rem;
+    }
+
+    .bottom-controls-group button {
+        padding: 1rem 0.5rem;
+    }
+
+    .queue-header,
+    .lyrics-header,
+    .queue-content,
+    .lyrics-content {
+        padding: 0.75rem;
+    }
+}
+
+/*
  * Big-phone tier (361–430px) — iPhone 13/14/15, Pro Max, Pixel 7/8/8
  * Pro, Galaxy S24, etc. The default fullscreen player layout is tuned
  * for the cramped sub-360 tier where every pixel counts; on these

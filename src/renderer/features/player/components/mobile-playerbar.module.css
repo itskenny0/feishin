@@ -123,6 +123,43 @@
 }
 
 /*
+ * Small-phone tier (≤360px): at 360px width, 60px cover + 1rem outer
+ * padding + 0.5rem controls gap + three player buttons leave the
+ * metadata column under 100px and the song title truncates after ~6
+ * characters. Tighten the outer padding, shrink the cover slightly,
+ * and drop the artificial 50% cap on the metadata column so the song
+ * title actually gets room to breathe. Hide the third (album) metadata
+ * line — it's the lowest-priority info and usually redundant with the
+ * fullscreen player one tap away.
+ */
+@media (width <= 360px) {
+    .container {
+        padding: 0.5rem;
+    }
+
+    .content-wrapper {
+        gap: 0.5rem;
+    }
+
+    .image {
+        width: 52px;
+        height: 52px;
+    }
+
+    .metadata-stack {
+        max-width: none;
+    }
+
+    .metadata-stack > .line-item:nth-of-type(3) {
+        display: none;
+    }
+
+    .controls-wrapper {
+        gap: 0.25rem;
+    }
+}
+
+/*
  * Big-phone tier (361–430px) — iPhone 13/14/15, Pro Max, Pixel 7/8/8
  * Pro, Galaxy S24, etc. The default 60px cover and 0.5rem padding read
  * as cramped on these comfortable viewports; bump both so the mini-
