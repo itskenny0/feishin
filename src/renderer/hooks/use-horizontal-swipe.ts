@@ -29,6 +29,10 @@ export const useHorizontalSwipe = ({
 }: UseHorizontalSwipeOptions) => {
     const startRef = useRef<null | { x: number; y: number }>(null);
     const firedRef = useRef(false);
+    // Suppress the browser-synthesised click that follows the pointerup
+    // when a swipe fired — otherwise a swipe-to-next on the mini-player
+    // would ALSO fire the wrapper's onClick (e.g. expand-to-fullscreen).
+    const suppressNextClick = useRef(false);
 
     const onPointerDown = useCallback(
         (event: React.PointerEvent<HTMLElement>) => {
@@ -61,6 +65,7 @@ export const useHorizontalSwipe = ({
             }
             if (Math.abs(dx) >= triggerPx) {
                 firedRef.current = true;
+                suppressNextClick.current = true;
                 triggerHaptic('selection');
                 if (dx < 0) {
                     onSwipeLeft?.();
@@ -81,5 +86,16 @@ export const useHorizontalSwipe = ({
         startRef.current = null;
     }, []);
 
-    return { onPointerCancel, onPointerDown, onPointerMove, onPointerUp };
+    // Capture-phase click handler that swallows the click immediately
+    // after a swipe fires. Capture phase matters — by bubble phase
+    // sibling/parent onClick handlers would have already run.
+    const onClickCapture = useCallback((event: React.MouseEvent<HTMLElement>) => {
+        if (suppressNextClick.current) {
+            suppressNextClick.current = false;
+            event.preventDefault();
+            event.stopPropagation();
+        }
+    }, []);
+
+    return { onClickCapture, onPointerCancel, onPointerDown, onPointerMove, onPointerUp };
 };
