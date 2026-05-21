@@ -105,6 +105,8 @@
         z-index: 50;
         width: min(420px, 42vw);
         min-width: 320px;
+        border-top-left-radius: var(--theme-radius-lg);
+        border-bottom-left-radius: var(--theme-radius-lg);
         box-shadow: -8px 0 24px alpha(var(--theme-colors-shadow, #000), 0.18);
     }
 
@@ -131,6 +133,8 @@
         height: auto;
         border-top: 0;
         border-left: 1px solid alpha(var(--theme-colors-border), 0.5);
+        border-top-left-radius: var(--theme-radius-lg);
+        border-bottom-left-radius: var(--theme-radius-lg);
         box-shadow: -8px 0 24px alpha(var(--theme-colors-shadow, #000), 0.18);
     }
 }
