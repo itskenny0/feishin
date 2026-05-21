@@ -11,6 +11,31 @@
     filter: drop-shadow(0 0 5px rgb(0 0 0 / 50%));
 }
 
+/*
+ * Touch / narrow viewports.
+ *
+ * Radix's submenu primitive doesn't accept `side` or `align` — submenus
+ * always open to the right of their trigger. On a 430px phone the
+ * desktop 16rem (256px) parent menu plus a 16rem submenu need 512px of
+ * horizontal space, which obviously doesn't fit, so Radix's
+ * `avoidCollisions` is forced to clip the submenu off the right edge.
+ *
+ * Cap the menu width at 45vw on touch so the parent + submenu add up
+ * to at most ~390px (out of 430px viewport), leaving enough margin for
+ * Radix to position both side-by-side. `min(16rem, 45vw)` keeps the
+ * desktop width unchanged for narrow desktop windows (where 45vw is
+ * still bigger than 16rem) and only kicks in on truly small touch
+ * viewports. Items inside the menu break onto multiple lines as
+ * needed — the .item rule above already sets `white-space: normal`.
+ */
+@media (pointer: coarse) {
+    .content {
+        width: min(16rem, 45vw);
+        min-width: min(12rem, 40vw);
+        max-width: min(16rem, 45vw);
+    }
+}
+
 .inner-content {
     display: flex;
     flex-direction: column;

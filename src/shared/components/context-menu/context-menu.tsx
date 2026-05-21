@@ -250,12 +250,16 @@ function SubmenuContent(props: SubmenuContentProps) {
             {open && (
                 <RadixContextMenu.Portal forceMount>
                     <RadixContextMenu.SubContent
-                        // collisionPadding keeps the submenu's edges 12px
-                        // inside the viewport on every side; Radix will
-                        // flip from right→left or top→bottom automatically
-                        // when the menu would otherwise spill off-screen.
-                        // Without explicit padding the default behaviour
-                        // can still let submenus clip on narrow phones.
+                        // Radix submenus always open to the right of their
+                        // trigger (Western LTR semantics) — the primitive
+                        // explicitly omits `side` and `align` from its
+                        // typed props, so we can't override the direction
+                        // here. The off-screen behaviour on phones is
+                        // addressed in context-menu.module.css instead by
+                        // shrinking the menu width on `pointer: coarse`,
+                        // so the parent + submenu can fit side-by-side
+                        // when Radix's `avoidCollisions` shifts the
+                        // submenu to keep it inside the viewport.
                         avoidCollisions
                         className={styles.content}
                         collisionPadding={12}
