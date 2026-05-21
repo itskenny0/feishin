@@ -30,6 +30,25 @@ export const BREAKPOINT_QUERIES: Record<Breakpoint, string> = {
 };
 
 /**
+ * Sub-range query inside `phone` covering modern flagship-sized phones in
+ * portrait — iPhone 13/14/15 (390px), Pro Max (430px), Pixel 7/8/8 Pro
+ * (412px), Galaxy S24 / S24 Ultra (384–412px), iPhone 13 Mini (375px).
+ *
+ * Big-phone covers the majority of mobile traffic and has comfortable but
+ * not luxurious horizontal space (enough for a 2-col grid with proper
+ * cover-art presence, richer mini-player metadata, intentionally laid-out
+ * tab labels — but not so much that we should switch to tablet layouts).
+ *
+ * Pair with CSS media queries at the same boundaries:
+ *
+ *   @media (min-width: 361px) and (max-width: 430px) { ... }
+ *
+ * Keep the JS and CSS sides aligned. Sub-360 ("small phone") and ≥431
+ * ("phablet+") deliberately get separate treatments.
+ */
+export const BIG_PHONE_QUERY = '(min-width: 361px) and (max-width: 430px)';
+
+/**
  * Returns the currently active named breakpoint.
  *
  * SSR-safe: useMediaQuery returns false on the server, so we fall back to
@@ -51,6 +70,15 @@ export const useIsMobileShell = () => useMediaQuery('(max-width: 767px)');
 
 /** True for phone-sized screens only — use sparingly, prefer useBreakpoint. */
 export const useIsPhone = () => useMediaQuery(BREAKPOINT_QUERIES.phone);
+
+/**
+ * True for the big-phone tier (361–430px). Flagship phones in portrait —
+ * iPhone 13/14/15, Pro Max, Pixel 7/8/8 Pro, Galaxy S24, etc. Use this to
+ * unlock the richer mobile layouts (lusher fullscreen player, denser
+ * mini-player metadata, intentional tab-bar labels) without affecting
+ * cramped sub-360 viewports or phablets ≥431.
+ */
+export const useIsBigPhone = () => useMediaQuery(BIG_PHONE_QUERY);
 
 /** True for tablet or smaller — useful for hiding the queue sidebar. */
 export const useIsTabletOrSmaller = () => useMediaQuery('(max-width: 1199px)');
