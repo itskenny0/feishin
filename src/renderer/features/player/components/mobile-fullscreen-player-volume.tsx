@@ -55,27 +55,29 @@ export const MobileFullscreenPlayerVolume = memo(() => {
 
     return (
         <div className={styles.volumeRow}>
-            <ActionIcon
-                aria-label={
-                    muted || volume === 0
-                        ? t('player.muted', { defaultValue: 'Unmute' })
-                        : t('player.volume', { defaultValue: 'Mute' })
-                }
-                icon={
-                    muted || volume === 0
-                        ? 'volumeMute'
-                        : volume > 50
-                          ? 'volumeMax'
-                          : 'volumeNormal'
-                }
-                iconProps={{
-                    color: muted ? 'muted' : undefined,
-                    size: 'lg',
-                }}
-                onClick={handleMute}
-                size="md"
-                variant="subtle"
-            />
+            <div className={styles.volumeIconSlot}>
+                <ActionIcon
+                    aria-label={
+                        muted || volume === 0
+                            ? t('player.muted', { defaultValue: 'Unmute' })
+                            : t('player.volume', { defaultValue: 'Mute' })
+                    }
+                    icon={
+                        muted || volume === 0
+                            ? 'volumeMute'
+                            : volume > 50
+                              ? 'volumeMax'
+                              : 'volumeNormal'
+                    }
+                    iconProps={{
+                        color: muted ? 'muted' : undefined,
+                        size: 'lg',
+                    }}
+                    onClick={handleMute}
+                    size="md"
+                    variant="subtle"
+                />
+            </div>
             <Slider
                 aria-label={t('player.volume', { defaultValue: 'Volume' })}
                 className={styles.volumeSlider}
@@ -87,6 +89,7 @@ export const MobileFullscreenPlayerVolume = memo(() => {
                 style={{ flex: 1, opacity: canSetVolume ? undefined : 0.4 }}
                 value={sliderValue}
             />
+            <div aria-hidden="true" className={styles.volumeRowSpacer} />
         </div>
     );
 });

@@ -317,13 +317,47 @@
     }
 }
 
+/*
+ * Volume row geometry — must match `.progress-container` exactly so the
+ * slider track starts and ends at the same x-coordinates as the seek bar
+ * directly above it. Mismatched gutters were the source of the visual
+ * "two different sliders" bug the user reported: the volume slider sat
+ * ~30px farther left than the seek bar's start because the seek bar
+ * reserves a 3.5ch time-label slot on the left + 0.75rem gap, while the
+ * volume row was using only its mute icon + 0.5rem gap.
+ *
+ * Mirror the progress-container's outer 1.25rem horizontal padding and
+ * 0.75rem gap, give the mute icon a min-width that matches the
+ * progress-container's `.time-container` slot (3.5ch), and reserve a
+ * matching right-side spacer so the slider track ends at the same right
+ * edge as the seek bar. The result reads as one continuous control
+ * stack rather than two unrelated rows.
+ */
 .volume-row {
     display: flex;
     flex-shrink: 0;
-    gap: 0.5rem;
+    gap: 0.75rem;
     align-items: center;
     width: 100%;
-    padding: 0 1rem 0.25rem;
+    padding: 0.25rem 1.25rem 0.5rem;
+}
+
+/* Match `.time-container` width so the slider lines up with the seek bar. */
+.volume-icon-slot {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    min-width: 3.5ch;
+}
+
+/*
+ * Invisible spacer mirroring the right-side time-container of the seek
+ * row — gives the slider track the same right edge as the seek bar.
+ */
+.volume-row-spacer {
+    flex-shrink: 0;
+    min-width: 3.5ch;
 }
 
 .volume-slider {
