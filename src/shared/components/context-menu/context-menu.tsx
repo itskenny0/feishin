@@ -91,7 +91,15 @@ function Content(props: ContentProps) {
         <AnimatePresence>
             {open && (
                 <RadixContextMenu.Portal forceMount>
-                    <RadixContextMenu.Content asChild className={styles.content}>
+                    <RadixContextMenu.Content
+                        asChild
+                        // Same collision-padding rule as SubContent — keeps
+                        // the menu's edges inside the viewport on phones
+                        // where the right-click point is close to the edge.
+                        avoidCollisions
+                        className={styles.content}
+                        collisionPadding={12}
+                    >
                         <motion.div
                             animate="show"
                             className={styles.content}
@@ -242,9 +250,18 @@ function SubmenuContent(props: SubmenuContentProps) {
             {open && (
                 <RadixContextMenu.Portal forceMount>
                     <RadixContextMenu.SubContent
+                        // collisionPadding keeps the submenu's edges 12px
+                        // inside the viewport on every side; Radix will
+                        // flip from right→left or top→bottom automatically
+                        // when the menu would otherwise spill off-screen.
+                        // Without explicit padding the default behaviour
+                        // can still let submenus clip on narrow phones.
+                        avoidCollisions
                         className={styles.content}
+                        collisionPadding={12}
                         onMouseEnter={handleMouseEnter}
                         onMouseLeave={handleMouseLeave}
+                        sideOffset={4}
                     >
                         <motion.div
                             animate="show"
