@@ -53,6 +53,24 @@ export const usePullToRefresh = (
             // Only arm when starting at the very top of the scroll area —
             // mid-scroll touches should NOT initiate a refresh.
             if (el.scrollTop > 0) return;
+            // Many routes render with their own internal scroll
+            // containers; in those cases el.scrollTop stays 0 even when
+            // the visible content is scrolled. Walk up from the touch
+            // target and abort if any ancestor scrollable is mid-scroll.
+            let walker: Element | null = event.target as Element | null;
+            while (walker && walker !== el) {
+                if (walker.scrollHeight > walker.clientHeight && walker.scrollTop > 0) {
+                    return;
+                }
+                walker = walker.parentElement;
+            }
+            // Also require the gesture to start in the upper portion of
+            // the visible area — a pull that begins halfway down the
+            // viewport doesn't read as "refresh". 96px keeps the
+            // affordance reachable even on small phones.
+            const rect = el.getBoundingClientRect();
+            if (event.clientY - rect.top > 96) return;
+
             startY = event.clientY;
             lastDeltaY = 0;
             active = true;
