@@ -40,6 +40,19 @@ export const useEdgeSwipe = ({
         const handleStart = (event: PointerEvent) => {
             if (event.pointerType !== 'touch') return;
             if (event.clientX > edgePx) return;
+            // If a child element (slider thumb, custom drag target)
+            // already consumed the pointerdown, don't conflict with it
+            // — the user is interacting with that element, not the
+            // edge of the screen.
+            if (event.defaultPrevented) return;
+            // Also bail if the touch began on an interactive element
+            // near the edge: input, button, [role=slider], etc. Use
+            // event.target rather than composedPath since we listen on
+            // window.
+            const target = event.target as Element | null;
+            if (target?.closest?.('input, button, [role="slider"], [role="button"]')) {
+                return;
+            }
             startRef.current = { x: event.clientX, y: event.clientY };
             firedRef.current = false;
         };
