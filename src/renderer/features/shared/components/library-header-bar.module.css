@@ -15,3 +15,16 @@
     align-items: center;
     justify-content: center;
 }
+
+/*
+ * Small-phone tier: 1rem gap between the play button, title, and count badge
+ * eats the available width on 320–360px viewports and forces the title to
+ * truncate after just a few characters. Tighten the gap and pad so the title
+ * gets room to breathe.
+ */
+@media (width <= 360px) {
+    .header-container {
+        gap: 0.5rem;
+        padding: 0 var(--theme-spacing-xs);
+    }
+}

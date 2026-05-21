@@ -32,3 +32,25 @@
         display: none;
     }
 }
+
+/*
+ * Small-phone tier (≤360): force the filter-bar children to a single
+ * row that scrolls horizontally, with -webkit-overflow-scrolling:touch
+ * for momentum on iOS. At ≤360 the wrap-then-overflow fallback above
+ * still produces an awkward two-row layout because each individual
+ * control is too wide; nowrap + horizontal scroll keeps the entire row
+ * uniform and predictable. Use !important to override the flex-wrap:
+ * wrap rule above without lifting its specificity.
+ */
+@media (width <= 360px) {
+    .filter-bar {
+        overflow-y: hidden;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .filter-bar > * {
+        flex-wrap: nowrap !important;
+        width: max-content;
+        min-width: 100%;
+    }
+}

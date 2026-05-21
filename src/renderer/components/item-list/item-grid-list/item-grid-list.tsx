@@ -251,6 +251,11 @@ const createThrottledSetTableMeta = (
     size?: 'compact' | 'default' | 'large',
 ) => {
     return throttle((width: number, dataLength: number, setTableMeta: (meta: any) => void) => {
+        // Small-phone tier: below 380 (covers 320 iPhone SE through 360 Pixel 4a
+        // plus padding), drop to a single column. Two square covers at 360
+        // minus padding leaves ~150px each, which is smaller than the text
+        // rows beneath them and looks cramped on Spotify-tier devices.
+        const isSmallPhone = width < 380;
         const isSm = width >= 600;
         const isMd = width >= 768;
         const isLg = width >= 960;
@@ -275,6 +280,8 @@ const createThrottledSetTableMeta = (
             dynamicItemsPerRow = 4;
         } else if (isSm) {
             dynamicItemsPerRow = 3;
+        } else if (isSmallPhone) {
+            dynamicItemsPerRow = 1;
         } else {
             dynamicItemsPerRow = 2;
         }
