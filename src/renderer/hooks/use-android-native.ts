@@ -1,6 +1,11 @@
 import { useEffect } from 'react';
 
-import { usePlayerActions, usePlayerStatus } from '/@/renderer/store';
+import {
+    useAppStore,
+    useFullScreenPlayerStore,
+    usePlayerActions,
+    usePlayerStatus,
+} from '/@/renderer/store';
 import { PlayerStatus } from '/@/shared/types/types';
 
 /**
@@ -111,8 +116,23 @@ export const useAndroidStatusBar = () => {
 };
 
 /**
- * Hardware back button: walk back through router history when there's
- * anything to pop; exit the app only when the user is at the root.
+ * Hardware back button. Dismisses open overlays before walking back
+ * through router history, in the order Android users expect:
+ *
+ *   1. Context menus / dropdowns / popovers — Radix listens for the
+ *      Escape key and closes on it, so we dispatch a synthetic
+ *      keydown('Escape') and bail out if anything handled it (i.e. the
+ *      DOM has fewer popper wrappers afterwards).
+ *   2. Visualizer overlay — collapse via the FullScreenPlayer store.
+ *   3. Fullscreen player overlay — collapse via the same store.
+ *   4. Command palette — close via the AppStore opener.
+ *   5. Router history — if any back-stack exists, pop it.
+ *   6. Exit the app — only when the user is at the root with nothing
+ *      else open.
+ *
+ * Each store check is a one-shot read via `getState()` so this hook
+ * doesn't re-subscribe / re-register the native listener on every
+ * store change.
  */
 export const useAndroidBackButton = () => {
     useEffect(() => {
@@ -126,12 +146,73 @@ export const useAndroidBackButton = () => {
                 const { App: CapApp } = await import('@capacitor/app');
                 if (cancelled) return;
 
-                const handle = await CapApp.addListener('backButton', ({ canGoBack }) => {
+                /*
+                 * Lazy import the store hooks at handler-fire time
+                 * (NOT module-load) so the cycle through
+                 * use-android-native → store → react root doesn't
+                 * fight Vite's import graph in dev. .getState() is
+                 * the synchronous read; we don't subscribe.
+                 */
+                const handle = await CapApp.addListener('backButton', async ({ canGoBack }) => {
+                    // 1. Dispatch Escape so Radix popovers / context
+                    //    menus / Mantine modals close themselves. They
+                    //    listen via document-level keydown, so this is
+                    //    the cheapest universal "close any popup" call.
+                    const popperWrappersBefore = document.querySelectorAll(
+                        '[data-radix-popper-content-wrapper]',
+                    ).length;
+                    document.dispatchEvent(
+                        new KeyboardEvent('keydown', {
+                            bubbles: true,
+                            cancelable: true,
+                            code: 'Escape',
+                            key: 'Escape',
+                        }),
+                    );
+                    // Give Radix a frame to react then re-check.
+                    await new Promise((r) => requestAnimationFrame(r));
+                    const popperWrappersAfter = document.querySelectorAll(
+                        '[data-radix-popper-content-wrapper]',
+                    ).length;
+                    if (popperWrappersAfter < popperWrappersBefore) {
+                        // Something popped. Consume the back press.
+                        return;
+                    }
+
+                    // 2-4. Stored overlays. Read via getState() (not the
+                    //      hook factories) so we can call from outside a
+                    //      React component. The stores are STATIC
+                    //      imports above — we tried dynamic `await
+                    //      import('/@/renderer/store')` here in v21pp/ss
+                    //      and Rollup duplicated the store-index chunk
+                    //      (dynamic + static referenced the same path),
+                    //      producing a "Cannot access X before
+                    //      initialization" TDZ error at boot. Static
+                    //      imports avoid that entirely.
+                    const fsState = useFullScreenPlayerStore.getState();
+                    if (fsState.visualizerExpanded) {
+                        fsState.actions.setStore({ visualizerExpanded: false });
+                        return;
+                    }
+                    if (fsState.expanded) {
+                        fsState.actions.setStore({ expanded: false });
+                        return;
+                    }
+
+                    const app = useAppStore.getState();
+                    if (app.commandPalette.opened) {
+                        app.commandPalette.close();
+                        return;
+                    }
+
+                    // 5. Router history.
                     if (canGoBack && window.history.length > 1) {
                         window.history.back();
-                    } else {
-                        void CapApp.exitApp();
+                        return;
                     }
+
+                    // 6. Final fallback.
+                    void CapApp.exitApp();
                 });
 
                 if (cancelled) {
