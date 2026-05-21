@@ -62,6 +62,11 @@ export default defineConfig({
             '@tanstack/react-query-persist-client',
             'idb-keyval',
         ],
+        include: [
+            '@atlaskit/pragmatic-drag-and-drop > bind-event-listener',
+            '@atlaskit/pragmatic-drag-and-drop-auto-scroll > bind-event-listener',
+            '@atlaskit/pragmatic-drag-and-drop-hitbox > bind-event-listener',
+        ],
     },
     plugins: [
         createReactPlugin(),

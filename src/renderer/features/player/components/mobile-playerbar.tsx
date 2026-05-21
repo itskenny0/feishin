@@ -1,6 +1,8 @@
+import type { PanInfo } from 'motion/react';
+
 import clsx from 'clsx';
-import { AnimatePresence, LayoutGroup, motion, useMotionValue } from 'motion/react';
-import React, { memo, MouseEvent, useCallback } from 'react';
+import { animate, AnimatePresence, LayoutGroup, motion, useMotionValue } from 'motion/react';
+import React, { memo, MouseEvent, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 
@@ -10,7 +12,7 @@ import { ItemImage } from '/@/renderer/components/item-image/item-image';
 import { ContextMenuController } from '/@/renderer/features/context-menu/context-menu-controller';
 import { MainPlayButton, PlayerButton } from '/@/renderer/features/player/components/player-button';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
-import { useHorizontalSwipe } from '/@/renderer/hooks/use-horizontal-swipe';
+import { triggerHaptic } from '/@/renderer/hooks/use-haptic';
 import { AppRoute } from '/@/renderer/router/routes';
 import {
     useFullScreenPlayerStore,
@@ -72,46 +74,93 @@ export const MobilePlayerbar = () => {
 
     const stopPropagation = (e?: MouseEvent) => e?.stopPropagation();
 
-    // Horizontal swipe on the metadata/cover area skips next/previous,
-    // mirroring Spotify's mini-player behaviour. Drag-left advances,
-    // drag-right goes back. Only fires on touch (mouse keeps tap-to-
-    // expand) and only past 60px so accidental drift on a tap doesn't
-    // fire. The buttons (prev/play/next) sit outside this wrapper so
-    // their clicks are unaffected.
-    //
-    // We also stream the live x-delta into a Motion value so the
-    // cover + metadata translate WITH the finger as it drags —
-    // exactly how Spotify's mini-player feels. Once the threshold is
-    // crossed (or the user lifts), the handler sends dx=0 which
-    // Motion's spring animates back to rest (or onto the next song,
-    // whichever the threshold crossing fired). The trans-X value is
-    // applied via `style={{ x: swipeX }}` on the content wrapper.
+    /*
+     * Spotify-style finger-tracking carousel swipe.
+     *
+     * Uses Motion's native drag="x" so the content row stays attached
+     * to the finger the entire way (no threshold-and-jump). On
+     * release, a combined velocity + offset rule decides whether the
+     * gesture commits to next/previous (fast flick OR drag past 25%
+     * of container width) or springs back to rest. Inertia is
+     * preserved across the commit by passing the release-velocity into
+     * the snap-back animation, so a quick flick reads as one
+     * continuous gesture instead of two separate ones.
+     */
+    const containerRef = useRef<HTMLDivElement>(null);
     const swipeX = useMotionValue(0);
-    const handleSwipeMove = useCallback(
-        (dx: number) => {
-            // Light rubber-banding above 80px so the bar visibly resists
-            // very long drags — drags that mean "I changed my mind"
-            // shouldn't visually overshoot off-screen.
-            const cappedDx =
-                Math.abs(dx) > 80 ? Math.sign(dx) * (80 + (Math.abs(dx) - 80) * 0.35) : dx;
-            swipeX.set(cappedDx);
+    const handleDragEnd = useCallback(
+        (_event: unknown, info: PanInfo) => {
+            const width = containerRef.current?.offsetWidth ?? 320;
+            const commitOffset = width * 0.25;
+            const flickVelocity = 500;
+
+            const offset = info.offset.x;
+            const velocity = info.velocity.x;
+
+            const wantsNext = offset < -commitOffset || velocity < -flickVelocity;
+            const wantsPrev = offset > commitOffset || velocity > flickVelocity;
+
+            if (wantsNext && isSongDefined) {
+                triggerHaptic('selection');
+                mediaNext();
+                // Continue the motion with the release velocity for a
+                // beat so the gesture feels like a single throw rather
+                // than a jolt-and-snap. The current-song slot
+                // visually "swipes off" before resetting to 0 (the
+                // new song now occupies the slot).
+                animate(swipeX, 0, {
+                    damping: 30,
+                    stiffness: 220,
+                    type: 'spring',
+                    velocity,
+                });
+            } else if (wantsPrev && isSongDefined) {
+                triggerHaptic('selection');
+                mediaPrevious();
+                animate(swipeX, 0, {
+                    damping: 30,
+                    stiffness: 220,
+                    type: 'spring',
+                    velocity,
+                });
+            } else {
+                // Not enough drag/velocity — spring back to rest. Carry
+                // the release velocity so the bounce feels natural.
+                animate(swipeX, 0, {
+                    damping: 28,
+                    stiffness: 360,
+                    type: 'spring',
+                    velocity,
+                });
+            }
         },
-        [swipeX],
+        [isSongDefined, mediaNext, mediaPrevious, swipeX],
     );
-    const swipeHandlers = useHorizontalSwipe({
-        disabled: !isSongDefined,
-        onSwipeLeft: mediaNext,
-        onSwipeMove: handleSwipeMove,
-        onSwipeRight: mediaPrevious,
-    });
 
     return (
-        <div className={clsx(styles.container, PlaybackSelectors.mediaPlayer)}>
+        <div className={clsx(styles.container, PlaybackSelectors.mediaPlayer)} ref={containerRef}>
             <motion.div
-                {...swipeHandlers}
                 className={styles.contentWrapper}
+                drag={isSongDefined ? 'x' : false}
+                dragConstraints={{ left: 0, right: 0 }}
+                /*
+                 * dragElastic=1 lets the user drag freely beyond the
+                 * 0,0 constraints — Motion handles the visual stretch
+                 * itself, so we don't have to apply rubber-banding in
+                 * JS. The carousel feels like a Spotify list under
+                 * the finger: light resistance, no hard wall.
+                 */
+                dragElastic={1}
+                /*
+                 * dragMomentum=false because we're handling the
+                 * commit ourselves in onDragEnd. Without this, Motion
+                 * would coast the wrapper offscreen on a flick before
+                 * we got to fire mediaNext, leaving the bar visibly
+                 * empty for a frame.
+                 */
+                dragMomentum={false}
+                onDragEnd={handleDragEnd}
                 style={{ x: swipeX }}
-                transition={{ damping: 28, mass: 0.6, stiffness: 380, type: 'spring' }}
             >
                 <LayoutGroup>
                     <AnimatePresence initial={false} mode="popLayout">
