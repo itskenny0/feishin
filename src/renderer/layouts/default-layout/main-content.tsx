@@ -10,6 +10,7 @@ import { ExpandedListContainer } from '/@/renderer/components/item-list/expanded
 import { ExpandedListItem } from '/@/renderer/components/item-list/expanded-list-item';
 import { RouteSkeleton } from '/@/renderer/features/shared/components/route-skeleton';
 import { ScrollToTopButton } from '/@/renderer/features/shared/components/scroll-to-top-button';
+import { useIsTabletRange } from '/@/renderer/hooks/use-breakpoint';
 import { FullScreenOverlay } from '/@/renderer/layouts/default-layout/full-screen-overlay';
 import { FullScreenVisualizerOverlay } from '/@/renderer/layouts/default-layout/full-screen-visualizer-overlay';
 import { LeftSidebar } from '/@/renderer/layouts/default-layout/left-sidebar';
@@ -26,7 +27,13 @@ import { constrainRightSidebarWidth, constrainSidebarWidth } from '/@/renderer/u
 const MINIMUM_SIDEBAR_WIDTH = 260;
 
 export const MainContent = ({ shell }: { shell?: boolean }) => {
-    const { collapsed, leftWidth, rightExpanded, rightHeight, rightWidth } = useAppStore(
+    const {
+        collapsed: storedCollapsed,
+        leftWidth,
+        rightExpanded: storedRightExpanded,
+        rightHeight,
+        rightWidth,
+    } = useAppStore(
         (state) => ({
             collapsed: state.sidebar.collapsed,
             leftWidth: state.sidebar.leftWidth,
@@ -36,6 +43,20 @@ export const MainContent = ({ shell }: { shell?: boolean }) => {
         }),
         shallow,
     );
+    /*
+     * Tablet-range override (viewport 768–834px): force the left sidebar
+     * to its 80px collapsed rail and suppress the right (queue) sidebar
+     * entirely. At 768–834 the desktop shell renders but the user's
+     * stored 260px+ sidebar plus a 200px+ queue sidebar would crowd the
+     * main content into a 350px sliver — useless for tablet portrait.
+     *
+     * The store is left alone — only the render-time overrides flip —
+     * so when the viewport leaves the tablet range the user's original
+     * desktop preferences come back without a side-effect on mount.
+     */
+    const isTabletRange = useIsTabletRange();
+    const collapsed = isTabletRange ? true : storedCollapsed;
+    const rightExpanded = isTabletRange ? false : storedRightExpanded;
     const { setSideBar } = useAppStoreActions();
     const sideQueueType = useSideQueueType();
     const sideQueueLayout = useSideQueueLayout();
@@ -204,6 +225,7 @@ export const MainContent = ({ shell }: { shell?: boolean }) => {
                 [styles.shell]: shell,
                 [styles.sidebarCollapsed]: collapsed,
                 [styles.sidebarExpanded]: !collapsed,
+                [styles.tabletShell]: isTabletRange,
                 [styles.verticalLayout]:
                     rightExpanded &&
                     sideQueueType === 'sideQueue' &&
@@ -217,11 +239,21 @@ export const MainContent = ({ shell }: { shell?: boolean }) => {
                     <FullScreenVisualizerOverlay />
                     <FullScreenOverlay />
                     <LeftSidebar isResizing={isResizing} startResizing={startResizing} />
-                    <RightSidebar
-                        isResizing={isResizingRight}
-                        ref={rightSidebarRef}
-                        startResizing={startResizing}
-                    />
+                    {/*
+                     * Suppress the right (queue) sidebar render entirely
+                     * in the tablet sweet-spot. RightSidebar normally
+                     * reads `rightExpanded` from the store itself, so
+                     * the parent override above doesn't reach it — we
+                     * just skip mounting it in this range. The user's
+                     * stored desktop preference is untouched.
+                     */}
+                    {!isTabletRange && (
+                        <RightSidebar
+                            isResizing={isResizingRight}
+                            ref={rightSidebarRef}
+                            startResizing={startResizing}
+                        />
+                    )}
                 </>
             )}
             <MainContentBody />

@@ -58,3 +58,18 @@
     min-height: 0;
     overflow: auto;
 }
+
+/*
+ * Tablet shell (768–834px viewport): a flag class so the main-content
+ * grid knows the right-sidebar can never appear in this range. The
+ * left-sidebar is always at its 80px collapsed rail (forced from the
+ * LeftSidebar component) — the .sidebar-collapsed rule above is what
+ * actually drives the column widths, so we don't need a different
+ * grid template here. The class is mostly a hook for descendants that
+ * want to tighten their own padding/sizing at this viewport.
+ */
+.main-content-container.tablet-shell {
+    /* No-op grid template — kept as an explicit reminder that the
+       right-sidebar column is always missing in this range so the
+       sidebar-collapsed column rule above applies cleanly. */
+}

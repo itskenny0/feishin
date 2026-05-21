@@ -76,5 +76,4 @@ export const useIsTouch = () => useMediaQuery('(pointer: coarse)');
  * desktop shell renders but with tablet-tuned defaults (auto-collapsed
  * sidebar, queue sidebar suppressed, earlier two-column detail layouts).
  */
-export const useIsTabletRange = () =>
-    useMediaQuery('(min-width: 431px) and (max-width: 834px)');
+export const useIsTabletRange = () => useMediaQuery('(min-width: 431px) and (max-width: 834px)');
