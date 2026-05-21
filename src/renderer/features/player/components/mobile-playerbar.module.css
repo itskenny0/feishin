@@ -11,6 +11,37 @@
 }
 
 /*
+ * Trackmap backdrop on the mini-player. The full trackmap canvas
+ * renders mirrored above and below a centerline; here we want only the
+ * top half (the user asked for "render only one half of the mirrored
+ * spectrum"). Clip the lower half via clip-path so the bottom edge sits
+ * flush with the mini-player bottom, and dim the colour way down so
+ * the spectrum behaves as ambient motion rather than visual noise.
+ *
+ * `pointer-events: none` so it never intercepts the swipe / tap
+ * gestures the row owns. z-index: 0 sits just above the .container's
+ * tint gradient but below the actual row content (image, metadata,
+ * controls — which all render in the natural z-stack above this).
+ */
+.trackmap-backdrop {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    overflow: hidden;
+    pointer-events: none;
+    mix-blend-mode: screen;
+    opacity: 0.32;
+    clip-path: polygon(0 0, 100% 0, 100% 50%, 0 50%);
+    transform: scaleY(2);
+    transform-origin: top;
+}
+
+.trackmap-backdrop > * {
+    width: 100%;
+    height: 100%;
+}
+
+/*
  * Spotify-style album-art tint behind the mini-player.
  *
  * --playerbar-art-tint is set by the parent <Playerbar> from

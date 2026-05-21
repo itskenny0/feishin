@@ -12,6 +12,8 @@ import { ItemImage } from '/@/renderer/components/item-image/item-image';
 import { ContextMenuController } from '/@/renderer/features/context-menu/context-menu-controller';
 import { MainPlayButton, PlayerButton } from '/@/renderer/features/player/components/player-button';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
+import { ComponentErrorBoundary } from '/@/renderer/features/shared/components/component-error-boundary';
+import { TrackmapCanvas } from '/@/renderer/features/trackmap';
 import { triggerHaptic } from '/@/renderer/hooks/use-haptic';
 import { AppRoute } from '/@/renderer/router/routes';
 import {
@@ -24,6 +26,7 @@ import {
 import {
     useMobilePlayerbarShowNavButtons,
     useShowFilesystemNameForAlbums,
+    useTrackmapEnabled,
 } from '/@/renderer/store/settings.store';
 import { useTimestampStoreBase } from '/@/renderer/store/timestamp.store';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
@@ -50,6 +53,7 @@ export const MobilePlayerbar = () => {
     const isSongDefined = Boolean(currentSong?.id);
     const useFsAlbumName = useShowFilesystemNameForAlbums();
     const showNavButtons = useMobilePlayerbarShowNavButtons();
+    const trackmapEnabled = useTrackmapEnabled();
     const albumDisplayName =
         (useFsAlbumName ? albumFolderFromSongPath(currentSong?.path) : null) ||
         currentSong?.album ||
@@ -202,6 +206,13 @@ export const MobilePlayerbar = () => {
             onPointerUp={handleContainerPointerUp}
             ref={containerRef}
         >
+            {trackmapEnabled && isSongDefined && (
+                <div aria-hidden className={styles.trackmapBackdrop}>
+                    <ComponentErrorBoundary>
+                        <TrackmapCanvas />
+                    </ComponentErrorBoundary>
+                </div>
+            )}
             <motion.div
                 className={styles.contentWrapper}
                 drag={isSongDefined ? 'x' : false}
