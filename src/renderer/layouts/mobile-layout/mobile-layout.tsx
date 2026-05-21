@@ -1,9 +1,9 @@
 import { useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
 import { AnimatePresence, motion } from 'motion/react';
-import { Suspense, useCallback, useRef } from 'react';
+import { Suspense, useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Outlet } from 'react-router';
+import { Outlet, useLocation } from 'react-router';
 
 import styles from './mobile-layout.module.css';
 
@@ -61,6 +61,19 @@ export const MobileLayout = ({ shell }: MobileLayoutProps) => {
         disabled: sidebarOpened || isFullScreenPlayerExpanded || isFullScreenVisualizerExpanded,
         onSwipeOpen: openSidebar,
     });
+
+    // Auto-close the drawer when the user taps a navigation link inside it.
+    // Without this the drawer would stay open over the destination route
+    // until the user manually swiped it away — annoying when you've just
+    // tapped a playlist or sidebar item and want to see it.
+    const location = useLocation();
+    useEffect(() => {
+        if (sidebarOpened) closeSidebar();
+        // closeSidebar identity is stable from useDisclosure; sidebarOpened
+        // is intentionally not included so a manual open from anywhere
+        // doesn't immediately re-close.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [location.pathname]);
 
     // On Android (Capacitor) the WindowBar's native min/max/close controls are
     // meaningless and just steal vertical space — Platform.WEB is what we get
