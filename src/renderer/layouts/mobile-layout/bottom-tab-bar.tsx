@@ -25,6 +25,11 @@ interface BottomTabBarProps {
     drawerOpen: boolean;
     /** Open the drawer when the More tab is tapped. */
     onMoreTab: () => void;
+    /**
+     * Called when the user taps a tab whose route is already active —
+     * the host scrolls the main content to top (Spotify pattern).
+     */
+    onScrollToTop?: () => void;
 }
 
 interface Tab {
@@ -53,7 +58,7 @@ type TabKey = 'home' | 'library' | 'more' | 'search';
  * than a re-navigation, so the user doesn't lose scroll position when they
  * accidentally tap the active tab.
  */
-export const BottomTabBar = ({ drawerOpen, onMoreTab }: BottomTabBarProps) => {
+export const BottomTabBar = ({ drawerOpen, onMoreTab, onScrollToTop }: BottomTabBarProps) => {
     const { t } = useTranslation();
     const location = useLocation();
     const navigate = useNavigate();
@@ -126,6 +131,14 @@ export const BottomTabBar = ({ drawerOpen, onMoreTab }: BottomTabBarProps) => {
                             // routes.
                             if (!active || tab.key === 'more') {
                                 haptic('selection');
+                            }
+                            // Spotify pattern: re-tapping the active tab
+                            // scrolls the main content to top instead of
+                            // re-navigating. Skipped for the More tab
+                            // (its onClick toggles the drawer).
+                            if (active && tab.key !== 'more' && onScrollToTop) {
+                                onScrollToTop();
+                                return;
                             }
                             tab.onClick();
                         }}
