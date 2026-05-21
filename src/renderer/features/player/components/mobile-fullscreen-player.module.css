@@ -4,14 +4,6 @@
     left: 0;
     width: 100%;
     height: 100%;
-
-    /* Push the fullscreen player's interior controls inside the safe
-       area: the dynamic background image still extends to the screen
-       edges, but every interactive control (back chevron, seek slider,
-       volume, transport buttons) stays clear of the status-bar clock
-       and the gesture pill. */
-    padding-top: env(safe-area-inset-top, 0);
-    padding-bottom: env(safe-area-inset-bottom, 0);
     overflow: hidden;
     background: var(--theme-colors-background);
 }
@@ -43,15 +35,25 @@
 .queue-state,
 .lyrics-state {
     position: absolute;
-    top: 0;
+
+    /*
+     * Inset interactive content from the device safe-area: the dynamic
+     * background image (positioned absolutely behind these states) still
+     * extends to the screen edges, but the controls themselves stay
+     * clear of the status-bar clock and the gesture pill. Using env()
+     * directly on the state divs (rather than padding on the container)
+     * matters because the states are absolutely-positioned children
+     * with their own top/bottom — padding on the container would be
+     * silently ignored.
+     */
+    top: env(safe-area-inset-top, 0);
     right: 0;
-    bottom: 0;
+    bottom: env(safe-area-inset-bottom, 0);
     left: 0;
     z-index: 1;
     display: flex;
     flex-direction: column;
     width: 100%;
-    height: 100%;
     overflow: hidden;
     pointer-events: none;
     background: transparent;
