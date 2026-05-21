@@ -25,6 +25,38 @@ const isNative = async () => {
 };
 
 /**
+ * Flags <html> with `data-capacitor-android="true"` so global CSS rules can
+ * apply Android-specific safe-area fallbacks (notably a min padding for the
+ * bottom gesture-nav pill, since env(safe-area-inset-bottom) is reported as
+ * 0 inside the Capacitor 8 WebView even with viewport-fit=cover + the
+ * StatusBar plugin's overlay=false).
+ *
+ * No-op outside Capacitor; the flag is set once on first mount and stays
+ * for the lifetime of the page (which on Capacitor is one app session).
+ */
+export const useAndroidBodyFlag = () => {
+    useEffect(() => {
+        let cancelled = false;
+
+        const apply = async () => {
+            try {
+                if (!(await isNative())) return;
+                if (cancelled) return;
+                document.documentElement.setAttribute('data-capacitor-android', 'true');
+            } catch {
+                // ignore
+            }
+        };
+
+        void apply();
+
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+};
+
+/**
  * Status bar: dark icons on a black background so the OS strip matches the
  * app's dark theme instead of showing the WebView default.
  */

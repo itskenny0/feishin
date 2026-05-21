@@ -17,8 +17,15 @@
  */
 
 .layout {
-    --safe-top: env(safe-area-inset-top, 0px);
-    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    /*
+     * Capacitor 8's Android WebView ignores env(safe-area-inset-*) even
+     * with viewport-fit: cover. --android-safe-* is set by
+     * useAndroidBodyFlag (28px each) so the layout grid grows to clear
+     * the status-bar clock and the gesture pill regardless. On every
+     * other platform those vars resolve to 0px and only env() matters.
+     */
+    --safe-top: max(env(safe-area-inset-top, 0px), var(--android-safe-top, 0px));
+    --safe-bottom: max(env(safe-area-inset-bottom, 0px), var(--android-safe-bottom, 0px));
     --window-bar-height: 0px;
     --player-bar-height: 90px;
 

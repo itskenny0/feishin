@@ -1,6 +1,12 @@
 .metadata-group {
+    flex-wrap: wrap;
     justify-content: center;
     width: 100%;
+
+    /* On narrow viewports the long-list of metadata items (release
+       year, song count, duration, size, play count, etc.) wraps to the
+       next line instead of getting cut off by the page edge. */
+    overflow-wrap: anywhere;
 
     @container (min-width: $mantine-breakpoint-sm) {
         justify-content: flex-start;
