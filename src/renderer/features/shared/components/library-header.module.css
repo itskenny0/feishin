@@ -1,6 +1,13 @@
 .top-right {
     position: absolute;
-    top: var(--theme-spacing-lg);
+
+    /*
+     * Push below the device status-bar / clock on Capacitor Android by
+     * adding env(safe-area-inset-top) to the offset. env() resolves to 0
+     * in environments without a system-bar overlap (electron, browser
+     * without overlay) so desktop is unchanged.
+     */
+    top: calc(var(--theme-spacing-lg) + env(safe-area-inset-top, 0px));
     right: var(--theme-spacing-md);
     z-index: 20;
 }
