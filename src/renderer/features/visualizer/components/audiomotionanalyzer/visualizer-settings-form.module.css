@@ -9,3 +9,72 @@
 .select-label {
     text-align: center;
 }
+
+/*
+ * Mobile shell: the visualizer settings sheet runs full-screen on a phone
+ * (see open-visualizer-settings-modal.ts) so the inner form has the whole
+ * viewport width to work with, but most of the section bodies are built
+ * from Mantine `<Group>` rows (flex-direction: row, no wrap) that hold a
+ * label + a slider/select/buttons cluster. On a 360–430px phone these
+ * rows are wider than the sheet, which is what the user observed —
+ * "AudioMotion Analyzer" → "ioMotion Analyzer", "Randomize" → "Randomi"
+ * etc. Force wrapping on all Group descendants so each control drops
+ * to its own line, give each child enough room to render its full
+ * content, and tighten Fieldset / SegmentedControl gutters so the
+ * stacked layout doesn't waste vertical space.
+ *
+ * The selectors target Mantine's stable class hooks — they live in
+ * the cascade outside this module, so we use :global() to escape the
+ * CSS-module namespacing. Keep these scoped to .container so the rules
+ * never bleed into other Mantine Groups on the page.
+ */
+/* stylelint-disable selector-class-pattern -- Mantine emits PascalCase class
+   names on its root elements and we have to target those externally. */
+@media (width <= 767px), (orientation: landscape) and (height <= 480px) {
+    .container {
+        gap: var(--theme-spacing-sm);
+        padding: 0;
+    }
+
+    .container :global(.mantine-Group-root) {
+        flex-wrap: wrap;
+        row-gap: var(--theme-spacing-xs);
+    }
+
+    /*
+     * Fieldset legends and bodies: drop the desktop horizontal padding so
+     * each section's content stretches edge-to-edge.
+     */
+    .container :global(.mantine-Fieldset-root) {
+        padding: var(--theme-spacing-xs);
+    }
+
+    /*
+     * SegmentedControl (used for the AudioMotion / Butterchurn switch and
+     * mode selectors) — let it shrink to fit the row and wrap if needed.
+     */
+    .container :global(.mantine-SegmentedControl-root) {
+        width: 100%;
+    }
+
+    /*
+     * Select / TextInput dropdowns: ensure they take the full row width
+     * rather than the Mantine default min-width that kicks them off-edge
+     * on narrow viewports.
+     */
+    .container :global(.mantine-Select-root),
+    .container :global(.mantine-TextInput-root),
+    .container :global(.mantine-NumberInput-root),
+    .container :global(.mantine-Textarea-root) {
+        width: 100%;
+    }
+
+    /*
+     * Buttons that were sitting inline on desktop should stretch on mobile
+     * so the tap target is comfortable — Material 48dp minimum.
+     */
+    .container :global(.mantine-Button-root) {
+        min-height: 40px;
+    }
+}
+/* stylelint-enable selector-class-pattern */
