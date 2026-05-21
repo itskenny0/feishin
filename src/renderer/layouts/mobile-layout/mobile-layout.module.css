@@ -82,6 +82,15 @@
     grid-area: main-content;
     overflow-x: hidden;
     overflow-y: auto;
+
+    /*
+     * Contain the overscroll so the browser's bounce/refresh chrome
+     * doesn't fight our own pull-to-refresh gesture. Without this, on
+     * Android Chrome the page would bounce + emit overscroll-glow at
+     * the top edge, masking the spinner the usePullToRefresh hook is
+     * drawing.
+     */
+    overscroll-behavior-y: contain;
     -webkit-overflow-scrolling: touch;
 }
 
