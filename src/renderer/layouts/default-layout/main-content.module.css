@@ -107,7 +107,7 @@
         min-width: 320px;
         border-top-left-radius: var(--theme-radius-lg);
         border-bottom-left-radius: var(--theme-radius-lg);
-        box-shadow: -8px 0 24px alpha(var(--theme-colors-shadow, #000), 0.18);
+        box-shadow: -8px 0 24px rgb(0 0 0 / 18%);
     }
 
     /* Vertical layout (queue pinned to bottom) is bad UX at this width; keep
@@ -135,6 +135,6 @@
         border-left: 1px solid alpha(var(--theme-colors-border), 0.5);
         border-top-left-radius: var(--theme-radius-lg);
         border-bottom-left-radius: var(--theme-radius-lg);
-        box-shadow: -8px 0 24px alpha(var(--theme-colors-shadow, #000), 0.18);
+        box-shadow: -8px 0 24px rgb(0 0 0 / 18%);
     }
 }
