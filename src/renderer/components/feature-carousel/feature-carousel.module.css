@@ -132,6 +132,14 @@
     opacity: 1;
 }
 
+/* Touch always shows the play-button overlay since hover isn't a thing. */
+@media (pointer: coarse) {
+    .play-button-overlay {
+        pointer-events: auto;
+        opacity: 1;
+    }
+}
+
 .metadata-section {
     display: flex;
     flex-shrink: 0;
