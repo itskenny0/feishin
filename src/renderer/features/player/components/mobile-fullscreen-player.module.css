@@ -27,7 +27,28 @@
     z-index: -1;
     width: 100%;
     height: 100%;
-    background: var(--theme-overlay-header);
+
+    /*
+     * Layered overlay over the dynamic-background album cover:
+     *
+     *   1. A dark wash whose opacity is driven by
+     *      --mobile-fullscreen-overlay-strength. Set inline by the
+     *      MobilePlayerContainer based on the cover's relative
+     *      luminance — bright covers (yellow, cream, pastel) get
+     *      ~0.72, normal/dark covers ~0.42. Without this, a solid-
+     *      yellow album like "Жёлтый альбом" by Краски painted the
+     *      whole player face bright yellow and the white title /
+     *      artist text disappeared into it.
+     *   2. The theme's standard hero overlay on top, preserving the
+     *      existing colour grading.
+     */
+    background:
+        linear-gradient(
+            180deg,
+            rgb(0 0 0 / calc(var(--mobile-fullscreen-overlay-strength, 0.42) * 100%)) 0%,
+            rgb(0 0 0 / calc(var(--mobile-fullscreen-overlay-strength, 0.42) * 85%)) 100%
+        ),
+        var(--theme-overlay-header);
     backdrop-filter: blur(var(--image-blur));
 }
 

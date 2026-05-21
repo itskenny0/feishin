@@ -48,6 +48,51 @@ import { ItemListKey } from '/@/shared/types/types';
 
 const mainBackground = 'var(--theme-colors-background)';
 
+/**
+ * Relative-luminance proxy (CCIR 601 / Rec. 601) for an `rgb(r, g, b)`
+ * string. Returns null when the input doesn't look like an rgb() colour.
+ *
+ * We use the perceptual weights so a yellow album (high R+G, low B,
+ * luminance ~226) correctly reads as "bright" — the simpler L = (r+g+b)/3
+ * proxy would underestimate it because the blue channel is near zero.
+ *
+ * The returned value is on the 0–255 scale, matching the channel inputs.
+ */
+const rgbLuminance = (color: string | undefined): null | number => {
+    if (!color) return null;
+    const m = color.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+    if (!m) return null;
+    const r = Number(m[1]);
+    const g = Number(m[2]);
+    const b = Number(m[3]);
+    return 0.299 * r + 0.587 * g + 0.114 * b;
+};
+
+/**
+ * If `color` is brighter than `threshold` (0–255 scale, default 160 — the
+ * point at which white text on the colour starts losing contrast against
+ * WCAG AA), return a darkened version with each channel multiplied by
+ * `factor`. Otherwise return the input untouched.
+ *
+ * This is the readability fix for the dynamic-background fullscreen
+ * player: yellow / cream / pastel album covers used to paint the whole
+ * face with a colour brighter than the white text on top, leaving the
+ * title / artist / progress times invisible. We "ground" bright dominant
+ * colours into the same low-luminance zone as the rest of the dark theme
+ * so the text retains contrast no matter what the cover looks like.
+ */
+const darkenIfBright = (color: string | undefined, threshold = 160, factor = 0.32): string => {
+    if (!color) return mainBackground;
+    const L = rgbLuminance(color);
+    if (L === null || L < threshold) return color;
+    const m = color.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+    if (!m) return color;
+    const r = Math.round(Number(m[1]) * factor);
+    const g = Math.round(Number(m[2]) * factor);
+    const b = Math.round(Number(m[3]) * factor);
+    return `rgb(${r}, ${g}, ${b})`;
+};
+
 const backgroundImageVariants: Variants = {
     closed: {
         opacity: 0,
@@ -336,19 +381,34 @@ const MobilePlayerContainer = memo(
             srcLoaded: true,
         });
 
+        // Darken the dominant colour before using it as the page background
+        // so bright covers (the canonical case: yellow / cream / pastel
+        // albums) don't wash out the white text on top. See darkenIfBright
+        // above for the WCAG-AA reasoning. The blended-image variant keeps
+        // alpha 0.3 so it tints rather than replaces the cover-image
+        // backdrop, but the underlying RGB still gets the darken pass.
+        const grounded = darkenIfBright(background);
         let backgroundColor = mainBackground;
         if (dynamicBackground) {
             if (dynamicIsImage && background) {
-                const rgbMatch = background.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+                const rgbMatch = grounded.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
                 if (rgbMatch) {
                     backgroundColor = `rgba(${rgbMatch[1]}, ${rgbMatch[2]}, ${rgbMatch[3]}, 0.3)`;
                 } else {
-                    backgroundColor = background;
+                    backgroundColor = grounded;
                 }
             } else {
-                backgroundColor = background || mainBackground;
+                backgroundColor = grounded;
             }
         }
+
+        // When the source colour is bright, also strengthen the overlay
+        // that sits on top of the cover-image backdrop so the title /
+        // progress / control row stay legible. The CSS reads from
+        // --mobile-fullscreen-overlay-strength on the container — see
+        // .background-image-overlay in mobile-fullscreen-player.module.css.
+        const sourceLuminance = rgbLuminance(background);
+        const overlayStrength = sourceLuminance !== null && sourceLuminance > 160 ? '0.72' : '0.42';
 
         return (
             <motion.div
@@ -374,9 +434,12 @@ const MobilePlayerContainer = memo(
                         onDismiss();
                     }
                 }}
-                style={{
-                    backgroundColor,
-                }}
+                style={
+                    {
+                        '--mobile-fullscreen-overlay-strength': overlayStrength,
+                        backgroundColor,
+                    } as CSSProperties
+                }
                 variants={mobileContainerVariants}
             >
                 <BackgroundImage
