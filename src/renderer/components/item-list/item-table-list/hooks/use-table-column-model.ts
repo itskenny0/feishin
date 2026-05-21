@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 
 import { parseTableColumns } from '/@/renderer/components/item-list/helpers/parse-table-columns';
 import { ItemTableListColumnConfig } from '/@/renderer/components/item-list/types';
+import { useIsMobileShell } from '/@/renderer/hooks/use-breakpoint';
 
 export const useTableColumnModel = ({
     autoFitColumns,
@@ -14,7 +15,15 @@ export const useTableColumnModel = ({
     columns: ItemTableListColumnConfig[];
     totalContainerWidth: number;
 }) => {
-    const parsedColumns = useMemo(() => parseTableColumns(columns), [columns]);
+    // On the mobile shell drop deprioritised informational columns
+    // (album, year, genre, size, etc.) so the essential title + duration
+    // get the horizontal space - on a 360-480px viewport, having 6+
+    // columns means everything is truncated past the point of legibility.
+    const isMobileShell = useIsMobileShell();
+    const parsedColumns = useMemo(
+        () => parseTableColumns(columns, { trimForMobile: isMobileShell }),
+        [columns, isMobileShell],
+    );
 
     const calculatedColumnWidths = useMemo(() => {
         const baseWidths = parsedColumns.map((c) => c.width);
