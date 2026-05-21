@@ -13,6 +13,14 @@
 
 .controls-container {
     z-index: 201;
+
+    /*
+     * Push the top control row below the device status bar on
+     * Capacitor Android — the visualizer canvas extends to the screen
+     * edges (which is correct, the visuals fill everything), but the
+     * back/close/etc buttons need to stay clear of the clock.
+     */
+    padding-top: env(safe-area-inset-top, 0);
     background: rgb(var(--theme-colors-background-transparent), 80%);
 }
 
