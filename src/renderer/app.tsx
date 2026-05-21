@@ -17,6 +17,7 @@ import {
     useAndroidKeepAwake,
     useAndroidStatusBar,
 } from '/@/renderer/hooks/use-android-native';
+import { useIsMobileShell } from '/@/renderer/hooks/use-breakpoint';
 import { useCheckForUpdates } from '/@/renderer/hooks/use-check-for-updates';
 import { useGithubReleasesUpdater } from '/@/renderer/hooks/use-github-releases-updater';
 import { useNativeMenuSync } from '/@/renderer/hooks/use-native-menu-sync';
@@ -59,13 +60,22 @@ const AppShell = memo(function AppShell() {
         return { setWebAudio, webAudio };
     }, [webAudio]);
 
+    // Bottom margin on bottom-centered toasts needs to clear whatever
+    // chrome sits at the bottom of the viewport:
+    //  - desktop shell: just the playerbar (90px)
+    //  - mobile shell:  playerbar (90px) + tab bar (56px) + safe-area
+    // We also pad an extra safe-area-inset-bottom via env() so the toast
+    // always sits above the device's gesture pill on Capacitor Android.
+    const isMobileShell = useIsMobileShell();
     const notificationStyles = useMemo(
         () => ({
             root: {
-                marginBottom: 90,
+                marginBottom: isMobileShell
+                    ? 'calc(90px + 56px + env(safe-area-inset-bottom, 0px) + 12px)'
+                    : 'calc(90px + env(safe-area-inset-bottom, 0px))',
             },
         }),
-        [],
+        [isMobileShell],
     );
 
     return (
