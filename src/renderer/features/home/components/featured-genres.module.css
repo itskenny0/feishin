@@ -118,3 +118,15 @@
     opacity: 1;
     transform: translateY(-50%) translateX(0);
 }
+
+/*
+ * Touch devices don't have hover so the play button would never appear,
+ * leaving the genre tile with no obvious affordance. Always show it on
+ * pointer:coarse and skip the slide-in animation.
+ */
+@media (pointer: coarse) {
+    .play-button-wrapper {
+        opacity: 1;
+        transform: translateY(-50%) translateX(0);
+    }
+}
