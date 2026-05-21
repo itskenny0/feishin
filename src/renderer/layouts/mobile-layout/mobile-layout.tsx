@@ -12,6 +12,7 @@ import { FullScreenVisualizer } from '/@/renderer/features/player/components/ful
 import { MobileFullscreenPlayer } from '/@/renderer/features/player/components/mobile-fullscreen-player';
 import { RouteSkeleton } from '/@/renderer/features/shared/components/route-skeleton';
 import { MobileSidebar } from '/@/renderer/features/sidebar/components/mobile-sidebar';
+import { useIsBigPhone } from '/@/renderer/hooks/use-breakpoint';
 import { useEdgeSwipe } from '/@/renderer/hooks/use-edge-swipe';
 import { usePullToRefresh } from '/@/renderer/hooks/use-pull-to-refresh';
 import { PlayerBar } from '/@/renderer/layouts/default-layout/player-bar';
@@ -39,6 +40,7 @@ export const MobileLayout = ({ shell }: MobileLayoutProps) => {
         visualizerExpanded: isFullScreenVisualizerExpanded,
     } = useFullScreenPlayerOverlayState();
     const windowBarStyle = useWindowBarStyle();
+    const isBigPhone = useIsBigPhone();
     const mainContentRef = useRef<HTMLElement>(null);
     const queryClient = useQueryClient();
     const { open: openCommandPalette } = useCommandPaletteState();
@@ -152,7 +154,13 @@ export const MobileLayout = ({ shell }: MobileLayoutProps) => {
                 onClose={closeSidebar}
                 opened={sidebarOpened}
                 position="left"
-                size="320px"
+                // Big-phone tier (361–430px) — iPhone 13/14/15 Pro Max,
+                // Pixel 8 Pro, Galaxy S24 Ultra, etc. — gets a wider
+                // drawer (360px vs the default 320px) so the sidebar
+                // items breathe instead of crowding against the
+                // accordion chevrons. Sub-360 phones keep the 320px
+                // default so the drawer doesn't swallow the viewport.
+                size={isBigPhone ? '360px' : '320px'}
                 styles={{
                     body: {
                         height: '100%',
