@@ -60,12 +60,15 @@
     /*
      * Wrapper covers the full viewport and gets a dim backdrop, just like
      * Spotify / iOS Files action sheet. The sheet itself is positioned
-     * absolutely at the bottom of this wrapper. Pointer-events: none on
-     * the wrapper so a tap on the dim area passes through to Radix's
-     * dismiss-on-outside-click (which the wrapper itself doesn't catch
-     * because pointer-events is opt-in on the sheet).
+     * absolutely at the bottom of this wrapper.
+     *
+     * Scope to popper wrappers that contain a .content (i.e. our context
+     * menu's content element) via :has(). Without that, ALL Radix
+     * poppers (DropdownMenu, HoverCard, Tooltip) would also get the
+     * bottom-sheet styling, which we don't want — they have their own
+     * UX expectations on touch.
      */
-    :global([data-radix-popper-content-wrapper]) {
+    :global([data-radix-popper-content-wrapper]):has(.content) {
         top: 0 !important;
         right: 0 !important;
         bottom: 0 !important;
