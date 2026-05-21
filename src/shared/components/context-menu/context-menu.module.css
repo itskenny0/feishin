@@ -34,6 +34,27 @@
         min-width: min(12rem, 40vw);
         max-width: min(16rem, 45vw);
     }
+
+    /*
+     * Touch-friendly row sizing for menu items. Material design specifies
+     * 48dp as the minimum tap target; default desktop padding leaves rows
+     * around 32–36px which is fiddly on a phone. Bump the vertical
+     * padding + font size so each row is a comfortable Spotify-mobile-
+     * scale tappable surface.
+     */
+    .item {
+        min-height: 44px;
+        padding: var(--theme-spacing-sm) var(--theme-spacing-md);
+        font-size: var(--theme-font-size-md);
+    }
+
+    .item.has-left-icon {
+        padding-left: calc(var(--theme-spacing-md) + 1.75rem);
+    }
+
+    .item.has-right-icon {
+        padding-right: calc(var(--theme-spacing-md) + 1.75rem);
+    }
 }
 
 .inner-content {
