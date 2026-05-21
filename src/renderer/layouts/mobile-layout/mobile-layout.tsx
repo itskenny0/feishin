@@ -159,7 +159,7 @@ export const MobileLayout = ({ shell }: MobileLayoutProps) => {
                 }}
                 withCloseButton={false}
             >
-                <MobileSidebar />
+                <MobileSidebar onSwipeClose={closeSidebar} />
             </Drawer>
             <AnimatePresence initial={false}>
                 {isFullScreenPlayerExpanded && (

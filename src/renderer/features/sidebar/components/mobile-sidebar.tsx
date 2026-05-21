@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import styles from './mobile-sidebar.module.css';
@@ -11,6 +11,7 @@ import {
     SidebarPlaylistList,
     SidebarSharedPlaylistList,
 } from '/@/renderer/features/sidebar/components/sidebar-playlist-list';
+import { useSwipeToClose } from '/@/renderer/hooks/use-swipe-to-close';
 import {
     SidebarItemType,
     useSidebarBottomSection,
@@ -21,9 +22,26 @@ import { Group } from '/@/shared/components/group/group';
 import { ScrollArea } from '/@/shared/components/scroll-area/scroll-area';
 import { Text } from '/@/shared/components/text/text';
 
-export const MobileSidebar = () => {
+interface MobileSidebarProps {
+    /**
+     * Called when the user swipes the drawer toward the left edge of
+     * the screen — mirrors Android's standard "swipe-away" gesture so
+     * the drawer can be dismissed without reaching for the backdrop or
+     * the More tab.
+     */
+    onSwipeClose?: () => void;
+}
+
+export const MobileSidebar = ({ onSwipeClose }: MobileSidebarProps = {}) => {
     const { t } = useTranslation();
     const sidebarBottomSection = useSidebarBottomSection();
+    const containerRef = useRef<HTMLDivElement>(null);
+
+    useSwipeToClose(containerRef, {
+        direction: 'left',
+        disabled: !onSwipeClose,
+        onClose: onSwipeClose ?? (() => undefined),
+    });
 
     const translatedSidebarItemMap = useMemo(
         () => ({
@@ -60,7 +78,7 @@ export const MobileSidebar = () => {
     }, [sidebarItems, translatedSidebarItemMap]);
 
     return (
-        <div className={styles.container} id="mobile-sidebar">
+        <div className={styles.container} id="mobile-sidebar" ref={containerRef}>
             <Group grow id="global-search-container" style={{ flexShrink: 0 }}>
                 <ActionBar />
             </Group>
