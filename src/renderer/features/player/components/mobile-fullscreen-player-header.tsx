@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import styles from './mobile-fullscreen-player.module.css';
 
 import { SONG_TABLE_COLUMNS } from '/@/renderer/components/item-list/item-table-list/default-columns';
+import { AutoDJButton } from '/@/renderer/features/player/components/right-controls';
 import { SleepTimerButton } from '/@/renderer/features/player/components/sleep-timer-button';
 import {
     ListConfigMenu,
@@ -348,11 +349,12 @@ export const MobileFullscreenPlayerHeader = memo(
                     }}
                     tableColumnsData={SONG_TABLE_COLUMNS}
                 />
-                {/* Sleep timer is desktop-only otherwise — mobile users
-                    couldn't start one from the playerbar (which is
-                    collapsed) or anywhere else. Surface it in the
-                    fullscreen player header where there's room. */}
+                {/* Sleep timer + auto-DJ are otherwise desktop-only —
+                    mobile users couldn't reach either from the
+                    collapsed playerbar. Surface both in the fullscreen
+                    player header where there's room. */}
                 <SleepTimerButton />
+                <AutoDJButton />
             </div>
         );
     },
