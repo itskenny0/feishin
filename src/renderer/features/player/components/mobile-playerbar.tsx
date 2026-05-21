@@ -76,8 +76,13 @@ export const MobilePlayerbar = () => {
     // without going through the slower seek-bar machinery in the
     // fullscreen player. Stays at 0% when there's no song or no
     // duration so the strip is just an empty rail in that case.
+    //
+    // QueueSong.duration is in milliseconds; usePlayerTimestamp is in
+    // seconds (matches what the fullscreen progress component does — it
+    // does `currentSong.duration / 1000`). Convert duration to seconds
+    // before the division so both sides of the ratio are in seconds.
     const timestamp = usePlayerTimestamp();
-    const songDurationSec = currentSong?.duration ?? 0;
+    const songDurationSec = currentSong?.duration ? currentSong.duration / 1000 : 0;
     const progressPct =
         songDurationSec > 0 ? Math.min(100, Math.max(0, (timestamp / songDurationSec) * 100)) : 0;
 
