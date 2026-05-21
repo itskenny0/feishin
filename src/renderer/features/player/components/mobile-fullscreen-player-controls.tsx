@@ -6,7 +6,12 @@ import styles from './mobile-fullscreen-player.module.css';
 import { MainPlayButton, PlayerButton } from '/@/renderer/features/player/components/player-button';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
 import { triggerHaptic } from '/@/renderer/hooks/use-haptic';
-import { usePlayerRepeat, usePlayerShuffle, usePlayerStatus } from '/@/renderer/store';
+import {
+    usePlayerRepeat,
+    usePlayerShuffle,
+    usePlayerStatus,
+    useSkipButtons,
+} from '/@/renderer/store';
 import { Icon } from '/@/shared/components/icon/icon';
 import { QueueSong } from '/@/shared/types/domain-types';
 import { PlayerRepeat, PlayerShuffle, PlayerStatus } from '/@/shared/types/types';
@@ -31,6 +36,18 @@ export const MobileFullscreenPlayerControls = memo(
         const status = usePlayerStatus();
         const shuffle = usePlayerShuffle();
         const repeat = usePlayerRepeat();
+        // The 15s skip-back / skip-forward pair is only useful on long
+        // tracks (podcasts, mixes, long-form sets). For songs under 8
+        // minutes you're better off just letting it play to the next
+        // track than scrubbing 15s at a time. Mirror the desktop
+        // skip-buttons setting AND additionally hide them on short
+        // songs so the row stays the clean 5-button Spotify layout
+        // (shuffle/prev/play/next/repeat) which fits comfortably on a
+        // 320px viewport.
+        const skip = useSkipButtons();
+        const LONG_TRACK_THRESHOLD_MS = 8 * 60 * 1000;
+        const isLongTrack = (currentSong?.duration ?? 0) >= LONG_TRACK_THRESHOLD_MS;
+        const skipEnabled = Boolean(skip?.enabled) && isLongTrack;
         const {
             mediaNext,
             mediaPrevious,
@@ -76,17 +93,19 @@ export const MobileFullscreenPlayerControls = memo(
                     }}
                     variant="secondary"
                 />
-                <PlayerButton
-                    icon={<Icon fill="default" icon="mediaStepBackward" size="lg" />}
-                    onClick={mediaSkipBackward}
-                    tooltip={{
-                        label: t('player.skip', {
-                            context: 'back',
-                        }),
-                        openDelay: 400,
-                    }}
-                    variant="tertiary"
-                />
+                {skipEnabled && (
+                    <PlayerButton
+                        icon={<Icon fill="default" icon="mediaStepBackward" size="lg" />}
+                        onClick={mediaSkipBackward}
+                        tooltip={{
+                            label: t('player.skip', {
+                                context: 'back',
+                            }),
+                            openDelay: 400,
+                        }}
+                        variant="tertiary"
+                    />
+                )}
                 <MainPlayButton
                     disabled={currentSongId === undefined}
                     isPaused={status === PlayerStatus.PAUSED}
@@ -102,17 +121,19 @@ export const MobileFullscreenPlayerControls = memo(
                         width: '50px',
                     }}
                 />
-                <PlayerButton
-                    icon={<Icon fill="default" icon="mediaStepForward" size="lg" />}
-                    onClick={mediaSkipForward}
-                    tooltip={{
-                        label: t('player.skip', {
-                            context: 'forward',
-                        }),
-                        openDelay: 400,
-                    }}
-                    variant="tertiary"
-                />
+                {skipEnabled && (
+                    <PlayerButton
+                        icon={<Icon fill="default" icon="mediaStepForward" size="lg" />}
+                        onClick={mediaSkipForward}
+                        tooltip={{
+                            label: t('player.skip', {
+                                context: 'forward',
+                            }),
+                            openDelay: 400,
+                        }}
+                        variant="tertiary"
+                    />
+                )}
                 <PlayerButton
                     icon={<Icon fill="default" icon="mediaNext" size="xl" />}
                     onClick={mediaNext}
