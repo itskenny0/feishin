@@ -315,6 +315,26 @@
     display: none;
 }
 
+/*
+ * Touch devices never hover, so .hover-only / .hover-only-flex
+ * (actions column overflow button, favorite badge, rating placeholder,
+ * row-index expand affordance) stayed permanently hidden. Show them by
+ * default on pointer:coarse so the user has the same visible
+ * affordances they'd otherwise discover by hovering with a mouse.
+ *
+ * Conversely .hide-on-hover stays visible because it never gets the
+ * hover state to hide under.
+ */
+@media (pointer: coarse) {
+    .container :global(.hover-only) {
+        display: block;
+    }
+
+    .container :global(.hover-only-flex) {
+        display: flex;
+    }
+}
+
 .resize-handle {
     position: absolute;
     top: 8px;
