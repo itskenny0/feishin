@@ -1,4 +1,7 @@
-import { MouseEvent as ReactMouseEvent, useCallback, useEffect } from 'react';
+import type { PanInfo } from 'motion/react';
+
+import { animate, motion, useMotionValue } from 'motion/react';
+import { MouseEvent as ReactMouseEvent, useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 
@@ -8,6 +11,7 @@ import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { ContextMenuController } from '/@/renderer/features/context-menu/context-menu-controller';
 import { setFeatureCardHovered } from '/@/renderer/features/home/components/feature-card/hover-signal';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
+import { triggerHaptic } from '/@/renderer/hooks/use-haptic';
 import { Button } from '/@/shared/components/button/button';
 import { Icon } from '/@/shared/components/icon/icon';
 import { Skeleton } from '/@/shared/components/skeleton/skeleton';
@@ -177,13 +181,57 @@ export const FeatureCardShell = ({
         <span className={styles.artistName}>{data.title}</span>
     );
 
+    /*
+     * Spotify-style finger-tracking swipe to switch variants. Same
+     * Motion-native drag pattern as the mini-player / fullscreen-player
+     * cover swipe — the card stays attached to the finger, velocity +
+     * offset on release decides commit-vs-snap-back. Disabled when
+     * onPrev / onNext aren't wired (e.g. variants with only one item).
+     */
+    const cardRef = useRef<HTMLDivElement | null>(null);
+    const swipeX = useMotionValue(0);
+    const canDrag = Boolean(data.onPrev || data.onNext);
+    const handleDragEnd = useCallback(
+        (_event: unknown, info: PanInfo) => {
+            const width = cardRef.current?.offsetWidth ?? 320;
+            const commitOffset = width * 0.25;
+            const flickVelocity = 500;
+            const offset = info.offset.x;
+            const velocity = info.velocity.x;
+            const wantsNext = offset < -commitOffset || velocity < -flickVelocity;
+            const wantsPrev = offset > commitOffset || velocity > flickVelocity;
+
+            if (wantsNext && data.onNext) {
+                triggerHaptic('selection');
+                data.onNext();
+            } else if (wantsPrev && data.onPrev) {
+                triggerHaptic('selection');
+                data.onPrev();
+            }
+            animate(swipeX, 0, {
+                damping: 28,
+                stiffness: 360,
+                type: 'spring',
+                velocity,
+            });
+        },
+        [data, swipeX],
+    );
+
     return (
-        <div
+        <motion.div
             className={styles.card}
+            drag={canDrag ? 'x' : false}
+            dragConstraints={{ left: 0, right: 0 }}
+            dragElastic={1}
+            dragMomentum={false}
             onBlur={onFocusOut}
+            onDragEnd={handleDragEnd}
             onFocus={onFocusIn}
             onMouseEnter={onMouseEnter}
             onMouseLeave={onMouseLeave}
+            ref={cardRef}
+            style={{ x: swipeX }}
         >
             <div
                 aria-hidden
@@ -286,6 +334,6 @@ export const FeatureCardShell = ({
                     ))}
                 </div>
             )}
-        </div>
+        </motion.div>
     );
 };
