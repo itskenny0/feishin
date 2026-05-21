@@ -26,6 +26,11 @@ interface BottomTabBarProps {
     /** Open the drawer when the More tab is tapped. */
     onMoreTab: () => void;
     /**
+     * Open the global command palette when the Search tab is tapped.
+     * Falls back to navigating to /search if not provided.
+     */
+    onOpenSearch?: () => void;
+    /**
      * Called when the user taps a tab whose route is already active —
      * the host scrolls the main content to top (Spotify pattern).
      */
@@ -58,7 +63,12 @@ type TabKey = 'home' | 'library' | 'more' | 'search';
  * than a re-navigation, so the user doesn't lose scroll position when they
  * accidentally tap the active tab.
  */
-export const BottomTabBar = ({ drawerOpen, onMoreTab, onScrollToTop }: BottomTabBarProps) => {
+export const BottomTabBar = ({
+    drawerOpen,
+    onMoreTab,
+    onOpenSearch,
+    onScrollToTop,
+}: BottomTabBarProps) => {
     const { t } = useTranslation();
     const location = useLocation();
     const navigate = useNavigate();
@@ -80,10 +90,16 @@ export const BottomTabBar = ({ drawerOpen, onMoreTab, onScrollToTop }: BottomTab
         {
             icon: (active) =>
                 active ? <RiSearchFill size="1.5rem" /> : <RiSearchLine size="1.5rem" />,
+            // Search tab is "active" while either the search route is
+            // displayed OR the command-palette overlay is showing.
             isActive: (p) => p.startsWith('/search'),
             key: 'search',
             label: t('page.sidebar.search', { defaultValue: 'Search' }),
-            onClick: () => navigate(searchPath),
+            // Per Spotify pattern: tap the Search tab on mobile to bring
+            // up the global command palette (which has search + commands
+            // built in). Falls back to navigating to /search only when
+            // the host didn't wire a palette opener.
+            onClick: () => (onOpenSearch ? onOpenSearch() : navigate(searchPath)),
         },
         {
             icon: (active) =>
