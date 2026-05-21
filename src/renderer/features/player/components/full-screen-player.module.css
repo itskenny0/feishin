@@ -5,10 +5,18 @@
     z-index: 200;
     display: flex;
     justify-content: center;
-    padding: 2rem;
+
+    /*
+     * Padding includes the safe-area inset on top/bottom so the
+     * fullscreen player's controls stay below the device status-bar
+     * clock and above the gesture pill on Capacitor Android. On
+     * desktop electron these env() values resolve to 0 and the
+     * original 2rem padding is preserved.
+     */
+    padding: calc(2rem + env(safe-area-inset-top, 0)) 2rem calc(2rem + env(safe-area-inset-bottom, 0));
 
     @media screen and (orientation: portrait) {
-        padding: 2rem 2rem 1rem;
+        padding: calc(2rem + env(safe-area-inset-top, 0)) 2rem calc(1rem + env(safe-area-inset-bottom, 0));
     }
 
     &:hover .controls-container {
