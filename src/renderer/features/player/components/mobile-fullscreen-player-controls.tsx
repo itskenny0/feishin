@@ -116,11 +116,15 @@ export const MobileFullscreenPlayerControls = memo(
                         triggerHaptic('impact');
                         mediaTogglePlayPause();
                     }}
-                    style={{
-                        height: '50px',
-                        width: '50px',
-                    }}
                 />
+                {/*
+                 * Note: button size used to be set via an inline 50×50px
+                 * style here. Removed so the Spotify-scale 72px (mobile
+                 * fullscreen) rule in mobile-fullscreen-player.module.css
+                 * can apply — the desktop callers fall back to the
+                 * MainPlayButton CSS-module default, which is already
+                 * sized for the desktop playerbar.
+                 */}
                 {skipEnabled && (
                     <PlayerButton
                         icon={<Icon fill="default" icon="mediaStepForward" size="lg" />}
