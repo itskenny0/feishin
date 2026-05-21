@@ -73,7 +73,17 @@
     align-items: center;
     justify-content: flex-start;
     width: 100%;
-    padding: 1rem;
+    padding: 0.5rem 0.75rem;
+}
+
+/*
+ * The close chevron sits on the far left; the rest of the header
+ * controls (settings, list-config, sleep-timer, auto-DJ) cluster on
+ * the right. margin-left: auto on the SECOND header child pushes
+ * everything after the close button to the trailing edge.
+ */
+.header > :first-child + * {
+    margin-left: auto;
 }
 
 .header-info {
