@@ -243,10 +243,10 @@ const HomeRoute = () => {
             >
                 <LibraryContainer>
                     <Stack
+                        className={styles.contentStack}
                         gap="2xl"
                         mb="5rem"
                         pt={windowBarStyle === Platform.WEB ? '5rem' : '3rem'}
-                        px="2rem"
                         ref={containerQuery.ref}
                     >
                         {/* Per-widget error boundaries so a thrown error in one
