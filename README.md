@@ -29,7 +29,24 @@
 
 ---
 
-> **About this fork** — this is [@itskenny0](https://github.com/itskenny0)'s fork of [@jeffvli](https://github.com/jeffvli)'s excellent [Feishin](https://github.com/jeffvli/feishin). It tracks upstream and adds a handful of personal additions, grouped below. All credit for the project goes to **[@jeffvli](https://github.com/jeffvli)** — please ⭐ the [upstream repo](https://github.com/jeffvli/feishin) if you enjoy Feishin.
+> **About this fork** — this is [@itskenny0](https://github.com/itskenny0)'s fork of [@jeffvli](https://github.com/jeffvli)'s excellent [Feishin](https://github.com/jeffvli/feishin). It tracks upstream and adds a meaningful chunk of mobile, UX, packaging and reliability work — grouped below. All credit for the project goes to **[@jeffvli](https://github.com/jeffvli)** — please ⭐ the [upstream repo](https://github.com/jeffvli/feishin) if you enjoy Feishin.
+>
+> **Mobile shell (the biggest delta)**
+> - A complete Spotify-flavoured mobile UI: bottom tab bar (Home / Search / Library / Settings / More), persistent mini-player with album-art-coloured tint, swipe-down-to-dismiss + swipe-up-to-expand fullscreen player, fullscreen player with hero gradient + bigger play button + finger-tracking swipe on the cover to switch tracks.
+> - Mobile-optimised context menus: render as bottom action sheets on touch (Spotify / iOS pattern) with backdrop dim, slide-up animation, drag-handle pill, and ≥44pt rows. Tap-outside-submenu dismisses the submenu only (not the parent).
+> - Mobile-aware breakpoints with first-class big-phone (361–430px) and small-phone (≤360px) tiers. Phones in landscape stay in the mobile shell even though they're 800–1000px wide.
+> - Landscape fullscreen player is a split layout: cover on the left half, transport + metadata stack on the right.
+> - Sticky `:hover` state stripped on touch so tapped buttons don't stay highlighted.
+> - Long-press → context menu, edge-swipe to open the side drawer, horizontal swipe on the mini-player content to skip next/previous (Motion-native drag with velocity-based commit), pull-to-refresh on routes.
+> - Dynamic-background readability fix: bright covers (yellow / cream / pastel) are luminance-grounded so the white-on-art text stays legible.
+>
+> **Android (Capacitor)**
+> - Packaged Android APK alongside the Electron desktop builds (Linux / macOS / Windows). Same renderer, same features.
+> - Status-bar / gesture-pill safe-area handling (status-bar overlay disabled, env() fallback values for the Capacitor WebView's 0px-inset bug).
+> - Hardware back gesture peels overlays before walking router history (context menus, visualizer, fullscreen player, command palette, then router).
+> - In-app volume slider is hidden — system volume rocker is the single source of truth (Spotify pattern); engine forced to 100% so the OS volume isn't double-attenuated.
+> - Wake-lock during playback, hardware media keys, cold-start lands on Home (not the last-visited route).
+> - APK is unsigned dev / debug-style for now — usable but expect Play-Store-tier hardening to come later.
 >
 > **Library / display**
 > - Show the on-disk folder name for albums and folders instead of the Jellyfin metadata title (toggleable per type). Applied across the album list, album detail header, sticky scroll header, breadcrumbs, sidebar, search results, context menu, and player bar.
@@ -37,6 +54,7 @@
 > - Album-detail "Genres" and "External Links" sections are collapsible, with state persisted between launches.
 > - Default sort on the Albums view is "Recently added" (descending) for new users.
 > - "Is Favorited" filter on the Albums view is persisted across restarts and gets a 3-state None/Yes/No toggle.
+> - Library detail headers always left-aligned (Spotify pattern), horizontal action row, hero gradient tinted by album art.
 >
 > **Player / playback**
 > - Jellyfin remote-control: the app shows up in "Play On" / Home Assistant / etc. and accepts play/pause/queue from other Jellyfin clients.
@@ -44,6 +62,8 @@
 > - Synchronized-lyric advancement smoothed: handles gaps, overlaps and out-of-order timestamps gracefully.
 > - NetEase placeholder-lyric filter — strips the "纯音乐, 请欣赏" filler when a song has no real lyrics.
 > - Auto-DJ no longer fires immediately on a freshly-replaced one-track queue.
+> - Fullscreen player scrolls to reveal a Lyrics card below the player face (Spotify pattern); the dedicated Lyrics tab still works for the full immersive view.
+> - Hero-tinted mini-player, heart-pulse animation on favourite, Spotify-scale 72px play button in the fullscreen player.
 >
 > **Performance**
 > - Albums and playlists open near-instantly: the sidebar's favorited-albums list pre-warms the album-detail cache in the background, and the player pre-warms lyrics for the next N tracks in the queue (both configurable).
@@ -52,8 +72,13 @@
 >
 > **UX / build**
 > - Opt-in analytics.
-> - Date-tagged auto-builds for Linux / macOS / Windows; the version suffix is baked into every produced artifact (zip, exe, dmg, deb, AppImage) so unzipped binaries identify themselves.
+> - Date-tagged auto-builds for Linux / macOS / Windows + Android APK; the version suffix is baked into every produced artifact (zip, exe, dmg, deb, AppImage, apk) so unzipped binaries identify themselves.
 > - The "what's new" changelog modal no longer pops up on launch — still reachable from the app menu.
+> - GitHub-Releases-based auto-update channel for the desktop builds.
+> - Visualizer settings render as a full-screen sheet on mobile (was a tiny clipped popover).
+> - Command palette drops desktop key-hint glyphs (ESC / ↑ / ↓ / ⏎) on touch and bumps row heights to 48dp.
+>
+> Last sync with upstream: 2026-05-21, jeffvli/feishin@8f408949.
 
 Rewrite of [Sonixd](https://github.com/jeffvli/sonixd).
 
