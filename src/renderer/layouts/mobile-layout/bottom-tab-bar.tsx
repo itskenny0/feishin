@@ -118,9 +118,15 @@ export const BottomTabBar = ({ drawerOpen, onMoreTab }: BottomTabBarProps) => {
                         className={clsx(styles.tab, { [styles.active]: active })}
                         key={tab.key}
                         onClick={() => {
-                            // Tiny tick on tab switch, but skip if already
-                            // active — re-tapping shouldn't buzz the device.
-                            if (!active) haptic('selection');
+                            // Tiny tick on tab switch. The More tab is
+                            // a toggle (active means drawer-open) so we
+                            // fire on every tap there — every press
+                            // either opens or closes the drawer. Other
+                            // tabs only buzz on the move that changes
+                            // routes.
+                            if (!active || tab.key === 'more') {
+                                haptic('selection');
+                            }
                             tab.onClick();
                         }}
                         role="tab"
