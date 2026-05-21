@@ -38,6 +38,12 @@ export const useLongPress = ({ disabled, onLongPress, onPress }: UseLongPressOpt
     const timer = useRef<null | number>(null);
     const startPos = useRef<null | { x: number; y: number }>(null);
     const longPressed = useRef(false);
+    // Track whether the most recent pointer interaction completed as a
+    // long-press. Used by the onClickCapture handler to swallow the
+    // browser-synthesised click that always fires after pointerup -
+    // without this the row's onClick would also fire on long-press,
+    // adding the song to queue + opening the context menu in one tap.
+    const suppressNextClick = useRef(false);
 
     const clear = useCallback(() => {
         if (timer.current !== null) {
@@ -65,6 +71,7 @@ export const useLongPress = ({ disabled, onLongPress, onPress }: UseLongPressOpt
 
             timer.current = window.setTimeout(() => {
                 longPressed.current = true;
+                suppressNextClick.current = true;
                 triggerHaptic('impact');
                 onLongPress(persisted);
             }, LONG_PRESS_MS);
@@ -98,5 +105,17 @@ export const useLongPress = ({ disabled, onLongPress, onPress }: UseLongPressOpt
         clear();
     }, [clear]);
 
-    return { onPointerCancel, onPointerDown, onPointerMove, onPointerUp };
+    // Capture-phase click handler that swallows the click immediately
+    // after a long-press fire. Capture phase is essential — by the time
+    // bubble phase reaches sibling/parent onClick handlers, we've
+    // already stopped propagation here.
+    const onClickCapture = useCallback((event: React.MouseEvent<HTMLElement>) => {
+        if (suppressNextClick.current) {
+            suppressNextClick.current = false;
+            event.preventDefault();
+            event.stopPropagation();
+        }
+    }, []);
+
+    return { onClickCapture, onPointerCancel, onPointerDown, onPointerMove, onPointerUp };
 };
