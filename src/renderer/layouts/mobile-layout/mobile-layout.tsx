@@ -120,6 +120,26 @@ export const MobileLayout = ({ shell }: MobileLayoutProps) => {
                 <BottomTabBar
                     drawerOpen={sidebarOpened}
                     onMoreTab={sidebarOpened ? closeSidebar : openSidebar}
+                    onScrollToTop={() => {
+                        // Soft-scroll the main content + any inner
+                        // scrollable nearest to the top so re-tapping
+                        // the active tab snaps back to the start of
+                        // the page (Spotify pattern). Best-effort —
+                        // routes that own their own scroll containers
+                        // get the outer scroll reset for free anyway
+                        // because main-content also scrolls.
+                        const main = mainContentRef.current;
+                        if (main) {
+                            main.scrollTo({ behavior: 'smooth', top: 0 });
+                            // Also walk to the first inner scrollable
+                            // child and reset it — routes that render
+                            // a NativeScrollArea or OverlayScrollbars
+                            // inside main-content need this to actually
+                            // snap to top.
+                            const inner = main.querySelector<HTMLElement>('[data-scrollable]');
+                            inner?.scrollTo({ behavior: 'smooth', top: 0 });
+                        }
+                    }}
                 />
             </div>
             <Drawer
