@@ -15,6 +15,7 @@ import { useDocumentTitle } from '/@/renderer/features/shared/hooks/use-document
 import {
     useAndroidBackButton,
     useAndroidBodyFlag,
+    useAndroidForceFullVolume,
     useAndroidKeepAwake,
     useAndroidStatusBar,
 } from '/@/renderer/hooks/use-android-native';
@@ -119,6 +120,7 @@ const AndroidNativeEffect = () => {
     useAndroidBackButton();
     useAndroidKeepAwake();
     useAndroidBodyFlag();
+    useAndroidForceFullVolume();
 
     return null;
 };

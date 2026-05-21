@@ -8,6 +8,7 @@ import {
     useTransportEnabled,
 } from '/@/renderer/features/jellyfin-remote-target/hooks/use-active-player-source';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
+import { useIsAndroidNative } from '/@/renderer/hooks/use-breakpoint';
 import { usePlayerMuted } from '/@/renderer/store';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Slider } from '/@/shared/components/slider/slider';
@@ -28,6 +29,7 @@ export const MobileFullscreenPlayerVolume = memo(() => {
     const canSetVolume = useTransportEnabled('SetVolume');
     const localMuted = usePlayerMuted();
     const volume = source.volume;
+    const isAndroidNative = useIsAndroidNative();
     // Remote mode treats volume === 0 as muted (no separate mute channel);
     // local player keeps a dedicated muted flag so the user can mute without
     // losing their pre-mute volume level.
@@ -52,6 +54,16 @@ export const MobileFullscreenPlayerVolume = memo(() => {
     const handleMute = useCallback(() => {
         mediaToggleMute();
     }, [mediaToggleMute]);
+
+    // On Android the OS volume rocker is the single source of truth for
+    // playback volume — the in-app slider just adds confusion (it would
+    // attenuate the audio a second time on top of the system volume).
+    // Hide the entire row. The bootstrap in `useAndroidForceFullVolume`
+    // (app.tsx) sets the internal volume to 100% on startup so the
+    // engine doesn't attenuate anything.
+    if (isAndroidNative) {
+        return null;
+    }
 
     return (
         <div className={styles.volumeRow}>

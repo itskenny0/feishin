@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 
-import { usePlayerStatus } from '/@/renderer/store';
+import { usePlayerActions, usePlayerStatus } from '/@/renderer/store';
 import { PlayerStatus } from '/@/shared/types/types';
 
 /**
@@ -153,6 +153,48 @@ export const useAndroidBackButton = () => {
             cancelled = true;
             if (cleanup) cleanup();
         };
+    }, []);
+};
+
+/**
+ * Force the internal player volume to 100% on Android. We hide the
+ * in-app volume slider in the Capacitor build (the OS volume rocker is
+ * the single source of truth on a phone), but the underlying audio
+ * engine still attenuates by its stored volume value — if the user had
+ * previously set 60% on the web build, that 60% would carry over and
+ * silently cut the playback level when the same profile syncs to the
+ * Android install. Bootstrap it back to 100% once on mount so the OS
+ * volume is the only attenuator.
+ *
+ * No-op outside Capacitor Android; Electron / web users keep their
+ * previously-saved volume.
+ */
+export const useAndroidForceFullVolume = () => {
+    const { setVolume } = usePlayerActions();
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const apply = async () => {
+            try {
+                if (!(await isNative())) return;
+                if (cancelled) return;
+                const { Capacitor } = await importCapacitorCore();
+                if (Capacitor.getPlatform() !== 'android') return;
+                if (cancelled) return;
+                setVolume(100);
+            } catch {
+                // ignore
+            }
+        };
+
+        void apply();
+
+        return () => {
+            cancelled = true;
+        };
+        // setVolume identity from zustand is stable across renders.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 };
 

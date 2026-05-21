@@ -1,3 +1,4 @@
+import { Capacitor } from '@capacitor/core';
 import { useMediaQuery } from '@mantine/hooks';
 
 /**
@@ -143,6 +144,26 @@ export const useIsTouch = () => useMediaQuery('(pointer: coarse)');
  * sidebar, queue sidebar suppressed, earlier two-column detail layouts).
  */
 export const useIsTabletRange = () => useMediaQuery('(min-width: 431px) and (max-width: 834px)');
+
+/**
+ * True when running inside the Capacitor Android WebView (the packaged
+ * mobile app), false on Electron desktop / web / iOS. Synchronous —
+ * Capacitor.getPlatform() returns 'web' / 'android' / 'ios' at module
+ * load time without any async resolution.
+ *
+ * Use this to suppress in-app affordances that the host OS already
+ * handles natively. Two current callers:
+ *   - The volume sliders are hidden on Android because the OS volume
+ *     rocker is the single source of truth (Spotify / Apple Music
+ *     pattern).
+ *   - Anywhere else we want "this is the packaged Android app", not
+ *     "this viewport is phone-shaped" (use `useIsMobileShell` for the
+ *     latter — Capacitor Android can also be installed on tablets, and
+ *     a desktop browser window resized to 400×800 is not the Android
+ *     app).
+ */
+const IS_ANDROID_NATIVE = Capacitor.getPlatform() === 'android';
+export const useIsAndroidNative = () => IS_ANDROID_NATIVE;
 
 /**
  * True when the viewport is in the "big-tablet" range (835–1280px). Covers
