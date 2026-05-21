@@ -2,6 +2,7 @@ import React, { memo } from 'react';
 
 import styles from './settings-option.module.css';
 
+import { useIsMobileShell } from '/@/renderer/hooks/use-breakpoint';
 import { Group } from '/@/shared/components/group/group';
 import { Icon } from '/@/shared/components/icon/icon';
 import { Stack } from '/@/shared/components/stack/stack';
@@ -19,6 +20,8 @@ interface SettingsOptionProps {
 
 export const SettingsOptions = memo(
     ({ control, description, indent, isSubheader, note, title }: SettingsOptionProps) => {
+        const isMobileShell = useIsMobileShell();
+
         if (isSubheader) {
             // A "row" that's actually just a section header. Title-cased,
             // muted, with a hairline under it so the eye can break dense
@@ -32,6 +35,37 @@ export const SettingsOptions = memo(
                 </Group>
             );
         }
+        // Mobile shell stacks label-above-control because the side-by-side
+        // layout cramps both columns into uncomfortably narrow widths on a
+        // 360px phone. Desktop keeps the existing label-left / control-
+        // right pair for fast scanning.
+        if (isMobileShell) {
+            return (
+                <Stack className={indent ? styles.rowIndented : styles.row} gap="xs">
+                    <Group gap="xs" wrap="nowrap">
+                        <Text isNoSelect size="md">
+                            {title}
+                        </Text>
+                        {note && (
+                            <Tooltip label={note} openDelay={400}>
+                                <Icon icon="info" />
+                            </Tooltip>
+                        )}
+                    </Group>
+                    {React.isValidElement(description) ? (
+                        description
+                    ) : (
+                        <Text isMuted isNoSelect size="sm">
+                            {description}
+                        </Text>
+                    )}
+                    <Group justify="flex-start" w="100%">
+                        {control}
+                    </Group>
+                </Stack>
+            );
+        }
+
         return (
             <>
                 <Group
