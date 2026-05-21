@@ -11,6 +11,13 @@
     padding: 1rem 2rem 5rem;
 }
 
+@media (width <= 360px) {
+    .detail-container {
+        gap: var(--theme-spacing-md);
+        padding: 0.75rem 0.75rem 5rem;
+    }
+}
+
 .content-layout {
     display: grid;
     grid-template-areas:
