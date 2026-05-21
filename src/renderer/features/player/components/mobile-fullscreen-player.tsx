@@ -586,23 +586,42 @@ export const MobileFullscreenPlayer = () => {
                         isPageHovered={isPageHovered}
                         onClose={handleToggleFullScreenPlayer}
                     />
-                    <MobileFullscreenPlayerAlbumArt />
-                    <MobileFullscreenPlayerMetadata
-                        currentSong={currentSong}
-                        onToggleFavorite={handleToggleFavorite}
-                        onUpdateRating={handleUpdateRating}
-                        radioArtist={
-                            isPlayingRadio ? (radioMetadata?.artist ?? undefined) : undefined
-                        }
-                        radioStationName={isPlayingRadio ? (stationName ?? undefined) : undefined}
-                        radioTitle={
-                            isPlayingRadio ? (radioMetadata?.title ?? undefined) : undefined
-                        }
-                        showRating={showRating}
-                    />
-                    <MobileFullscreenPlayerProgress currentSong={currentSong} />
-                    <MobileFullscreenPlayerVolume />
-                    <MobileFullscreenPlayerControls currentSong={currentSong} />
+                    {/*
+                     * Body wrapper for the cover + control-stack. In
+                     * portrait this is `display: contents` so the
+                     * children sit flat inside .playerFace's flex
+                     * column. In landscape phone it switches to a
+                     * 1fr/1fr grid: cover on the left, the control
+                     * stack on the right — Spotify's tablet split
+                     * layout. Without this wrapper the cover and
+                     * controls would stack vertically in landscape
+                     * too, which crams them into a 400px-tall window.
+                     */}
+                    <div className={styles.playerFaceBody}>
+                        <MobileFullscreenPlayerAlbumArt />
+                        <div className={styles.playerFaceControlStack}>
+                            <MobileFullscreenPlayerMetadata
+                                currentSong={currentSong}
+                                onToggleFavorite={handleToggleFavorite}
+                                onUpdateRating={handleUpdateRating}
+                                radioArtist={
+                                    isPlayingRadio
+                                        ? (radioMetadata?.artist ?? undefined)
+                                        : undefined
+                                }
+                                radioStationName={
+                                    isPlayingRadio ? (stationName ?? undefined) : undefined
+                                }
+                                radioTitle={
+                                    isPlayingRadio ? (radioMetadata?.title ?? undefined) : undefined
+                                }
+                                showRating={showRating}
+                            />
+                            <MobileFullscreenPlayerProgress currentSong={currentSong} />
+                            <MobileFullscreenPlayerVolume />
+                            <MobileFullscreenPlayerControls currentSong={currentSong} />
+                        </div>
+                    </div>
                     <MobileFullscreenPlayerBottomControls
                         isLyricsActive={isLyricsState}
                         isQueueActive={isQueueState}

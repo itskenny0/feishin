@@ -110,6 +110,55 @@
 }
 
 /*
+ * Body wrapper inside the player face that holds the cover art and
+ * the control stack (metadata + progress + volume + transport). In
+ * portrait this is `display: contents` — the wrapper itself doesn't
+ * generate a box, and its children participate directly in
+ * .player-face's flex column. In landscape phone it switches to a
+ * two-column grid: cover on the left, controls stacked on the right
+ * — Spotify's tablet-style split layout, which is the right shape
+ * for landscape phones where vertical room is at a premium and the
+ * cover would otherwise be too small to read.
+ */
+.player-face-body {
+    display: contents;
+}
+
+.player-face-control-stack {
+    display: contents;
+}
+
+@media (orientation: landscape) and (height <= 500px) {
+    .player-face-body {
+        display: grid;
+        flex: 1 1 0;
+        grid-template-columns: 1fr 1fr;
+        gap: var(--theme-spacing-md);
+        align-items: center;
+        min-height: 0;
+        padding: 0 var(--theme-spacing-md);
+    }
+
+    .player-face-control-stack {
+        display: flex;
+        flex-direction: column;
+        gap: var(--theme-spacing-sm);
+        justify-content: center;
+        min-width: 0;
+    }
+
+    /*
+     * Cover takes the left half. Its image-container is already
+     * height-bound by the grid row; the .image inside keeps its
+     * aspect-ratio: 1 and shrinks to fit.
+     */
+    .player-face-body :global(.image-container),
+    .player-face-body > div:first-child {
+        padding: 0;
+    }
+}
+
+/*
  * Lyrics card that appears below the player face when scrolled.
  * Spotify-style "About / Lyrics preview" pattern: full-width card with
  * its own padding, rounded corners, subtle background, and an eyebrow
