@@ -8,6 +8,7 @@ import { SearchAlbumArtistsSection } from '/@/renderer/features/search/component
 import { SearchAlbumsSection } from '/@/renderer/features/search/components/search-albums-section';
 import { SearchSongsSection } from '/@/renderer/features/search/components/search-songs-section';
 import { ServerCommands } from '/@/renderer/features/search/components/server-commands';
+import { useIsMobileShell } from '/@/renderer/hooks/use-breakpoint';
 import { useAppStore } from '/@/renderer/store';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Breadcrumb } from '/@/shared/components/breadcrumb/breadcrumb';
@@ -140,6 +141,12 @@ export const CommandPalette = ({ modalProps }: CommandPaletteProps) => {
     const isHome = activePage === CommandPalettePages.HOME;
     const commandRootRef = useRef<HTMLDivElement>(null);
     const searchInputRef = useRef<HTMLInputElement>(null);
+    // On the mobile shell the modal goes fullscreen so the input/results
+    // claim the entire viewport (Spotify search style) rather than a
+    // cramped centered dialog. zIndex bumped to 1000 so the palette
+    // floats above the bottom-tab-bar (which has its own z-index 0 in
+    // the layout grid + a box-shadow) and the mini-player above it.
+    const isMobileShell = useIsMobileShell();
 
     const popPage = useCallback(() => {
         setPages((pages) => {
@@ -157,7 +164,8 @@ export const CommandPalette = ({ modalProps }: CommandPaletteProps) => {
     return (
         <Modal
             {...modalProps}
-            centered
+            centered={!isMobileShell}
+            fullScreen={isMobileShell}
             handlers={{
                 ...modalProps.handlers,
                 close: () => {
@@ -180,8 +188,11 @@ export const CommandPalette = ({ modalProps }: CommandPaletteProps) => {
             size="lg"
             styles={{
                 body: { padding: '0' },
+                content: isMobileShell ? { height: '100dvh' } : undefined,
                 header: { display: 'none' },
+                root: { zIndex: 1000 },
             }}
+            zIndex={1000}
         >
             <Command
                 filter={(value, search) => {

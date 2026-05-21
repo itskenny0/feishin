@@ -17,7 +17,11 @@ import { usePullToRefresh } from '/@/renderer/hooks/use-pull-to-refresh';
 import { PlayerBar } from '/@/renderer/layouts/default-layout/player-bar';
 import { BottomTabBar } from '/@/renderer/layouts/mobile-layout/bottom-tab-bar';
 import { WindowBar } from '/@/renderer/layouts/window-bar';
-import { useFullScreenPlayerOverlayState, useWindowBarStyle } from '/@/renderer/store';
+import {
+    useCommandPaletteState,
+    useFullScreenPlayerOverlayState,
+    useWindowBarStyle,
+} from '/@/renderer/store';
 import { Drawer } from '/@/shared/components/drawer/drawer';
 import { Icon } from '/@/shared/components/icon/icon';
 import { useDisclosure } from '/@/shared/hooks/use-disclosure';
@@ -37,6 +41,7 @@ export const MobileLayout = ({ shell }: MobileLayoutProps) => {
     const windowBarStyle = useWindowBarStyle();
     const mainContentRef = useRef<HTMLElement>(null);
     const queryClient = useQueryClient();
+    const { open: openCommandPalette } = useCommandPaletteState();
 
     // Pull-to-refresh on the main content scroll container: invalidate all
     // active react-query queries so the current route refetches. The hook
@@ -120,6 +125,7 @@ export const MobileLayout = ({ shell }: MobileLayoutProps) => {
                 <BottomTabBar
                     drawerOpen={sidebarOpened}
                     onMoreTab={sidebarOpened ? closeSidebar : openSidebar}
+                    onOpenSearch={openCommandPalette}
                     onScrollToTop={() => {
                         // Soft-scroll the main content + any inner
                         // scrollable nearest to the top so re-tapping
