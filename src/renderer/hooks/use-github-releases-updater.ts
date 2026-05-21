@@ -57,14 +57,24 @@ const fetchLatestRelease = async (): Promise<GithubRelease | null> => {
     }
 };
 
-const normalizeVersion = (raw: string): string =>
-    raw
-        .replace(/^v/, '')
-        // CI converts ALL suffix dots to dashes when setting package.json.
-        // We normalize the tag the same way so e.g. "1.11.0-itskenny0-2026.05.20q"
-        // and "1.11.0-itskenny0-2026-05-20q" compare equal.
-        .replace(/\.(?=[^.]*$)/, '-')
-        .replace(/(?<=itskenny0[-.])([\d.-]+)/, (m) => m.replace(/\./g, '-'));
+const normalizeVersion = (raw: string): string => {
+    // Strip the 'v' prefix off git tags ("v1.11.0-..." → "1.11.0-...").
+    let s = raw.replace(/^v/, '');
+    // Find the start of the fork suffix and convert every dot inside it
+    // to a dash, since CI converts those when it rewrites package.json
+    // (sanitizedSuffix=${rawSuffix//./-}). The baseline "1.11.0" before
+    // the suffix MUST stay intact - earlier versions of this function
+    // greedily replaced the last dot anywhere in the string, which
+    // mangled the baseline ("1.11.0" → "1.11-0") on already-normalized
+    // current versions and caused a false-positive update toast.
+    const suffixIdx = s.indexOf('-itskenny0');
+    if (suffixIdx >= 0) {
+        const head = s.slice(0, suffixIdx);
+        const tail = s.slice(suffixIdx).replace(/\./g, '-');
+        s = head + tail;
+    }
+    return s;
+};
 
 const isNewerVersion = (latestTag: string, current: string): boolean => {
     const a = normalizeVersion(latestTag);
