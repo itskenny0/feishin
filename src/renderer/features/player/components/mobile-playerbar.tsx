@@ -1,6 +1,6 @@
 import clsx from 'clsx';
 import { AnimatePresence, LayoutGroup, motion } from 'motion/react';
-import React, { MouseEvent } from 'react';
+import React, { memo, MouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { generatePath, Link } from 'react-router';
 
@@ -16,10 +16,10 @@ import {
     useFullScreenPlayerStoreActions,
     usePlayerSong,
     usePlayerStatus,
-    usePlayerTimestamp,
     useSetFullScreenPlayerStore,
 } from '/@/renderer/store';
 import { useShowFilesystemNameForAlbums } from '/@/renderer/store/settings.store';
+import { useTimestampStoreBase } from '/@/renderer/store/timestamp.store';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Group } from '/@/shared/components/group/group';
 import { Icon } from '/@/shared/components/icon/icon';
@@ -71,30 +71,8 @@ export const MobilePlayerbar = () => {
 
     const stopPropagation = (e?: MouseEvent) => e?.stopPropagation();
 
-    // Thin Spotify-style progress strip across the bottom of the mini-
-    // player. Reads the timestamp store directly so we tick every second
-    // without going through the slower seek-bar machinery in the
-    // fullscreen player. Stays at 0% when there's no song or no
-    // duration so the strip is just an empty rail in that case.
-    //
-    // QueueSong.duration is in milliseconds; usePlayerTimestamp is in
-    // seconds (matches what the fullscreen progress component does — it
-    // does `currentSong.duration / 1000`). Convert duration to seconds
-    // before the division so both sides of the ratio are in seconds.
-    const timestamp = usePlayerTimestamp();
-    const songDurationSec = currentSong?.duration ? currentSong.duration / 1000 : 0;
-    const progressPct =
-        songDurationSec > 0 ? Math.min(100, Math.max(0, (timestamp / songDurationSec) * 100)) : 0;
-
     return (
-        <div
-            className={clsx(styles.container, PlaybackSelectors.mediaPlayer)}
-            style={
-                {
-                    ['--mobile-playerbar-progress' as string]: `${progressPct}%`,
-                } as React.CSSProperties
-            }
-        >
+        <div className={clsx(styles.container, PlaybackSelectors.mediaPlayer)}>
             <div className={styles.contentWrapper}>
                 <LayoutGroup>
                     <AnimatePresence initial={false} mode="popLayout">
@@ -262,9 +240,43 @@ export const MobilePlayerbar = () => {
                     variant="tertiary"
                 />
             </div>
-            <div aria-hidden className={styles.progress}>
-                <div className={styles.progressFill} />
-            </div>
+            <MiniPlayerProgressStrip durationMs={currentSong?.duration ?? 0} />
         </div>
     );
 };
+
+/**
+ * Bottom progress strip on the mini-player.
+ *
+ * Lives in its own memoised component so the timestamp subscription
+ * doesn't force the rest of the mini-player (image, metadata, controls)
+ * to re-render every second. Receives the song duration as a prop so it
+ * doesn't need its own currentSong subscription.
+ *
+ * QueueSong.duration is in milliseconds; usePlayerTimestamp is in
+ * seconds (matches what the fullscreen progress component does — it
+ * does `currentSong.duration / 1000`). Convert duration to seconds
+ * before the division so both sides of the ratio are in seconds.
+ */
+const MiniPlayerProgressStrip = memo(({ durationMs }: { durationMs: number }) => {
+    const timestamp = useTimestampStoreBase((state) => state.timestamp);
+    const songDurationSec = durationMs > 0 ? durationMs / 1000 : 0;
+    const progressPct =
+        songDurationSec > 0 ? Math.min(100, Math.max(0, (timestamp / songDurationSec) * 100)) : 0;
+
+    return (
+        <div
+            aria-hidden
+            className={styles.progress}
+            style={
+                {
+                    ['--mobile-playerbar-progress' as string]: `${progressPct}%`,
+                } as React.CSSProperties
+            }
+        >
+            <div className={styles.progressFill} />
+        </div>
+    );
+});
+
+MiniPlayerProgressStrip.displayName = 'MiniPlayerProgressStrip';
