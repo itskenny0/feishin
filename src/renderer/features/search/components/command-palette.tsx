@@ -189,9 +189,16 @@ export const CommandPalette = ({ modalProps }: CommandPaletteProps) => {
             styles={{
                 body: { padding: '0' },
                 content: isMobileShell ? { height: '100dvh' } : undefined,
-                header: { display: 'none' },
+                // Keep the modal header visible on the mobile shell so
+                // the user has an explicit close X. On desktop the
+                // header is hidden because the palette already has Esc
+                // / overlay-click to dismiss + the result is centered
+                // in a compact dialog where the header takes valuable
+                // vertical space.
+                header: isMobileShell ? undefined : { display: 'none' },
                 root: { zIndex: 1000 },
             }}
+            withCloseButton={isMobileShell}
             zIndex={1000}
         >
             <Command

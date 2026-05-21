@@ -33,7 +33,14 @@ export const useHorizontalSwipe = ({
     const onPointerDown = useCallback(
         (event: React.PointerEvent<HTMLElement>) => {
             if (disabled) return;
-            if (event.pointerType !== 'touch') return;
+            // Allow touch + pen + 'mouse' pointer types. Capacitor 8's
+            // Android WebView sometimes reports pointerType='mouse' on
+            // actual touch interactions (depending on the Android
+            // version's input synthesis), so a strict 'touch' filter
+            // would silently kill the gesture there. The triggerPx
+            // movement threshold + bail-on-vertical-drift already
+            // filter out accidental click drift, so allowing every
+            // pointer type is safe.
             startRef.current = { x: event.clientX, y: event.clientY };
             firedRef.current = false;
         },
