@@ -38,6 +38,21 @@
     padding-left: 1rem;
 }
 
+/*
+ * Big-phone tier (361–430px). Comfortable horizontal space lets the
+ * content stack open up to 1.25rem side margin (vs. the 1rem we keep
+ * for cramped sub-360 phones) — this matches the way Spotify pads its
+ * home column on flagship-sized portrait devices: enough margin for
+ * the eye to anchor, but still leaving plenty of room for the
+ * carousels to extend toward the edge.
+ */
+@media (361px <= width <= 430px) {
+    .content-stack {
+        padding-right: 1.25rem;
+        padding-left: 1.25rem;
+    }
+}
+
 @media (width >= 768px) {
     .content-stack {
         padding-right: 2rem;
@@ -56,4 +71,23 @@
     font-weight: 600;
     line-height: 1.2;
     letter-spacing: -0.02em;
+}
+
+/*
+ * Big-phone tier (361–430px): the greeting is the editorial anchor for
+ * the entire home dashboard. On comfortable portrait viewports it
+ * deserves an h1 scale — bump to 2.1rem so it reads as a proper "Good
+ * morning" title rather than another section header. Margin bumps so
+ * the first carousel doesn't crowd it.
+ */
+@media (361px <= width <= 430px) {
+    .greeting {
+        margin-bottom: var(--theme-spacing-lg);
+    }
+
+    .greeting-text {
+        font-size: 2.1rem;
+        font-weight: 700;
+        letter-spacing: -0.025em;
+    }
 }
