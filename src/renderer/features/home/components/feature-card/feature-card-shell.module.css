@@ -238,12 +238,21 @@
     opacity: 1;
 }
 
-/* Touch devices never trigger hover, so the carousel nav arrows would
-   stay invisible. Show them by default on pointer:coarse so users have
-   tap targets to scroll the feature-card carousels. */
+/*
+ * Touch devices: hide the side nav-arrows entirely.
+ *
+ * We used to force them visible on `(pointer: coarse)` so touch users had a
+ * tap target, but the chevrons land at `left: 8px` / `top: 50%` of the card
+ * and on phone-width screens they sit directly on top of the "Play all" /
+ * "Reshuffle" buttons in the metadata row — looks broken. The carousel is
+ * already swipeable on touch (the underlying motion.div has drag="x") and
+ * the dot indicators below the card show the current page, so dropping the
+ * chevrons follows the Spotify / Apple Music convention and removes the
+ * overlap regression.
+ */
 @media (pointer: coarse) {
     .nav-arrow {
-        opacity: 1;
+        display: none;
     }
 }
 

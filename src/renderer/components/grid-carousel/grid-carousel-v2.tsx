@@ -288,7 +288,7 @@ function BaseGridCarousel(props: GridCarouselProps) {
                                         />
                                     )}
                                 </Group>
-                                <Group gap="xs" justify="end">
+                                <Group className={styles.navButtons} gap="xs" justify="end">
                                     <ActionIcon
                                         disabled={isPrevDisabled}
                                         icon="arrowLeftS"
@@ -310,7 +310,7 @@ function BaseGridCarousel(props: GridCarouselProps) {
                         ) : (
                             <div className={styles.customTitleContainer}>
                                 <div className={styles.customTitleContent}>{title}</div>
-                                <Group gap="xs" justify="end">
+                                <Group className={styles.navButtons} gap="xs" justify="end">
                                     <ActionIcon
                                         disabled={isPrevDisabled}
                                         icon="arrowLeftS"

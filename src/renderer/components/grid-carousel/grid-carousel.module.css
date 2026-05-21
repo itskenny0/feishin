@@ -36,6 +36,20 @@
     min-width: 0;
 }
 
+/*
+ * Prev / next chevrons next to the section title. The underlying
+ * motion.div has drag="x" so a horizontal swipe already pages through
+ * the carousel — on touch the chevrons are dead weight. Hide them so
+ * the title row reads cleaner and matches Spotify / Apple Music's
+ * swipe-only carousel pattern. Desktop still gets them (precise
+ * targets, no scroll gesture without horizontal wheel).
+ */
+@media (pointer: coarse) {
+    .nav-buttons {
+        display: none;
+    }
+}
+
 .grid-carousel-viewport {
     width: 100%;
     min-height: 0;

@@ -308,6 +308,21 @@
     opacity: 1;
 }
 
+/*
+ * Touch devices: drop the side chevrons entirely. The hero carousel cycles
+ * automatically and can be swiped with a finger, so the chevrons are dead
+ * weight that occasionally stays opacity:1 after a tap (Mobile Safari's
+ * sticky-hover quirk) and obscures the artwork.
+ */
+@media (pointer: coarse) {
+    .single-carousel-container .nav-arrow-left,
+    .single-carousel-container .nav-arrow-right,
+    .nav-arrow-left,
+    .nav-arrow-right {
+        display: none;
+    }
+}
+
 @container (min-width: $mantine-breakpoint-xs) {
     .carousel-item {
         min-height: 300px;

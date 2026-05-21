@@ -104,6 +104,19 @@
 .main-content {
     position: relative;
     grid-area: main-content;
+
+    /*
+     * Bottom inset so the last row of any route (home carousels, album
+     * grids, track lists) sits comfortably above the mini-player edge
+     * when the user scrolls to the bottom. Without this the last card
+     * is flush against the mini-player border and the page feels
+     * "guillotined" — Spotify, Apple Music and YouTube Music all leave
+     * roughly 20–24px of breathing room.
+     *
+     * Set as padding (not margin) so the scrollbar track matches the
+     * visible content area on platforms that show one.
+     */
+    padding-bottom: var(--theme-spacing-md);
     overflow-x: hidden;
     overflow-y: auto;
 
