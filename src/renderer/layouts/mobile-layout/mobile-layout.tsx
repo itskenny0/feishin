@@ -1,6 +1,8 @@
+import { useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
-import { AnimatePresence } from 'motion/react';
-import { Suspense } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
+import { Suspense, useCallback, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Outlet } from 'react-router';
 
 import styles from './mobile-layout.module.css';
@@ -11,11 +13,13 @@ import { MobileFullscreenPlayer } from '/@/renderer/features/player/components/m
 import { RouteSkeleton } from '/@/renderer/features/shared/components/route-skeleton';
 import { MobileSidebar } from '/@/renderer/features/sidebar/components/mobile-sidebar';
 import { useEdgeSwipe } from '/@/renderer/hooks/use-edge-swipe';
+import { usePullToRefresh } from '/@/renderer/hooks/use-pull-to-refresh';
 import { PlayerBar } from '/@/renderer/layouts/default-layout/player-bar';
 import { BottomTabBar } from '/@/renderer/layouts/mobile-layout/bottom-tab-bar';
 import { WindowBar } from '/@/renderer/layouts/window-bar';
 import { useFullScreenPlayerOverlayState, useWindowBarStyle } from '/@/renderer/store';
 import { Drawer } from '/@/shared/components/drawer/drawer';
+import { Icon } from '/@/shared/components/icon/icon';
 import { useDisclosure } from '/@/shared/hooks/use-disclosure';
 import { Platform } from '/@/shared/types/types';
 
@@ -24,12 +28,28 @@ interface MobileLayoutProps {
 }
 
 export const MobileLayout = ({ shell }: MobileLayoutProps) => {
+    const { t } = useTranslation();
     const [sidebarOpened, { close: closeSidebar, open: openSidebar }] = useDisclosure(false);
     const {
         expanded: isFullScreenPlayerExpanded,
         visualizerExpanded: isFullScreenVisualizerExpanded,
     } = useFullScreenPlayerOverlayState();
     const windowBarStyle = useWindowBarStyle();
+    const mainContentRef = useRef<HTMLElement>(null);
+    const queryClient = useQueryClient();
+
+    // Pull-to-refresh on the main content scroll container: invalidate all
+    // active react-query queries so the current route refetches. The hook
+    // only fires for touch pointers and only when the scroll container is
+    // at the top, so it never fights normal mid-scroll touches.
+    const handleRefresh = useCallback(async () => {
+        await queryClient.invalidateQueries({ refetchType: 'active' });
+    }, [queryClient]);
+
+    const { distance: pullDistance, refreshing } = usePullToRefresh(mainContentRef, {
+        disabled: isFullScreenPlayerExpanded || isFullScreenVisualizerExpanded,
+        onRefresh: handleRefresh,
+    });
 
     // Edge-swipe to open the side drawer: a finger landing within 24px of
     // the left edge and dragging inward past 60px opens the drawer. Mirrors
@@ -60,7 +80,25 @@ export const MobileLayout = ({ shell }: MobileLayoutProps) => {
                 id="mobile-layout"
             >
                 {showWindowBar && <WindowBar />}
-                <main className={styles.mainContent}>
+                <main className={styles.mainContent} ref={mainContentRef}>
+                    {(pullDistance > 0 || refreshing) && (
+                        <motion.div
+                            animate={{
+                                opacity: refreshing ? 1 : Math.min(1, pullDistance / 80),
+                                y: refreshing ? 56 : pullDistance,
+                            }}
+                            aria-label={t('common.refreshing', { defaultValue: 'Refreshing' })}
+                            className={styles.pullToRefresh}
+                            initial={false}
+                            transition={refreshing ? { duration: 0 } : { duration: 0 }}
+                        >
+                            <Icon
+                                className={refreshing ? styles.pullToRefreshSpinning : undefined}
+                                icon="refresh"
+                                size="lg"
+                            />
+                        </motion.div>
+                    )}
                     <Suspense fallback={<RouteSkeleton />}>
                         <Outlet />
                     </Suspense>

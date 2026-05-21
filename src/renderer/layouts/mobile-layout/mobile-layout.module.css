@@ -85,6 +85,52 @@
     -webkit-overflow-scrolling: touch;
 }
 
+/*
+ * Pull-to-refresh indicator: a circular badge that hangs above the
+ * scroll content while the user is pulling down at scrollTop=0. The
+ * motion component controls the y-translation + opacity from JS; the
+ * styles here just set the badge appearance.
+ */
+.pull-to-refresh {
+    position: absolute;
+    top: -56px;
+    left: 50%;
+    z-index: 80;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    color: var(--theme-colors-primary-filled);
+    pointer-events: none;
+    background: color-mix(in srgb, var(--theme-colors-background) 92%, transparent);
+    border: 1px solid var(--theme-colors-border);
+    border-radius: 50%;
+    box-shadow: 0 2px 6px rgb(0 0 0 / 18%);
+    backdrop-filter: blur(12px);
+    transform: translateX(-50%);
+}
+
+.pull-to-refresh-spinning {
+    animation: pull-to-refresh-spin 800ms linear infinite;
+}
+
+@keyframes pull-to-refresh-spin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .pull-to-refresh-spinning {
+        animation: none;
+    }
+}
+
 .full-screen-player-overlay {
     position: fixed;
     top: 0;
