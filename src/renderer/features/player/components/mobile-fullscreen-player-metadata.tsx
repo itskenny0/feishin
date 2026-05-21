@@ -4,6 +4,7 @@ import { memo, MouseEvent } from 'react';
 
 import styles from './mobile-fullscreen-player.module.css';
 
+import { triggerHaptic } from '/@/renderer/hooks/use-haptic';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Group } from '/@/shared/components/group/group';
 import { Rating } from '/@/shared/components/rating/rating';
@@ -89,7 +90,13 @@ export const MobileFullscreenPlayerMetadata = memo(
                                 fill: isFavorite ? 'primary' : undefined,
                                 size: 'md',
                             }}
-                            onClick={onToggleFavorite}
+                            onClick={(event) => {
+                                // Celebratory success pattern only when
+                                // adding — un-favouriting is a destructive
+                                // action and shouldn't feel rewarding.
+                                if (!isFavorite) triggerHaptic('success');
+                                onToggleFavorite(event);
+                            }}
                             size="sm"
                             variant="subtle"
                         />

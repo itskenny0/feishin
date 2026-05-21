@@ -93,7 +93,12 @@ export const RightControls = () => {
     );
 };
 
-const AutoDJButton = () => {
+/**
+ * Toggles the auto-DJ setting (keep playing similar tracks once the queue
+ * runs dry). Exported so the mobile fullscreen player can reuse it - it
+ * was previously a desktop-only convenience.
+ */
+export const AutoDJButton = () => {
     const { t } = useTranslation();
     const settings = useAutoDJSettings();
     const { setSettings } = useSettingsStoreActions();
