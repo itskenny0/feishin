@@ -11,6 +11,8 @@ import {
     RiMenuLine,
     RiSearchFill,
     RiSearchLine,
+    RiSettings3Fill,
+    RiSettings3Line,
 } from 'react-icons/ri';
 import { generatePath, useLocation, useNavigate } from 'react-router';
 
@@ -50,7 +52,7 @@ interface Tab {
     onClick: () => void;
 }
 
-type TabKey = 'home' | 'library' | 'more' | 'search';
+type TabKey = 'home' | 'library' | 'more' | 'search' | 'settings';
 
 /**
  * Persistent bottom tab bar shown on the mobile shell (<768px).
@@ -109,6 +111,19 @@ export const BottomTabBar = ({
             key: 'library',
             label: t('page.sidebar.myLibrary', { defaultValue: 'Library' }),
             onClick: () => navigate(AppRoute.LIBRARY_ALBUMS),
+        },
+        {
+            // Settings as a first-class tab. The previous path was More →
+            // sidebar drawer → Settings, which is two taps for a destination
+            // that gets visited often (servers, themes, playback). Sits
+            // immediately left of the More overflow so the visual centre of
+            // gravity stays balanced.
+            icon: (active) =>
+                active ? <RiSettings3Fill size="1.5rem" /> : <RiSettings3Line size="1.5rem" />,
+            isActive: (p) => p.startsWith('/settings'),
+            key: 'settings',
+            label: t('page.sidebar.settings', { defaultValue: 'Settings' }),
+            onClick: () => navigate(AppRoute.SETTINGS),
         },
         {
             // "More" stays active while the drawer is open so the user has a
