@@ -84,8 +84,11 @@ export const useGithubReleasesUpdater = () => {
     const shownForRef = useRef<null | string>(null);
 
     // Electron has its own native updater path; web + Capacitor don't, so
-    // this hook only runs in the latter.
-    const isEnabled = !isElectron();
+    // this hook only runs in the latter. Also skip in Vite dev mode so the
+    // toast doesn't pop on every `pnpm dev` session — dev's package.json
+    // version is the bare "1.11.0" baseline which is always older than any
+    // release tag and would trigger the prompt continuously.
+    const isEnabled = !isElectron() && !import.meta.env.DEV;
 
     const { data } = useQuery({
         enabled: isEnabled,
