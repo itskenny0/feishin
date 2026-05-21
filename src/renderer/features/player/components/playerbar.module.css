@@ -43,6 +43,18 @@
     @media (width < 768px) {
         grid-template-columns: minmax(0, 0.5fr) minmax(0, 1fr) minmax(0, 0.5fr);
     }
+
+    /*
+     * Tablet (768–834px desktop-shell) — the equal 1:1:1 split crams the
+     * seek bar into ~270px of viewport. Bias the center column (transport
+     * + progress) wider so the slider has room to read, and let the
+     * left/right columns (cover + title // queue + volume buttons)
+     * shrink — the cover/title naturally truncates and the right-rail
+     * buttons are icon-only at this size anyway.
+     */
+    @media (768px <= width <= 834px) {
+        grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.6fr) minmax(0, 0.7fr);
+    }
 }
 
 .right-grid-item {
