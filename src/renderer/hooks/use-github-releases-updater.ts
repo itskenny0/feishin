@@ -1,6 +1,6 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import isElectron from 'is-electron';
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import packageJson from '../../../package.json';
@@ -11,25 +11,28 @@ import { toast } from '/@/shared/components/toast/toast';
  * Polls the fork's GitHub releases for a newer build than what's running and
  * pops a one-shot toast offering a download.
  *
- * On Electron, the platform's electron-updater handles updates natively
- * (the feed URL in src/main/index.ts now points at this fork), so this
- * hook is a no-op there. On Capacitor Android and on web/PWA, this is the
- * only update path — the toast's CTA opens the release page (or the APK
- * asset URL directly on Android) and the OS browser takes it from there.
+ * Electron has its own electron-updater path (feed pointed at this fork);
+ * Capacitor Android and web/PWA use this hook. The toast's "Install" action
+ * triggers the APK download via a synthesised <a download> click, which the
+ * Android WebView's download manager hands off to the system package
+ * installer. On non-Android we open the release page so the user can pick
+ * the right binary.
  *
  * Versions look like:
- *   - package.json after CI rewrite: "1.11.0-itskenny0-2026-05-20q"
- *   - git tag for the same release:  "v1.11.0-itskenny0-2026.05.20q"
+ *   - package.json after CI rewrite: "1.11.0-itskenny0-2026-05-21bb"
+ *   - git tag for the same release:  "v1.11.0-itskenny0-2026.05.21bb"
  *
- * The fork-suffix dots vs dashes is the CI's `sanitizedSuffix` translation.
- * `normalizeVersion` strips the 'v' prefix and converts the suffix dots to
- * dashes so the two forms line up under plain lexicographic comparison —
- * the ISO date in the suffix means alphabetical sort matches chronological.
+ * The CI's `sanitizedSuffix` step converts every fork-suffix dot to a dash.
+ * `normalizeVersion` mirrors that conversion (only on the part after
+ * `-itskenny0`) so the two forms line up under plain lexicographic
+ * comparison. The ISO date inside the suffix means alphabetical sort and
+ * chronological sort agree.
  */
 
 const REPO = 'itskenny0/feishin';
 const POLL_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const DISMISSED_KEY = 'feishin-github-update-dismissed-tag';
+const QUERY_KEY = ['feishin-github-releases-updater'] as const;
 
 interface GithubRelease {
     assets: GithubReleaseAsset[];
@@ -52,21 +55,12 @@ const fetchLatestRelease = async (): Promise<GithubRelease | null> => {
         if (!res.ok) return null;
         return (await res.json()) as GithubRelease;
     } catch {
-        // Network down, CORS, blocked — we just don't show the toast.
         return null;
     }
 };
 
 const normalizeVersion = (raw: string): string => {
-    // Strip the 'v' prefix off git tags ("v1.11.0-..." → "1.11.0-...").
     let s = raw.replace(/^v/, '');
-    // Find the start of the fork suffix and convert every dot inside it
-    // to a dash, since CI converts those when it rewrites package.json
-    // (sanitizedSuffix=${rawSuffix//./-}). The baseline "1.11.0" before
-    // the suffix MUST stay intact - earlier versions of this function
-    // greedily replaced the last dot anywhere in the string, which
-    // mangled the baseline ("1.11.0" → "1.11-0") on already-normalized
-    // current versions and caused a false-positive update toast.
     const suffixIdx = s.indexOf('-itskenny0');
     if (suffixIdx >= 0) {
         const head = s.slice(0, suffixIdx);
@@ -88,22 +82,59 @@ const isAndroidWebView = (): boolean => {
     return /android/i.test(navigator.userAgent);
 };
 
+/**
+ * Force-trigger a download for the given URL by synthesising an anchor
+ * click. On Capacitor Android this hands off to the WebView's download
+ * manager, which Android then routes to the system package installer for
+ * .apk MIME types. On other platforms the browser handles it as a normal
+ * download (or follows the link to the release page).
+ */
+const triggerDownload = (url: string, filename?: string): void => {
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.rel = 'noopener noreferrer';
+    anchor.target = '_blank';
+    if (filename) anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+};
+
+const pickDownloadTarget = (
+    release: GithubRelease,
+): { filename?: string; isApk: boolean; url: string } => {
+    const apkAsset = release.assets.find((a) => a.name.toLowerCase().endsWith('.apk'));
+    if (isAndroidWebView() && apkAsset) {
+        return { filename: apkAsset.name, isApk: true, url: apkAsset.browser_download_url };
+    }
+    return { isApk: false, url: release.html_url };
+};
+
+const dismissTag = (tag: string) => {
+    try {
+        localStorage.setItem(DISMISSED_KEY, tag);
+    } catch {
+        // ignore
+    }
+};
+
+/**
+ * Hook used by the AppEffects layer: arms the background polling and pops
+ * a toast when a newer release is detected.
+ */
 export const useGithubReleasesUpdater = () => {
     const { t } = useTranslation();
     const currentVersion = packageJson.version;
     const shownForRef = useRef<null | string>(null);
 
-    // Electron has its own native updater path; web + Capacitor don't, so
-    // this hook only runs in the latter. Also skip in Vite dev mode so the
-    // toast doesn't pop on every `pnpm dev` session — dev's package.json
-    // version is the bare "1.11.0" baseline which is always older than any
-    // release tag and would trigger the prompt continuously.
+    // Skip in Vite dev mode (the bare package.json version is always older
+    // than any release tag) and in Electron (electron-updater handles it).
     const isEnabled = !isElectron() && !import.meta.env.DEV;
 
     const { data } = useQuery({
         enabled: isEnabled,
         queryFn: fetchLatestRelease,
-        queryKey: ['feishin-github-releases-updater', currentVersion],
+        queryKey: [...QUERY_KEY, currentVersion],
         refetchInterval: POLL_INTERVAL_MS,
         refetchIntervalInBackground: true,
         refetchOnWindowFocus: false,
@@ -114,47 +145,103 @@ export const useGithubReleasesUpdater = () => {
         if (!data || !isEnabled) return;
         const latestTag = data.tag_name;
         if (!isNewerVersion(latestTag, currentVersion)) return;
-
-        // Don't re-toast the same release on every render.
         if (shownForRef.current === latestTag) return;
         shownForRef.current = latestTag;
-
-        // Don't re-toast a release the user has already dismissed.
         try {
             if (localStorage.getItem(DISMISSED_KEY) === latestTag) return;
         } catch {
-            // localStorage blocked (private mode / quota) — fall through.
+            // ignore
         }
 
-        const apkAsset = data.assets.find((asset) => asset.name.toLowerCase().endsWith('.apk'));
-        // On Android, opening the .apk asset URL in the system browser
-        // triggers the OS package-installer prompt directly. On every
-        // other platform, the release page is the safer landing spot
-        // (users can pick the right binary themselves).
-        const downloadUrl =
-            isAndroidWebView() && apkAsset ? apkAsset.browser_download_url : data.html_url;
-
-        const dismiss = () => {
-            try {
-                localStorage.setItem(DISMISSED_KEY, latestTag);
-            } catch {
-                // ignore
-            }
-        };
+        const target = pickDownloadTarget(data);
 
         toast.info({
             autoClose: false,
             message: t('common.updateAvailableBody', {
-                defaultValue:
-                    'Version {{tag}} is available. Tap to download — your browser will handle installation.',
+                defaultValue: target.isApk
+                    ? 'Version {{tag}} is available. Tap to download — the OS installer will take over.'
+                    : 'Version {{tag}} is available. Tap to open the release page.',
                 tag: latestTag,
             }),
             onClick: () => {
-                window.open(downloadUrl, '_blank', 'noopener,noreferrer');
-                dismiss();
+                triggerDownload(target.url, target.filename);
+                dismissTag(latestTag);
             },
-            onClose: dismiss,
+            onClose: () => dismissTag(latestTag),
             title: t('common.updateAvailable', { defaultValue: 'Update available' }),
         });
     }, [data, currentVersion, isEnabled, t]);
+};
+
+/**
+ * Imperative controls for the GitHub-releases updater. Exposed for any UI
+ * surface that wants a manual "Check for updates" button (mobile drawer,
+ * settings entry, etc.) — re-invalidates the cached query so the next
+ * usage of `useGithubReleasesUpdater` re-fetches and the auto-toast fires
+ * if there's a newer release; and exposes `installLatest` for callers that
+ * want to immediately stage the most recent release for install (regardless
+ * of whether it's newer than the running build — useful for "re-download
+ * latest" / repair flows).
+ */
+export const useGithubReleasesUpdaterControls = () => {
+    const queryClient = useQueryClient();
+    const { t } = useTranslation();
+    const currentVersion = packageJson.version;
+
+    const checkNow = useCallback(async () => {
+        toast.info({
+            autoClose: 3000,
+            message: t('common.checkingForUpdates', {
+                defaultValue: 'Checking for updates…',
+            }),
+        });
+        // Force a re-fetch by invalidating the cache; the
+        // useGithubReleasesUpdater effect will pop the standard
+        // update-available toast if a newer release shows up.
+        await queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+        // Look at the data we just refetched directly so we can give the
+        // user clear feedback when they're already on the latest release.
+        const fresh =
+            queryClient.getQueryData<GithubRelease | null>([...QUERY_KEY, currentVersion]) ??
+            (await fetchLatestRelease());
+        if (!fresh) {
+            toast.warn({
+                message: t('common.updateCheckFailed', {
+                    defaultValue: 'Could not reach the update server.',
+                }),
+            });
+            return;
+        }
+        if (!isNewerVersion(fresh.tag_name, currentVersion)) {
+            toast.success({
+                message: t('common.upToDate', {
+                    defaultValue: 'You are on the latest version ({{tag}}).',
+                    tag: fresh.tag_name,
+                }),
+            });
+        }
+    }, [queryClient, t, currentVersion]);
+
+    const installLatest = useCallback(async () => {
+        const release = await fetchLatestRelease();
+        if (!release) {
+            toast.warn({
+                message: t('common.updateCheckFailed', {
+                    defaultValue: 'Could not reach the update server.',
+                }),
+            });
+            return;
+        }
+        const target = pickDownloadTarget(release);
+        triggerDownload(target.url, target.filename);
+        toast.info({
+            message: t('common.installStarted', {
+                defaultValue: target.isApk
+                    ? 'Downloading APK — the OS installer will prompt to install.'
+                    : 'Opening release page in your browser.',
+            }),
+        });
+    }, [t]);
+
+    return { checkNow, installLatest };
 };

@@ -11,6 +11,7 @@ import { isServerLock } from '/@/renderer/features/action-required/utils/window-
 import { ServerList } from '/@/renderer/features/servers/components/server-list';
 import { openSettingsModal } from '/@/renderer/features/settings/utils/open-settings-modal';
 import { ServerSelector } from '/@/renderer/features/sidebar/components/server-selector';
+import { useGithubReleasesUpdaterControls } from '/@/renderer/hooks/use-github-releases-updater';
 import { openReleaseNotesModal } from '/@/renderer/release-notes-modal';
 import {
     useAppStore,
@@ -90,6 +91,7 @@ export const AppMenu = () => {
     const settings = useGeneralSettings();
     const currentServer = useCurrentServer();
     const { open: openCommandPalette } = useCommandPalette();
+    const { checkNow: checkForUpdatesNow, installLatest } = useGithubReleasesUpdaterControls();
 
     const handleBrowserDevTools = () => {
         browser?.devtools();
@@ -294,6 +296,43 @@ export const AppMenu = () => {
                     t('common.newVersion', { version: packageJson.version }) as string,
                 ),
             type: 'item',
+        },
+        {
+            // Non-Electron platforms (Capacitor Android, web/PWA) get a
+            // visible "Check for updates" + "Install latest release" pair
+            // since the only automatic check is the 6h background poll
+            // and the user can't always wait. Electron is hidden because
+            // electron-updater has its own UI surface.
+            condition: !isElectron(),
+            id: 'check-for-updates',
+            item: {
+                icon: 'refresh',
+                id: 'check-for-updates',
+                label: t('page.appMenu.checkForUpdates', {
+                    defaultValue: 'Check for updates',
+                }),
+                onClick: () => {
+                    void checkForUpdatesNow();
+                },
+                type: 'item',
+            },
+            type: 'conditional-item',
+        },
+        {
+            condition: !isElectron(),
+            id: 'install-latest',
+            item: {
+                icon: 'download',
+                id: 'install-latest',
+                label: t('page.appMenu.installLatest', {
+                    defaultValue: 'Install latest release',
+                }),
+                onClick: () => {
+                    void installLatest();
+                },
+                type: 'item',
+            },
+            type: 'conditional-item',
         },
         {
             condition: isElectron(),
