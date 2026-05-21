@@ -174,39 +174,72 @@
     display: flex;
     flex-shrink: 0;
     flex-direction: column;
+    gap: 0.15rem;
+    align-items: stretch;
+    width: 100%;
+    padding: 0.75rem 1.25rem 0.5rem;
+}
+
+/*
+ * Spotify-mobile metadata row: title + artist stacked on the left
+ * (taking remaining width), favourite heart pinned to the right so the
+ * title alignment doesn't shift when the song changes.
+ */
+.title-and-favorite-row {
+    display: flex;
     gap: 0.5rem;
     align-items: center;
     width: 100%;
-    padding: 1rem;
-    padding-top: 1.5rem;
 }
 
-.title-row {
+.title-stack {
     display: flex;
-    gap: 0.75rem;
-    align-items: center;
-    justify-content: center;
-    width: 100%;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.15;
+    white-space: nowrap;
+}
+
+.artist {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: color-mix(in srgb, var(--theme-colors-foreground) 70%, transparent);
+    white-space: nowrap;
+}
+
+.album {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: color-mix(in srgb, var(--theme-colors-foreground) 55%, transparent);
+    white-space: nowrap;
+}
+
+.favorite-action {
+    flex-shrink: 0;
 }
 
 .metadata-row {
-    justify-content: center;
-    width: 100%;
+    justify-content: flex-start;
+    color: color-mix(in srgb, var(--theme-colors-foreground) 55%, transparent);
 }
 
 .actions-row {
-    justify-content: center;
-    width: 100%;
+    justify-content: flex-start;
 }
 
 .progress-container {
     display: flex;
     flex-shrink: 0;
-    gap: 1rem;
+    gap: 0.75rem;
     align-items: center;
     width: 100%;
-    padding: 0 1rem;
-    padding-bottom: 1.5rem;
+    padding: 0.25rem 1.25rem 0.5rem;
 }
 
 .time-container {
@@ -225,8 +258,7 @@
     align-items: center;
     justify-content: center;
     width: 100%;
-    padding: 0 1rem;
-    padding-bottom: 1.5rem;
+    padding: 0.5rem 1rem 1rem;
 }
 
 /* On very narrow phones (≤360px), 7 transport buttons + gaps overflow the
@@ -244,8 +276,7 @@
     gap: 0.5rem;
     align-items: center;
     width: 100%;
-    padding: 0 1rem;
-    padding-bottom: 0.75rem;
+    padding: 0.25rem 1rem 0.5rem;
 }
 
 .volume-slider {
