@@ -4,7 +4,7 @@ import { memo, MouseEvent } from 'react';
 import styles from './mobile-fullscreen-player.module.css';
 
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
-import { usePlayerRepeat, usePlayerShuffle } from '/@/renderer/store';
+import { usePlayerData, usePlayerRepeat, usePlayerShuffle } from '/@/renderer/store';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Group } from '/@/shared/components/group/group';
 import { PlayerRepeat, PlayerShuffle } from '/@/shared/types/types';
@@ -28,6 +28,10 @@ export const MobileFullscreenPlayerBottomControls = memo(
         const repeat = usePlayerRepeat();
         const shuffle = usePlayerShuffle();
         const { toggleRepeat, toggleShuffle } = usePlayer();
+        // Queue badge mirrors the desktop right-controls QueueButton —
+        // surfaces "how many tracks are queued?" at a glance so the user
+        // doesn't have to switch into the queue tab to find out.
+        const { queueLength } = usePlayerData();
 
         return (
             <div className={styles.bottomControlsBar}>
@@ -56,18 +60,25 @@ export const MobileFullscreenPlayerBottomControls = memo(
                         onClick={toggleRepeat}
                         variant="transparent"
                     />
-                    <ActionIcon
-                        aria-label={t('player.viewQueue')}
-                        aria-pressed={isQueueActive}
-                        className={styles.bottomControlIcon}
-                        icon="queue"
-                        iconProps={{
-                            fill: isQueueActive ? 'primary' : undefined,
-                            size: 'xl',
-                        }}
-                        onClick={onToggleQueue}
-                        variant="transparent"
-                    />
+                    <div className={styles.queueButtonWrapper}>
+                        <ActionIcon
+                            aria-label={t('player.viewQueue')}
+                            aria-pressed={isQueueActive}
+                            className={styles.bottomControlIcon}
+                            icon="queue"
+                            iconProps={{
+                                fill: isQueueActive ? 'primary' : undefined,
+                                size: 'xl',
+                            }}
+                            onClick={onToggleQueue}
+                            variant="transparent"
+                        />
+                        {queueLength > 0 && (
+                            <span aria-hidden className={styles.queueBadge}>
+                                {queueLength > 99 ? '99+' : queueLength}
+                            </span>
+                        )}
+                    </div>
                     <ActionIcon
                         aria-label={t('player.lyrics')}
                         aria-pressed={isLyricsActive}
