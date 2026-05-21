@@ -69,12 +69,18 @@ export const openVisualizerSettingsModal = () => {
             // fullscreen visualizer paints through the transparent overlay
             // and turns the form into illegible white-on-rainbow. The
             // header gets its own subtle background so the close X has a
-            // hit area that's distinguishable from the visualization.
+            // hit area that's distinguishable from the visualization. Top
+            // padding lifts past the status-bar / notch — env() covers
+            // iOS, --android-safe-top is the Capacitor Android fallback.
             header: fullScreen
                 ? {
                       background: 'var(--theme-colors-background)',
                       borderBottom: '1px solid var(--theme-colors-border)',
-                      padding: 'var(--theme-spacing-sm)',
+                      paddingBottom: 'var(--theme-spacing-sm)',
+                      paddingLeft: 'var(--theme-spacing-sm)',
+                      paddingRight: 'var(--theme-spacing-sm)',
+                      paddingTop:
+                          'calc(var(--theme-spacing-sm) + max(env(safe-area-inset-top, 0px), var(--android-safe-top, 0px)))',
                   }
                 : undefined,
             // On mobile, paint a solid background so the form is readable

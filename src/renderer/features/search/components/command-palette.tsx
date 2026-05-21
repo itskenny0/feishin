@@ -187,15 +187,32 @@ export const CommandPalette = ({ modalProps }: CommandPaletteProps) => {
             }}
             size="lg"
             styles={{
-                body: { padding: '0' },
+                body: isMobileShell
+                    ? {
+                          // Inset the body horizontally so cmdk rows and
+                          // the search input don't run flush against the
+                          // screen edge on the full-screen mobile sheet.
+                          padding: '0 var(--theme-spacing-md)',
+                      }
+                    : { padding: '0' },
                 content: isMobileShell ? { height: '100dvh' } : undefined,
                 // Keep the modal header visible on the mobile shell so
-                // the user has an explicit close X. On desktop the
-                // header is hidden because the palette already has Esc
-                // / overlay-click to dismiss + the result is centered
-                // in a compact dialog where the header takes valuable
-                // vertical space.
-                header: isMobileShell ? undefined : { display: 'none' },
+                // the user has an explicit close X. Lift the header's top
+                // padding to clear the Android status-bar / iOS notch:
+                // env(safe-area-inset-top) covers iOS, --android-safe-top
+                // is the Capacitor Android fallback (the WebView reports
+                // env() as 0 there). On desktop the header is hidden
+                // because the palette already has Esc / overlay-click to
+                // dismiss + the result is centered in a compact dialog
+                // where the header takes valuable vertical space.
+                header: isMobileShell
+                    ? {
+                          paddingLeft: 'var(--theme-spacing-md)',
+                          paddingRight: 'var(--theme-spacing-md)',
+                          paddingTop:
+                              'calc(var(--theme-spacing-md) + max(env(safe-area-inset-top, 0px), var(--android-safe-top, 0px)))',
+                      }
+                    : { display: 'none' },
                 root: { zIndex: 1000 },
             }}
             withCloseButton={isMobileShell}
@@ -290,12 +307,22 @@ export const CommandPalette = ({ modalProps }: CommandPaletteProps) => {
                     ))}
                 </Breadcrumb>
 
-                <Group gap="sm">
-                    <Kbd size="md">ESC</Kbd>
-                    <Kbd size="md">↑</Kbd>
-                    <Kbd size="md">↓</Kbd>
-                    <Kbd size="md">⏎</Kbd>
-                </Group>
+                {/*
+                 * Keyboard-shortcut glyphs only make sense on devices with
+                 * a physical keyboard. On the mobile shell the user is
+                 * driving the palette with taps + the on-screen keyboard,
+                 * so the ESC / ↑ / ↓ / ⏎ row is dead weight that eats
+                 * vertical room and competes with the breadcrumb for the
+                 * first visible row above the soft keyboard.
+                 */}
+                {!isMobileShell && (
+                    <Group gap="sm">
+                        <Kbd size="md">ESC</Kbd>
+                        <Kbd size="md">↑</Kbd>
+                        <Kbd size="md">↓</Kbd>
+                        <Kbd size="md">⏎</Kbd>
+                    </Group>
+                )}
             </Group>
         </Modal>
     );

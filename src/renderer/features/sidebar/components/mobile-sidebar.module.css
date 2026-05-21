@@ -10,10 +10,15 @@
      * sit under the status-bar clock or get cut by the gesture pill.
      * The Mantine Drawer itself is position: fixed across the whole
      * viewport, so it doesn't inherit the layout's safe-area-aware
-     * grid - we apply the insets directly here.
+     * grid — we apply the insets directly here.
+     *
+     * Capacitor Android reports env(safe-area-inset-*) as 0 inside its
+     * WebView, so fall back to --android-safe-* (set by useAndroidBodyFlag
+     * to 28px on Android). On iOS / web env() is authoritative and the
+     * Android fallback resolves to 0.
      */
-    padding-top: env(safe-area-inset-top, 0);
-    padding-bottom: env(safe-area-inset-bottom, 0);
+    padding-top: max(env(safe-area-inset-top, 0px), var(--android-safe-top, 0px));
+    padding-bottom: max(env(safe-area-inset-bottom, 0px), var(--android-safe-bottom, 0px));
     background: var(--theme-colors-background-alternate);
 }
 

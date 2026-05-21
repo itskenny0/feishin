@@ -42,3 +42,33 @@ input[cmdk-input] {
     margin: 0 0 var(--theme-spacing-sm);
     background: var(--theme-colors-border);
 }
+
+/*
+ * Touch devices: the cmdk row default (var(--theme-spacing-sm)) is fine
+ * for mouse pointers but undersized for fingers — the Material 48dp /
+ * Apple HIG 44pt minimum tap target means each row needs more vertical
+ * padding. Bump the row padding + input size so the palette feels
+ * native rather than a desktop search box stretched to full screen.
+ */
+@media (pointer: coarse) {
+    [cmdk-item] {
+        min-height: 48px;
+        padding: var(--theme-spacing-md);
+        font-size: var(--theme-font-size-lg);
+
+        svg {
+            width: 1.4rem;
+            height: 1.4rem;
+        }
+    }
+
+    input[cmdk-input] {
+        padding: var(--theme-spacing-md);
+        font-size: var(--theme-font-size-lg);
+    }
+
+    [cmdk-group-heading] {
+        margin: var(--theme-spacing-sm) 0;
+        font-size: var(--theme-font-size-md);
+    }
+}

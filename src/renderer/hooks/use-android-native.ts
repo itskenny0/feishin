@@ -43,6 +43,30 @@ export const useAndroidBodyFlag = () => {
                 if (!(await isNative())) return;
                 if (cancelled) return;
                 document.documentElement.setAttribute('data-capacitor-android', 'true');
+
+                /*
+                 * Capacitor 8's Android WebView reports
+                 * `env(safe-area-inset-top)` and `env(safe-area-inset-bottom)`
+                 * as 0px even when the StatusBar plugin's
+                 * setOverlaysWebView({ overlay: false }) call lifts the
+                 * WebView below the system bars. Many vendor Androids
+                 * (crDroid, MIUI, OneUI) also ignore the
+                 * `windowOptOutEdgeToEdgeEnforcement` attribute, so we
+                 * end up with our header / titlebar / modal headers
+                 * painted under the status-bar clock.
+                 *
+                 * Set explicit fallback inset variables on the document
+                 * root so every CSS rule that uses
+                 * `max(env(safe-area-inset-top, 0px), var(--android-safe-top, 0px))`
+                 * gets a real value. Tuned to the Material 3 status-bar
+                 * (24dp) plus a small comfort margin so notched / hole-
+                 * punch devices like the Pixel 8 don't crowd the title
+                 * against the camera cutout. The bottom fallback covers
+                 * the gesture-nav pill (typically 16dp + 12dp pill
+                 * height).
+                 */
+                document.documentElement.style.setProperty('--android-safe-top', '28px');
+                document.documentElement.style.setProperty('--android-safe-bottom', '28px');
             } catch {
                 // ignore
             }
