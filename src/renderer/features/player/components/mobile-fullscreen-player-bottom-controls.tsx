@@ -3,11 +3,7 @@ import { memo, MouseEvent } from 'react';
 
 import styles from './mobile-fullscreen-player.module.css';
 
-import {
-    useFullScreenPlayerStore,
-    useFullScreenPlayerStoreActions,
-    usePlayerData,
-} from '/@/renderer/store';
+import { usePlayerData } from '/@/renderer/store';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Group } from '/@/shared/components/group/group';
 
@@ -21,15 +17,14 @@ interface MobileFullscreenPlayerBottomControlsProps {
 
 /**
  * Bottom utility bar inside the mobile fullscreen player. Spotify pattern:
- * four flat-icon buttons - Queue (with count badge), Lyrics, Visualizer,
- * and an overflow ⋯ that opens the song's context menu.
+ * three flat-icon buttons - Queue (with count badge), Lyrics, and an
+ * overflow ⋯ that opens the song's context menu.
  *
- * Shuffle and Repeat used to live here too, but they're in the transport
- * row above now, so duplicating them in the bottom bar was just clutter
- * and stole space from more useful controls. The visualizer toggle is the
- * only entry point on mobile (desktop has its own button in the
- * left-controls); without it there's no way to reach the fullscreen
- * visualizer from a phone.
+ * The visualizer button used to live here too but now lives inside the
+ * dedicated Visualizer card lower in the scrollable card stack — that
+ * card has its own expand-to-fullscreen button, which is also where
+ * the eye lands when scrolling Spotify-style. Mirroring the affordance
+ * in the bottom bar would be noise.
  */
 export const MobileFullscreenPlayerBottomControls = memo(
     ({
@@ -39,23 +34,10 @@ export const MobileFullscreenPlayerBottomControls = memo(
         onToggleLyrics,
         onToggleQueue,
     }: MobileFullscreenPlayerBottomControlsProps) => {
-        const { visualizerExpanded } = useFullScreenPlayerStore();
-        const { setStore } = useFullScreenPlayerStoreActions();
         // Queue badge mirrors the desktop right-controls QueueButton —
         // surfaces "how many tracks are queued?" at a glance so the user
         // doesn't have to switch into the queue tab to find out.
         const { queueLength } = usePlayerData();
-
-        const handleToggleVisualizer = () => {
-            // Toggle the dedicated FullScreenVisualizer overlay (mobile-layout
-            // renders it when visualizerExpanded is true). Collapses the
-            // player overlay first so the user lands on the visualizer
-            // cleanly rather than seeing both layered briefly.
-            setStore({
-                expanded: false,
-                visualizerExpanded: !visualizerExpanded,
-            });
-        };
 
         return (
             <div className={styles.bottomControlsBar}>
@@ -93,23 +75,6 @@ export const MobileFullscreenPlayerBottomControls = memo(
                             size: 'xl',
                         }}
                         onClick={onToggleLyrics}
-                        variant="transparent"
-                    />
-                    <ActionIcon
-                        aria-label={t('player.visualizer', {
-                            defaultValue: 'Visualizer',
-                        })}
-                        aria-pressed={visualizerExpanded}
-                        className={styles.bottomControlIcon}
-                        // Sparkles reads as "visual effects" - the closest
-                        // metaphor we have in the icon set for an audio
-                        // visualizer.
-                        icon="sparkles"
-                        iconProps={{
-                            fill: visualizerExpanded ? 'primary' : undefined,
-                            size: 'xl',
-                        }}
-                        onClick={handleToggleVisualizer}
                         variant="transparent"
                     />
                     <ActionIcon

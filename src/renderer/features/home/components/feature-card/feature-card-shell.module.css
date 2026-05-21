@@ -17,6 +17,18 @@
     margin-bottom: var(--theme-spacing-md);
     container-type: inline-size;
     overflow: hidden;
+
+    /*
+     * Reserve horizontal pans for Motion's drag handler. Without this
+     * Android Chrome's "swipe from left edge" back gesture eats every
+     * rightward swipe on the card — the user reported that swiping
+     * backwards (to the previous featured artist) reloaded the page,
+     * because the gesture was being interpreted as a navigation-back
+     * before Motion ever saw the touch. `touch-action: pan-y` tells
+     * the browser to keep vertical pans (page scroll) but hand
+     * horizontal pans to us.
+     */
+    touch-action: pan-y;
     border-radius: var(--theme-radius-md);
     isolation: isolate;
 }
