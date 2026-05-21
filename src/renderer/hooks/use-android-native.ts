@@ -99,7 +99,7 @@ export const useAndroidBodyFlag = () => {
 export const useAndroidStatusBar = () => {
     useEffect(() => {
         let cancelled = false;
-        let StatusBarApi: typeof import('@capacitor/status-bar').StatusBar | null = null;
+        let StatusBarApi: null | typeof import('@capacitor/status-bar').StatusBar = null;
 
         const applyStatusBar = async () => {
             try {

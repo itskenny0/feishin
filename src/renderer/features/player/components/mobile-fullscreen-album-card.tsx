@@ -79,9 +79,7 @@ export const MobileFullscreenAlbumCard = memo(
                         )}
                         <div className={styles.albumCardMeta}>
                             <div className={styles.albumCardName}>{albumName}</div>
-                            {subtitle && (
-                                <div className={styles.albumCardSubtitle}>{subtitle}</div>
-                            )}
+                            {subtitle && <div className={styles.albumCardSubtitle}>{subtitle}</div>}
                         </div>
                     </div>
                 </Link>

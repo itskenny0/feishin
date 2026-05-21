@@ -4,13 +4,14 @@ import {
     CSSProperties,
     memo,
     MouseEvent,
-    PointerEvent as ReactPointerEvent,
     ReactNode,
+    PointerEvent as ReactPointerEvent,
     useCallback,
     useEffect,
     useRef,
     useState,
 } from 'react';
+import { lazy as lazyImport, Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import styles from './mobile-fullscreen-player.module.css';
@@ -19,14 +20,38 @@ import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { ContextMenuController } from '/@/renderer/features/context-menu/context-menu-controller';
 import { Lyrics } from '/@/renderer/features/lyrics/lyrics';
 import { PlayQueue } from '/@/renderer/features/now-playing/components/play-queue';
-import { lazy as lazyImport, Suspense } from 'react';
-
 import { MobileFullscreenAlbumCard } from '/@/renderer/features/player/components/mobile-fullscreen-album-card';
 import { MobileFullscreenArtistCard } from '/@/renderer/features/player/components/mobile-fullscreen-artist-card';
 import { MobileFullscreenPlayerAlbumArt } from '/@/renderer/features/player/components/mobile-fullscreen-player-album-art';
+import { MobileFullscreenPlayerBottomControls } from '/@/renderer/features/player/components/mobile-fullscreen-player-bottom-controls';
+import { MobileFullscreenPlayerControls } from '/@/renderer/features/player/components/mobile-fullscreen-player-controls';
+import { MobileFullscreenPlayerHeader } from '/@/renderer/features/player/components/mobile-fullscreen-player-header';
+import { MobileFullscreenPlayerMetadata } from '/@/renderer/features/player/components/mobile-fullscreen-player-metadata';
+import { MobileFullscreenPlayerProgress } from '/@/renderer/features/player/components/mobile-fullscreen-player-progress';
+import { MobileFullscreenPlayerVolume } from '/@/renderer/features/player/components/mobile-fullscreen-player-volume';
 import { MobileFullscreenVisualizerCard } from '/@/renderer/features/player/components/mobile-fullscreen-visualizer-card';
+import {
+    useIsRadioActive,
+    useRadioPlayer,
+} from '/@/renderer/features/radio/hooks/use-radio-player';
 import { ComponentErrorBoundary } from '/@/renderer/features/shared/components/component-error-boundary';
+import { useSetFavorite } from '/@/renderer/features/shared/hooks/use-set-favorite';
+import { useSetRating } from '/@/renderer/features/shared/hooks/use-set-rating';
+import { useFastAverageColor } from '/@/renderer/hooks';
+import {
+    useCurrentServer,
+    useFullScreenPlayerStore,
+    useFullScreenPlayerStoreActions,
+    usePlayerData,
+    usePlayerSong,
+    useSetFullScreenPlayerStore,
+    useShowRatings,
+} from '/@/renderer/store';
 import { usePlaybackSettings, useSettingsStore } from '/@/renderer/store/settings.store';
+import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
+import { Text } from '/@/shared/components/text/text';
+import { LibraryItem, ServerType } from '/@/shared/types/domain-types';
+import { ItemListKey } from '/@/shared/types/types';
 
 const AudioMotionAnalyzerVisualizer = lazyImport(() =>
     import('/@/renderer/features/visualizer/components/audiomotionanalyzer/visualizer').then(
@@ -35,9 +60,9 @@ const AudioMotionAnalyzerVisualizer = lazyImport(() =>
 );
 
 const ButterchurnVisualizer = lazyImport(() =>
-    import('/@/renderer/features/visualizer/components/butternchurn/visualizer').then(
-        (module) => ({ default: module.Visualizer }),
-    ),
+    import('/@/renderer/features/visualizer/components/butternchurn/visualizer').then((module) => ({
+        default: module.Visualizer,
+    })),
 );
 
 /**
@@ -76,32 +101,6 @@ const FullscreenVisualizerBackground = memo(() => {
 });
 
 FullscreenVisualizerBackground.displayName = 'FullscreenVisualizerBackground';
-import { MobileFullscreenPlayerBottomControls } from '/@/renderer/features/player/components/mobile-fullscreen-player-bottom-controls';
-import { MobileFullscreenPlayerControls } from '/@/renderer/features/player/components/mobile-fullscreen-player-controls';
-import { MobileFullscreenPlayerHeader } from '/@/renderer/features/player/components/mobile-fullscreen-player-header';
-import { MobileFullscreenPlayerMetadata } from '/@/renderer/features/player/components/mobile-fullscreen-player-metadata';
-import { MobileFullscreenPlayerProgress } from '/@/renderer/features/player/components/mobile-fullscreen-player-progress';
-import { MobileFullscreenPlayerVolume } from '/@/renderer/features/player/components/mobile-fullscreen-player-volume';
-import {
-    useIsRadioActive,
-    useRadioPlayer,
-} from '/@/renderer/features/radio/hooks/use-radio-player';
-import { useSetFavorite } from '/@/renderer/features/shared/hooks/use-set-favorite';
-import { useSetRating } from '/@/renderer/features/shared/hooks/use-set-rating';
-import { useFastAverageColor } from '/@/renderer/hooks';
-import {
-    useCurrentServer,
-    useFullScreenPlayerStore,
-    useFullScreenPlayerStoreActions,
-    usePlayerData,
-    usePlayerSong,
-    useSetFullScreenPlayerStore,
-    useShowRatings,
-} from '/@/renderer/store';
-import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
-import { Text } from '/@/shared/components/text/text';
-import { LibraryItem, ServerType } from '/@/shared/types/domain-types';
-import { ItemListKey } from '/@/shared/types/types';
 
 const mainBackground = 'var(--theme-colors-background)';
 

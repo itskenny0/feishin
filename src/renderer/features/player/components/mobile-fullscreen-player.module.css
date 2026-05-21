@@ -91,8 +91,8 @@
     overflow-y: auto;
     overscroll-behavior-y: contain;
     pointer-events: none;
-    background: transparent;
     scrollbar-width: none;
+    background: transparent;
     -ms-overflow-style: none;
 }
 
@@ -181,6 +181,7 @@
  * its own padding, rounded corners, subtle background, and an eyebrow
  * label up top.
  */
+
 /*
  * Lyrics preview card. The fullscreen player paints a dynamic background
  * tinted by the album cover, so a translucent foreground-tinted card can
@@ -192,10 +193,10 @@
  * guaranteed.
  */
 .lyrics-card {
-    cursor: pointer;
     padding: var(--theme-spacing-md);
     margin: var(--theme-spacing-md) var(--theme-spacing-md) calc(var(--theme-spacing-lg) * 2);
     color: #fff;
+    cursor: pointer;
     background: rgb(0 0 0 / 55%);
     border-radius: var(--theme-radius-lg);
     backdrop-filter: blur(14px) saturate(140%);
@@ -228,6 +229,7 @@
     max-height: 60vh;
     overflow-y: auto;
     color: #fff;
+
     /*
      * Render the lyrics as display-only inside the preview card. A
      * tap on the card opens the full-screen Lyrics tab (which IS
@@ -382,17 +384,17 @@
 
 .album-card-name {
     overflow: hidden;
+    text-overflow: ellipsis;
     font-size: 1rem;
     font-weight: 600;
-    text-overflow: ellipsis;
     white-space: nowrap;
 }
 
 .album-card-subtitle {
     overflow: hidden;
+    text-overflow: ellipsis;
     font-size: 0.8rem;
     color: rgb(255 255 255 / 70%);
-    text-overflow: ellipsis;
     white-space: nowrap;
 }
 
@@ -404,8 +406,8 @@
  */
 .visualizer-card {
     position: relative;
-    overflow: hidden;
     margin: 0 var(--theme-spacing-md) calc(var(--theme-spacing-lg) * 2);
+    overflow: hidden;
     background: rgb(0 0 0 / 65%);
     border-radius: var(--theme-radius-lg);
     backdrop-filter: blur(14px) saturate(140%);
@@ -737,6 +739,7 @@
 .slider-wrapper {
     position: relative;
     flex: 1;
+
     /*
      * Tell the browser: pointer events inside the slider wrapper are
      * for the slider only, not for scrolling the parent. Without this,

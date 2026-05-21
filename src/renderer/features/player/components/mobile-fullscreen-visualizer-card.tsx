@@ -20,9 +20,9 @@ const AudioMotionAnalyzerVisualizer = lazy(() =>
 );
 
 const ButterchurnVisualizer = lazy(() =>
-    import('/@/renderer/features/visualizer/components/butternchurn/visualizer').then(
-        (module) => ({ default: module.Visualizer }),
-    ),
+    import('/@/renderer/features/visualizer/components/butternchurn/visualizer').then((module) => ({
+        default: module.Visualizer,
+    })),
 );
 
 /**
@@ -57,9 +57,7 @@ export const MobileFullscreenVisualizerCard = memo(() => {
     return (
         <div className={styles.visualizerCard}>
             <div className={styles.visualizerCardHeader}>
-                <span>
-                    {t('page.fullscreenPlayer.visualizer', { defaultValue: 'Visualizer' })}
-                </span>
+                <span>{t('page.fullscreenPlayer.visualizer', { defaultValue: 'Visualizer' })}</span>
                 <ActionIcon
                     aria-label={t('common.expand', { defaultValue: 'Expand' })}
                     onClick={handleExpand}

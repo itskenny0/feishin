@@ -7,8 +7,7 @@ import { openContextModal } from '@mantine/modals';
  * directly at open-time. The query catches phones in either
  * orientation; tablets and desktops get the regular sized modal.
  */
-const MOBILE_SHELL_QUERY =
-    '(max-width: 767px), (orientation: landscape) and (max-height: 480px)';
+const MOBILE_SHELL_QUERY = '(max-width: 767px), (orientation: landscape) and (max-height: 480px)';
 
 export const openSettingsModal = () => {
     const isMobile =

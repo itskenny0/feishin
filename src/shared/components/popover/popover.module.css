@@ -1,12 +1,4 @@
 .dropdown {
-    padding: var(--theme-spacing-sm);
-    color: var(--theme-colors-foreground);
-    background: var(--theme-colors-background);
-    border: 2px solid var(--theme-colors-border);
-    border-radius: var(--theme-radius-md);
-    box-shadow: 2px 2px 10px 2px rgb(0 0 0 / 40%);
-    filter: drop-shadow(0 0 5px rgb(0 0 0 / 50%));
-
     /*
      * Constrain the dropdown to the viewport so long settings menus
      * (the fullscreen-player config has ~15 options between dynamic
@@ -17,6 +9,13 @@
      */
     max-width: calc(100vw - 24px);
     max-height: calc(100dvh - 96px);
+    padding: var(--theme-spacing-sm);
     overflow-y: auto;
     overscroll-behavior: contain;
+    color: var(--theme-colors-foreground);
+    background: var(--theme-colors-background);
+    border: 2px solid var(--theme-colors-border);
+    border-radius: var(--theme-radius-md);
+    box-shadow: 2px 2px 10px 2px rgb(0 0 0 / 40%);
+    filter: drop-shadow(0 0 5px rgb(0 0 0 / 50%));
 }

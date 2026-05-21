@@ -84,10 +84,10 @@
      * above the fold. Landscape phones and tablets keep the editorial
      * hero — that's where it actually fits.
      */
-    @media (max-width: 767px) and (orientation: portrait) {
+    @media (width <= 767px) and (orientation: portrait) {
         grid-template-areas: 'image info';
-        grid-template-columns: 120px minmax(0, 1fr);
         grid-template-rows: auto;
+        grid-template-columns: 120px minmax(0, 1fr);
         gap: var(--theme-spacing-sm);
         align-items: center;
         justify-items: flex-start;

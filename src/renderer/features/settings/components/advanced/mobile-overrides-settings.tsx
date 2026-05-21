@@ -1,6 +1,9 @@
 import { ChangeEvent } from 'react';
 
-import { SettingOption, SettingsSection } from '/@/renderer/features/settings/components/settings-section';
+import {
+    SettingOption,
+    SettingsSection,
+} from '/@/renderer/features/settings/components/settings-section';
 import { useSettingsStore, useSettingsStoreActions } from '/@/renderer/store/settings.store';
 import { Switch } from '/@/shared/components/switch/switch';
 
