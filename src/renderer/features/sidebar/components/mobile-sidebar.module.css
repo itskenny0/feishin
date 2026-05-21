@@ -4,6 +4,16 @@
     gap: var(--mantine-spacing-xs);
     width: 100%;
     height: 100%;
+
+    /*
+     * Inset the drawer content so the search bar / sidebar items don't
+     * sit under the status-bar clock or get cut by the gesture pill.
+     * The Mantine Drawer itself is position: fixed across the whole
+     * viewport, so it doesn't inherit the layout's safe-area-aware
+     * grid - we apply the insets directly here.
+     */
+    padding-top: env(safe-area-inset-top, 0);
+    padding-bottom: env(safe-area-inset-bottom, 0);
     background: var(--theme-colors-background-alternate);
 }
 
