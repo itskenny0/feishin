@@ -2,7 +2,19 @@
     position: relative;
     width: 100vw;
     height: 100%;
-    padding-bottom: env(safe-area-inset-bottom, 0);
+
+    /*
+     * Pad to clear the Android gesture-pill. env(safe-area-inset-bottom)
+     * is the standards-compliant source on iOS / iPad PWAs, but
+     * Capacitor 8's Android WebView reports 0 even with viewport-fit:
+     * cover + the StatusBar overlay=false call. The
+     * --android-safe-bottom override (set on html when running in the
+     * Capacitor Android WebView via useAndroidBodyFlag) lifts the
+     * padding to 28px so the seek slider never sits under the pill.
+     * On every other platform the var resolves to 0px and behaviour is
+     * unchanged.
+     */
+    padding-bottom: max(env(safe-area-inset-bottom, 0px), var(--android-safe-bottom, 0px));
     border-top: 1px solid alpha(var(--theme-colors-border), 0.5);
 }
 

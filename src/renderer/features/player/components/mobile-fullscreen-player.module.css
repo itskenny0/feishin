@@ -44,11 +44,12 @@
      * directly on the state divs (rather than padding on the container)
      * matters because the states are absolutely-positioned children
      * with their own top/bottom — padding on the container would be
-     * silently ignored.
+     * silently ignored. Capacitor Android falls back to
+     * --android-safe-* (28px) since env() reports 0 there.
      */
-    top: env(safe-area-inset-top, 0);
+    top: max(env(safe-area-inset-top, 0px), var(--android-safe-top, 0px));
     right: 0;
-    bottom: env(safe-area-inset-bottom, 0);
+    bottom: max(env(safe-area-inset-bottom, 0px), var(--android-safe-bottom, 0px));
     left: 0;
     z-index: 1;
     display: flex;

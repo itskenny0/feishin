@@ -3,11 +3,15 @@
 
     /*
      * Push below the device status-bar / clock on Capacitor Android by
-     * adding env(safe-area-inset-top) to the offset. env() resolves to 0
-     * in environments without a system-bar overlap (electron, browser
-     * without overlay) so desktop is unchanged.
+     * adding the max(env, --android-safe-top) to the offset. env() is 0
+     * in environments without a system-bar overlap, and --android-safe-
+     * top is 0 outside Capacitor — so desktop is unchanged. On
+     * Capacitor it lifts by 28px to clear the clock.
      */
-    top: calc(var(--theme-spacing-lg) + env(safe-area-inset-top, 0px));
+    top: calc(
+        var(--theme-spacing-lg) +
+            max(env(safe-area-inset-top, 0px), var(--android-safe-top, 0px))
+    );
     right: var(--theme-spacing-md);
     z-index: 20;
 }
@@ -207,20 +211,24 @@
 
 .title {
     display: flex;
+    width: 100%;
     margin: 0;
 
     /* Spotify-style display title: large, dense, tight tracking.
        3.5rem ceiling lets desktop hero pages read as editorial cover-
-       art labels rather than UI chrome; 2rem floor keeps phone titles
-       readable without crushing into the album-art on portrait. The
-       sizes calculated by calculateTitleSize() in library-header.tsx
-       override this baseline when the title is unusually long. */
-    font-size: clamp(2rem, 4dvw, 3.5rem);
+       art labels rather than UI chrome; 1.75rem floor keeps phone
+       titles readable without crushing into the album-art on portrait.
+       The sizes calculated by calculateTitleSize() in
+       library-header.tsx override this baseline when the title is
+       unusually long. overflow-wrap: anywhere + text-wrap: pretty lets
+       the browser break long words and balance lines on bigger widths,
+       so titles never spill off the page edge on narrow viewports. */
+    font-size: clamp(1.75rem, 4dvw, 3.5rem);
     font-weight: 800;
     line-height: 1.1;
     letter-spacing: -0.02em;
-    word-break: keep-all;
     text-wrap: pretty;
+    overflow-wrap: anywhere;
 }
 
 .library-header-menu {

@@ -356,3 +356,35 @@ button {
         --theme-colors-border: rgb(255 255 255 / 10%);
     }
 }
+
+/*
+ * Android safe-area fallback.
+ *
+ * The Capacitor 8 WebView (even with viewport-fit=cover + the StatusBar
+ * plugin's overlay=false call) often reports env(safe-area-inset-bottom)
+ * as 0 - meaning every safe-area CSS rule resolves to 0 padding and the
+ * Android gesture-pill at the bottom of the screen ends up covering the
+ * player's seek slider. iOS Safari does NOT have this problem (env values
+ * are honoured), so we can't unconditionally pad - it'd add unwanted
+ * margin on iOS/PWA.
+ *
+ * useAndroidBodyFlag flips html[data-capacitor-android="true"] on
+ * Capacitor. The two custom properties below override the env() fallback
+ * so any CSS that reads --safe-bottom (or uses env(safe-area-inset-bottom,
+ * 0px) via the default-layout grid) gets a sane 28px minimum on Android.
+ * Top is similarly defended for ROMs that don't honour fitsSystemWindows.
+ */
+html[data-capacitor-android='true'] {
+    --safe-top: max(env(safe-area-inset-top, 0px), 28px);
+    --safe-bottom: max(env(safe-area-inset-bottom, 0px), 28px);
+}
+
+html[data-capacitor-android='true'] body,
+html[data-capacitor-android='true'] {
+    /* Re-expose the env() values to descendants that read env() directly
+       (playerbar.module.css, mobile-fullscreen-player.module.css). The
+       trick: set --android-safe-* custom properties that those modules
+       can max() against, so they don't all need updating individually. */
+    --android-safe-top: 28px;
+    --android-safe-bottom: 28px;
+}

@@ -34,8 +34,16 @@
 }
 
 .layout {
-    --safe-top: env(safe-area-inset-top, 0px);
-    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    /*
+     * --safe-top / --safe-bottom drive the grid template heights below.
+     * Use the max() of env() and the Android fallback variable so the
+     * grid grows to clear the gesture pill / status bar on Capacitor
+     * (where env() reports 0 even with viewport-fit: cover). On every
+     * other platform --android-safe-* resolves to 0px and behaviour is
+     * unchanged from a plain env() lookup.
+     */
+    --safe-top: max(env(safe-area-inset-top, 0px), var(--android-safe-top, 0px));
+    --safe-bottom: max(env(safe-area-inset-bottom, 0px), var(--android-safe-bottom, 0px));
 
     position: relative;
     display: grid;
@@ -152,7 +160,8 @@
     /* The full-screen player needs to extend BENEATH the system bars (the
        overlay covers the whole viewport visually) but its own controls
        should stay inside the safe area. Children that touch the edges
-       use these vars to inset their content. */
-    --safe-top: env(safe-area-inset-top, 0px);
-    --safe-bottom: env(safe-area-inset-bottom, 0px);
+       use these vars to inset their content. Same Android fallback
+       pattern as the layout grid above. */
+    --safe-top: max(env(safe-area-inset-top, 0px), var(--android-safe-top, 0px));
+    --safe-bottom: max(env(safe-area-inset-bottom, 0px), var(--android-safe-bottom, 0px));
 }

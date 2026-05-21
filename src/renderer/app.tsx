@@ -14,6 +14,7 @@ import { WebAudioContext } from '/@/renderer/features/player/context/webaudio-co
 import { useDocumentTitle } from '/@/renderer/features/shared/hooks/use-document-title';
 import {
     useAndroidBackButton,
+    useAndroidBodyFlag,
     useAndroidKeepAwake,
     useAndroidStatusBar,
 } from '/@/renderer/hooks/use-android-native';
@@ -117,6 +118,7 @@ const AndroidNativeEffect = () => {
     useAndroidStatusBar();
     useAndroidBackButton();
     useAndroidKeepAwake();
+    useAndroidBodyFlag();
 
     return null;
 };
