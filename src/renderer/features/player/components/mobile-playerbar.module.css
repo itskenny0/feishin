@@ -1,4 +1,5 @@
 .container {
+    position: relative;
     display: grid;
     grid-template-columns: 1fr auto;
     gap: var(--theme-spacing-sm);
@@ -7,6 +8,31 @@
     height: 90px;
     padding: 0.5rem 1rem;
     overflow: hidden;
+}
+
+/*
+ * Spotify-style thin progress strip at the bottom of the mini-player.
+ * Sits absolutely anchored to the bar's bottom edge; the inner bar's
+ * width is driven by --mobile-playerbar-progress (set inline from the
+ * playback timestamp). 2px tall keeps it informative without competing
+ * with the controls above.
+ */
+.progress {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    height: 2px;
+    overflow: hidden;
+    pointer-events: none;
+    background: color-mix(in srgb, var(--theme-colors-foreground) 12%, transparent);
+}
+
+.progress-fill {
+    width: var(--mobile-playerbar-progress, 0%);
+    height: 100%;
+    background: var(--theme-colors-primary-filled);
+    transition: width 250ms linear;
 }
 
 .content-wrapper {
