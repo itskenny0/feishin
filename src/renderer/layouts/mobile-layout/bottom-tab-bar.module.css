@@ -100,3 +100,40 @@
     font-weight: 600;
     color: var(--theme-colors-foreground);
 }
+
+/*
+ * Big-phone tier (361–430px) — iPhone 13/14/15, Pro Max, Pixel 7/8/8 Pro,
+ * Galaxy S24, etc. Comfortable horizontal space lets the four labels
+ * breathe instead of huddling under their icons. Keep aligned with the
+ * --mobile-tab-bar-height var in mobile-layout.module.css when bumping
+ * heights here.
+ *
+ * Sub-360 phones keep the tighter 56px default so the layout doesn't
+ * spill; ≥431px phablets keep the default too (the tab bar there shares
+ * its row with the desktop sidebar, so over-sizing would feel out of
+ * place).
+ */
+@media (361px <= width <= 430px) {
+    .tab {
+        gap: 0.25rem;
+        padding: 0.5rem 0.35rem 0.6rem;
+        font-size: 0.74rem;
+    }
+
+    .icon-slot {
+        width: 1.85rem;
+        height: 1.85rem;
+    }
+
+    /* Slightly larger active-state dot so the indicator reads at a glance
+       on the comfortable tier without dominating the icon above it. */
+    .active-dot {
+        bottom: -0.35rem;
+        width: 0.4rem;
+        height: 0.4rem;
+    }
+
+    .label {
+        letter-spacing: 0.025em;
+    }
+}

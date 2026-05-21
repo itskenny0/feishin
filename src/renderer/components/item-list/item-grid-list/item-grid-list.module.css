@@ -60,3 +60,37 @@
 
     --card-gap: var(--theme-spacing-sm);
 }
+
+/*
+ * Big-phone tier (361–430px). The default 'md' gap (var(--theme-spacing-md),
+ * ~12px) leaves a fair bit of dead space between cards on 412–430px
+ * 2-column grids; tighten it down to 'sm' so the covers read as a
+ * proper pair with the eye finding the cover-row pattern faster.
+ *
+ * Also tighten the grid-list-container side padding so the grid
+ * extends closer to the screen edge — at 412px with the default 1rem
+ * each side we waste ~16px per side that would be better spent on the
+ * cover art itself.
+ *
+ * Sub-360 phones keep the existing tighter defaults (every pixel
+ * counts) and ≥431 phones / tablets keep the desktop densities.
+ */
+@media (361px <= width <= 430px) {
+    .grid-list-container {
+        padding: 0 var(--theme-spacing-sm);
+    }
+
+    .item-row.gap-md {
+        padding: var(--theme-spacing-sm);
+
+        --card-gap: var(--theme-spacing-xs);
+    }
+
+    .item-row.gap-lg {
+        padding: var(--theme-spacing-md);
+    }
+
+    .item-row.gap-xl {
+        padding: var(--theme-spacing-lg);
+    }
+}

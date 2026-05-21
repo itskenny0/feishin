@@ -245,3 +245,44 @@
         justify-content: space-between;
     }
 }
+
+/*
+ * Big-phone tier (361–430px). At these comfortable portrait widths the
+ * default stacked phone hero (250px cover, 2rem vertical padding) reads
+ * as cramped against the album art's surrounding hero gradient — the
+ * cover should feel like a vinyl record sleeve, the title should pick
+ * up the editorial scale that lives in .title above, and the metadata
+ * should sit confidently beneath both.
+ *
+ * Bumps:
+ *   - Cover art grows to 280px (within the 360–430 column it still
+ *     leaves comfortable side margin).
+ *   - The vertical padding tightens slightly so the cover lands
+ *     visually closer to the top — the hero feels like a deliberate
+ *     editorial spread rather than a centred photo.
+ *   - The drop-shadow under the image is deepened to give the cover
+ *     real "floating" presence against the hero gradient.
+ *
+ * Sub-360 phones keep the 250px default; ≥431 we let the container-
+ * query rules take over (which already widen to 225px+ in the
+ * landscape/horizontal layout).
+ */
+@media (361px <= width <= 430px) {
+    .library-header {
+        padding: 1.25rem 1rem 1.5rem;
+
+        :global(.item-image-placeholder) {
+            width: 280px !important;
+            height: 280px;
+        }
+
+        .image {
+            width: 280px !important;
+            height: 280px;
+        }
+    }
+
+    .image-section {
+        filter: drop-shadow(0 8px 16px rgb(0 0 0 / 55%));
+    }
+}

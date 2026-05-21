@@ -121,3 +121,54 @@
         min-height: 44px;
     }
 }
+
+/*
+ * Big-phone tier (361–430px) — iPhone 13/14/15, Pro Max, Pixel 7/8/8
+ * Pro, Galaxy S24, etc. The default 60px cover and 0.5rem padding read
+ * as cramped on these comfortable viewports; bump both so the mini-
+ * player visually anchors against the tab bar beneath it. The cover
+ * grows to 64px (still inside the 90px playerbar height with 13px of
+ * vertical margin top + bottom) and the inner padding opens up.
+ *
+ * The metadata-stack max-width is also slightly relaxed so song titles
+ * and album names get a few extra characters of headroom before they
+ * truncate — at 412px we have ~190px of metadata width vs. ~165px on
+ * smaller phones.
+ *
+ * The transport ActionIcon footprint is bumped from the 44×44 touch-
+ * target floor to 48×48 so the prev/play/next buttons feel deliberate
+ * rather than minimum-spec.
+ */
+@media (361px <= width <= 430px) {
+    .container {
+        padding: 0.5rem 0.85rem;
+    }
+
+    /* Subtle elevation so the cover reads as a tappable affordance
+       against the playerbar's slightly-tinted background — Spotify
+       does the same on its tablet mini-player. */
+    .image {
+        width: 64px;
+        height: 64px;
+        border-radius: 6px;
+        box-shadow: 0 1px 3px rgb(0 0 0 / 30%);
+    }
+
+    .metadata-stack {
+        gap: 0.05rem;
+
+        /* Bias more width to the metadata column on big-phone — at 412
+           the controls cluster is ~150px wide and we have plenty of
+           runway for a longer title/album. */
+        max-width: 60%;
+    }
+
+    .controls-wrapper {
+        gap: 0.6rem;
+    }
+
+    .controls-wrapper button {
+        min-width: 48px;
+        min-height: 48px;
+    }
+}

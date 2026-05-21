@@ -390,3 +390,104 @@
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
 }
+
+/*
+ * Big-phone tier (361–430px) — iPhone 13/14/15, Pro Max, Pixel 7/8/8
+ * Pro, Galaxy S24, etc. The default fullscreen player layout is tuned
+ * for the cramped sub-360 tier where every pixel counts; on these
+ * comfortable viewports the cover art should feel like the visual
+ * centerpiece (Spotify / Apple Music pattern), the title block should
+ * read editorial-bold, and the transport row should feel spacious with
+ * generous tap targets.
+ *
+ * Specifically:
+ *   - The album-art cap is lifted (was min(100%, 480px)) so the cover
+ *     uses the full square that the column can give it, with slightly
+ *     more side breathing room.
+ *   - The cover gets a deeper drop shadow + tighter radius for that
+ *     "floating record sleeve" presence.
+ *   - The metadata title bumps up from h3 default (~1.4rem) to roughly
+ *     1.55rem so it reads as a proper now-playing label rather than
+ *     small body copy.
+ *   - The progress + control rows get tighter side gutters and a
+ *     fractionally wider transport gap so the prev/play/next cluster
+ *     reads as deliberately spaced (not crammed).
+ *   - The bottom utility bar (queue / lyrics / visualizer / overflow)
+ *     gets a tiny vertical pad relax so its icons don't bump the safe-
+ *     area inset.
+ *
+ * Landscape and sub-360 are explicitly excluded — the landscape rule
+ * lower in this file still wins, and small-phone keeps the existing
+ * tight rules.
+ */
+@media (361px <= width <= 430px) and (orientation: portrait) {
+    .image-container {
+        padding: 1.25rem 1.75rem 0.75rem;
+    }
+
+    .image {
+        max-width: 100%;
+        border-radius: 16px;
+        box-shadow:
+            0 16px 40px rgb(0 0 0 / 45%),
+            0 6px 14px rgb(0 0 0 / 28%);
+    }
+
+    .metadata-container {
+        gap: 0.2rem;
+        padding: 1rem 1.5rem 0.5rem;
+    }
+
+    .title {
+        font-size: 1.55rem;
+        line-height: 1.1;
+        letter-spacing: -0.015em;
+    }
+
+    .artist {
+        font-size: 0.95rem;
+    }
+
+    .album {
+        font-size: 0.85rem;
+    }
+
+    .progress-container {
+        gap: 0.85rem;
+        padding: 0.35rem 1.5rem 0.5rem;
+    }
+
+    .controls-container {
+        gap: 0.7rem;
+        padding: 0.75rem 1.25rem 1rem;
+    }
+
+    .volume-row {
+        gap: 0.65rem;
+        padding: 0 1.5rem 0.35rem;
+    }
+
+    /* Bottom utility row: a touch more vertical padding so the four
+       icon buttons read as a proper Spotify-style bottom dock rather
+       than minimum-sized chrome. */
+    .bottom-controls-group button {
+        padding: 1.65rem 1.5rem;
+    }
+
+    /* Queue / lyrics tab headers gain a touch more padding on big-
+       phone so the close + collapse chevrons feel like a deliberate
+       sticky header instead of squeezing the top-left corner. */
+    .queue-header,
+    .lyrics-header {
+        padding: 1.15rem 1.25rem 0.85rem;
+    }
+
+    /* Bigger gutters inside the queue/lyrics content area so the
+       PlayQueue table and synced lyrics read with more breathing
+       room. The grow factor on flex:1 keeps the column filling
+       the available height regardless. */
+    .queue-content,
+    .lyrics-content {
+        padding: 0.5rem 1.25rem 1.25rem;
+    }
+}
