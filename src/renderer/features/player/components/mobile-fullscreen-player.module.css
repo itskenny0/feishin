@@ -329,14 +329,57 @@
     padding: 0.5rem 1rem 1rem;
 }
 
+/*
+ * Spotify-style: the main play button is dramatically bigger than the
+ * surrounding transport buttons (~70–80px circle vs ~36px icons). The
+ * shared MainPlayButton.module.css renders the .main class as a circle
+ * via background + border-radius, so we just enlarge it here using a
+ * direct width/height override scoped to the mobile-fullscreen-player
+ * controls row. The icon inside scales via Mantine's ActionIcon CSS
+ * vars — we bump --ai-size to match.
+ *
+ * Touch-target also lands the Material 48dp / Apple HIG 44pt floor by
+ * a comfortable margin, so missed taps on the most-tapped button drop.
+ */
+/* stylelint-disable selector-class-pattern -- Mantine emits PascalCase
+   class names on its root elements; we have to target those externally. */
+.controls-container :global(.mantine-ActionIcon-root)[class*='main'] {
+    width: 72px;
+    height: 72px;
+
+    --ai-size: 72px;
+}
+
+/* Bump the play icon glyph inside the bigger circle so it reads at the
+   button's new scale rather than getting lost in a sea of white space. */
+.controls-container :global(.mantine-ActionIcon-root)[class*='main'] svg {
+    width: 32px;
+    height: 32px;
+}
+/* stylelint-enable selector-class-pattern */
+
 /* On very narrow phones (≤360px), 7 transport buttons + gaps overflow the
    1rem-padded row. Tighten the gap, since shuffle/repeat are smaller than
    prev/play/next they still read as visually grouped. */
+/* stylelint-disable selector-class-pattern -- see above. */
 @media (width <= 360px) {
     .controls-container {
         gap: 0.2rem;
     }
+
+    .controls-container :global(.mantine-ActionIcon-root)[class*='main'] {
+        width: 60px;
+        height: 60px;
+
+        --ai-size: 60px;
+    }
+
+    .controls-container :global(.mantine-ActionIcon-root)[class*='main'] svg {
+        width: 26px;
+        height: 26px;
+    }
 }
+/* stylelint-enable selector-class-pattern */
 
 /*
  * Volume row geometry — must match `.progress-container` exactly so the

@@ -130,7 +130,7 @@ export const MobilePlayerbar = () => {
                                 <Text
                                     className={PlaybackSelectors.songTitle}
                                     component={Link}
-                                    fw={500}
+                                    fw={700}
                                     isLink
                                     onClick={handleToggleFullScreenPlayer}
                                     onContextMenu={handleToggleContextMenu}
