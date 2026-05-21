@@ -8,7 +8,27 @@
     display: flex;
     flex-direction: column;
     gap: var(--theme-spacing-lg);
-    padding: 1rem 2rem 5rem;
+
+    /*
+     * Tighter horizontal padding by default — the 2rem we previously had
+     * fit desktop hero pages but was tight on portrait tablets when the
+     * 2-column split kicks in (the track column needs every pixel it
+     * can get). Container queries widen the padding back to 2rem on
+     * desktop-sized widths.
+     */
+    padding: 1rem 1rem 5rem;
+}
+
+@container (min-width: $mantine-breakpoint-sm) {
+    .detail-container {
+        padding: 1rem 1.5rem 5rem;
+    }
+}
+
+@container (min-width: $mantine-breakpoint-lg) {
+    .detail-container {
+        padding: 1rem 2rem 5rem;
+    }
 }
 
 .content-layout {
@@ -98,14 +118,31 @@
     }
 }
 
-@container (min-width: $mantine-breakpoint-lg) {
+/*
+ * Tablet-tier 2-column split — kicks in once the content container is at
+ * least ~720px wide (iPad Mini portrait main-content room comfortably
+ * clears this). The tracklist takes the wider column; the metadata column
+ * shrinks to 240px so the song titles still have plenty of horizontal
+ * room. Pills + chips stack vertically inside the narrower column, which
+ * looks tidier than the wide-flex row layout that the `sm` rule above
+ * inherits when the container has enough room for the row-flex AND a
+ * dedicated track column.
+ */
+@container (min-width: 720px) {
     .content-layout {
         grid-template-areas: 'songs metadata';
         grid-template-rows: 1fr;
-        grid-template-columns: minmax(0, 1fr) 300px;
-        gap: var(--theme-spacing-xl);
+        grid-template-columns: minmax(0, 1fr) 240px;
+        gap: var(--theme-spacing-lg);
         width: 100%;
         max-width: 100%;
+    }
+
+    .metadata-column {
+        flex-direction: column;
+        align-items: flex-start;
+        width: 240px;
+        text-align: left;
     }
 
     /* Prevent sticky headers from extending into the right margins */
@@ -113,6 +150,13 @@
     .songs-column :global(.fs-item-table-list-module-sticky-group-row) {
         padding-right: 0;
         margin-right: 0;
+    }
+}
+
+@container (min-width: $mantine-breakpoint-lg) {
+    .content-layout {
+        grid-template-columns: minmax(0, 1fr) 300px;
+        gap: var(--theme-spacing-xl);
     }
 
     .metadata-column {
