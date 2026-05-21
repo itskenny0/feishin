@@ -55,6 +55,14 @@ export const SidebarSettings = memo(() => {
         });
     };
 
+    const handleSetMobilePlayerbarShowNavButtons = (e: ChangeEvent<HTMLInputElement>) => {
+        setSettings({
+            general: {
+                mobilePlayerbarShowNavButtons: e.target.checked,
+            },
+        });
+    };
+
     const handleSetSidebarPlaylistFolders = (e: ChangeEvent<HTMLInputElement>) => {
         setSettings({
             general: {
@@ -195,6 +203,18 @@ export const SidebarSettings = memo(() => {
             description:
                 'Where the "Library" tab on the mobile bottom bar takes you. Default: Albums.',
             title: 'Mobile Library tab destination',
+        },
+        {
+            control: (
+                <Switch
+                    aria-label="Show prev/next buttons on the mobile mini-player"
+                    checked={settings.mobilePlayerbarShowNavButtons}
+                    onChange={handleSetMobilePlayerbarShowNavButtons}
+                />
+            ),
+            description:
+                'Show explicit previous/next buttons alongside play/pause on the mobile mini-player. Off by default since horizontal swipe already switches tracks.',
+            title: 'Mobile mini-player nav buttons',
         },
         {
             control: (

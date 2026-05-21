@@ -1,7 +1,22 @@
 import type { TFunction } from 'i18next';
 
+import { Capacitor } from '@capacitor/core';
 import clsx from 'clsx';
 import isElectron from 'is-electron';
+
+/*
+ * "Is this a touch-first, no-keyboard device" detector. We can't use
+ * the React `useIsTouch` hook in the CATEGORIES array because that
+ * lives at module scope. matchMedia is synchronous + cheap, so we
+ * sample it once per render where needed (inside the visible() lambdas).
+ */
+const isTouchOnlyDevice = () => {
+    if (typeof window === 'undefined') return false;
+    if (Capacitor.getPlatform() === 'android' || Capacitor.getPlatform() === 'ios') {
+        return true;
+    }
+    return window.matchMedia('(pointer: coarse)').matches;
+};
 import { lazy, ReactNode, Suspense, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -93,7 +108,13 @@ const CATEGORIES: CategoryDef[] = [
         Icon: RiKeyboardLine,
         id: 'hotkeys',
         label: (t) => t('page.setting.hotkeysTab'),
-        visible: () => true,
+        /*
+         * Hotkeys are meaningless on touch-only devices — there's no
+         * keyboard to bind them to. Hide on Capacitor mobile and any
+         * pointer:coarse host so the category list isn't padded with a
+         * dead-end on phones.
+         */
+        visible: () => !isTouchOnlyDevice(),
     },
     {
         description: (t) =>

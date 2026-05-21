@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useSettingSearchContext } from '/@/renderer/features/settings/context/search-context';
 import { LibraryHeaderBar } from '/@/renderer/features/shared/components/library-header-bar';
 import { SearchInput } from '/@/renderer/features/shared/components/search-input';
+import { useIsTouch } from '/@/renderer/hooks/use-breakpoint';
 import { useSettingsStoreActions } from '/@/renderer/store/settings.store';
 import { Button } from '/@/shared/components/button/button';
 import { Flex } from '/@/shared/components/flex/flex';
@@ -20,6 +21,16 @@ export const SettingsHeader = ({ setSearch }: SettingsHeaderProps) => {
     const { t } = useTranslation();
     const { reset } = useSettingsStoreActions();
     const search = useSettingSearchContext();
+    /*
+     * Touch devices: skip the search input's autofocus. Auto-focus
+     * pops the on-screen keyboard the instant Settings opens, which
+     * (a) covers half the viewport before the user sees any settings,
+     * and (b) is unwanted 90% of the time — most users land in
+     * Settings to flip a known switch, not to search. Mouse users
+     * still get autofocus so cmd-K-style "open + type immediately"
+     * flow stays intact.
+     */
+    const isTouch = useIsTouch();
 
     const handleResetToDefault = () => {
         reset();
@@ -49,7 +60,7 @@ export const SettingsHeader = ({ setSearch }: SettingsHeaderProps) => {
                     </Group>
                     <Group>
                         <SearchInput
-                            autoFocus
+                            autoFocus={!isTouch}
                             defaultValue={search}
                             onChange={(event) => setSearch(event.target.value.toLocaleLowerCase())}
                         />

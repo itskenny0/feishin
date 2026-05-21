@@ -19,8 +19,63 @@ import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { ContextMenuController } from '/@/renderer/features/context-menu/context-menu-controller';
 import { Lyrics } from '/@/renderer/features/lyrics/lyrics';
 import { PlayQueue } from '/@/renderer/features/now-playing/components/play-queue';
+import { lazy as lazyImport, Suspense } from 'react';
+
+import { MobileFullscreenAlbumCard } from '/@/renderer/features/player/components/mobile-fullscreen-album-card';
 import { MobileFullscreenArtistCard } from '/@/renderer/features/player/components/mobile-fullscreen-artist-card';
 import { MobileFullscreenPlayerAlbumArt } from '/@/renderer/features/player/components/mobile-fullscreen-player-album-art';
+import { MobileFullscreenVisualizerCard } from '/@/renderer/features/player/components/mobile-fullscreen-visualizer-card';
+import { ComponentErrorBoundary } from '/@/renderer/features/shared/components/component-error-boundary';
+import { usePlaybackSettings, useSettingsStore } from '/@/renderer/store/settings.store';
+
+const AudioMotionAnalyzerVisualizer = lazyImport(() =>
+    import('/@/renderer/features/visualizer/components/audiomotionanalyzer/visualizer').then(
+        (module) => ({ default: module.Visualizer }),
+    ),
+);
+
+const ButterchurnVisualizer = lazyImport(() =>
+    import('/@/renderer/features/visualizer/components/butternchurn/visualizer').then(
+        (module) => ({ default: module.Visualizer }),
+    ),
+);
+
+/**
+ * Inline visualizer-as-background. Rendered behind the player face when
+ * the user has flipped `visualizerAsBackground` in the fullscreen player
+ * config menu. Sits in the same layer as BackgroundImage / overlay,
+ * just farther back, and the existing dim overlay sits on top so the
+ * controls remain legible.
+ *
+ * Bails when webAudio isn't available — no analyzer to drive the visuals.
+ * Suspends quickly with no fallback so first-paint isn't blocked on the
+ * visualizer chunk loading.
+ */
+const FullscreenVisualizerBackground = memo(() => {
+    const { webAudio } = usePlaybackSettings();
+    const visualizerType = useSettingsStore((store) => store.visualizer.type);
+    const { visualizerAsBackground, visualizerExpanded } = useFullScreenPlayerStore();
+
+    if (!webAudio || !visualizerAsBackground || visualizerExpanded) {
+        return null;
+    }
+
+    return (
+        <div className={styles.visualizerBackground}>
+            <ComponentErrorBoundary>
+                <Suspense fallback={null}>
+                    {visualizerType === 'butterchurn' ? (
+                        <ButterchurnVisualizer />
+                    ) : (
+                        <AudioMotionAnalyzerVisualizer />
+                    )}
+                </Suspense>
+            </ComponentErrorBoundary>
+        </div>
+    );
+});
+
+FullscreenVisualizerBackground.displayName = 'FullscreenVisualizerBackground';
 import { MobileFullscreenPlayerBottomControls } from '/@/renderer/features/player/components/mobile-fullscreen-player-bottom-controls';
 import { MobileFullscreenPlayerControls } from '/@/renderer/features/player/components/mobile-fullscreen-player-controls';
 import { MobileFullscreenPlayerHeader } from '/@/renderer/features/player/components/mobile-fullscreen-player-header';
@@ -634,6 +689,7 @@ export const MobileFullscreenPlayer = () => {
             onDismiss={handleToggleFullScreenPlayer}
             scrollableRef={playerStateRef}
         >
+            <FullscreenVisualizerBackground />
             <BackgroundImageOverlay
                 dynamicBackground={effectiveDynamicBackground}
                 dynamicImageBlur={dynamicImageBlur}
@@ -720,6 +776,12 @@ export const MobileFullscreenPlayer = () => {
                  */}
                 {isSongDefined && (
                     <>
+                        {!isPlayingRadio && (
+                            <MobileFullscreenArtistCard
+                                artistId={currentSong?.artists?.[0]?.id}
+                                artistName={currentSong?.artists?.[0]?.name}
+                            />
+                        )}
                         <div
                             className={styles.lyricsCard}
                             onClick={handleToggleLyrics}
@@ -743,11 +805,12 @@ export const MobileFullscreenPlayer = () => {
                             </div>
                         </div>
                         {!isPlayingRadio && (
-                            <MobileFullscreenArtistCard
-                                artistId={currentSong?.artists?.[0]?.id}
-                                artistName={currentSong?.artists?.[0]?.name}
+                            <MobileFullscreenAlbumCard
+                                albumId={currentSong?.albumId}
+                                albumName={currentSong?.album ?? undefined}
                             />
                         )}
+                        <MobileFullscreenVisualizerCard />
                     </>
                 )}
             </motion.div>

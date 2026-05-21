@@ -88,10 +88,18 @@ export const useAndroidBodyFlag = () => {
 /**
  * Status bar: dark icons on a black background so the OS strip matches the
  * app's dark theme instead of showing the WebView default.
+ *
+ * Also toggles status-bar visibility based on the fullscreen player /
+ * visualizer state subscribed from the fullscreen-player store. When
+ * either overlay is open, hide the OS status bar so the immersive view
+ * truly covers the screen; on close, restore it. We subscribe via
+ * useFullScreenPlayerStore.getState() + subscribe so the effect doesn't
+ * tear down on every store change.
  */
 export const useAndroidStatusBar = () => {
     useEffect(() => {
         let cancelled = false;
+        let StatusBarApi: typeof import('@capacitor/status-bar').StatusBar | null = null;
 
         const applyStatusBar = async () => {
             try {
@@ -99,6 +107,7 @@ export const useAndroidStatusBar = () => {
                 if (cancelled) return;
                 const { StatusBar, Style } = await import('@capacitor/status-bar');
                 if (cancelled) return;
+                StatusBarApi = StatusBar;
                 await StatusBar.setStyle({ style: Style.Dark });
                 await StatusBar.setBackgroundColor({ color: '#000000' });
                 await StatusBar.setOverlaysWebView({ overlay: false });
@@ -109,8 +118,33 @@ export const useAndroidStatusBar = () => {
 
         void applyStatusBar();
 
+        let lastHidden = false;
+        const sync = (hidden: boolean) => {
+            if (!StatusBarApi || hidden === lastHidden) return;
+            lastHidden = hidden;
+            try {
+                if (hidden) {
+                    void StatusBarApi.hide();
+                } else {
+                    void StatusBarApi.show();
+                }
+            } catch (error) {
+                console.warn('[android] status bar visibility toggle failed:', error);
+            }
+        };
+
+        const unsubFs = useFullScreenPlayerStore.subscribe((state) => {
+            sync(state.expanded || state.visualizerExpanded);
+        });
+
         return () => {
             cancelled = true;
+            unsubFs();
+            try {
+                void StatusBarApi?.show();
+            } catch {
+                /* ignore — best-effort restore on unmount */
+            }
         };
     }, []);
 };

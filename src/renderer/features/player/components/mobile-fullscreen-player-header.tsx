@@ -45,6 +45,8 @@ export const MobileFullscreenPlayerHeader = memo(
             dynamicIsImage,
             opacity,
             useImageAspectRatio,
+            visualizerAsBackground,
+            visualizerLyricsOverlay,
         } = useFullScreenPlayerStore();
         const { setStore } = useFullScreenPlayerStoreActions();
         const { setSettings } = useSettingsStoreActions();
@@ -178,6 +180,40 @@ export const MobileFullscreenPlayerHeader = memo(
                                     onChange={(e) =>
                                         setStore({
                                             useImageAspectRatio: e.target.checked,
+                                        })
+                                    }
+                                />
+                            </Option.Control>
+                        </Option>
+                        <Option>
+                            <Option.Label>
+                                {t('page.fullscreenPlayer.config.visualizerAsBackground', {
+                                    defaultValue: 'Visualizer as background',
+                                })}
+                            </Option.Label>
+                            <Option.Control>
+                                <Switch
+                                    checked={!!visualizerAsBackground}
+                                    onChange={(e) =>
+                                        setStore({
+                                            visualizerAsBackground: e.target.checked,
+                                        })
+                                    }
+                                />
+                            </Option.Control>
+                        </Option>
+                        <Option>
+                            <Option.Label>
+                                {t('page.fullscreenPlayer.config.visualizerLyricsOverlay', {
+                                    defaultValue: 'Show lyrics over visualizer',
+                                })}
+                            </Option.Label>
+                            <Option.Control>
+                                <Switch
+                                    checked={visualizerLyricsOverlay !== false}
+                                    onChange={(e) =>
+                                        setStore({
+                                            visualizerLyricsOverlay: e.target.checked,
                                         })
                                     }
                                 />

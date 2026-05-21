@@ -5,10 +5,14 @@ import { useLocation } from 'react-router';
 
 import styles from './full-screen-visualizer.module.css';
 
+import { Lyrics } from '/@/renderer/features/lyrics/lyrics';
 import { FullScreenVisualizerSongInfo } from '/@/renderer/features/player/components/full-screen-visualizer-song-info';
 import { useHotkeys } from '/@/renderer/hooks/use-hotkeys';
 import { useIsMobile } from '/@/renderer/hooks/use-is-mobile';
-import { useFullScreenPlayerStoreActions } from '/@/renderer/store/full-screen-player.store';
+import {
+    useFullScreenPlayerStore,
+    useFullScreenPlayerStoreActions,
+} from '/@/renderer/store/full-screen-player.store';
 import {
     usePlaybackSettings,
     useSettingsStore,
@@ -32,16 +36,19 @@ const ButterchurnVisualizer = lazy(() =>
 const containerVariants: Variants = {
     closed: (custom) => {
         const { isMobile, windowBarStyle } = custom;
-        const height =
-            windowBarStyle === Platform.WINDOWS || windowBarStyle === Platform.MACOS
-                ? 'calc(100vh - 120px)'
-                : 'calc(100vh - 90px)';
-
         if (isMobile) {
+            /*
+             * Truly full-viewport on phones. The visualizer is mounted
+             * inside `.fullScreenPlayerOverlay` (position: fixed inset:
+             * 0, z-index: 200) so taking 100dvh here covers the
+             * bottom-tab-bar + mini-player completely. The previous
+             * `calc(100vh - 120px)` left a strip at the bottom where
+             * the tab-bar bled through but couldn't be interacted with.
+             */
             return {
-                height,
+                height: '100dvh',
                 position: 'absolute',
-                top: '100vh',
+                top: '100dvh',
                 transition: {
                     duration: 0.5,
                     ease: 'easeInOut',
@@ -50,6 +57,10 @@ const containerVariants: Variants = {
                 y: 0,
             };
         }
+        const height =
+            windowBarStyle === Platform.WINDOWS || windowBarStyle === Platform.MACOS
+                ? 'calc(100vh - 120px)'
+                : 'calc(100vh - 90px)';
         return {
             height,
             position: 'absolute',
@@ -64,21 +75,12 @@ const containerVariants: Variants = {
     },
     open: (custom) => {
         const { isMobile, windowBarStyle } = custom;
-        const height =
-            windowBarStyle === Platform.WINDOWS || windowBarStyle === Platform.MACOS
-                ? 'calc(100vh - 120px)'
-                : 'calc(100vh - 90px)';
-        const topOffset =
-            windowBarStyle === Platform.WINDOWS || windowBarStyle === Platform.MACOS
-                ? '30px'
-                : '0px';
-
         if (isMobile) {
             return {
-                height,
+                height: '100dvh',
                 left: 0,
                 position: 'absolute',
-                top: topOffset,
+                top: 0,
                 transition: {
                     delay: 0.1,
                     duration: 0.5,
@@ -88,6 +90,10 @@ const containerVariants: Variants = {
                 y: 0,
             };
         }
+        const height =
+            windowBarStyle === Platform.WINDOWS || windowBarStyle === Platform.MACOS
+                ? 'calc(100vh - 120px)'
+                : 'calc(100vh - 90px)';
         return {
             height,
             left: 0,
@@ -135,6 +141,9 @@ export const FullScreenVisualizer = () => {
     const { windowBarStyle } = useWindowSettings();
     const { webAudio } = usePlaybackSettings();
     const visualizerType = useSettingsStore((store) => store.visualizer.type);
+    const visualizerLyricsOverlay = useFullScreenPlayerStore(
+        (state) => state.visualizerLyricsOverlay,
+    );
     const isMobile = useIsMobile();
 
     const location = useLocation();
@@ -182,7 +191,13 @@ export const FullScreenVisualizer = () => {
                         )}
                     </Suspense>
                 ) : null}
-                <FullScreenVisualizerSongInfo />
+                {visualizerLyricsOverlay !== false ? (
+                    <div className={styles.lyricsOverlay}>
+                        <Lyrics fadeOutNoLyricsMessage />
+                    </div>
+                ) : (
+                    <FullScreenVisualizerSongInfo />
+                )}
             </div>
         </VisualizerContainer>
     );

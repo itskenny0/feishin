@@ -87,3 +87,40 @@
     line-height: 1.3;
     color: #ddd;
 }
+
+/*
+ * Lyrics laid over the visualizer canvas. The container is absolute +
+ * full-bleed so the lyrics scroll inside their own region, and the
+ * Lyrics component's internal background is transparent (it inherits
+ * "color: #fff" from here and the visualizer paints behind). A dim
+ * gradient at the top/bottom keeps the edges readable when very-long
+ * lines crowd a vivid section of the visualizer.
+ */
+.lyrics-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 60;
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+    padding: max(env(safe-area-inset-top, 0px), var(--android-safe-top, 0px)) 0 0;
+    pointer-events: auto;
+    background: linear-gradient(
+        180deg,
+        rgb(0 0 0 / 50%) 0%,
+        rgb(0 0 0 / 20%) 20%,
+        rgb(0 0 0 / 20%) 80%,
+        rgb(0 0 0 / 50%) 100%
+    );
+}
+
+.lyrics-overlay > * {
+    width: 100%;
+    max-width: 720px;
+    color: #fff;
+}
+
+.lyrics-overlay :global(.active) {
+    color: var(--theme-colors-primary);
+    text-shadow: 0 2px 12px rgb(0 0 0 / 60%);
+}

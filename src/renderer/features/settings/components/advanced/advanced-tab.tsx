@@ -5,6 +5,7 @@ import { AnalyticsSettings } from '/@/renderer/features/settings/components/adva
 import { ExportImportSettings } from '/@/renderer/features/settings/components/advanced/export-import-settings';
 import { JellyfinServerActions } from '/@/renderer/features/settings/components/advanced/jellyfin-server-actions';
 import { LoggerSettings } from '/@/renderer/features/settings/components/advanced/logger-settings';
+import { MobileOverridesSettings } from '/@/renderer/features/settings/components/advanced/mobile-overrides-settings';
 import { ServerInfoWidget } from '/@/renderer/features/settings/components/advanced/server-info-widget';
 import { CacheSettings } from '/@/renderer/features/settings/components/window/cache-settngs';
 import { UpdateSettings } from '/@/renderer/features/settings/components/window/update-settings';
@@ -16,6 +17,7 @@ const sections = [
     { component: ServerInfoWidget, key: 'server-info' },
     { component: JellyfinServerActions, key: 'jellyfin-server-actions' },
     { component: AnalyticsSettings, key: 'analytics' },
+    { component: MobileOverridesSettings, key: 'mobile-overrides' },
     { component: ExportImportSettings, key: 'export-import' },
     { component: LoggerSettings, key: 'logger' },
     { component: CacheSettings, key: 'cache' },
