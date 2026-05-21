@@ -77,6 +77,20 @@
         max-width: 100vw !important;
         height: 100vh !important;
         height: 100dvh !important;
+
+        /*
+         * Make the backdrop actually catch taps. Radix's popper wrapper
+         * defaults to `pointer-events: box-none`, so a tap on the dim
+         * area passes through to whatever sits underneath — including
+         * items in the PARENT menu while a submenu is open, which
+         * silently fires the wrong action. Setting `auto` here catches
+         * the tap; Radix's onPointerDownOutside handler on the inner
+         * Content then registers the click-outside and dismisses (in
+         * the submenu case, only the submenu — the parent stays open,
+         * which is the user-expected pattern: "tap outside submenu →
+         * close submenu, return to parent menu").
+         */
+        pointer-events: auto !important;
         background: rgb(0 0 0 / 38%);
         transform: none !important;
         animation: context-menu-fade-backdrop 200ms ease-out;
