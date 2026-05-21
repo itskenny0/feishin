@@ -73,3 +73,64 @@
        right-sidebar column is always missing in this range so the
        sidebar-collapsed column rule above applies cleanly. */
 }
+
+/*
+ * Big-tablet tier (835-1280px):
+ * - Clamp the expanded left sidebar to a narrower max width so persisted desktop
+ *   widths (e.g. 320-400px) don't crush the main content area.
+ * - When the right queue sidebar opens, overlay it on top of the main content
+ *   instead of stealing a grid column. Main content keeps its full width and the
+ *   queue floats with a shadow + border, Spotify-style. This is the central
+ *   big-tablet redesign decision.
+ */
+@media (835px <= width <= 1280px) {
+    .main-content-container.sidebar-expanded {
+        grid-template-columns: min(var(--sidebar-width), 240px) 1fr;
+    }
+
+    .main-content-container.right-expanded {
+        grid-template-columns: min(var(--sidebar-width), 240px) 1fr;
+    }
+
+    .main-content-container.sidebar-collapsed.right-expanded {
+        grid-template-columns: 80px 1fr;
+    }
+
+    .main-content-container.right-expanded #sidebar-queue,
+    .main-content-container.sidebar-collapsed.right-expanded #sidebar-queue {
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 50;
+        width: min(420px, 42vw);
+        min-width: 320px;
+        box-shadow: -8px 0 24px alpha(var(--theme-colors-shadow, #000), 0.18);
+    }
+
+    /* Vertical layout (queue pinned to bottom) is bad UX at this width; keep
+       horizontal-overlay behaviour even when the user has vertical-layout set. */
+    .main-content-container.vertical-layout {
+        grid-template-areas: 'sidebar .';
+        grid-template-rows: minmax(0, 1fr);
+        grid-template-columns: min(var(--sidebar-width), 240px) 1fr;
+    }
+
+    .main-content-container.sidebar-collapsed.vertical-layout {
+        grid-template-columns: 80px 1fr;
+    }
+
+    .main-content-container.vertical-layout #sidebar-queue {
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 50;
+        width: min(420px, 42vw);
+        min-width: 320px;
+        height: auto;
+        border-top: 0;
+        border-left: 1px solid alpha(var(--theme-colors-border), 0.5);
+        box-shadow: -8px 0 24px alpha(var(--theme-colors-shadow, #000), 0.18);
+    }
+}
