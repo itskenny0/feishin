@@ -266,7 +266,16 @@
     display: flex;
     flex: 1;
     align-items: stretch;
-    justify-content: center;
+    justify-content: stretch;
+
+    /* The button inside expands to fill the wrapper so its flex-1
+       footprint inside .bottom-controls-group matches the sibling icon
+       buttons exactly. Without this the wrapper would stretch but the
+       inner button would only be content+padding wide, leaving dead
+       space inside the wrapper. */
+    > * {
+        flex: 1;
+    }
 }
 
 .queue-badge {
