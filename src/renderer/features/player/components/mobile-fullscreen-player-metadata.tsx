@@ -28,6 +28,14 @@ interface MobileFullscreenPlayerMetadataProps {
     showRating?: boolean;
 }
 
+/**
+ * Spotify-style metadata block for the mobile fullscreen player. The
+ * title is left-aligned and bold; the artist + favourite heart share a
+ * row beneath it (heart on the right so the title alignment doesn't
+ * shift when the song changes); the album sits below the artist; the
+ * meta row (container, year) sits last on its own muted line. Tap the
+ * artist or album to navigate AND dismiss the fullscreen overlay.
+ */
 export const MobileFullscreenPlayerMetadata = memo(
     ({
         currentSong,
@@ -57,9 +65,7 @@ export const MobileFullscreenPlayerMetadata = memo(
 
         // Resolve nav targets: when the user taps an artist or album in the
         // fullscreen player we want to close the overlay AND navigate to
-        // that detail page (matches Spotify's behaviour). artists[0] is
-        // the canonical link target if there are multiple - tapping into a
-        // collaboration's first artist is the conventional pick.
+        // that detail page (matches Spotify's behaviour).
         const primaryArtistId = !isRadio ? currentSong?.artists?.[0]?.id : undefined;
         const albumId = !isRadio ? currentSong?.albumId : undefined;
         const artistHref = primaryArtistId
@@ -74,47 +80,74 @@ export const MobileFullscreenPlayerMetadata = memo(
 
         return (
             <div className={styles.metadataContainer}>
-                <div className={styles.titleRow}>
-                    <TextTitle
-                        className={PlaybackSelectors.songTitle}
-                        fw={700}
-                        order={2}
-                        ta="center"
-                    >
-                        {title || '—'}
-                    </TextTitle>
+                <div className={styles.titleAndFavoriteRow}>
+                    <div className={styles.titleStack}>
+                        <TextTitle
+                            className={clsx(styles.title, PlaybackSelectors.songTitle)}
+                            fw={800}
+                            order={3}
+                        >
+                            {title || '—'}
+                        </TextTitle>
+                        {artistHref ? (
+                            <Text
+                                className={clsx(styles.artist, PlaybackSelectors.songArtist)}
+                                component={Link}
+                                isLink
+                                onClick={collapseFullScreen}
+                                size="sm"
+                                to={artistHref}
+                                truncate
+                            >
+                                {artistsDisplay || '—'}
+                            </Text>
+                        ) : (
+                            <Text
+                                className={clsx(styles.artist, PlaybackSelectors.songArtist)}
+                                size="sm"
+                                truncate
+                            >
+                                {artistsDisplay || '—'}
+                            </Text>
+                        )}
+                    </div>
+                    {!isRadio && (
+                        <ActionIcon
+                            aria-label={t('common.favorite', { defaultValue: 'Favorite' })}
+                            aria-pressed={Boolean(isFavorite)}
+                            className={styles.favoriteAction}
+                            icon="favorite"
+                            iconProps={{
+                                fill: isFavorite ? 'primary' : undefined,
+                                size: 'lg',
+                            }}
+                            onClick={(event) => {
+                                if (!isFavorite) triggerHaptic('success');
+                                onToggleFavorite(event);
+                            }}
+                            size="lg"
+                            variant="subtle"
+                        />
+                    )}
                 </div>
-                {artistHref ? (
-                    <Text
-                        className={clsx(PlaybackSelectors.songArtist)}
-                        component={Link}
-                        isLink
-                        onClick={collapseFullScreen}
-                        size="md"
-                        to={artistHref}
-                        truncate
-                    >
-                        {artistsDisplay || '—'}
-                    </Text>
-                ) : (
-                    <Text className={clsx(PlaybackSelectors.songArtist)} size="md" truncate>
-                        {artistsDisplay || '—'}
-                    </Text>
-                )}
                 {albumHref ? (
                     <Text
-                        className={clsx(PlaybackSelectors.songAlbum)}
+                        className={clsx(styles.album, PlaybackSelectors.songAlbum)}
                         component={Link}
                         isLink
                         onClick={collapseFullScreen}
-                        size="md"
+                        size="sm"
                         to={albumHref}
                         truncate
                     >
                         {album || '—'}
                     </Text>
                 ) : (
-                    <Text className={clsx(PlaybackSelectors.songAlbum)} size="md" truncate>
+                    <Text
+                        className={clsx(styles.album, PlaybackSelectors.songAlbum)}
+                        size="sm"
+                        truncate
+                    >
                         {album || '—'}
                     </Text>
                 )}
@@ -129,29 +162,9 @@ export const MobileFullscreenPlayerMetadata = memo(
                         )}
                     </Group>
                 )}
-                {!isRadio && (
+                {!isRadio && showRating && (
                     <Group align="center" className={styles.actionsRow} gap="xs">
-                        <ActionIcon
-                            aria-label={t('common.favorite', { defaultValue: 'Favorite' })}
-                            aria-pressed={Boolean(isFavorite)}
-                            icon="favorite"
-                            iconProps={{
-                                fill: isFavorite ? 'primary' : undefined,
-                                size: 'md',
-                            }}
-                            onClick={(event) => {
-                                // Celebratory success pattern only when
-                                // adding — un-favouriting is a destructive
-                                // action and shouldn't feel rewarding.
-                                if (!isFavorite) triggerHaptic('success');
-                                onToggleFavorite(event);
-                            }}
-                            size="sm"
-                            variant="subtle"
-                        />
-                        {showRating && (
-                            <Rating onChange={onUpdateRating} size="sm" value={rating || 0} />
-                        )}
+                        <Rating onChange={onUpdateRating} size="sm" value={rating || 0} />
                     </Group>
                 )}
             </div>
