@@ -186,3 +186,62 @@
         display: none;
     }
 }
+
+/*
+ * Big-phone tier (361–430px). Comfortable horizontal space lets the
+ * category list adopt a more Android-12 / Material-You feel: circular
+ * tinted icon backgrounds, slightly larger row height with a label
+ * scale that reads as primary navigation, and a proper chevron tone.
+ *
+ * Sub-360 phones keep the original tighter layout (every pixel counts
+ * there); ≥431 phones / tablets keep the desktop two-pane.
+ */
+@media (361px <= width <= 430px) {
+    .category-list {
+        gap: 0.35rem;
+        padding: 0.85rem 0.65rem;
+    }
+
+    .category-item {
+        gap: 1rem;
+        min-height: 72px;
+        padding: 0.9rem 1rem;
+    }
+
+    /*
+     * Circular tinted background behind the category icon — picks up
+     * the theme primary at a low opacity so it reads as Material-You
+     * "icon chip" rather than a bare glyph. Pairs with the larger row
+     * height for an Android-12 settings vibe.
+     */
+    .category-icon {
+        width: 2.6rem;
+        height: 2.6rem;
+        background: color-mix(in srgb, var(--theme-colors-primary-filled) 14%, transparent);
+        border-radius: 50%;
+    }
+
+    .category-item:not(.active) .category-icon {
+        background: color-mix(in srgb, var(--theme-colors-foreground) 8%, transparent);
+    }
+
+    .category-label {
+        font-size: 1rem;
+    }
+
+    .category-description {
+        font-size: 0.82rem;
+    }
+
+    .category-chevron {
+        color: color-mix(in srgb, var(--theme-colors-foreground) 45%, transparent);
+    }
+
+    /* Back button leans heavier on big-phone so the title-of-section
+       reads as a header rather than a chip. */
+    .back-button {
+        min-height: 56px;
+        padding: 0.85rem 1.15rem;
+        font-size: 1.05rem;
+    }
+}
