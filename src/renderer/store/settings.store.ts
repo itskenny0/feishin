@@ -3031,6 +3031,9 @@ export const useSetDetailSectionCollapsed = () => {
     };
 };
 
+export const useSidebarPlaylistMode = () =>
+    useSettingsStore((state) => state.general.sidebarPlaylistMode, shallow);
+
 export const useSidebarPlaylistSorting = () =>
     useSettingsStore((state) => state.general.sidebarPlaylistSorting, shallow);
 

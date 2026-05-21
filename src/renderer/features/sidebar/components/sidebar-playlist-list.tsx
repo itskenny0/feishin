@@ -250,7 +250,9 @@ export const PlaylistRowButton = memo(
                         <Text className={styles.compactName} fw={500} size="md">
                             {name}
                         </Text>
-                        {isHovered && <RowControls id={to} onPlay={handlePlay} variant="compact" />}
+                        {showControls && (
+                            <RowControls id={to} onPlay={handlePlay} variant="compact" />
+                        )}
                     </>
                 ) : (
                     <>
@@ -298,7 +300,9 @@ export const PlaylistRowButton = memo(
                             </div>
                         </div>
 
-                {showControls && <RowControls id={to} onPlay={handlePlay} />}
+                        {showControls && <RowControls id={to} onPlay={handlePlay} />}
+                    </>
+                )}
             </Link>
         );
     },
@@ -628,20 +632,15 @@ export const SidebarPlaylistList = () => {
                 </Group>
             </PlaylistRootAccordionControl>
             <Accordion.Panel>
-                {playlistItems?.items?.map((item) => (
-                    <PlaylistRowButton
-                        item={item}
-                        // Use the stable playlist id so React doesn't mis-
-                        // attribute hover / drag state to neighbouring rows
-                        // after a reorder. The previous key={index} bound
-                        // state to the position, not the item.
-                        key={item.id}
-                        name={item.name}
-                        onContextMenu={handleContextMenu}
-                        onReorder={handleReorder}
-                        to={item.id}
-                    />
-                ))}
+                <PlaylistFolderViews
+                    {...folderViewState}
+                    allPlaylists={playlistItems?.items ?? []}
+                    expandedSet={expandedSet}
+                    navigation={navigation}
+                    onContextMenu={handleContextMenu}
+                    onReorder={handleReorder}
+                    onToggleFolder={toggle}
+                />
             </Accordion.Panel>
         </Accordion.Item>
     );
@@ -817,20 +816,15 @@ export const SidebarSharedPlaylistList = () => {
                 </Group>
             </Accordion.Control>
             <Accordion.Panel>
-                {playlistItems?.items?.map((item) => (
-                    <PlaylistRowButton
-                        item={item}
-                        // Use the stable playlist id so React doesn't mis-
-                        // attribute hover / drag state to neighbouring rows
-                        // after a reorder. The previous key={index} bound
-                        // state to the position, not the item.
-                        key={item.id}
-                        name={item.name}
-                        onContextMenu={handleContextMenu}
-                        onReorder={handleReorder}
-                        to={item.id}
-                    />
-                ))}
+                <PlaylistFolderViews
+                    {...folderViewState}
+                    allPlaylists={playlistItems?.items ?? []}
+                    expandedSet={expandedSet}
+                    navigation={navigation}
+                    onContextMenu={handleContextMenu}
+                    onReorder={handleReorder}
+                    onToggleFolder={toggle}
+                />
             </Accordion.Panel>
         </Accordion.Item>
     );

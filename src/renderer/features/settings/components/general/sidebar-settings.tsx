@@ -7,6 +7,8 @@ import {
     SettingsSection,
 } from '/@/renderer/features/settings/components/settings-section';
 import { useGeneralSettings, useSettingsStoreActions } from '/@/renderer/store';
+import { ColorInput } from '/@/shared/components/color-input/color-input';
+import { NumberInput } from '/@/shared/components/number-input/number-input';
 import { Select } from '/@/shared/components/select/select';
 import { Switch } from '/@/shared/components/switch/switch';
 import { TextInput } from '/@/shared/components/text-input/text-input';
@@ -30,6 +32,14 @@ export const SidebarSettings = memo(() => {
                 // Keep the legacy boolean in sync so older code paths and the
                 // mobile sidebar that still read it stay consistent.
                 sidebarPlaylistList: value === 'playlists',
+            },
+        });
+    };
+
+    const handleSetSidebarPlaylistFolders = (e: ChangeEvent<HTMLInputElement>) => {
+        setSettings({
+            general: {
+                sidebarPlaylistFolders: e.target.checked,
             },
         });
     };
@@ -126,21 +136,15 @@ export const SidebarSettings = memo(() => {
                 <Select
                     data={[
                         {
-                            label: t('setting.sidebarBottomSection_playlists', {
-                                postProcess: 'sentenceCase',
-                            }),
+                            label: t('setting.sidebarBottomSection_playlists'),
                             value: 'playlists',
                         },
                         {
-                            label: t('setting.sidebarBottomSection_favoriteAlbums', {
-                                postProcess: 'sentenceCase',
-                            }),
+                            label: t('setting.sidebarBottomSection_favoriteAlbums'),
                             value: 'favoriteAlbums',
                         },
                         {
-                            label: t('setting.sidebarBottomSection_none', {
-                                postProcess: 'sentenceCase',
-                            }),
+                            label: t('setting.sidebarBottomSection_none'),
                             value: 'none',
                         },
                     ]}
@@ -151,7 +155,7 @@ export const SidebarSettings = memo(() => {
             description: t('setting.sidebarBottomSection', {
                 context: 'description',
             }),
-            title: t('setting.sidebarBottomSection', { postProcess: 'sentenceCase' }),
+            title: t('setting.sidebarBottomSection'),
         },
         {
             control: (
