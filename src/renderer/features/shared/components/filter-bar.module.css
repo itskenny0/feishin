@@ -5,6 +5,19 @@
 }
 
 /*
+ * Touch viewports: drop the hard 1px border below the filter row.
+ * Spotify / Apple Music / YouTube Music all let the filter chips flow
+ * straight into the list below without a divider — the chip row is
+ * already visually distinct (smaller controls, more padding) and the
+ * line just looks like desktop-chrome on a phone.
+ */
+@media (pointer: coarse) {
+    .filter-bar {
+        border-bottom: none;
+    }
+}
+
+/*
  * Touch / narrow viewport: the filter bar children (Flex / Group rows
  * of sort dropdowns, divider, filter button, refresh button, display-
  * toggle, list-config menu) overflow horizontally past the viewport
