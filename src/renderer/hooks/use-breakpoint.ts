@@ -57,3 +57,24 @@ export const useIsTabletOrSmaller = () => useMediaQuery('(max-width: 1199px)');
 
 /** True for genuine pointer:coarse devices (touch). Pair with breakpoint checks. */
 export const useIsTouch = () => useMediaQuery('(pointer: coarse)');
+
+/**
+ * True when the viewport sits in the 431–834px "tablet sweet-spot" — the
+ * range that straddles the 768px mobile/desktop shell boundary. Covers
+ * large phones in landscape (430–600), small portrait tablets (744–810),
+ * narrow split-screen desktop windows and book-mode foldables.
+ *
+ * Devices in this range have plenty of horizontal space but are commonly
+ * held in portrait with two thumbs, so layouts that look right on phones
+ * (single column, full-bleed art) waste room here, and layouts tuned for
+ * desktop (resizable sidebar, queue sidebar, dense tables) feel cramped.
+ *
+ * The 768 mobile-shell boundary is preserved — useIsTabletRange spans
+ * BOTH shells. Below 768 the mobile shell stays in charge (with
+ * tablet-flavoured polish layered on top via `@media (min-width: 600px)`
+ * style queries inside the mobile-shell components). Above 768 the
+ * desktop shell renders but with tablet-tuned defaults (auto-collapsed
+ * sidebar, queue sidebar suppressed, earlier two-column detail layouts).
+ */
+export const useIsTabletRange = () =>
+    useMediaQuery('(min-width: 431px) and (max-width: 834px)');
