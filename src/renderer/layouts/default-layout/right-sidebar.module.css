@@ -22,3 +22,70 @@
 .queue-drawer {
     border-radius: var(--theme-radius-lg);
 }
+
+/*
+ * Tablet-tier (835–1280px) slide-in overlay. The right sidebar normally
+ * occupies its own grid column, but on iPad-portrait widths squeezing a
+ * persistent 400px queue panel between a 240px nav sidebar and the
+ * main content leaves the album grid impossibly narrow (~380px on a
+ * 1024px viewport). Behave like Spotify / Apple Music here: the
+ * sidebar floats above the page from the right edge, dismissable by
+ * tapping outside, and still resizable via its existing drag-handle.
+ *
+ * We keep the grid-area assignment (so the sidebar's grid placement
+ * tooling stays valid) and just override visual position with
+ * !important when we're in the bigTablet window. The grid column the
+ * sidebar reserves collapses to 0 via the matching rule in
+ * main-content.module.css — the sidebar's `position: fixed` lifts it
+ * out of the grid flow visually.
+ */
+@media (835px <= width <= 1280px) {
+    .right-sidebar-container {
+        position: fixed;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 50;
+        width: var(--right-sidebar-width, 400px);
+        max-width: 80vw;
+        height: 100vh;
+        height: 100dvh;
+        box-shadow: -16px 0 32px rgb(0 0 0 / 36%);
+        animation: right-sidebar-slide-in 220ms cubic-bezier(0.2, 0.9, 0.3, 1);
+    }
+}
+
+@keyframes right-sidebar-slide-in {
+    from {
+        transform: translateX(100%);
+    }
+
+    to {
+        transform: translateX(0);
+    }
+}
+
+/*
+ * Dim backdrop rendered alongside the sidebar on tablet-tier. Sits
+ * just below the sidebar in stacking order (sidebar is z-50, backdrop
+ * z-49) so a tap lands on the backdrop and fires the dismiss handler
+ * without leaking through to the page underneath.
+ */
+.overlay-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 49;
+    cursor: pointer;
+    background: rgb(0 0 0 / 38%);
+    animation: overlay-backdrop-fade-in 220ms ease-out;
+}
+
+@keyframes overlay-backdrop-fade-in {
+    from {
+        background: rgb(0 0 0 / 0%);
+    }
+
+    to {
+        background: rgb(0 0 0 / 38%);
+    }
+}
