@@ -12,36 +12,19 @@
 }
 
 /*
- * Touch / narrow viewports.
+ * Touch / phone-width: render the context menu as a Spotify-style bottom
+ * sheet instead of a popper. The width cap that used to live here
+ * (min(16rem, 45vw)) was needed so Radix's submenu could fit alongside
+ * the parent on a narrow screen — but the bottom-sheet treatment below
+ * (full-width pinned to the bottom edge) makes that constraint moot
+ * because there's no "popper alongside" anymore: each level of the
+ * menu fills the sheet, and the submenu opens on top.
  *
- * Radix's submenu primitive doesn't accept `side` or `align` — submenus
- * always open to the right of their trigger. On a 430px phone the
- * desktop 16rem (256px) parent menu plus a 16rem submenu need 512px of
- * horizontal space, which obviously doesn't fit, so Radix's
- * `avoidCollisions` is forced to clip the submenu off the right edge.
- *
- * Cap the menu width at 45vw on touch so the parent + submenu add up
- * to at most ~390px (out of 430px viewport), leaving enough margin for
- * Radix to position both side-by-side. `min(16rem, 45vw)` keeps the
- * desktop width unchanged for narrow desktop windows (where 45vw is
- * still bigger than 16rem) and only kicks in on truly small touch
- * viewports. Items inside the menu break onto multiple lines as
- * needed — the .item rule above already sets `white-space: normal`.
+ * Touch-friendly row sizing: 44px min-height per row, slightly larger
+ * font, more generous icon padding so each item is a comfortable
+ * Material 48dp / Apple HIG 44pt tap target.
  */
 @media (pointer: coarse) {
-    .content {
-        width: min(16rem, 45vw);
-        min-width: min(12rem, 40vw);
-        max-width: min(16rem, 45vw);
-    }
-
-    /*
-     * Touch-friendly row sizing for menu items. Material design specifies
-     * 48dp as the minimum tap target; default desktop padding leaves rows
-     * around 32–36px which is fiddly on a phone. Bump the vertical
-     * padding + font size so each row is a comfortable Spotify-mobile-
-     * scale tappable surface.
-     */
     .item {
         min-height: 44px;
         padding: var(--theme-spacing-sm) var(--theme-spacing-md);
@@ -54,6 +37,53 @@
 
     .item.has-right-icon {
         padding-right: calc(var(--theme-spacing-md) + 1.75rem);
+    }
+}
+
+/*
+ * Bottom-sheet rendering of the context menu on touch.
+ *
+ * Radix positions the Content via inline `transform: translate3d(...)`
+ * + `top/left` styles on the popper wrapper element. We override those
+ * with !important so the menu pins to the bottom of the viewport,
+ * spans the full width, and animates in from below like a Spotify /
+ * iOS Files action sheet. The submenu (which Radix renders as its own
+ * popper wrapper alongside the parent) gets the same treatment, so
+ * tapping a submenu trigger slides a new sheet over the previous one.
+ *
+ * We target the Radix popper wrapper via
+ * [data-radix-popper-content-wrapper], which Radix emits for both
+ * top-level and sub content. Touch-only via `pointer: coarse` so
+ * desktop keeps the standard cursor-anchored popper behaviour.
+ */
+@media (pointer: coarse) {
+    :global([data-radix-popper-content-wrapper]) {
+        right: 0 !important;
+        bottom: 0 !important;
+        left: 0 !important;
+        width: 100vw !important;
+        max-width: 100vw !important;
+        transform: none !important;
+    }
+
+    .content {
+        width: 100vw !important;
+        min-width: 100vw !important;
+        max-width: 100vw !important;
+        padding: var(--theme-spacing-sm) var(--theme-spacing-md);
+        padding-bottom: max(
+            var(--theme-spacing-md),
+            env(safe-area-inset-bottom, 0px),
+            var(--android-safe-bottom, 0px)
+        );
+        border: none;
+        border-radius: 18px 18px 0 0;
+        box-shadow: 0 -12px 32px rgb(0 0 0 / 50%);
+        filter: none;
+    }
+
+    .max-height {
+        max-height: 70vh;
     }
 }
 
