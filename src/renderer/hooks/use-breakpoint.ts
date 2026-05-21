@@ -118,3 +118,18 @@ export const useIsTouch = () => useMediaQuery('(pointer: coarse)');
  * sidebar, queue sidebar suppressed, earlier two-column detail layouts).
  */
 export const useIsTabletRange = () => useMediaQuery('(min-width: 431px) and (max-width: 834px)');
+
+/**
+ * True when the viewport is in the "big-tablet" range (835–1280px). Covers
+ * iPad portrait edge cases (820–834), iPad Pro 11" landscape (834×1194),
+ * iPad Pro 12.9" portrait (1024×1366), iPad landscape (1180×820), Samsung
+ * Galaxy Tab S9 Ultra landscape, ChromeOS tablet mode, foldable outers and
+ * small Surface devices.
+ *
+ * This tier overlaps both the legacy `tablet` shell (835–1199) and the
+ * bottom slice of the `desktop` shell (1200–1280). It is a layout-tweak
+ * signal, not a shell selector — the actual layout shell is still chosen
+ * by `useIsMobileShell()`. Pair with `@media (min-width: 835px) and
+ * (max-width: 1280px)` in CSS modules.
+ */
+export const useIsBigTablet = () => useMediaQuery('(min-width: 835px) and (max-width: 1280px)');
