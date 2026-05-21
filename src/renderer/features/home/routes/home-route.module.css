@@ -30,15 +30,24 @@
 
 /*
  * Horizontal padding for the home page content stack. Phone shell uses
- * the minimum to maximize the carousel viewport (1rem each side);
- * tablet+ keeps the 2rem we'd previously hardcoded via px="2rem".
+ * the minimum to maximize the carousel viewport (1rem each side); the
+ * tablet sweet-spot (600–834px) steps up to 1.5rem so the carousels
+ * don't bleed into the screen edges on portrait tablets while still
+ * giving the cover-art rows room to breathe. Desktop bumps to 2rem.
  */
 .content-stack {
     padding-right: 1rem;
     padding-left: 1rem;
 }
 
-@media (width >= 768px) {
+@media (width >= 600px) {
+    .content-stack {
+        padding-right: 1.5rem;
+        padding-left: 1.5rem;
+    }
+}
+
+@media (width >= 835px) {
     .content-stack {
         padding-right: 2rem;
         padding-left: 2rem;
@@ -56,4 +65,21 @@
     font-weight: 600;
     line-height: 1.2;
     letter-spacing: -0.02em;
+}
+
+/*
+ * Bump the greeting size on tablet — the magazine-style greeting reads
+ * better at 2.25rem when there's enough horizontal room for it to sit
+ * comfortably above wider carousels.
+ */
+@media (600px <= width <= 834px) {
+    .greeting-text {
+        font-size: 2.25rem;
+    }
+}
+
+@media (width >= 835px) {
+    .greeting-text {
+        font-size: 2.5rem;
+    }
 }
