@@ -1,14 +1,25 @@
+import type { PanInfo } from 'motion/react';
+
 import clsx from 'clsx';
-import { AnimatePresence, HTMLMotionProps, motion, Variants } from 'motion/react';
+import {
+    animate,
+    AnimatePresence,
+    HTMLMotionProps,
+    motion,
+    useMotionValue,
+    Variants,
+} from 'motion/react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import styles from './mobile-fullscreen-player.module.css';
 
 import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
+import { usePlayer } from '/@/renderer/features/player/context/player-context';
 import {
     useIsRadioActive,
     useRadioPlayer,
 } from '/@/renderer/features/radio/hooks/use-radio-player';
+import { triggerHaptic } from '/@/renderer/hooks/use-haptic';
 import {
     useFullScreenPlayerStore,
     useImageRes,
@@ -160,12 +171,69 @@ export const MobileFullscreenPlayerAlbumArt = () => {
         previousSongRef.current = currentSong?._uniqueId;
     }, [currentSong?._uniqueId, currentImageUrl, nextSong?._uniqueId, nextImageUrl, setImageState]);
 
+    /*
+     * Spotify-style finger-tracking carousel swipe on the cover. Same
+     * pattern as the mini-player: drag stays attached to the finger,
+     * velocity + offset on release decide commit-or-snap-back. The
+     * BackgroundImage / overlay don't drag with it — only the cover
+     * itself slides, which matches Spotify's behaviour where the cover
+     * is the only swipable element.
+     */
+    const { mediaNext, mediaPrevious } = usePlayer();
+    const coverSwipeX = useMotionValue(0);
+    const isSongDefined = Boolean(currentSong?.id);
+    const handleCoverDragEnd = useCallback(
+        (_event: unknown, info: PanInfo) => {
+            const width = mainImageRef.current?.offsetWidth ?? 320;
+            const commitOffset = width * 0.25;
+            const flickVelocity = 500;
+            const offset = info.offset.x;
+            const velocity = info.velocity.x;
+            const wantsNext = offset < -commitOffset || velocity < -flickVelocity;
+            const wantsPrev = offset > commitOffset || velocity > flickVelocity;
+
+            if (wantsNext && isSongDefined) {
+                triggerHaptic('selection');
+                mediaNext();
+                animate(coverSwipeX, 0, {
+                    damping: 30,
+                    stiffness: 220,
+                    type: 'spring',
+                    velocity,
+                });
+            } else if (wantsPrev && isSongDefined) {
+                triggerHaptic('selection');
+                mediaPrevious();
+                animate(coverSwipeX, 0, {
+                    damping: 30,
+                    stiffness: 220,
+                    type: 'spring',
+                    velocity,
+                });
+            } else {
+                animate(coverSwipeX, 0, {
+                    damping: 28,
+                    stiffness: 360,
+                    type: 'spring',
+                    velocity,
+                });
+            }
+        },
+        [coverSwipeX, isSongDefined, mediaNext, mediaPrevious],
+    );
+
     return (
         <div className={styles.imageContainer} ref={mainImageRef}>
-            <div
+            <motion.div
                 className={clsx(styles.image, {
                     [styles.imageNativeAspectRatio]: useImageAspectRatio,
                 })}
+                drag={isSongDefined && !isPlayingRadio ? 'x' : false}
+                dragConstraints={{ left: 0, right: 0 }}
+                dragElastic={1}
+                dragMomentum={false}
+                onDragEnd={handleCoverDragEnd}
+                style={{ x: coverSwipeX }}
             >
                 <AnimatePresence initial={false} mode="sync">
                     {isPlayingRadio ? (
@@ -222,7 +290,7 @@ export const MobileFullscreenPlayerAlbumArt = () => {
                         </>
                     )}
                 </AnimatePresence>
-            </div>
+            </motion.div>
         </div>
     );
 };
