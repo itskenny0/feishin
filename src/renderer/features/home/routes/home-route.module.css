@@ -54,6 +54,18 @@
     }
 }
 
+/*
+ * Big-tablet tier (835–1280px) — tighten the content-stack horizontal
+ * padding so the carousel rows have more room to grow the album grid.
+ * Above 1280 the standard desktop 2rem padding stays in charge.
+ */
+@media (835px <= width <= 1280px) {
+    .content-stack {
+        padding-right: 1.25rem;
+        padding-left: 1.25rem;
+    }
+}
+
 /* Time-aware greeting at the top of the home page. Subtle single-line
    header: larger weight, tightened tracking, leading the carousels. */
 .greeting {
