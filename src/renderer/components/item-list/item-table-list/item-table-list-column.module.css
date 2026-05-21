@@ -333,6 +333,15 @@
     .container :global(.hover-only-flex) {
         display: flex;
     }
+
+    /* If a hover-only element is shown on touch, its hide-on-hover
+       partner (the thing that would normally be replaced by the
+       hover-only one) should hide too — otherwise they stack/overlap.
+       Used by row-index-column.tsx where the row index is replaced
+       by an expand action button on hover. */
+    .container :global(.hide-on-hover) {
+        display: none;
+    }
 }
 
 .resize-handle {
