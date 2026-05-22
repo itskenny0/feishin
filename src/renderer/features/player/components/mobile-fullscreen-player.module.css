@@ -127,6 +127,41 @@
 }
 
 /*
+ * Drag handle pill at the top of the player face. The visible pill is
+ * 4px tall; the surrounding padding (10px above and 8px below) gives a
+ * generous touch target without taking much vertical space. touch-action
+ * none keeps the browser from claiming the pull as a scroll gesture
+ * before Motion's drag listener gets it.
+ */
+.drag-handle {
+    display: flex;
+    flex-shrink: 0;
+    justify-content: center;
+    width: 100%;
+    padding: 10px 0 8px;
+    touch-action: none;
+    cursor: grab;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.drag-handle:active {
+    cursor: grabbing;
+}
+
+.drag-handle-pill {
+    width: 44px;
+    height: 4px;
+    background: rgb(255 255 255 / 45%);
+    border-radius: 4px;
+    transition: background 160ms ease;
+}
+
+.drag-handle:active .drag-handle-pill,
+.drag-handle:focus-visible .drag-handle-pill {
+    background: rgb(255 255 255 / 80%);
+}
+
+/*
  * Body wrapper inside the player face that holds the cover art and
  * the control stack (metadata + progress + volume + transport). In
  * portrait this is `display: contents` — the wrapper itself doesn't

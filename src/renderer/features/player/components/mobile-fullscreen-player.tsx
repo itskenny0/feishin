@@ -1,11 +1,13 @@
+import type { DragControls } from 'motion/react';
+
 import { AnimatePresence, motion, useDragControls } from 'motion/react';
 import { Variants } from 'motion/react';
 import {
     CSSProperties,
     memo,
     MouseEvent,
+    PointerEvent,
     ReactNode,
-    PointerEvent as ReactPointerEvent,
     useCallback,
     useEffect,
     useRef,
@@ -403,16 +405,15 @@ const BackgroundImageOverlay = memo(
 BackgroundImageOverlay.displayName = 'BackgroundImageOverlay';
 
 interface DismissibleMobilePlayerContainerProps extends MobilePlayerContainerProps {
+    /**
+     * Drag controls created by the parent and shared with the drag handle so
+     * a pointerdown on the handle hands the gesture straight to Motion's
+     * drag state on this container — no manual pointermove tracking needed.
+     */
+    dragControls: DragControls;
     /** True while the player face (cover/metadata/transport) is the active tab. */
     isPlayerTab: boolean;
     onDismiss: () => void;
-    /**
-     * Ref to the scrollable card-stack inside the player. Used to gate the
-     * pull-to-dismiss gesture: drag-down only takes over when the inner
-     * scroll is already at the top, otherwise the user's pull becomes a
-     * scroll up through the lyrics / artist cards.
-     */
-    scrollableRef: React.RefObject<HTMLDivElement | null>;
 }
 
 interface MobilePlayerContainerProps {
@@ -429,11 +430,11 @@ interface MobilePlayerContainerProps {
 const MobilePlayerContainer = memo(
     ({
         children,
+        dragControls,
         dynamicBackground,
         dynamicIsImage,
         isPlayerTab,
         onDismiss,
-        scrollableRef,
     }: DismissibleMobilePlayerContainerProps) => {
         const currentSong = usePlayerSong();
         const imageUrl = useItemImageUrl({
@@ -478,67 +479,19 @@ const MobilePlayerContainer = memo(
         const overlayStrength = sourceLuminance !== null && sourceLuminance > 160 ? '0.72' : '0.42';
 
         /*
-         * Pull-to-dismiss. The fullscreen player has a scrollable card
-         * stack (player face + lyrics + artist cards), so a naive
-         * `drag="y"` on the container competes with the inner scroll
-         * and the inner scroll always wins — that's the regression
-         * users reported after the scrollable cards landed.
+         * Pull-to-dismiss. We previously tried to track raw pointer
+         * events on the container and call dragControls.start() once
+         * we saw a downward pull at scrollTop=0, but that gesture
+         * never reliably reached us — the inner scroll surface and
+         * Motion's own pointer plumbing kept eating the events.
          *
-         * Fix: take manual control of the drag. Watch raw pointer
-         * events on the container. If the user starts pulling DOWN
-         * while the scroll surface is already at scrollTop=0, hand the
-         * gesture off to Motion (`dragControls.start`). Anything else
-         * (scrolling up, pulling on a non-player tab, or the inner
-         * scroll has already moved off the top) is left alone so the
-         * native scroll behaviour works as expected.
+         * The robust pattern is a dedicated drag handle (the visible
+         * pill at the top of the player face) whose onPointerDown
+         * hands the gesture directly to Motion's drag state on this
+         * container. dragControls is created up in MobileFullscreenPlayer
+         * and threaded down to both this container and the handle so
+         * they share state.
          */
-        const dragControls = useDragControls();
-        const pullStartRef = useRef<null | { x: number; y: number }>(null);
-
-        const handlePointerDown = useCallback(
-            (event: ReactPointerEvent<HTMLDivElement>) => {
-                if (!isPlayerTab) {
-                    pullStartRef.current = null;
-                    return;
-                }
-                const scroll = scrollableRef.current;
-                if (scroll && scroll.scrollTop > 0) {
-                    pullStartRef.current = null;
-                    return;
-                }
-                pullStartRef.current = { x: event.clientX, y: event.clientY };
-            },
-            [isPlayerTab, scrollableRef],
-        );
-
-        const handlePointerMove = useCallback(
-            (event: ReactPointerEvent<HTMLDivElement>) => {
-                const start = pullStartRef.current;
-                if (!start) return;
-                const dy = event.clientY - start.y;
-                const dx = Math.abs(event.clientX - start.x);
-                // Only commit to a pull-to-dismiss once we've moved
-                // a noticeable distance vertically — small finger
-                // wobble shouldn't kick off a drag mid-tap.
-                if (dy < 8) {
-                    return;
-                }
-                // Bail if the user is moving more horizontally than
-                // vertically — the album-art cover swipe owns that
-                // gesture.
-                if (dx > dy) {
-                    pullStartRef.current = null;
-                    return;
-                }
-                pullStartRef.current = null;
-                dragControls.start(event.nativeEvent, { snapToCursor: false });
-            },
-            [dragControls],
-        );
-
-        const handlePointerUp = useCallback(() => {
-            pullStartRef.current = null;
-        }, []);
 
         return (
             <motion.div
@@ -549,11 +502,9 @@ const MobilePlayerContainer = memo(
                 dragControls={dragControls}
                 dragElastic={{ bottom: 0.6, top: 0 }}
                 // dragListener=false: don't auto-start drag on pointer
-                // events. We start it manually via dragControls in
-                // handlePointerMove when scrollTop is 0 and the user
-                // is moving downward. This is what lets the inner
-                // scrollable card stack keep ownership of the
-                // touch-move event until the user pulls past the top.
+                // events. The drag fires exclusively from the handle
+                // pill calling dragControls.start(), so taps on the
+                // cover / metadata / transport stay click-only.
                 dragListener={false}
                 exit="closed"
                 initial="closed"
@@ -564,9 +515,6 @@ const MobilePlayerContainer = memo(
                         onDismiss();
                     }
                 }}
-                onPointerDown={handlePointerDown}
-                onPointerMove={handlePointerMove}
-                onPointerUp={handlePointerUp}
                 style={
                     {
                         '--mobile-fullscreen-overlay-strength': overlayStrength,
@@ -639,7 +587,21 @@ export const MobileFullscreenPlayer = () => {
     const setRating = useSetRating();
 
     const [isPageHovered, setIsPageHovered] = useState(false);
-    const playerStateRef = useRef<HTMLDivElement | null>(null);
+    /*
+     * Shared drag controls — wired into the container's drag="y" state
+     * AND into the drag-handle pill below. The handle's onPointerDown
+     * calls dragControls.start(e), which is what actually makes the
+     * swipe-down-to-dismiss work; if we left Motion's normal listener
+     * on, the inner scrollable card-stack would race the gesture and
+     * the dismiss would never fire.
+     */
+    const dragControls = useDragControls();
+    const handleHandlePointerDown = useCallback(
+        (event: PointerEvent<HTMLDivElement>) => {
+            dragControls.start(event.nativeEvent);
+        },
+        [dragControls],
+    );
 
     const handleToggleFullScreenPlayer = useCallback(() => {
         setFullScreenPlayerStore({ expanded: false });
@@ -701,11 +663,11 @@ export const MobileFullscreenPlayer = () => {
 
     return (
         <MobilePlayerContainer
+            dragControls={dragControls}
             dynamicBackground={effectiveDynamicBackground}
             dynamicIsImage={dynamicIsImage}
             isPlayerTab={isPlayerState}
             onDismiss={handleToggleFullScreenPlayer}
-            scrollableRef={playerStateRef}
         >
             <FullscreenVisualizerBackground />
             <BackgroundImageOverlay
@@ -720,7 +682,6 @@ export const MobileFullscreenPlayer = () => {
                 className={styles.playerState}
                 onMouseEnter={() => setIsPageHovered(true)}
                 onMouseLeave={() => setIsPageHovered(false)}
-                ref={playerStateRef}
                 transition={{ duration: 0.3, ease: 'easeInOut' }}
             >
                 {/*
@@ -734,6 +695,25 @@ export const MobileFullscreenPlayer = () => {
                  * scrolls.
                  */}
                 <div className={styles.playerFace}>
+                    {/*
+                     * Spotify/Apple-Music-style drag handle. Living at the
+                     * top of the player face means it scrolls away once the
+                     * user pulls the card stack up — they can't dismiss
+                     * by accident while reading lyrics / artist info, which
+                     * matches the platform pattern. onPointerDown calls
+                     * dragControls.start() directly; Motion handles the
+                     * rest. The pill itself is purely cosmetic — the hit
+                     * area is the surrounding padding.
+                     */}
+                    <div
+                        aria-label={t('common.minimize', { defaultValue: 'Swipe down to close' })}
+                        className={styles.dragHandle}
+                        onPointerDown={handleHandlePointerDown}
+                        role="button"
+                        tabIndex={-1}
+                    >
+                        <div aria-hidden className={styles.dragHandlePill} />
+                    </div>
                     <MobileFullscreenPlayerHeader
                         currentSong={currentSong}
                         isPageHovered={isPageHovered}

@@ -18,52 +18,51 @@
 }
 
 /*
- * Touch / narrow viewport: the filter bar children (Flex / Group rows
- * of sort dropdowns, divider, filter button, refresh button, display-
- * toggle, list-config menu) overflow horizontally past the viewport
- * because each child is wrap=nowrap by default. Allow horizontal
- * scrolling INSIDE the bar so the user can pan-x to reach off-screen
- * controls without breaking the layout, while keeping the rest of the
- * page non-scrolling. Doesn't affect desktop (the bar fits there).
+ * Mobile / narrow viewport: the filter-bar children (a Flex with two
+ * justify=space-between Groups containing sort dropdowns, divider,
+ * filter button, refresh button, display-toggle, list-config menu)
+ * always overflow past the viewport — the controls cluster were
+ * designed for desktop widths. Spotify / Apple Music / YouTube Music
+ * all handle this with a single horizontally-scrollable row of pills.
  *
- * scrollbar-width: none + ::-webkit-scrollbar { display:none } hide
- * the scrollbar — the row should feel like a strip the user pushes
- * with a finger rather than a UI element that demands its own
- * scrollbar gutter.
+ * Mobile rules:
+ *   1. overflow-x: auto on the bar so the user can pan-x to reach the
+ *      off-screen controls.
+ *   2. flex-wrap: nowrap on the immediate child (the Flex) so the row
+ *      stays a single line even when the inner Groups would otherwise
+ *      try to wrap onto a second row.
+ *   3. !important + width: max-content overrides the inner Flex's
+ *      justify="space-between" + w="100%" that would otherwise push
+ *      the two Groups to opposite edges (which on overflow looks
+ *      broken — the first Group's wider-than-viewport content shoves
+ *      the second cluster entirely off-screen).
+ *   4. Every Group/child inside is flex-shrink: 0 so each control
+ *      keeps its natural width — no squashing.
+ *   5. -webkit-overflow-scrolling: touch gives iOS momentum.
+ *   6. Scrollbar hidden — the row should feel like a finger-pushed
+ *      strip rather than a UI element with chrome.
  */
 @media (width < 768px) {
     .filter-bar {
         overflow-x: auto;
-        scrollbar-width: none;
-    }
-
-    .filter-bar > * {
-        flex-wrap: wrap;
-    }
-
-    .filter-bar::-webkit-scrollbar {
-        display: none;
-    }
-}
-
-/*
- * Small-phone tier (≤360): force the filter-bar children to a single
- * row that scrolls horizontally, with -webkit-overflow-scrolling:touch
- * for momentum on iOS. At ≤360 the wrap-then-overflow fallback above
- * still produces an awkward two-row layout because each individual
- * control is too wide; nowrap + horizontal scroll keeps the entire row
- * uniform and predictable. Use !important to override the flex-wrap:
- * wrap rule above without lifting its specificity.
- */
-@media (width <= 360px) {
-    .filter-bar {
         overflow-y: hidden;
+        scrollbar-width: none;
         -webkit-overflow-scrolling: touch;
     }
 
     .filter-bar > * {
         flex-wrap: nowrap !important;
+        justify-content: flex-start !important;
         width: max-content;
         min-width: 100%;
+    }
+
+    .filter-bar > * > * {
+        flex-shrink: 0;
+        width: auto !important;
+    }
+
+    .filter-bar::-webkit-scrollbar {
+        display: none;
     }
 }
