@@ -34,4 +34,24 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!--
+        Background audio + persistent media notification. The
+        @jofr/capacitor-media-session plugin registers its own
+        foreground service for media playback; we just declare the
+        permissions it needs:
+
+          - FOREGROUND_SERVICE: required for any FGS on Android 9+.
+          - FOREGROUND_SERVICE_MEDIA_PLAYBACK: Android 14+ requires a
+            typed FGS permission. Without this the plugin's service
+            fails to start on API 34+ and the notification never
+            appears.
+          - POST_NOTIFICATIONS: Android 13+ requires a runtime opt-in
+            to show the notification at all. The user is asked the
+            first time playback starts; the OS surfaces a system
+            prompt.
+    -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 </manifest>

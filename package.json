@@ -87,6 +87,7 @@
         "@capacitor/status-bar": "^8.0.2",
         "@electron-toolkit/preload": "^3.0.2",
         "@electron-toolkit/utils": "^4.0.0",
+        "@jofr/capacitor-media-session": "^4.0.0",
         "@mantine/colors-generator": "^9.1.1",
         "@mantine/core": "^9.1.1",
         "@mantine/dates": "^9.1.1",
