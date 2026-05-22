@@ -236,7 +236,7 @@
 
 .lyrics-card-body {
     position: relative;
-    min-height: 12rem;
+    min-height: 8rem;
     max-height: 38vh;
     overflow-y: auto;
     color: #fff;
