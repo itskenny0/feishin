@@ -588,6 +588,25 @@
     aspect-ratio: auto;
 }
 
+/*
+ * Preview of the next song's cover, rendered offscreen to the right of
+ * the main cover. Tracks the same swipeX motion value so it slides in
+ * lockstep as the user pulls the main cover left. The 1.5rem inset
+ * matches the .image-container padding so the preview's edge sits where
+ * the user's eye expects after the main cover clears the viewport. The
+ * preview is opacity 0.6 + slightly desaturated so it reads as "behind"
+ * rather than competing with the active art.
+ */
+.image-next-preview {
+    position: absolute;
+    top: 50%;
+    left: calc(100% + var(--theme-spacing-md));
+    pointer-events: none;
+    opacity: 0.6;
+    filter: saturate(0.85);
+    transform: translateY(-50%);
+}
+
 .album-image {
     position: absolute;
     top: 0;

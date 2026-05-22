@@ -222,8 +222,42 @@ export const MobileFullscreenPlayerAlbumArt = () => {
         [coverSwipeX, isSongDefined, mediaNext, mediaPrevious],
     );
 
+    /*
+     * Spotify-style preview-of-next-cover during the swipe gesture. Render
+     * a faint preview of the upcoming song's cover offscreen to the
+     * right; while the user is dragging left, the main cover slides off
+     * and the preview slides in. The preview is positioned at left: 100%
+     * + a small gap so it sits in the negative-x space that opens up as
+     * coverSwipeX goes negative. The preview tracks the same swipeX
+     * motion value so it moves in lockstep with the main cover.
+     *
+     * Hidden when no nextSong is queued (or in radio mode) so the swipe
+     * gesture still feels clean when there's nothing to peek at.
+     */
+    const nextImageSrc = !isPlayingRadio && nextSong?._uniqueId ? nextImageUrl : null;
+
     return (
         <div className={styles.imageContainer} ref={mainImageRef}>
+            {nextImageSrc && (
+                <motion.div
+                    aria-hidden
+                    className={clsx(styles.image, styles.imageNextPreview, {
+                        [styles.imageNativeAspectRatio]: useImageAspectRatio,
+                    })}
+                    style={{ x: coverSwipeX }}
+                >
+                    <img
+                        alt=""
+                        className={styles.albumImage}
+                        draggable={false}
+                        src={nextImageSrc}
+                        style={{
+                            objectFit: useImageAspectRatio ? 'contain' : 'cover',
+                            width: useImageAspectRatio ? 'auto' : '100%',
+                        }}
+                    />
+                </motion.div>
+            )}
             <motion.div
                 className={clsx(styles.image, {
                     [styles.imageNativeAspectRatio]: useImageAspectRatio,
