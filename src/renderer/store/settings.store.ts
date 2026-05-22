@@ -815,6 +815,10 @@ export const ValidationSettingsStateSchema = z.object({
         z.literal('window'),
         z.string(),
     ]),
+    // Drill-down level inside the selected `tab`. Empty string = show
+    // the subpages list for that category; non-empty = render that
+    // subpage's content. Reset to '' when category changes.
+    tabSubpage: z.string(),
     visualizer: VisualizerSettingsSchema,
     window: WindowSettingsSchema,
 });
@@ -2054,6 +2058,7 @@ const initialState: SettingsState = {
         username: 'feishin',
     },
     tab: 'general',
+    tabSubpage: '',
     visualizer: {
         audiomotionanalyzer: {
             alphaBars: false,
