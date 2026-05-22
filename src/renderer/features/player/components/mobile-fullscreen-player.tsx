@@ -612,28 +612,90 @@ export const MobileFullscreenPlayer = () => {
         },
         [dragControls],
     );
-    const handleFacePointerDown = useCallback(
-        (event: PointerEvent<HTMLDivElement>) => {
-            // Only when the page hasn't been scrolled past the player
-            // face — otherwise a pull-down should scroll back up
-            // through the cards, not dismiss.
-            const scrollEl = playerStateRef.current;
-            if (scrollEl && scrollEl.scrollTop > 0) return;
 
-            // Skip elements that own their own touch behaviour — chiefly
-            // the album-art cover (horizontal swipe for prev/next) and
-            // anything tagged with [data-noplayerdrag]. Without this,
-            // calling dragControls.start() on a horizontal cover swipe
-            // would race the cover's drag="x" and visibly stutter.
-            const target = event.target as HTMLElement | null;
-            if (target?.closest('[data-noplayerdrag], [data-cover-swipe]')) {
+    /*
+     * Pull-to-dismiss on the whole player face.
+     *
+     * React's `onPointerDown` (what we tried first) lost the race against
+     * the browser's native scroll claim because React's touch listeners
+     * are passive — by the time React's handler had said "this is a
+     * drag" the browser had already claimed the gesture for vertical
+     * scrolling and Motion never received any pointer-move events. The
+     * drag-handle pill worked only because it had `touch-action: none`,
+     * which short-circuits the browser-claim path.
+     *
+     * The robust fix is to attach a non-passive native touchmove
+     * listener to the scroll surface so we can `preventDefault()` the
+     * exact moment we want to claim the gesture. When the user pulls
+     * down at scrollTop=0, we preventDefault (stops the browser scroll
+     * attempt cleanly) and hand the touch event off to Motion's drag
+     * controls. Any pull-up, sideways move, or scroll past the top
+     * falls through to native scroll like normal.
+     */
+    useEffect(() => {
+        const el = playerStateRef.current;
+        if (!el) return;
+        let startX = 0;
+        let startY = 0;
+        let active = false;
+        let claimed = false;
+
+        const onTouchStart = (e: TouchEvent) => {
+            // Album-art horizontal swipe + interactive controls own
+            // their own gestures; opt them out so the dismiss drag
+            // doesn't race them.
+            const target = e.target as HTMLElement | null;
+            if (target?.closest('[data-cover-swipe], [data-noplayerdrag]')) {
+                active = false;
                 return;
             }
+            if (el.scrollTop > 0) {
+                active = false;
+                return;
+            }
+            const touch = e.touches[0];
+            if (!touch) return;
+            startX = touch.clientX;
+            startY = touch.clientY;
+            active = true;
+            claimed = false;
+        };
 
-            dragControls.start(event.nativeEvent);
-        },
-        [dragControls],
-    );
+        const onTouchMove = (e: TouchEvent) => {
+            if (!active || claimed) return;
+            const touch = e.touches[0];
+            if (!touch) return;
+            const dy = touch.clientY - startY;
+            const dx = Math.abs(touch.clientX - startX);
+            if (dy <= 10) return; // need a clear downward intent
+            if (dx > dy) {
+                active = false; // mostly horizontal — let cover swipe handle it
+                return;
+            }
+            claimed = true;
+            // preventDefault must run on a non-passive listener (registered
+            // below). This stops the browser from kicking off scroll /
+            // overscroll for this touch, freeing Motion to track it.
+            e.preventDefault();
+            dragControls.start(e);
+        };
+
+        const onTouchEnd = () => {
+            active = false;
+            claimed = false;
+        };
+
+        el.addEventListener('touchstart', onTouchStart, { passive: true });
+        el.addEventListener('touchmove', onTouchMove, { passive: false });
+        el.addEventListener('touchend', onTouchEnd, { passive: true });
+        el.addEventListener('touchcancel', onTouchEnd, { passive: true });
+        return () => {
+            el.removeEventListener('touchstart', onTouchStart);
+            el.removeEventListener('touchmove', onTouchMove);
+            el.removeEventListener('touchend', onTouchEnd);
+            el.removeEventListener('touchcancel', onTouchEnd);
+        };
+    }, [dragControls]);
 
     const handleToggleFullScreenPlayer = useCallback(() => {
         setFullScreenPlayerStore({ expanded: false });
@@ -727,14 +789,13 @@ export const MobileFullscreenPlayer = () => {
                  * is. The .lyricsCard below it appears as the user
                  * scrolls.
                  *
-                 * onPointerDown on the face itself hands the gesture to
-                 * dragControls — that's what makes the whole player face
-                 * draggable, not just the pill up top. The scrollTop
-                 * gate inside handleFacePointerDown keeps the dismiss
-                 * from hijacking pulls that should scroll back up
-                 * through the card stack.
+                 * Whole-face drag-to-dismiss is wired via a non-passive
+                 * native touchmove listener on .playerState (see the
+                 * useEffect that registers it). React's synthetic
+                 * pointer events couldn't preventDefault in time, so we
+                 * bypass React entirely for that gesture.
                  */}
-                <div className={styles.playerFace} onPointerDown={handleFacePointerDown}>
+                <div className={styles.playerFace}>
                     {/*
                      * Spotify/Apple-Music-style drag handle. Living at the
                      * top of the player face means it scrolls away once the
@@ -829,8 +890,18 @@ export const MobileFullscreenPlayer = () => {
                          * (the inner Lyrics component handles the
                          * loading state) to avoid a flash of hide-then-
                          * show once a result arrives.
+                         *
+                         * Hidden entirely when the expanded lyrics tab
+                         * is active — both surfaces render the same
+                         * SynchronizedLyrics component which collides
+                         * on shared DOM ids (`lyric-N`, the scroll
+                         * container), and document.getElementById was
+                         * pinning the active line to whichever instance
+                         * mounted first. With the inline card unmounted
+                         * while expanded, the expanded view's lines
+                         * advance normally.
                          */}
-                        {hasLyrics !== false && (
+                        {hasLyrics !== false && !isLyricsState && (
                             <div
                                 aria-label={t('page.fullscreenPlayer.openLyrics', {
                                     defaultValue: 'Tap to expand lyrics',

@@ -6,6 +6,7 @@ import {
     subscribeCurrentTrack,
     subscribePlayerStatus,
     usePlayerActions,
+    usePlayerStore,
     useTimestampStoreBase,
 } from '/@/renderer/store';
 import { LibraryItem, QueueSong } from '/@/shared/types/domain-types';
@@ -142,15 +143,26 @@ const useCapacitorMediaSession = () => {
                 }
             });
 
-            // Push current state through immediately so the notification
-            // appears the first time the user starts playback (or shows
-            // the right state if media was already playing when the hook
-            // mounted, which can happen on a hot reload).
             unsubscribeTrack = subscribeCurrentTrack(({ song }) => {
                 if (!plugin || !song || isRadioActiveRef.current) return;
                 currentDurationSec = (song.duration ?? 0) / 1000;
                 plugin.setMetadata(buildMetadata(song));
             });
+
+            // Push the *current* track and status through immediately —
+            // Zustand's subscribe only fires on CHANGES, so without this
+            // priming step a song that's already playing when the hook
+            // finally mounts (which is the common case: plugin loads via
+            // dynamic import, finishes a tick after the user starts
+            // playback) would never trigger setPlaybackState, the FGS
+            // would never start, and no notification would appear. This
+            // was the silent failure mode from the first build that
+            // shipped the plugin.
+            const currentSongNow = usePlayerStore.getState().getCurrentSong();
+            if (currentSongNow && !isRadioActiveRef.current) {
+                currentDurationSec = (currentSongNow.duration ?? 0) / 1000;
+                plugin.setMetadata(buildMetadata(currentSongNow));
+            }
 
             // Android 13+ requires POST_NOTIFICATIONS runtime permission
             // before any FGS notification will show. The @jofr plugin
@@ -176,7 +188,7 @@ const useCapacitorMediaSession = () => {
                 Notification.requestPermission().catch(() => {});
             };
 
-            unsubscribeStatus = subscribePlayerStatus(({ status }) => {
+            const applyStatus = (status: PlayerStatus) => {
                 if (!plugin) return;
                 if (status === PlayerStatus.PLAYING) {
                     ensureNotificationPermission();
@@ -211,7 +223,15 @@ const useCapacitorMediaSession = () => {
                             .catch(() => {});
                     }, 5000);
                 }
-            });
+            };
+
+            unsubscribeStatus = subscribePlayerStatus(({ status }) => applyStatus(status));
+            // Prime the plugin with the current status now that the
+            // subscriber is wired — see the matching priming step above
+            // for currentTrack. Same race: if the user was already
+            // playing audio when the hook mounted, the subscriber would
+            // sit idle waiting for a transition that never comes.
+            applyStatus(usePlayerStore.getState().player.status);
         };
 
         init();
