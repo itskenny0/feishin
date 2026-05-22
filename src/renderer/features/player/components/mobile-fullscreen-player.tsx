@@ -801,8 +801,17 @@ export const MobileFullscreenPlayer = () => {
                             />
                         )}
                         <div
+                            aria-label={t('page.fullscreenPlayer.openLyrics', {
+                                defaultValue: 'Tap to expand lyrics',
+                            })}
                             className={styles.lyricsCard}
                             onClick={handleToggleLyrics}
+                            onKeyDown={(event) => {
+                                if (event.key === 'Enter' || event.key === ' ') {
+                                    event.preventDefault();
+                                    handleToggleLyrics();
+                                }
+                            }}
                             role="button"
                             tabIndex={0}
                         >
