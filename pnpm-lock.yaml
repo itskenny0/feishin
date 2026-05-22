@@ -45,6 +45,9 @@ importers:
       '@electron-toolkit/utils':
         specifier: ^4.0.0
         version: 4.0.0(electron@41.7.0)
+      '@jofr/capacitor-media-session':
+        specifier: ^4.0.0
+        version: 4.0.0(@capacitor/core@8.3.4)
       '@mantine/colors-generator':
         specifier: ^9.1.1
         version: 9.1.1(chroma-js@3.1.2)
@@ -1530,6 +1533,11 @@ packages:
   '@isaacs/fs-minipass@4.0.1':
     resolution: {integrity: sha512-wgm9Ehl2jpeqP3zw/7mo3kRHFp5MEDhqAdwy1fTGkHAwnkGOVsgpvQhL8B5n1qlb01jV3n/bI0ZfZp5lWA1k4w==}
     engines: {node: '>=18.0.0'}
+
+  '@jofr/capacitor-media-session@4.0.0':
+    resolution: {integrity: sha512-IGfc6BUzeeR0sJkk+0/jij3l0h78NdTqPMwBc9LXZrojtiqNtg4tw3CnIkYGccwZ/0glV3hPl8HVNTElOPVCyg==}
+    peerDependencies:
+      '@capacitor/core': ^6.0.0
 
   '@jridgewell/gen-mapping@0.3.13':
     resolution: {integrity: sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA==}
@@ -8285,6 +8293,10 @@ snapshots:
   '@isaacs/fs-minipass@4.0.1':
     dependencies:
       minipass: 7.1.3
+
+  '@jofr/capacitor-media-session@4.0.0(@capacitor/core@8.3.4)':
+    dependencies:
+      '@capacitor/core': 8.3.4
 
   '@jridgewell/gen-mapping@0.3.13':
     dependencies:
