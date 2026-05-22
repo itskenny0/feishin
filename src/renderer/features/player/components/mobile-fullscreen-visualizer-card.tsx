@@ -42,10 +42,18 @@ export const MobileFullscreenVisualizerCard = memo(() => {
     const { t } = useTranslation();
     const { webAudio } = usePlaybackSettings();
     const visualizerType = useSettingsStore((store) => store.visualizer.type);
-    const { visualizerExpanded } = useFullScreenPlayerStore();
+    const { visualizerAsBackground, visualizerExpanded } = useFullScreenPlayerStore();
     const { setStore } = useFullScreenPlayerStoreActions();
 
-    if (!webAudio) {
+    /*
+     * When the visualizer is already painting as the fullscreen
+     * player's background, surfacing it again inside this card would
+     * be (a) redundant and (b) wasteful — two visualizer instances
+     * compete for the same Web Audio analyzer nodes and the canvases
+     * race each other for paint cycles. Skip this card entirely in
+     * that mode.
+     */
+    if (!webAudio || visualizerAsBackground) {
         return null;
     }
 
