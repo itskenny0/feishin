@@ -19,3 +19,29 @@
     box-shadow: 2px 2px 10px 2px rgb(0 0 0 / 40%);
     filter: drop-shadow(0 0 5px rgb(0 0 0 / 50%));
 }
+
+/*
+ * Mobile dropdowns get a hard `width`, not just max-width, because
+ * Mantine's Popper positioning relies on the popover's intrinsic
+ * size — if the content is wider than the viewport, max-width doesn't
+ * help, the popover is positioned based on its natural (over-sized)
+ * width and ends up clipped off one edge. Forcing width also makes
+ * the intrinsic-size question moot: Popper centers a known-width
+ * popover predictably, and the shift middleware can clamp it to the
+ * viewport.
+ *
+ * Inner Mantine `Group` elements with `wrap="nowrap"` are also
+ * coerced to wrap on mobile so the side-by-side sliders inside the
+ * fullscreen-player lyrics config (Synchronized / Unsynchronized
+ * font-size, gap, etc.) stack vertically instead of overflowing.
+ */
+@media (width <= 767px) {
+    .dropdown {
+        width: calc(100vw - 24px);
+    }
+
+    /* stylelint-disable-next-line selector-class-pattern */
+    .dropdown :global(.mantine-Group-root) {
+        flex-wrap: wrap !important;
+    }
+}

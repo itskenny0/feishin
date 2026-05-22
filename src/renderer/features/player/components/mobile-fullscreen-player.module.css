@@ -458,24 +458,13 @@
  * overlay. The inline analyzer unmounts while the overlay is active to
  * keep one shared Web Audio analyzer at a time.
  */
-.visualizer-card {
-    position: relative;
-    margin: var(--theme-spacing-md) var(--theme-spacing-md);
 
-    /*
-     * TEMPORARY high-contrast styling so we can confirm whether the
-     * card renders on the user's device at all. If they see this
-     * magenta panel, the card path is fine and the previous styles
-     * were just blending into the page. If they DON'T see it even at
-     * the top of the scroll stack, the render is being skipped
-     * somewhere upstream and we need to chase that.
-     */
-    overflow: hidden;
-    background: #c026d3;
-    border: 3px solid #fde047;
-    border-radius: var(--theme-radius-lg);
-    box-shadow: 0 4px 24px rgb(0 0 0 / 50%);
-}
+/*
+ * (.visualizer-card class is retained for backwards compatibility but
+ * is now unused — the MobileFullscreenVisualizerCard component
+ * switched to inline styles after the CSS-module classes I'd added
+ * around it stopped being delivered to the production bundle.)
+ */
 
 /*
  * Inline visualizer as the fullscreen player's background. Sits at the
@@ -518,83 +507,14 @@
     );
 }
 
-.visualizer-card-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: var(--theme-spacing-md) var(--theme-spacing-md) var(--theme-spacing-sm);
-    font-size: 1.15rem;
-    font-weight: 800;
-    color: #fff;
-    letter-spacing: -0.01em;
-}
-
-.visualizer-card-surface {
-    position: relative;
-    width: 100%;
-    height: 50dvh;
-    overflow: hidden;
-    cursor: pointer;
-}
-
-.visualizer-card-surface > *:not(.visualizer-card-hint) {
-    width: 100%;
-    height: 100%;
-
-    /*
-     * Children (the actual visualizer canvas + its chrome) are pure
-     * paint — let scroll / tap gestures fall through to the surface
-     * so the surface's onClick (open fullscreen visualizer) and the
-     * outer .player-state's vertical scroll both work.
-     */
-    pointer-events: none;
-}
-
 /*
- * Centered "Tap to open" hint that floats over the visualizer canvas.
- * Visible regardless of whether the analyzer is drawing — when
- * playback is paused the canvas is blank, and without this hint the
- * card looked like a black void. The pill background gives it
- * contrast against both a bright canvas and an empty one.
+ * The .visualizer-card-* helper classes used to live here, but the
+ * MobileFullscreenVisualizerCard component now styles itself inline
+ * (the CSS-module classes weren't reaching the production bundle and
+ * the cleanest fix was to stop depending on them). Removing the
+ * orphans here also gets rid of the `:not()` selector that's the
+ * most likely suspect for the broken delivery.
  */
-.visualizer-card-hint {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    z-index: 2;
-    padding: 0.4rem 0.9rem;
-    font-size: 0.85rem;
-    font-weight: 600;
-    color: #fff;
-    letter-spacing: 0.02em;
-    pointer-events: none;
-    background: rgb(0 0 0 / 55%);
-    border-radius: 999px;
-    backdrop-filter: blur(8px);
-    transform: translate(-50%, -50%);
-}
-
-/*
- * Empty state shown when Web Audio is disabled. The card still
- * renders so the visualizer affordance stays discoverable in the
- * scroll stack; this body is the "enable to use" CTA.
- */
-.visualizer-card-empty-state {
-    display: flex;
-    flex-direction: column;
-    gap: var(--theme-spacing-md);
-    align-items: center;
-    justify-content: center;
-    padding: var(--theme-spacing-lg);
-    text-align: center;
-}
-
-.visualizer-card-empty-text {
-    margin: 0;
-    font-size: 0.9rem;
-    line-height: 1.4;
-    color: color-mix(in srgb, var(--theme-colors-foreground) 75%, transparent);
-}
 
 .player-state[style*='z-index: 2'],
 .queue-state[style*='z-index: 2'],

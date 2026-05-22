@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import styles from './mobile-fullscreen-player.module.css';
@@ -46,8 +46,24 @@ export const MobileFullscreenPlayerHeader = memo(
             opacity,
             useImageAspectRatio,
             visualizerAsBackground,
+            visualizerExpanded,
             visualizerLyricsOverlay,
         } = useFullScreenPlayerStore();
+
+        /*
+         * Controlled-popover state so we can force-close it when the
+         * fullscreen visualizer opens. The popover lives in a Mantine
+         * portal — when its trigger (the cog) is removed from the DOM
+         * (by my mobile-layout fix that unmounts the player overlay
+         * once visualizerExpanded flips true), the portalised popover
+         * doesn't get cleaned up with it. Without this wiring the
+         * popover stayed open on top of the visualizer canvas with
+         * its content clipped against the viewport edge.
+         */
+        const [configOpen, setConfigOpen] = useState(false);
+        useEffect(() => {
+            if (visualizerExpanded) setConfigOpen(false);
+        }, [visualizerExpanded]);
         const { setStore } = useFullScreenPlayerStoreActions();
         const { setSettings } = useSettingsStoreActions();
         const lyricsSettings = useLyricsSettings();
@@ -99,9 +115,11 @@ export const MobileFullscreenPlayerHeader = memo(
                  * lyrics-settings popover is wide enough that the left
                  * half ends up off-screen. Centered positioning lets
                  * Mantine's shift middleware clamp it inside the
-                 * viewport on both sides.
+                 * viewport on both sides. opened+onChange wires the
+                 * controlled state we use above to force-close on
+                 * visualizer open.
                  */}
-                <Popover position="bottom">
+                <Popover onChange={setConfigOpen} opened={configOpen} position="bottom">
                     <Popover.Target>
                         <ActionIcon
                             icon="settings2"

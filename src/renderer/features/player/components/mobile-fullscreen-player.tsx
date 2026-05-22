@@ -880,14 +880,6 @@ export const MobileFullscreenPlayer = () => {
                  */}
                 {isSongDefined && (
                     <>
-                        {/*
-                         * Visualizer card moved to the TOP of the scroll
-                         * stack while we figure out why it wasn't
-                         * appearing for the user. If they see it here
-                         * but not at the bottom, the issue was just
-                         * scroll distance through the other cards.
-                         */}
-                        <MobileFullscreenVisualizerCard />
                         {!isPlayingRadio && (
                             <MobileFullscreenArtistCard
                                 artistId={currentSong?.artists?.[0]?.id}
@@ -953,6 +945,7 @@ export const MobileFullscreenPlayer = () => {
                                 albumName={currentSong?.album ?? undefined}
                             />
                         )}
+                        <MobileFullscreenVisualizerCard />
                     </>
                 )}
             </motion.div>
