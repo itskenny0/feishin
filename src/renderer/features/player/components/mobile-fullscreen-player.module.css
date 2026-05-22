@@ -732,6 +732,24 @@
     filter: saturate(0.85);
 }
 
+/*
+ * Landscape phone layout: the playerFaceBody switches to a two-column
+ * grid (cover on the left, controls on the right). The next/previous
+ * preview covers position themselves at `left: 100% + spacing` /
+ * `right: 100% + spacing` relative to the imageContainer — in landscape
+ * that puts them squarely inside the controls column, painting the
+ * upcoming album art on top of the metadata + transport row. Hide them
+ * in this orientation; the swipe-to-next gesture still works (the main
+ * cover still drags off-screen and the track switches), users just
+ * don't get the slide-in preview of the adjacent album art.
+ */
+@media (orientation: landscape) and (height <= 500px) {
+    .image-next-preview,
+    .image-previous-preview {
+        display: none;
+    }
+}
+
 .album-image {
     position: absolute;
     top: 0;
