@@ -622,16 +622,18 @@ export const MobileFullscreenPlayer = () => {
     const server = useCurrentServer();
 
     const isPlayingRadio = isRadioActive && isRadioPlaying;
+    const { webAudio: webAudioEnabled } = usePlaybackSettings();
     /*
-     * When the visualizer is the chosen background, suppress the
-     * album-art-derived dynamic background. The visualizer painting +
-     * the cover image painting together looked muddled (cover bled
-     * through any gaps in the visualizer canvas). The dim overlay
-     * still renders on top of the visualizer to keep player text
-     * legible.
+     * When the visualizer is the chosen background AND Web Audio is
+     * enabled (so the visualizer can actually run), suppress the
+     * album-art-derived dynamic background — they painted on top of
+     * each other and the cover bled through any quiet sections of
+     * the visualizer canvas. If Web Audio is off, fall back to the
+     * dynamic background so the user doesn't see a dark void where
+     * the visualizer should have been.
      */
     const effectiveDynamicBackground =
-        dynamicBackground && !isPlayingRadio && !visualizerAsBackground;
+        dynamicBackground && !isPlayingRadio && !(visualizerAsBackground && webAudioEnabled);
     const setFavorite = useSetFavorite();
     const showRatingsSetting = useShowRatings();
     const setRating = useSetRating();
