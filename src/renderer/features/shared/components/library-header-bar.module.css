@@ -17,6 +17,22 @@
 }
 
 /*
+ * Spotify-style oversize page titles on mobile. The default Mantine
+ * Title (order=1) maxes at about 2rem here, which feels small next to
+ * the editorial album-detail covers and Spotify's own 28–32px page
+ * titles. Bump the h1 inside the header-container to a 2–2.5rem clamp
+ * on phones so the route — "Albums", "Playlists", "Search" — reads as
+ * a hero, not a navigation crumb.
+ */
+@media (width <= 767px) {
+    .header-container :global(h1) {
+        font-size: clamp(2rem, 7vw, 2.5rem);
+        font-weight: 800;
+        letter-spacing: -0.02em;
+    }
+}
+
+/*
  * Small-phone tier: 1rem gap between the play button, title, and count badge
  * eats the available width on 320–360px viewports and forces the title to
  * truncate after just a few characters. Tighten the gap and pad so the title
