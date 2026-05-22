@@ -1,43 +1,27 @@
 import { memo } from 'react';
-import { useTranslation } from 'react-i18next';
-import { RiFullscreenLine } from 'react-icons/ri';
 
-import styles from './mobile-fullscreen-player.module.css';
-
-import { triggerHaptic } from '/@/renderer/hooks/use-haptic';
 import {
     useFullScreenPlayerStore,
     useFullScreenPlayerStoreActions,
 } from '/@/renderer/store/full-screen-player.store';
 import { usePlaybackSettings, useSettingsStoreActions } from '/@/renderer/store/settings.store';
-import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
-import { Button } from '/@/shared/components/button/button';
 
 /**
- * Visualizer entry-point card in the mobile fullscreen player's scroll
- * stack.
+ * Nuclear-debug version. The previous styled card showed only its
+ * border on the user's device — the content area collapsed to 0
+ * height even with padded flex children. Most likely cause: the CSS
+ * module class for visualizer-card-empty-state isn't being delivered
+ * to the deployed bundle, so `styles.visualizerCardEmptyState`
+ * resolves to undefined, no padding applies, and the children
+ * collapse to zero intrinsic height (an empty <p> + a Button that
+ * also has 0 intrinsic height before its styles kick in).
  *
- * Earlier revisions embedded the audiomotionanalyzer / butterchurn
- * canvas directly inside the card surface, but on the user's device
- * the card simply never appeared no matter what styling we threw at
- * it. Most likely cause: one of the lazy-loaded visualizer chunks was
- * failing to resolve on Capacitor's WebView and our ComponentErrorBoundary
- * was swallowing the failure silently — but the outer card render
- * also somehow got lost in the noise.
- *
- * Strip the card to the absolute minimum: a plain panel with a label,
- * a fullscreen-icon button, and an "Open visualizer" CTA. No hooks
- * that touch the visualizer settings slice, no lazy imports, no
- * Suspense, no inner canvas. Tapping anywhere opens the existing
- * fullscreen visualizer overlay (where the canvas actually lives and
- * has been working reliably).
- *
- * The card hides when `visualizerAsBackground` is on — the user
- * already sees the visualizer behind the player face, no need for a
- * second entry point.
+ * This version uses only inline styles, no module CSS, no
+ * useTranslation, no ActionIcon, no Button. If THIS renders, the bug
+ * is in CSS module delivery. If it still doesn't, the bug is in the
+ * component-render path itself and we need to chase upstream.
  */
 export const MobileFullscreenVisualizerCard = memo(() => {
-    const { t } = useTranslation();
     const { webAudio } = usePlaybackSettings();
     const { setSettings } = useSettingsStoreActions();
     const { visualizerAsBackground } = useFullScreenPlayerStore();
@@ -48,11 +32,6 @@ export const MobileFullscreenVisualizerCard = memo(() => {
     }
 
     const handleOpen = () => {
-        triggerHaptic('selection');
-        // Enable Web Audio if needed — the visualizer overlay's canvas
-        // requires it. Flip on, then open. The AudioContext is set up
-        // by the useEffect in AudioPlayersContent that keys on the
-        // webAudio setting, so no restart is required.
         if (!webAudio) {
             setSettings({ playback: { webAudio: true } });
         }
@@ -60,28 +39,45 @@ export const MobileFullscreenVisualizerCard = memo(() => {
     };
 
     return (
-        <div className={styles.visualizerCard}>
-            <div className={styles.visualizerCardHeader}>
-                <span>{t('page.fullscreenPlayer.visualizer', { defaultValue: 'Visualizer' })}</span>
-                <ActionIcon
-                    aria-label={t('common.expand', { defaultValue: 'Expand' })}
-                    onClick={handleOpen}
-                    size="md"
-                    variant="subtle"
-                >
-                    <RiFullscreenLine />
-                </ActionIcon>
+        <div
+            style={{
+                background: '#c026d3',
+                border: '3px solid #fde047',
+                borderRadius: '12px',
+                color: '#fff',
+                margin: '16px',
+                minHeight: '160px',
+                padding: '20px',
+            }}
+        >
+            <div
+                style={{
+                    fontSize: '20px',
+                    fontWeight: 800,
+                    marginBottom: '12px',
+                }}
+            >
+                DEBUG VISUALIZER CARD
             </div>
-            <div className={styles.visualizerCardEmptyState}>
-                <p className={styles.visualizerCardEmptyText}>
-                    {t('page.fullscreenPlayer.visualizerHint', {
-                        defaultValue: 'Tap to open the fullscreen audio visualizer.',
-                    })}
-                </p>
-                <Button onClick={handleOpen} variant="filled">
-                    {t('common.open', { defaultValue: 'Open' })}
-                </Button>
+            <div style={{ fontSize: '14px', marginBottom: '16px' }}>
+                If you can read this, the card render path works. The previous styling was
+                collapsing because the CSS-module classes were not being applied to the body.
             </div>
+            <button
+                onClick={handleOpen}
+                style={{
+                    background: '#fff',
+                    border: 'none',
+                    borderRadius: '8px',
+                    color: '#c026d3',
+                    cursor: 'pointer',
+                    fontWeight: 700,
+                    padding: '10px 20px',
+                }}
+                type="button"
+            >
+                Open visualizer
+            </button>
         </div>
     );
 });
