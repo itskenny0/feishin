@@ -1,12 +1,10 @@
-import type { DragControls } from 'motion/react';
+import type { MotionValue, Variants } from 'motion/react';
 
-import { AnimatePresence, motion, useDragControls } from 'motion/react';
-import { Variants } from 'motion/react';
+import { animate, AnimatePresence, motion, useMotionValue } from 'motion/react';
 import {
     CSSProperties,
     memo,
     MouseEvent,
-    PointerEvent,
     ReactNode,
     useCallback,
     useEffect,
@@ -407,35 +405,28 @@ BackgroundImageOverlay.displayName = 'BackgroundImageOverlay';
 
 interface DismissibleMobilePlayerContainerProps extends MobilePlayerContainerProps {
     /**
-     * Drag controls created by the parent and shared with the drag handle so
-     * a pointerdown on the handle hands the gesture straight to Motion's
-     * drag state on this container — no manual pointermove tracking needed.
+     * Shared motion value that drives the container's vertical position.
+     * Native touch listeners attached in the parent update this directly;
+     * mounting / unmounting / dismiss all also drive it imperatively via
+     * animate(). Replaces Motion's `drag="y"` setup because the drag
+     * gesture kept being eaten by the browser's overscroll bounce — see
+     * the comment at the touchmove listener for the full story.
      */
-    dragControls: DragControls;
-    /** True while the player face (cover/metadata/transport) is the active tab. */
-    isPlayerTab: boolean;
-    onDismiss: () => void;
+    swipeY: MotionValue<number>;
 }
 
 interface MobilePlayerContainerProps {
     children: ReactNode;
     dynamicBackground: boolean | undefined;
     dynamicIsImage: boolean | undefined;
-    /**
-     * Fired when the user drags the fullscreen player downward past the
-     * dismiss threshold or flicks it down fast — closes the overlay.
-     */
-    onDismiss?: () => void;
 }
 
 const MobilePlayerContainer = memo(
     ({
         children,
-        dragControls,
         dynamicBackground,
         dynamicIsImage,
-        isPlayerTab,
-        onDismiss,
+        swipeY,
     }: DismissibleMobilePlayerContainerProps) => {
         const currentSong = usePlayerSong();
         const imageUrl = useItemImageUrl({
@@ -480,49 +471,27 @@ const MobilePlayerContainer = memo(
         const overlayStrength = sourceLuminance !== null && sourceLuminance > 160 ? '0.72' : '0.42';
 
         /*
-         * Pull-to-dismiss. We previously tried to track raw pointer
-         * events on the container and call dragControls.start() once
-         * we saw a downward pull at scrollTop=0, but that gesture
-         * never reliably reached us — the inner scroll surface and
-         * Motion's own pointer plumbing kept eating the events.
-         *
-         * The robust pattern is a dedicated drag handle (the visible
-         * pill at the top of the player face) whose onPointerDown
-         * hands the gesture directly to Motion's drag state on this
-         * container. dragControls is created up in MobileFullscreenPlayer
-         * and threaded down to both this container and the handle so
-         * they share state.
+         * Dismiss is fully manual now: parent component drives `swipeY`
+         * from a non-passive touchmove listener on the scroll surface
+         * (see useEffect below `MobileFullscreenPlayer`). Motion's own
+         * `drag` prop is gone — every attempt to coordinate it with the
+         * inner scroll lost the gesture race to the browser's overscroll
+         * bounce. Pull-to-refresh / pull-to-dismiss in WebViews ultimately
+         * has to call preventDefault() on the very first downward
+         * touchmove, which Motion couldn't reach in time through its
+         * passive event listeners.
          */
 
         return (
             <motion.div
-                animate="open"
                 className={styles.container}
-                drag={isPlayerTab ? 'y' : false}
-                dragConstraints={{ bottom: 0, left: 0, right: 0, top: 0 }}
-                dragControls={dragControls}
-                dragElastic={{ bottom: 0.6, top: 0 }}
-                // dragListener=false: don't auto-start drag on pointer
-                // events. The drag fires exclusively from the handle
-                // pill calling dragControls.start(), so taps on the
-                // cover / metadata / transport stay click-only.
-                dragListener={false}
-                exit="closed"
-                initial="closed"
-                // Past ~140px of downward drag (or a fast flick), dismiss.
-                // Below that we snap back to the resting position.
-                onDragEnd={(_, info) => {
-                    if (info.offset.y > 140 || info.velocity.y > 500) {
-                        onDismiss();
-                    }
-                }}
                 style={
                     {
                         '--mobile-fullscreen-overlay-strength': overlayStrength,
                         backgroundColor,
+                        y: swipeY,
                     } as CSSProperties
                 }
-                variants={mobileContainerVariants}
             >
                 <BackgroundImage
                     dynamicBackground={dynamicBackground}
@@ -536,22 +505,10 @@ const MobilePlayerContainer = memo(
 
 MobilePlayerContainer.displayName = 'MobilePlayerContainer';
 
-const mobileContainerVariants: Variants = {
-    closed: {
-        transition: {
-            duration: 0.5,
-            ease: 'easeInOut',
-        },
-        y: '100%',
-    },
-    open: {
-        transition: {
-            duration: 0.5,
-            ease: 'easeInOut',
-        },
-        y: 0,
-    },
-};
+// (mobileContainerVariants removed — the container's vertical position is now
+// driven by the `swipeY` motion value, animated imperatively on mount,
+// dismiss, and snap-back. See `animate(swipeY, ...)` calls in
+// MobileFullscreenPlayer below.)
 
 export const MobileFullscreenPlayer = () => {
     const { t } = useTranslation();
@@ -596,93 +553,149 @@ export const MobileFullscreenPlayer = () => {
      * so the fetch only fires once.
      */
     const hasLyrics = useHasLyrics(currentSong);
-    /*
-     * Shared drag controls — wired into the container's drag="y" state
-     * AND into the pill + the player face. dragListener=false on the
-     * container means a drag can only start via dragControls.start();
-     * we call it from the pill (always) and from the player face
-     * (gated on scrollTop=0 so it doesn't fire while the user is
-     * reading lyrics or scrolled into the artist card).
-     */
-    const dragControls = useDragControls();
-    const playerStateRef = useRef<HTMLDivElement | null>(null);
-    const handleHandlePointerDown = useCallback(
-        (event: PointerEvent<HTMLDivElement>) => {
-            dragControls.start(event.nativeEvent);
-        },
-        [dragControls],
-    );
 
     /*
-     * Pull-to-dismiss on the whole player face.
+     * Manual pull-to-dismiss.
      *
-     * React's `onPointerDown` (what we tried first) lost the race against
-     * the browser's native scroll claim because React's touch listeners
-     * are passive — by the time React's handler had said "this is a
-     * drag" the browser had already claimed the gesture for vertical
-     * scrolling and Motion never received any pointer-move events. The
-     * drag-handle pill worked only because it had `touch-action: none`,
-     * which short-circuits the browser-claim path.
+     * Earlier rounds tried Motion's `drag="y"` and dragControls.start()
+     * but both lost the gesture race to the browser's overscroll bounce
+     * — by the time React's passive pointer listeners decided "this is a
+     * drag" the browser had already committed to bouncing the scroll
+     * container, and Motion's later preventDefault was a no-op. Even
+     * touch-action: none on the player face wasn't enough because the
+     * inner scroll surface also wants vertical pans.
      *
-     * The robust fix is to attach a non-passive native touchmove
-     * listener to the scroll surface so we can `preventDefault()` the
-     * exact moment we want to claim the gesture. When the user pulls
-     * down at scrollTop=0, we preventDefault (stops the browser scroll
-     * attempt cleanly) and hand the touch event off to Motion's drag
-     * controls. Any pull-up, sideways move, or scroll past the top
-     * falls through to native scroll like normal.
+     * The only reliable Android WebView pattern is a non-passive native
+     * `touchmove` listener that calls preventDefault() the moment we
+     * detect a downward pull at scrollTop=0. Once preventDefault fires
+     * for a touch sequence, the browser is permanently locked out of
+     * scrolling it — so we then own the gesture and update `swipeY`
+     * directly. Upward pulls and sideways moves never preventDefault,
+     * so the browser's native scroll still works for revealing the
+     * lyrics / artist cards below.
      */
+    const playerStateRef = useRef<HTMLDivElement | null>(null);
+    const swipeY = useMotionValue(typeof window !== 'undefined' ? window.innerHeight : 0);
+    const isPlayerStateRef = useRef(true);
+    const onDismissRef = useRef<() => void>(() => {});
+
+    const handleToggleFullScreenPlayer = useCallback(() => {
+        // Animate the player off-screen before unmounting so the close
+        // button has the same dismissal feel as a swipe.
+        const target = typeof window !== 'undefined' ? window.innerHeight : 0;
+        animate(swipeY, target, {
+            duration: 0.25,
+            ease: 'easeInOut',
+            onComplete: () => {
+                setFullScreenPlayerStore({ expanded: false });
+                swipeY.set(target);
+            },
+        });
+    }, [setFullScreenPlayerStore, swipeY]);
+
+    useEffect(() => {
+        onDismissRef.current = handleToggleFullScreenPlayer;
+    }, [handleToggleFullScreenPlayer]);
+
+    // Entrance animation — slide up from the bottom of the viewport.
+    useEffect(() => {
+        const controls = animate(swipeY, 0, { duration: 0.45, ease: 'easeOut' });
+        return () => controls.stop();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
     useEffect(() => {
         const el = playerStateRef.current;
         if (!el) return;
-        let startX = 0;
         let startY = 0;
+        let startX = 0;
+        let startTime = 0;
         let active = false;
         let claimed = false;
+        let lastY = 0;
+        let lastTime = 0;
 
         const onTouchStart = (e: TouchEvent) => {
-            // Album-art horizontal swipe + interactive controls own
-            // their own gestures; opt them out so the dismiss drag
-            // doesn't race them.
+            if (!isPlayerStateRef.current) return;
             const target = e.target as HTMLElement | null;
-            if (target?.closest('[data-cover-swipe], [data-noplayerdrag]')) {
-                active = false;
-                return;
-            }
-            if (el.scrollTop > 0) {
-                active = false;
-                return;
-            }
+            // Album-art horizontal swipe owns the x-axis on that
+            // surface; vertical pulls from the cover are dropped so the
+            // dismiss drag doesn't race the cover's prev/next swipe.
+            if (target?.closest('[data-cover-swipe]')) return;
+            if (el.scrollTop > 0) return;
             const touch = e.touches[0];
             if (!touch) return;
             startX = touch.clientX;
             startY = touch.clientY;
+            startTime = performance.now();
+            lastY = startY;
+            lastTime = startTime;
             active = true;
             claimed = false;
         };
 
         const onTouchMove = (e: TouchEvent) => {
-            if (!active || claimed) return;
+            if (!active) return;
             const touch = e.touches[0];
             if (!touch) return;
             const dy = touch.clientY - startY;
             const dx = Math.abs(touch.clientX - startX);
-            if (dy <= 10) return; // need a clear downward intent
-            if (dx > dy) {
-                active = false; // mostly horizontal — let cover swipe handle it
-                return;
+
+            if (!claimed) {
+                // Decide direction off a small threshold. <=4px lets us
+                // act before the browser commits to its scroll bounce.
+                if (Math.abs(dy) < 4) return;
+                if (dy < 0) {
+                    // upward — let native scroll happen
+                    active = false;
+                    return;
+                }
+                if (dx > Math.abs(dy)) {
+                    // mostly horizontal — bail so cover swipe / etc.
+                    // can claim it
+                    active = false;
+                    return;
+                }
+                claimed = true;
             }
-            claimed = true;
-            // preventDefault must run on a non-passive listener (registered
-            // below). This stops the browser from kicking off scroll /
-            // overscroll for this touch, freeing Motion to track it.
+
+            // We own the gesture from here on; block native scroll.
             e.preventDefault();
-            dragControls.start(e);
+            // Mild rubber-band so the drag feels weighty but not 1:1.
+            swipeY.set(Math.max(0, dy * 0.75));
+            lastY = touch.clientY;
+            lastTime = performance.now();
         };
 
         const onTouchEnd = () => {
+            if (!active) {
+                return;
+            }
+            const wasClaimed = claimed;
             active = false;
             claimed = false;
+            if (!wasClaimed) return;
+
+            const offset = swipeY.get();
+            // Recover finger velocity from the last move snapshot so a
+            // flick dismisses even at small absolute offsets.
+            const elapsed = Math.max(16, performance.now() - lastTime);
+            const recentDy = lastY - startY;
+            const velocity = (recentDy / elapsed) * 1000;
+
+            const height = typeof window !== 'undefined' ? window.innerHeight : 800;
+            if (offset > 140 || velocity > 500) {
+                animate(swipeY, height, {
+                    duration: 0.25,
+                    ease: 'easeOut',
+                    onComplete: () => {
+                        onDismissRef.current();
+                        swipeY.set(height);
+                    },
+                });
+            } else {
+                animate(swipeY, 0, { damping: 30, stiffness: 380, type: 'spring' });
+            }
         };
 
         el.addEventListener('touchstart', onTouchStart, { passive: true });
@@ -695,11 +708,7 @@ export const MobileFullscreenPlayer = () => {
             el.removeEventListener('touchend', onTouchEnd);
             el.removeEventListener('touchcancel', onTouchEnd);
         };
-    }, [dragControls]);
-
-    const handleToggleFullScreenPlayer = useCallback(() => {
-        setFullScreenPlayerStore({ expanded: false });
-    }, [setFullScreenPlayerStore]);
+    }, [swipeY]);
 
     const handleToggleContextMenu = useCallback(
         (e: MouseEvent<HTMLButtonElement | HTMLDivElement>) => {
@@ -755,13 +764,16 @@ export const MobileFullscreenPlayer = () => {
         isSongDefined &&
         (server?.type === ServerType.NAVIDROME || server?.type === ServerType.SUBSONIC);
 
+    // Mirror the active-tab flag into a ref so the touch listener
+    // (registered once at mount) can check it without re-binding on
+    // every tab switch.
+    isPlayerStateRef.current = isPlayerState;
+
     return (
         <MobilePlayerContainer
-            dragControls={dragControls}
             dynamicBackground={effectiveDynamicBackground}
             dynamicIsImage={dynamicIsImage}
-            isPlayerTab={isPlayerState}
-            onDismiss={handleToggleFullScreenPlayer}
+            swipeY={swipeY}
         >
             <FullscreenVisualizerBackground />
             <BackgroundImageOverlay
@@ -797,23 +809,15 @@ export const MobileFullscreenPlayer = () => {
                  */}
                 <div className={styles.playerFace}>
                     {/*
-                     * Spotify/Apple-Music-style drag handle. Living at the
-                     * top of the player face means it scrolls away once the
-                     * user pulls the card stack up — they can't dismiss
-                     * by accident while reading lyrics / artist info, which
-                     * matches the platform pattern. onPointerDown calls
-                     * dragControls.start() directly; Motion handles the
-                     * rest. The pill itself is purely cosmetic — the hit
-                     * area is the surrounding padding.
+                     * Spotify/Apple-Music-style drag handle. Lives at the
+                     * top of the player face as a visual cue that the
+                     * surface is draggable; the actual gesture is handled
+                     * by the native touch listener registered on
+                     * .playerState below, so the pill itself doesn't
+                     * need its own onPointerDown.
                      */}
-                    <div
-                        aria-label={t('common.minimize', { defaultValue: 'Swipe down to close' })}
-                        className={styles.dragHandle}
-                        onPointerDown={handleHandlePointerDown}
-                        role="button"
-                        tabIndex={-1}
-                    >
-                        <div aria-hidden className={styles.dragHandlePill} />
+                    <div aria-hidden className={styles.dragHandle}>
+                        <div className={styles.dragHandlePill} />
                     </div>
                     <MobileFullscreenPlayerHeader
                         currentSong={currentSong}

@@ -5,7 +5,6 @@ import clsx from 'clsx';
 import { AnimatePresence, motion } from 'motion/react';
 import {
     createContext,
-    Fragment,
     type ReactNode,
     useContext,
     useEffect,
@@ -232,7 +231,7 @@ function Submenu(props: SubmenuProps) {
 
 function SubmenuContent(props: SubmenuContentProps) {
     const { children, stickyContent } = props;
-    const { cancelCloseTimeout, isCloseDisabled, open, setCloseTimeout, setOpen } = useContext(
+    const { cancelCloseTimeout, isCloseDisabled, setCloseTimeout, setOpen } = useContext(
         SubmenuContext,
     ) as SubmenuContext;
 
@@ -252,41 +251,46 @@ function SubmenuContent(props: SubmenuContentProps) {
         }
     };
 
+    /*
+     * Render the SubContent unconditionally and let Radix's controlled
+     * open state drive visibility. The previous `{open && ...}` gate
+     * unmounted the SubContent the instant open flipped to false — but
+     * that also removed Radix's outside-pointerdown listener from the
+     * DOM, so taps outside the submenu had nothing to detect them
+     * against. Net effect: once the submenu opened, only selecting an
+     * item or pressing back closed it; tapping the parent menu or the
+     * backdrop did nothing. Keeping the SubContent mounted (Radix
+     * hides it via state, not via unmount) restores normal dismiss
+     * behaviour via the onOpenChange wired up on the Sub above.
+     */
     return (
-        <Fragment>
-            {open && (
-                <RadixContextMenu.Portal forceMount>
-                    <RadixContextMenu.SubContent
-                        // Radix submenus always open to the right of their
-                        // trigger (Western LTR semantics) — the primitive
-                        // explicitly omits `side` and `align` from its
-                        // typed props, so we can't override the direction
-                        // here. The off-screen behaviour on phones is
-                        // addressed in context-menu.module.css instead by
-                        // shrinking the menu width on `pointer: coarse`,
-                        // so the parent + submenu can fit side-by-side
-                        // when Radix's `avoidCollisions` shifts the
-                        // submenu to keep it inside the viewport.
-                        avoidCollisions
-                        className={styles.content}
-                        collisionPadding={12}
-                        onMouseEnter={handleMouseEnter}
-                        onMouseLeave={handleMouseLeave}
-                        sideOffset={4}
-                    >
-                        <motion.div
-                            animate="show"
-                            className={styles.innerContent}
-                            initial="hidden"
-                            variants={animationVariants.fadeIn}
-                        >
-                            {stickyContent}
-                            <ScrollArea className={styles.maxHeight}>{children}</ScrollArea>
-                        </motion.div>
-                    </RadixContextMenu.SubContent>
-                </RadixContextMenu.Portal>
-            )}
-        </Fragment>
+        <RadixContextMenu.Portal>
+            <RadixContextMenu.SubContent
+                // Radix submenus always open to the right of their
+                // trigger (Western LTR semantics). The off-screen
+                // behaviour on phones is addressed in
+                // context-menu.module.css by shrinking the menu width
+                // on `pointer: coarse` so the parent + submenu fit
+                // side-by-side when Radix's avoidCollisions shifts the
+                // submenu inside the viewport.
+                avoidCollisions
+                className={styles.content}
+                collisionPadding={12}
+                onMouseEnter={handleMouseEnter}
+                onMouseLeave={handleMouseLeave}
+                sideOffset={4}
+            >
+                <motion.div
+                    animate="show"
+                    className={styles.innerContent}
+                    initial="hidden"
+                    variants={animationVariants.fadeIn}
+                >
+                    {stickyContent}
+                    <ScrollArea className={styles.maxHeight}>{children}</ScrollArea>
+                </motion.div>
+            </RadixContextMenu.SubContent>
+        </RadixContextMenu.Portal>
     );
 }
 

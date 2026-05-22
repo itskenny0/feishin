@@ -1,3 +1,5 @@
+import { Capacitor } from '@capacitor/core';
+import { MediaSession } from '@jofr/capacitor-media-session';
 import { useEffect, useRef } from 'react';
 
 import { getItemImageUrl } from '/@/renderer/components/item-image/item-image';
@@ -9,6 +11,7 @@ import {
     usePlayerStore,
     useTimestampStoreBase,
 } from '/@/renderer/store';
+import { toast } from '/@/shared/components/toast/toast';
 import { LibraryItem, QueueSong } from '/@/shared/types/domain-types';
 import { PlayerStatus } from '/@/shared/types/types';
 
@@ -46,23 +49,29 @@ import { PlayerStatus } from '/@/shared/types/types';
  *     don't have a sensible position/duration story for live streams.
  */
 
-type MediaSessionPlugin = typeof import('@jofr/capacitor-media-session').MediaSession;
+// Static import of @jofr/capacitor-media-session. The package ships a
+// MediaSessionWeb implementation as the web/iOS fallback (which just
+// proxies to navigator.mediaSession), so it's safe to import statically
+// even on the electron / browser builds — no native-only code is pulled
+// in. Switched away from the previous dynamic import after the build
+// log surfaced a "module is both statically and dynamically imported"
+// warning and we still couldn't get the notification to appear, raising
+// the suspicion that the dynamic chunk wasn't resolving on device.
+const isNative = Capacitor.isNativePlatform();
 
-let pluginPromise: null | Promise<MediaSessionPlugin | null> = null;
-
-const loadPlugin = async (): Promise<MediaSessionPlugin | null> => {
-    if (pluginPromise) return pluginPromise;
-    pluginPromise = (async () => {
-        try {
-            const { Capacitor } = await import('@capacitor/core');
-            if (!Capacitor.isNativePlatform()) return null;
-            const { MediaSession } = await import('@jofr/capacitor-media-session');
-            return MediaSession;
-        } catch {
-            return null;
-        }
-    })();
-    return pluginPromise;
+// One-shot telemetry toast so we can see on the device whether the
+// plugin actually loaded. Without this it was impossible to tell from
+// the user's perspective whether the plugin was even imported in the
+// shipped APK or silently bailing.
+let bootToastShown = false;
+const showBootToast = (message: string, kind: 'info' | 'warn' = 'info') => {
+    if (bootToastShown) return;
+    bootToastShown = true;
+    if (kind === 'warn') {
+        toast.warn({ message, title: 'Media notification' });
+    } else {
+        toast.info({ message, title: 'Media notification' });
+    }
 };
 
 const buildMetadata = (song: QueueSong) => {
@@ -108,159 +117,157 @@ const useCapacitorMediaSession = () => {
     };
 
     useEffect(() => {
-        let cancelled = false;
-        let plugin: MediaSessionPlugin | null = null;
+        if (!isNative) {
+            // On web / electron the static-imported MediaSession falls
+            // back to MediaSessionWeb which just proxies to
+            // navigator.mediaSession — already covered by the existing
+            // useMediaSession Web hook. Bail to avoid double-wiring.
+            return;
+        }
+
         let positionInterval: null | ReturnType<typeof setInterval> = null;
-        let unsubscribeTrack: (() => void) | undefined;
-        let unsubscribeStatus: (() => void) | undefined;
         let currentDurationSec = 0;
 
+        showBootToast('Wiring Android media notification…');
+
         const init = async () => {
-            const loaded = await loadPlugin();
-            if (cancelled || !loaded) return;
-            plugin = loaded;
+            try {
+                await MediaSession.setActionHandler({ action: 'play' }, () =>
+                    actionsRef.current.mediaPlay(),
+                );
+                await MediaSession.setActionHandler({ action: 'pause' }, () =>
+                    actionsRef.current.mediaPause(),
+                );
+                await MediaSession.setActionHandler({ action: 'stop' }, () =>
+                    actionsRef.current.mediaStop(),
+                );
+                await MediaSession.setActionHandler({ action: 'nexttrack' }, () => {
+                    if (isRadioActiveRef.current) return;
+                    actionsRef.current.mediaNext();
+                });
+                await MediaSession.setActionHandler({ action: 'previoustrack' }, () => {
+                    if (isRadioActiveRef.current) return;
+                    actionsRef.current.mediaPrevious();
+                });
+                await MediaSession.setActionHandler({ action: 'seekto' }, (details) => {
+                    if (isRadioActiveRef.current) return;
+                    if (details && typeof details.seekTime === 'number') {
+                        actionsRef.current.mediaSeekToTimestamp(details.seekTime);
+                    }
+                });
+            } catch (err) {
+                // If the native plugin failed to register (wrong
+                // Capacitor version, missing gradle wiring, etc.) every
+                // call above throws. Surface a one-time error toast so
+                // we can see it on the device rather than silently
+                // failing.
+                showBootToast(`Media plugin error: ${(err as Error).message ?? 'unknown'}`, 'warn');
+                return;
+            }
+        };
 
-            // Wire transport actions. Radio is gated in-handler rather than
-            // skipping registration so the notification still has working
-            // play/pause for the radio stream itself.
-            await plugin.setActionHandler({ action: 'play' }, () => actionsRef.current.mediaPlay());
-            await plugin.setActionHandler({ action: 'pause' }, () =>
-                actionsRef.current.mediaPause(),
-            );
-            await plugin.setActionHandler({ action: 'stop' }, () => actionsRef.current.mediaStop());
-            await plugin.setActionHandler({ action: 'nexttrack' }, () => {
-                if (isRadioActiveRef.current) return;
-                actionsRef.current.mediaNext();
-            });
-            await plugin.setActionHandler({ action: 'previoustrack' }, () => {
-                if (isRadioActiveRef.current) return;
-                actionsRef.current.mediaPrevious();
-            });
-            await plugin.setActionHandler({ action: 'seekto' }, (details) => {
-                if (isRadioActiveRef.current) return;
-                if (details && typeof details.seekTime === 'number') {
-                    actionsRef.current.mediaSeekToTimestamp(details.seekTime);
-                }
+        const unsubscribeTrack = subscribeCurrentTrack(({ song }) => {
+            if (!song || isRadioActiveRef.current) return;
+            currentDurationSec = (song.duration ?? 0) / 1000;
+            MediaSession.setMetadata(buildMetadata(song)).catch(() => {});
+        });
+
+        // Android 13+ requires POST_NOTIFICATIONS at runtime. The plugin
+        // doesn't request it on its own; we trigger the prompt the first
+        // time playback transitions to PLAYING so the OS dialog arrives
+        // with obvious context. Capacitor's WebView routes the Web
+        // Notification.requestPermission() call to the native
+        // POST_NOTIFICATIONS dialog.
+        let permissionAsked = false;
+        const ensureNotificationPermission = () => {
+            if (permissionAsked) return;
+            permissionAsked = true;
+            if (typeof Notification === 'undefined') return;
+            if (Notification.permission !== 'default') return;
+            Notification.requestPermission().catch(() => {});
+        };
+
+        const applyStatus = (status: PlayerStatus) => {
+            if (status === PlayerStatus.PLAYING) {
+                ensureNotificationPermission();
+            }
+            const playbackState =
+                status === PlayerStatus.PLAYING
+                    ? 'playing'
+                    : status === PlayerStatus.PAUSED
+                      ? 'paused'
+                      : 'none';
+            MediaSession.setPlaybackState({ playbackState }).catch((err) => {
+                showBootToast(
+                    `setPlaybackState failed: ${(err as Error).message ?? 'unknown'}`,
+                    'warn',
+                );
             });
 
-            unsubscribeTrack = subscribeCurrentTrack(({ song }) => {
-                if (!plugin || !song || isRadioActiveRef.current) return;
-                currentDurationSec = (song.duration ?? 0) / 1000;
-                plugin.setMetadata(buildMetadata(song));
-            });
+            // Manage the position-update ticker around play/pause so
+            // we don't waste battery polling while paused or stopped.
+            if (positionInterval) {
+                clearInterval(positionInterval);
+                positionInterval = null;
+            }
+            if (playbackState === 'playing' && currentDurationSec > 0) {
+                positionInterval = setInterval(() => {
+                    const position = useTimestampStoreBase.getState().timestamp;
+                    MediaSession.setPositionState({
+                        duration: currentDurationSec,
+                        playbackRate: 1,
+                        position,
+                    }).catch(() => {
+                        // Silent — setPositionState can fail when the
+                        // duration drifts (e.g. mid-skip) and there's
+                        // nothing useful to do besides try again next
+                        // tick.
+                    });
+                }, 5000);
+            }
+        };
 
-            // Push the *current* track and status through immediately —
-            // Zustand's subscribe only fires on CHANGES, so without this
-            // priming step a song that's already playing when the hook
-            // finally mounts (which is the common case: plugin loads via
-            // dynamic import, finishes a tick after the user starts
-            // playback) would never trigger setPlaybackState, the FGS
-            // would never start, and no notification would appear. This
-            // was the silent failure mode from the first build that
-            // shipped the plugin.
+        const unsubscribeStatus = subscribePlayerStatus(({ status }) => applyStatus(status));
+
+        init().then(() => {
+            // Prime the plugin with whatever the player is doing
+            // *right now* — Zustand subscribers only fire on changes,
+            // so a song that was already playing when this hook mounted
+            // would otherwise leave the plugin in its default 'none'
+            // state forever. Surface the priming result via the boot
+            // toast so we can confirm on the device that we got past
+            // this step.
             const currentSongNow = usePlayerStore.getState().getCurrentSong();
             if (currentSongNow && !isRadioActiveRef.current) {
                 currentDurationSec = (currentSongNow.duration ?? 0) / 1000;
-                plugin.setMetadata(buildMetadata(currentSongNow));
+                MediaSession.setMetadata(buildMetadata(currentSongNow)).catch(() => {});
             }
-
-            // Android 13+ requires POST_NOTIFICATIONS runtime permission
-            // before any FGS notification will show. The @jofr plugin
-            // doesn't request it on its own, so we have to — and we do it
-            // the first time the user actually starts playback (not at
-            // app launch) so the OS prompt arrives with obvious context
-            // ("I just hit play, this is asking about media controls").
-            // The Web `Notification.requestPermission()` API is routed
-            // through to the native POST_NOTIFICATIONS dialog by the
-            // Capacitor 8 / Chrome WebView.
-            let permissionAsked = false;
-            const ensureNotificationPermission = () => {
-                if (permissionAsked) return;
-                permissionAsked = true;
-                if (typeof Notification === 'undefined') return;
-                if (Notification.permission !== 'default') return;
-                // Fire-and-forget; the plugin will start showing the
-                // notification as soon as the user accepts. If they
-                // deny, the FGS keeps the process alive (background
-                // playback still works) — they just won't see the
-                // lockscreen / shade controls until they flip the
-                // permission in Android settings.
-                Notification.requestPermission().catch(() => {});
-            };
-
-            const applyStatus = (status: PlayerStatus) => {
-                if (!plugin) return;
-                if (status === PlayerStatus.PLAYING) {
-                    ensureNotificationPermission();
-                }
-                const playbackState =
-                    status === PlayerStatus.PLAYING
-                        ? 'playing'
-                        : status === PlayerStatus.PAUSED
-                          ? 'paused'
-                          : 'none';
-                plugin.setPlaybackState({ playbackState });
-
-                // Manage the position-update ticker around play/pause so
-                // we don't waste battery polling while paused or stopped.
-                if (positionInterval) {
-                    clearInterval(positionInterval);
-                    positionInterval = null;
-                }
-                if (playbackState === 'playing' && currentDurationSec > 0) {
-                    positionInterval = setInterval(() => {
-                        const position = useTimestampStoreBase.getState().timestamp;
-                        plugin
-                            ?.setPositionState({
-                                duration: currentDurationSec,
-                                playbackRate: 1,
-                                position,
-                            })
-                            // Silent — setPositionState can fail when the
-                            // duration drifts (e.g. mid-skip) and there's
-                            // nothing useful to do besides try again next
-                            // tick.
-                            .catch(() => {});
-                    }, 5000);
-                }
-            };
-
-            unsubscribeStatus = subscribePlayerStatus(({ status }) => applyStatus(status));
-            // Prime the plugin with the current status now that the
-            // subscriber is wired — see the matching priming step above
-            // for currentTrack. Same race: if the user was already
-            // playing audio when the hook mounted, the subscriber would
-            // sit idle waiting for a transition that never comes.
-            applyStatus(usePlayerStore.getState().player.status);
-        };
-
-        init();
+            const status = usePlayerStore.getState().player.status;
+            applyStatus(status);
+            showBootToast(`Media notification armed (status: ${PlayerStatus[status] ?? status})`);
+        });
 
         return () => {
-            cancelled = true;
             if (positionInterval) clearInterval(positionInterval);
-            unsubscribeTrack?.();
-            unsubscribeStatus?.();
+            unsubscribeTrack();
+            unsubscribeStatus();
             // Clear handlers + state so backgrounding the app and a
             // subsequent hot reload doesn't leave dangling references in
             // the native plugin.
-            if (plugin) {
-                plugin.setPlaybackState({ playbackState: 'none' }).catch(() => {});
-                const actions = [
-                    'play',
-                    'pause',
-                    'stop',
-                    'nexttrack',
-                    'previoustrack',
-                    'seekto',
-                ] as const;
-                for (const action of actions) {
-                    plugin.setActionHandler({ action }, null).catch(() => {});
-                }
+            MediaSession.setPlaybackState({ playbackState: 'none' }).catch(() => {});
+            for (const action of [
+                'play',
+                'pause',
+                'stop',
+                'nexttrack',
+                'previoustrack',
+                'seekto',
+            ] as const) {
+                MediaSession.setActionHandler({ action }, null).catch(() => {});
             }
         };
-        // Empty deps — refs above keep the registered handlers current
-        // without re-running this effect.
+        // Refs above keep the registered handlers current without
+        // re-running this effect.
     }, []);
 };
 
