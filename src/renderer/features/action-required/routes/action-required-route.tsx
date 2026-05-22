@@ -63,20 +63,17 @@ const ActionRequiredRoute = () => {
                     gap="xl"
                     style={{
                         /*
-                         * Desktop: 50% of the viewport keeps the form
-                         * comfortably centered without spreading
-                         * input fields across the whole window.
-                         * Mobile: 50% of a 390px phone = 195px, which
-                         * was narrower than the URL / username input's
-                         * intrinsic width and pushed the form past the
-                         * right edge of the screen — the OpenSubsonic
-                         * server-type chip and most placeholder text
-                         * got clipped. Use min() so the container
-                         * tracks the viewport on phones and only caps
-                         * on wider screens.
+                         * Wide-display: cap at 560px so the URL /
+                         * username inputs stay in a comfortable
+                         * reading column. Phone: take the full
+                         * viewport width minus a 24px gutter so
+                         * the server-type carousel and inputs fit
+                         * cleanly without horizontal scroll. min()
+                         * picks whichever is smaller at any width,
+                         * so we don't need a media-query branch.
                          */
-                        maxWidth: 'min(100% - 32px, 50%)',
-                        width: 'min(100%, 560px)',
+                        maxWidth: 'min(100% - 24px, 560px)',
+                        width: '100%',
                     }}
                 >
                     <ScrollArea style={{ maxHeight: 'calc(100vh - 50px)' }}>
