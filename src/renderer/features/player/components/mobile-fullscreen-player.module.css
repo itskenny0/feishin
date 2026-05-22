@@ -6,6 +6,17 @@
     height: 100%;
     overflow: hidden;
     background: var(--theme-colors-background);
+
+    /*
+     * Hint the browser to promote the container to its own compositor
+     * layer. Pull-to-dismiss animates `transform: translateY`, and
+     * without this hint the backdrop-filter on the dynamic-background
+     * overlay below re-rasterises every frame — visually that looks
+     * like the color washing in and out during the dismiss motion.
+     * Pinning the layer keeps the compositor in charge and the
+     * gradient stays still while the container slides.
+     */
+    will-change: transform;
 }
 
 .background-image {
