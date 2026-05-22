@@ -1,5 +1,6 @@
-import { queryOptions } from '@tanstack/react-query';
+import { queryOptions, useQuery } from '@tanstack/react-query';
 import isElectron from 'is-electron';
+import { useMemo } from 'react';
 
 import { api } from '/@/renderer/api';
 import { queryKeys } from '/@/renderer/api/query-keys';
@@ -367,4 +368,39 @@ export const lyricsQueries = {
             ...args.options,
         });
     },
+};
+
+/**
+ * Did the lyrics query resolve to actual lyrics for this song?
+ *
+ * Subscribes to the same TanStack key as the Lyrics component, so the
+ * request only fires once across both consumers. Returns:
+ *   - `null` while the query is still loading (caller should keep the
+ *     UI in place to avoid a flash of "no lyrics" → lyrics).
+ *   - `true` once we have a resolved selection (synced or unsynced).
+ *   - `false` once the fetch completes with nothing to show.
+ *
+ * Used by the mobile fullscreen player to hide the lyrics preview card
+ * entirely when there are no lyrics — keeping it would just show an
+ * empty box that scrolls into view below the cover.
+ */
+export const useHasLyrics = (song: QueueSong | undefined): boolean | null => {
+    const enabled = useMemo(
+        () => Boolean(song?.id && song?._serverId),
+        [song?._serverId, song?.id],
+    );
+    const { data, isLoading } = useQuery(
+        lyricsQueries.songLyrics(
+            {
+                options: { enabled },
+                query: { songId: song?.id || '' },
+                serverId: song?._serverId || '',
+            },
+            song,
+        ),
+    );
+
+    if (!enabled) return false;
+    if (isLoading && !data) return null;
+    return Boolean(data?.selected);
 };

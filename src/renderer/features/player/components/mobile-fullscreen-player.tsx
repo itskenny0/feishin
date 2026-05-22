@@ -20,6 +20,7 @@ import styles from './mobile-fullscreen-player.module.css';
 
 import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { ContextMenuController } from '/@/renderer/features/context-menu/context-menu-controller';
+import { useHasLyrics } from '/@/renderer/features/lyrics/api/lyrics-api';
 import { Lyrics } from '/@/renderer/features/lyrics/lyrics';
 import { PlayQueue } from '/@/renderer/features/now-playing/components/play-queue';
 import { MobileFullscreenAlbumCard } from '/@/renderer/features/player/components/mobile-fullscreen-album-card';
@@ -588,16 +589,47 @@ export const MobileFullscreenPlayer = () => {
 
     const [isPageHovered, setIsPageHovered] = useState(false);
     /*
+     * `null` while the lyrics query is still loading (keep the card
+     * shown so we don't flash hide → show); `false` once we know there
+     * are no lyrics for this song; `true` when there's something to
+     * render. The Lyrics component itself uses the same TanStack key
+     * so the fetch only fires once.
+     */
+    const hasLyrics = useHasLyrics(currentSong);
+    /*
      * Shared drag controls — wired into the container's drag="y" state
-     * AND into the drag-handle pill below. The handle's onPointerDown
-     * calls dragControls.start(e), which is what actually makes the
-     * swipe-down-to-dismiss work; if we left Motion's normal listener
-     * on, the inner scrollable card-stack would race the gesture and
-     * the dismiss would never fire.
+     * AND into the pill + the player face. dragListener=false on the
+     * container means a drag can only start via dragControls.start();
+     * we call it from the pill (always) and from the player face
+     * (gated on scrollTop=0 so it doesn't fire while the user is
+     * reading lyrics or scrolled into the artist card).
      */
     const dragControls = useDragControls();
+    const playerStateRef = useRef<HTMLDivElement | null>(null);
     const handleHandlePointerDown = useCallback(
         (event: PointerEvent<HTMLDivElement>) => {
+            dragControls.start(event.nativeEvent);
+        },
+        [dragControls],
+    );
+    const handleFacePointerDown = useCallback(
+        (event: PointerEvent<HTMLDivElement>) => {
+            // Only when the page hasn't been scrolled past the player
+            // face — otherwise a pull-down should scroll back up
+            // through the cards, not dismiss.
+            const scrollEl = playerStateRef.current;
+            if (scrollEl && scrollEl.scrollTop > 0) return;
+
+            // Skip elements that own their own touch behaviour — chiefly
+            // the album-art cover (horizontal swipe for prev/next) and
+            // anything tagged with [data-noplayerdrag]. Without this,
+            // calling dragControls.start() on a horizontal cover swipe
+            // would race the cover's drag="x" and visibly stutter.
+            const target = event.target as HTMLElement | null;
+            if (target?.closest('[data-noplayerdrag], [data-cover-swipe]')) {
+                return;
+            }
+
             dragControls.start(event.nativeEvent);
         },
         [dragControls],
@@ -682,6 +714,7 @@ export const MobileFullscreenPlayer = () => {
                 className={styles.playerState}
                 onMouseEnter={() => setIsPageHovered(true)}
                 onMouseLeave={() => setIsPageHovered(false)}
+                ref={playerStateRef}
                 transition={{ duration: 0.3, ease: 'easeInOut' }}
             >
                 {/*
@@ -693,8 +726,15 @@ export const MobileFullscreenPlayer = () => {
                  * on first paint regardless of how short the cover row
                  * is. The .lyricsCard below it appears as the user
                  * scrolls.
+                 *
+                 * onPointerDown on the face itself hands the gesture to
+                 * dragControls — that's what makes the whole player face
+                 * draggable, not just the pill up top. The scrollTop
+                 * gate inside handleFacePointerDown keeps the dismiss
+                 * from hijacking pulls that should scroll back up
+                 * through the card stack.
                  */}
-                <div className={styles.playerFace}>
+                <div className={styles.playerFace} onPointerDown={handleFacePointerDown}>
                     {/*
                      * Spotify/Apple-Music-style drag handle. Living at the
                      * top of the player face means it scrolls away once the
@@ -780,37 +820,49 @@ export const MobileFullscreenPlayer = () => {
                                 artistName={currentSong?.artists?.[0]?.name}
                             />
                         )}
-                        <div
-                            aria-label={t('page.fullscreenPlayer.openLyrics', {
-                                defaultValue: 'Tap to expand lyrics',
-                            })}
-                            className={styles.lyricsCard}
-                            onClick={handleToggleLyrics}
-                            onKeyDown={(event) => {
-                                if (event.key === 'Enter' || event.key === ' ') {
-                                    event.preventDefault();
-                                    handleToggleLyrics();
-                                }
-                            }}
-                            role="button"
-                            tabIndex={0}
-                        >
-                            <div className={styles.lyricsCardHeader}>
-                                <span>
-                                    {t('page.fullscreenPlayer.lyrics', {
-                                        defaultValue: 'Lyrics',
-                                    })}
-                                </span>
-                                <span className={styles.lyricsCardHeaderHint}>
-                                    {t('page.fullscreenPlayer.openLyrics', {
-                                        defaultValue: 'Tap to expand',
-                                    })}
-                                </span>
+                        {/*
+                         * Only show the lyrics preview card once the
+                         * query has resolved to something — empty
+                         * lyrics would otherwise leave a card with a
+                         * placeholder "no lyrics" message. While the
+                         * query is loading we keep showing the card
+                         * (the inner Lyrics component handles the
+                         * loading state) to avoid a flash of hide-then-
+                         * show once a result arrives.
+                         */}
+                        {hasLyrics !== false && (
+                            <div
+                                aria-label={t('page.fullscreenPlayer.openLyrics', {
+                                    defaultValue: 'Tap to expand lyrics',
+                                })}
+                                className={styles.lyricsCard}
+                                onClick={handleToggleLyrics}
+                                onKeyDown={(event) => {
+                                    if (event.key === 'Enter' || event.key === ' ') {
+                                        event.preventDefault();
+                                        handleToggleLyrics();
+                                    }
+                                }}
+                                role="button"
+                                tabIndex={0}
+                            >
+                                <div className={styles.lyricsCardHeader}>
+                                    <span>
+                                        {t('page.fullscreenPlayer.lyrics', {
+                                            defaultValue: 'Lyrics',
+                                        })}
+                                    </span>
+                                    <span className={styles.lyricsCardHeaderHint}>
+                                        {t('page.fullscreenPlayer.openLyrics', {
+                                            defaultValue: 'Tap to expand',
+                                        })}
+                                    </span>
+                                </div>
+                                <div className={styles.lyricsCardBody}>
+                                    <Lyrics fadeOutNoLyricsMessage />
+                                </div>
                             </div>
-                            <div className={styles.lyricsCardBody}>
-                                <Lyrics fadeOutNoLyricsMessage />
-                            </div>
-                        </div>
+                        )}
                         {!isPlayingRadio && (
                             <MobileFullscreenAlbumCard
                                 albumId={currentSong?.albumId}

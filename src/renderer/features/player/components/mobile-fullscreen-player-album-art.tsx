@@ -290,6 +290,11 @@ export const MobileFullscreenPlayerAlbumArt = () => {
                 className={clsx(styles.image, {
                     [styles.imageNativeAspectRatio]: useImageAspectRatio,
                 })}
+                // Marker the player-face onPointerDown handler looks for so
+                // it doesn't race the cover's horizontal swipe with the
+                // dismiss drag — without this both gestures fire at once
+                // and the cover stutters mid-drag.
+                data-cover-swipe
                 drag={isSongDefined && !isPlayingRadio ? 'x' : false}
                 dragConstraints={{ left: 0, right: 0 }}
                 dragElastic={1}

@@ -216,8 +216,15 @@ function Submenu(props: SubmenuProps) {
         [disabled, isCloseDisabled, open],
     );
 
+    // onOpenChange wires Radix's built-in dismiss paths back into our
+    // controlled `open` state. Without it, tapping outside the submenu
+    // (the parent menu, the backdrop, anywhere else) had no way to
+    // close it — Radix's outside-pointerdown handler fires, but the
+    // call to its internal close was a no-op because the primitive is
+    // controlled. The only escape paths left were making a selection
+    // or the system back button — the regression the user reported.
     return (
-        <RadixContextMenu.Sub open={open}>
+        <RadixContextMenu.Sub onOpenChange={setOpen} open={open}>
             <SubmenuContext.Provider value={context}>{children}</SubmenuContext.Provider>
         </RadixContextMenu.Sub>
     );
