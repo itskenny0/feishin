@@ -15,12 +15,10 @@ import {
     useFullScreenPlayerStoreActions,
     useLyricsDisplaySettings,
     useLyricsSettings,
-    usePlaybackSettings,
     useSettingsStore,
     useSettingsStoreActions,
 } from '/@/renderer/store';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
-import { Button } from '/@/shared/components/button/button';
 import { Divider } from '/@/shared/components/divider/divider';
 import { Group } from '/@/shared/components/group/group';
 import { NumberInput } from '/@/shared/components/number-input/number-input';
@@ -52,23 +50,9 @@ export const MobileFullscreenPlayerHeader = memo(
         } = useFullScreenPlayerStore();
         const { setStore } = useFullScreenPlayerStoreActions();
         const { setSettings } = useSettingsStoreActions();
-        const { webAudio } = usePlaybackSettings();
         const lyricsSettings = useLyricsSettings();
         const displaySettings = useLyricsDisplaySettings('default');
         const lyricConfig = { ...lyricsSettings, ...displaySettings };
-
-        const handleOpenVisualizer = () => {
-            // Web Audio is the prerequisite for the visualizer — without
-            // it there's no analyzer to drive the canvas. The setting
-            // lives in Playback → Web Audio which is a long way down a
-            // sub-menu on mobile, so we flip it on inline here and then
-            // expand. If the user prefers it off, they can toggle it
-            // back in Playback settings.
-            if (!webAudio) {
-                setSettings({ playback: { webAudio: true } });
-            }
-            setStore({ visualizerExpanded: true });
-        };
 
         const handleLyricsSettings = (property: string, value: any) => {
             const displayProperties = ['fontSize', 'fontSizeUnsync', 'gap', 'gapUnsync'];
@@ -107,7 +91,17 @@ export const MobileFullscreenPlayerHeader = memo(
                     tooltip={{ label: t('common.minimize'), openDelay: 400 }}
                     variant={isPageHovered ? 'default' : 'subtle'}
                 />
-                <Popover position="bottom-end">
+                {/*
+                 * `bottom` (centered below the trigger) rather than
+                 * `bottom-end` because on narrow phone viewports
+                 * `bottom-end` anchors the popover's right edge to the
+                 * trigger's right edge, then extends LEFT — and the
+                 * lyrics-settings popover is wide enough that the left
+                 * half ends up off-screen. Centered positioning lets
+                 * Mantine's shift middleware clamp it inside the
+                 * viewport on both sides.
+                 */}
+                <Popover position="bottom">
                     <Popover.Target>
                         <ActionIcon
                             icon="settings2"
@@ -199,29 +193,6 @@ export const MobileFullscreenPlayerHeader = memo(
                                         })
                                     }
                                 />
-                            </Option.Control>
-                        </Option>
-                        {/*
-                         * Direct entry point to the fullscreen visualizer
-                         * surface. Mobile used to surface the visualizer
-                         * through an inline card lower in the scroll
-                         * stack, but the card is gated on webAudio being
-                         * on and the option to flip it is buried in the
-                         * Playback settings — meaning a fresh-install
-                         * user had no obvious path to the visualizer.
-                         * This button flips Web Audio on (if needed) and
-                         * jumps straight to the expanded view.
-                         */}
-                        <Option>
-                            <Option.Label>
-                                {t('page.fullscreenPlayer.config.visualizer', {
-                                    defaultValue: 'Visualizer',
-                                })}
-                            </Option.Label>
-                            <Option.Control>
-                                <Button onClick={handleOpenVisualizer} size="compact-sm">
-                                    {t('common.open', { defaultValue: 'Open' })}
-                                </Button>
                             </Option.Control>
                         </Option>
                         <Option>

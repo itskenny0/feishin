@@ -181,6 +181,30 @@ export const FullScreenVisualizer = () => {
                 size="lg"
                 variant="default"
             />
+            {/*
+             * In-line lyrics toggle. The "show lyrics over visualizer"
+             * setting was previously buried in the fullscreen-player
+             * config popover; surfacing it inside the visualizer itself
+             * gives users the same one-tap combined view that desktop's
+             * sidebar variant has.
+             */}
+            <ActionIcon
+                aria-label={t('page.fullscreenPlayer.config.visualizerLyricsOverlay', {
+                    defaultValue: 'Show lyrics over visualizer',
+                })}
+                aria-pressed={visualizerLyricsOverlay !== false}
+                className={styles.lyricsToggleButton}
+                icon="microphone"
+                iconProps={{
+                    fill: visualizerLyricsOverlay !== false ? 'primary' : undefined,
+                    size: 'xl',
+                }}
+                onClick={() =>
+                    setStore({ visualizerLyricsOverlay: visualizerLyricsOverlay === false })
+                }
+                size="lg"
+                variant="default"
+            />
             <div className={styles.visualizerContainer}>
                 {webAudio ? (
                     <Suspense fallback={<></>}>

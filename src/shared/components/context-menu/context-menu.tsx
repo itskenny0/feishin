@@ -231,9 +231,10 @@ function Submenu(props: SubmenuProps) {
 
 function SubmenuContent(props: SubmenuContentProps) {
     const { children, stickyContent } = props;
-    const { cancelCloseTimeout, isCloseDisabled, setCloseTimeout, setOpen } = useContext(
+    const { cancelCloseTimeout, isCloseDisabled, open, setCloseTimeout, setOpen } = useContext(
         SubmenuContext,
     ) as SubmenuContext;
+    const subContentRef = useRef<HTMLDivElement | null>(null);
 
     const handleMouseEnter = () => {
         cancelCloseTimeout();
@@ -250,6 +251,48 @@ function SubmenuContent(props: SubmenuContentProps) {
             setOpen(false);
         }
     };
+
+    /*
+     * Manual outside-pointerdown handler.
+     *
+     * Radix's built-in onPointerDownOutside on MenuSubContent doesn't fire
+     * for taps inside the parent menu — Radix's DismissableLayer stack
+     * treats the parent's Content as "above" the SubContent in the
+     * layer order, so pointer events landing on the parent are
+     * considered inside an enclosing layer and the SubContent's outside
+     * detection short-circuits. That's the intended behaviour for
+     * keyboard-driven desktop menus, but on touch it leaves the user
+     * with no way to dismiss the submenu by tapping its background.
+     *
+     * Listen at the document level in the capture phase while the
+     * submenu is open. If the pointerdown isn't inside the SubContent
+     * or its trigger (Radix marks SubTriggers with
+     * aria-haspopup="menu"), close. The capture phase lets us run
+     * before Radix's own handlers consume the event.
+     */
+    useEffect(() => {
+        if (!open) return;
+        const handler = (event: PointerEvent) => {
+            const target = event.target as HTMLElement | null;
+            if (!target) return;
+            if (subContentRef.current?.contains(target)) return;
+            // The SubTrigger has its own toggle behaviour
+            // (handlePointerDown in SubmenuTarget); leave it alone so
+            // a second tap on the trigger doesn't fight our close.
+            if (target.closest('[aria-haspopup="menu"]')) return;
+            setOpen(false);
+        };
+        // Bind in the next tick — without the rAF, the very pointer-down
+        // event that opened the submenu would also satisfy this handler
+        // and immediately close it.
+        const raf = requestAnimationFrame(() => {
+            document.addEventListener('pointerdown', handler, true);
+        });
+        return () => {
+            cancelAnimationFrame(raf);
+            document.removeEventListener('pointerdown', handler, true);
+        };
+    }, [open, setOpen]);
 
     /*
      * Render the SubContent unconditionally and let Radix's controlled
@@ -278,6 +321,7 @@ function SubmenuContent(props: SubmenuContentProps) {
                 collisionPadding={12}
                 onMouseEnter={handleMouseEnter}
                 onMouseLeave={handleMouseLeave}
+                ref={subContentRef}
                 sideOffset={4}
             >
                 <motion.div

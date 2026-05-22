@@ -617,11 +617,14 @@ export const MobileFullscreenPlayer = () => {
 
         const onTouchStart = (e: TouchEvent) => {
             if (!isPlayerStateRef.current) return;
-            const target = e.target as HTMLElement | null;
-            // Album-art horizontal swipe owns the x-axis on that
-            // surface; vertical pulls from the cover are dropped so the
-            // dismiss drag doesn't race the cover's prev/next swipe.
-            if (target?.closest('[data-cover-swipe]')) return;
+            // Album-art horizontal swipe owns the x-axis but vertical
+            // pulls should still dismiss — the cover element has Motion's
+            // `drag="x"` which (a) auto-sets touch-action: pan-y so the
+            // browser keeps letting vertical events through, and (b)
+            // locks its drag to the x axis so vertical moves don't shift
+            // the cover. The two listeners thus coexist: our touchmove
+            // bails on the next event if horizontal motion dominates,
+            // letting Motion's drag claim the gesture.
             if (el.scrollTop > 0) return;
             const touch = e.touches[0];
             if (!touch) return;
@@ -861,10 +864,8 @@ export const MobileFullscreenPlayer = () => {
                         </div>
                     </div>
                     <MobileFullscreenPlayerBottomControls
-                        isLyricsActive={isLyricsState}
                         isQueueActive={isQueueState}
                         onToggleContextMenu={handleToggleContextMenu}
-                        onToggleLyrics={handleToggleLyrics}
                         onToggleQueue={handleToggleQueue}
                     />
                 </div>

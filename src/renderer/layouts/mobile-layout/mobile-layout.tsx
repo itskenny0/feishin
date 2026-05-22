@@ -187,7 +187,17 @@ export const MobileLayout = ({ shell }: MobileLayoutProps) => {
                 <MobileSidebar onSwipeClose={closeSidebar} />
             </Drawer>
             <AnimatePresence initial={false}>
-                {isFullScreenPlayerExpanded && (
+                {/*
+                 * Suppress the player overlay while the visualizer is up.
+                 * Without this both overlays are mounted simultaneously
+                 * and the player header's settings cog (and any popover
+                 * it has open) shows through next to the visualizer's
+                 * close button — taps on it also tear the layout
+                 * because the popover anchors to a position covered by
+                 * the visualizer. The visualizer is self-contained and
+                 * has its own close affordance to return to the player.
+                 */}
+                {isFullScreenPlayerExpanded && !isFullScreenVisualizerExpanded && (
                     <div className={styles.fullScreenPlayerOverlay}>
                         <MobileFullscreenPlayer />
                     </div>

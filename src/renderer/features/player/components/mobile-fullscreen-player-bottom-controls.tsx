@@ -8,30 +8,23 @@ import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Group } from '/@/shared/components/group/group';
 
 interface MobileFullscreenPlayerBottomControlsProps {
-    isLyricsActive: boolean;
     isQueueActive: boolean;
     onToggleContextMenu: (e: MouseEvent<HTMLButtonElement | HTMLDivElement>) => void;
-    onToggleLyrics: () => void;
     onToggleQueue: () => void;
 }
 
 /**
- * Bottom utility bar inside the mobile fullscreen player. Spotify pattern:
- * three flat-icon buttons - Queue (with count badge), Lyrics, and an
- * overflow ⋯ that opens the song's context menu.
- *
- * The visualizer button used to live here too but now lives inside the
- * dedicated Visualizer card lower in the scrollable card stack — that
- * card has its own expand-to-fullscreen button, which is also where
- * the eye lands when scrolling Spotify-style. Mirroring the affordance
- * in the bottom bar would be noise.
+ * Bottom utility bar inside the mobile fullscreen player. Two flat-icon
+ * buttons - Queue (with count badge) and an overflow ⋯ that opens the
+ * song's context menu. The lyrics and visualizer affordances live in
+ * their own cards below the player face (see MobileFullscreenLyricsCard
+ * and MobileFullscreenVisualizerCard) — the user prefers them to be
+ * scroll-discoverable rather than dedicated tabs.
  */
 export const MobileFullscreenPlayerBottomControls = memo(
     ({
-        isLyricsActive,
         isQueueActive,
         onToggleContextMenu,
-        onToggleLyrics,
         onToggleQueue,
     }: MobileFullscreenPlayerBottomControlsProps) => {
         // Queue badge mirrors the desktop right-controls QueueButton —
@@ -61,22 +54,6 @@ export const MobileFullscreenPlayerBottomControls = memo(
                             </span>
                         )}
                     </div>
-                    <ActionIcon
-                        aria-label={t('player.lyrics')}
-                        aria-pressed={isLyricsActive}
-                        className={styles.bottomControlIcon}
-                        // Microphone matches the desktop LyricsButton icon
-                        // so the affordance is consistent across surfaces.
-                        // The previous `metadata` (book-open) icon was
-                        // semantically vague for lyrics on mobile.
-                        icon="microphone"
-                        iconProps={{
-                            fill: isLyricsActive ? 'primary' : undefined,
-                            size: 'xl',
-                        }}
-                        onClick={onToggleLyrics}
-                        variant="transparent"
-                    />
                     <ActionIcon
                         aria-label={t('common.menu')}
                         className={styles.bottomControlIcon}

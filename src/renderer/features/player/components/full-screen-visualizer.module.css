@@ -39,6 +39,21 @@
     backdrop-filter: blur(8px);
 }
 
+/*
+ * Lyrics-overlay toggle, mirrors the close-button positioning but on
+ * the left so the two affordances bookend the top of the visualizer.
+ * `aria-pressed` styling lives in :global(.is-pressed) elsewhere — the
+ * actionicon's `fill="primary"` handles the visual tint.
+ */
+.lyrics-toggle-button {
+    position: absolute;
+    top: calc(1rem + max(env(safe-area-inset-top, 0px), var(--android-safe-top, 0px)));
+    left: 1rem;
+    z-index: 220;
+    background: rgb(0 0 0 / 50%);
+    backdrop-filter: blur(8px);
+}
+
 .visualizer-container {
     position: relative;
     flex: 1;

@@ -540,6 +540,28 @@
     pointer-events: none;
 }
 
+/*
+ * Empty state shown when Web Audio is disabled. The card still
+ * renders so the visualizer affordance stays discoverable in the
+ * scroll stack; this body is the "enable to use" CTA.
+ */
+.visualizer-card-empty-state {
+    display: flex;
+    flex-direction: column;
+    gap: var(--theme-spacing-md);
+    align-items: center;
+    justify-content: center;
+    padding: var(--theme-spacing-lg);
+    text-align: center;
+}
+
+.visualizer-card-empty-text {
+    margin: 0;
+    font-size: 0.9rem;
+    line-height: 1.4;
+    color: color-mix(in srgb, var(--theme-colors-foreground) 75%, transparent);
+}
+
 .player-state[style*='z-index: 2'],
 .queue-state[style*='z-index: 2'],
 .lyrics-state[style*='z-index: 2'] {
