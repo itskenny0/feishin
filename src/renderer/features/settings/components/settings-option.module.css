@@ -2,6 +2,19 @@
     align-items: center;
 }
 
+/*
+ * Phone shell stacks label-above-control vertically. align-items:
+ * center from the desktop layout centred every label and toggle row,
+ * which looks like a settings page rendered as a tutorial. Override
+ * to flex-start so the labels read flush with the left edge — Spotify
+ * / Android Settings convention.
+ */
+@media (max-width: 767px), (orientation: landscape) and (max-height: 480px) {
+    .row {
+        align-items: flex-start;
+    }
+}
+
 .row-indented {
     padding-left: var(--theme-spacing-lg);
     margin-left: var(--theme-spacing-md);

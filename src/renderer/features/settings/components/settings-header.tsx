@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useSettingSearchContext } from '/@/renderer/features/settings/context/search-context';
 import { LibraryHeaderBar } from '/@/renderer/features/shared/components/library-header-bar';
 import { SearchInput } from '/@/renderer/features/shared/components/search-input';
-import { useIsTouch } from '/@/renderer/hooks/use-breakpoint';
+import { useIsMobileShell, useIsTouch } from '/@/renderer/hooks/use-breakpoint';
 import { useSettingsStoreActions } from '/@/renderer/store/settings.store';
 import { Button } from '/@/shared/components/button/button';
 import { Flex } from '/@/shared/components/flex/flex';
@@ -31,6 +31,7 @@ export const SettingsHeader = ({ setSearch }: SettingsHeaderProps) => {
      * flow stays intact.
      */
     const isTouch = useIsTouch();
+    const isMobileShell = useIsMobileShell();
 
     const handleResetToDefault = () => {
         reset();
@@ -47,6 +48,33 @@ export const SettingsHeader = ({ setSearch }: SettingsHeaderProps) => {
             title: t('common.resetToDefault'),
         });
     };
+
+    /*
+     * Mobile shell rendering: the title + search + reset button were
+     * laid out as a single Flex row that overflowed the viewport on
+     * phones — the SearchInput floated off into the right margin and
+     * the "Reset to default" button wrapped onto a second visual line
+     * that the user couldn't reach. On mobile the search and reset
+     * are reachable from the drill-down section UI (Search affordance
+     * is inside each section via the existing collapsible search
+     * filter; Reset is a footer button at the very end of the General
+     * tab), so dropping them from the header cleans up the layout
+     * dramatically.
+     */
+    if (isMobileShell) {
+        return (
+            <Flex>
+                <LibraryHeaderBar>
+                    <Group wrap="nowrap">
+                        <Icon icon="settings" size="2xl" />
+                        <LibraryHeaderBar.Title>
+                            {t('common.setting', { count: 2 })}
+                        </LibraryHeaderBar.Title>
+                    </Group>
+                </LibraryHeaderBar>
+            </Flex>
+        );
+    }
 
     return (
         <Flex>
