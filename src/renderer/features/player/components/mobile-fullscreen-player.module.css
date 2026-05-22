@@ -462,18 +462,22 @@
     position: relative;
     margin: 0 var(--theme-spacing-md) calc(var(--theme-spacing-lg) * 2 + env(safe-area-inset-bottom, 0px));
     overflow: hidden;
-    background: rgb(0 0 0 / 65%);
 
     /*
-     * Hairline border. Without it the 65% opaque-black card was
-     * indistinguishable from the player face background when the
-     * dynamic-image backdrop was off — users couldn't tell the card
-     * existed at all, especially when playback was paused and the
-     * visualizer canvas wasn't drawing anything.
+     * Solid translucent panel that always reads against the player
+     * face background. The previous version layered backdrop-filter
+     * + a 65%-opaque-black background, which on Capacitor's WebView
+     * rasterised to near-zero contrast — the blur filter took the
+     * uniformly-dark backdrop and produced visually nothing
+     * distinguishable from the page. A gradient-coloured background
+     * with a visible border + soft shadow means the card is
+     * unmistakable regardless of what's painted behind it or whether
+     * the WebView honours backdrop-filter.
      */
-    border: 1px solid rgb(255 255 255 / 8%);
+    background: linear-gradient(180deg, rgb(35 35 45 / 95%) 0%, rgb(20 20 28 / 95%) 100%);
+    border: 1px solid rgb(255 255 255 / 14%);
     border-radius: var(--theme-radius-lg);
-    backdrop-filter: blur(14px) saturate(140%);
+    box-shadow: 0 4px 24px rgb(0 0 0 / 35%);
 }
 
 /*
