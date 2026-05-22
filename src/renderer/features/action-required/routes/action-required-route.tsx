@@ -59,7 +59,26 @@ const ActionRequiredRoute = () => {
         <AnimatedPage>
             <PageHeader />
             <Center style={{ height: '100%', width: '100vw' }}>
-                <Stack gap="xl" style={{ maxWidth: '50%' }}>
+                <Stack
+                    gap="xl"
+                    style={{
+                        /*
+                         * Desktop: 50% of the viewport keeps the form
+                         * comfortably centered without spreading
+                         * input fields across the whole window.
+                         * Mobile: 50% of a 390px phone = 195px, which
+                         * was narrower than the URL / username input's
+                         * intrinsic width and pushed the form past the
+                         * right edge of the screen — the OpenSubsonic
+                         * server-type chip and most placeholder text
+                         * got clipped. Use min() so the container
+                         * tracks the viewport on phones and only caps
+                         * on wider screens.
+                         */
+                        maxWidth: 'min(100% - 32px, 50%)',
+                        width: 'min(100%, 560px)',
+                    }}
+                >
                     <ScrollArea style={{ maxHeight: 'calc(100vh - 50px)' }}>
                         <Group wrap="nowrap">
                             {displayedCheck && (

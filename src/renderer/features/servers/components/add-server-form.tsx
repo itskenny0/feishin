@@ -247,6 +247,7 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
                     <SegmentedControl
                         data={ALL_SERVERS}
                         disabled={serverLock}
+                        fullWidth
                         p="md"
                         withItemsBorders={false}
                         {...form.getInputProps('type')}
