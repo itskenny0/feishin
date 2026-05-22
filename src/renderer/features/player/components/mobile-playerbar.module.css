@@ -80,7 +80,16 @@
     transition: background 500ms ease-out;
 }
 
-.container > * {
+/*
+ * Hoist the actual grid children above the ::before tint gradient. We
+ * used to target `.container > *` here, but that also re-declared
+ * position:relative on the absolutely-positioned trackmap backdrop
+ * (same specificity, later cascade), which yanked it into the grid
+ * flow as a real column and bumped the controls cluster onto row 2.
+ * Naming the real children keeps the absolute layers untouched.
+ */
+.container > .content-wrapper,
+.container > .controls-wrapper {
     position: relative;
     z-index: 1;
 }

@@ -305,17 +305,12 @@
     align-items: flex-start;
 }
 
-.artist-card-image,
-.artist-card-image-placeholder {
+.artist-card-image {
     flex-shrink: 0;
     width: 96px;
     height: 96px;
     object-fit: cover;
     border-radius: var(--theme-radius-md);
-}
-
-.artist-card-image-placeholder {
-    background: color-mix(in srgb, var(--theme-colors-foreground) 12%, transparent);
 }
 
 .artist-card-meta {
