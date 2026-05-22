@@ -195,7 +195,11 @@ export const CommandPalette = ({ modalProps }: CommandPaletteProps) => {
                           // Inset the body horizontally so cmdk rows and
                           // the search input don't run flush against the
                           // screen edge on the full-screen mobile sheet.
-                          padding: '0 var(--theme-spacing-md)',
+                          // Bottom padding clears the gesture-nav pill /
+                          // home-indicator on Android + iOS so the last
+                          // command in the list isn't tucked behind it.
+                          padding:
+                              '0 var(--theme-spacing-md) calc(var(--theme-spacing-md) + max(env(safe-area-inset-bottom, 0px), var(--android-safe-bottom, 0px)))',
                       }
                     : { padding: '0' },
                 content: isMobileShell ? { height: '100dvh' } : undefined,
