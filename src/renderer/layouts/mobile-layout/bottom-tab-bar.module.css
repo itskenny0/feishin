@@ -49,15 +49,24 @@
     -webkit-tap-highlight-color: transparent;
 }
 
-.tab:hover,
-.tab:focus-visible {
-    color: var(--theme-colors-foreground);
-    outline: none;
+/*
+ * Only apply the hover color change on devices that have a fine
+ * pointer (mouse/trackpad). On touch the :hover state stays "on"
+ * after a tap and made the previously-tapped tab look permanently
+ * highlighted until the next tap landed somewhere else.
+ */
+@media (hover: hover) and (pointer: fine) {
+    .tab:hover {
+        color: var(--theme-colors-foreground);
+    }
 }
 
 .tab:focus-visible {
-    /* Keyboard users still need a visible focus ring (the tap-highlight kill
-       above strips the touch one, but desktops also reach this on phablet). */
+    /* Keyboard users still need a visible focus ring (the tap-highlight
+       kill above strips the touch one, but desktops also reach this
+       on phablet). */
+    color: var(--theme-colors-foreground);
+    outline: none;
     box-shadow: inset 0 0 0 2px var(--theme-colors-primary-filled);
 }
 
