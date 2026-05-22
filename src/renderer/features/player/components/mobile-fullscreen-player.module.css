@@ -630,33 +630,30 @@
  * preview is opacity 0.6 + slightly desaturated so it reads as "behind"
  * rather than competing with the active art.
  */
+
+/*
+ * Side-of-cover preview cards. Stretched from top to bottom of the
+ * positioning context (imageContainer is position: relative) so the
+ * `.image` class's aspect-ratio: 1 + height: 100% sizes the preview
+ * to match the active cover. Vertical centering via top/bottom: 0
+ * instead of top: 50% + translateY(-50%) so Motion's inline drag
+ * transform (translateX) doesn't fight a CSS-side translateY.
+ */
 .image-next-preview {
     position: absolute;
     top: 0;
+    bottom: 0;
     left: calc(100% + var(--theme-spacing-md));
-    align-self: center;
     pointer-events: none;
     opacity: 0.6;
     filter: saturate(0.85);
 }
 
-/*
- * Mirror image of the next preview, positioned to the LEFT of the
- * active cover (right edge at -1rem from the cover's left). Slides in
- * from the left as the user pulls the cover right (positive x).
- *
- * We position with top: 0 instead of top: 50% + translateY(-50%) so
- * Motion's inline transform: translate(x, 0) doesn't fight a CSS-side
- * translate (the inline transform always wins, which used to leave the
- * preview misaligned vertically). The inner .image already has
- * aspect-ratio: 1 + height: 100% so the visual square sits where the
- * cover does.
- */
 .image-previous-preview {
     position: absolute;
     top: 0;
     right: calc(100% + var(--theme-spacing-md));
-    align-self: center;
+    bottom: 0;
     pointer-events: none;
     opacity: 0.6;
     filter: saturate(0.85);
