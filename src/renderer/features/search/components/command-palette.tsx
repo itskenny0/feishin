@@ -65,6 +65,9 @@ function CommandPaletteSearch({
                 data-autofocus
                 leftSection={<Icon icon="search" />}
                 onChange={(e) => setQuery(e.currentTarget.value)}
+                placeholder={t('page.search.placeholder', {
+                    defaultValue: 'Songs, albums, artists, playlists…',
+                })}
                 ref={searchInputRef}
                 rightSection={
                     query && (
