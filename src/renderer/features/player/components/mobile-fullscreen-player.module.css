@@ -249,12 +249,25 @@
      * track every time the user tried to scroll inside the card.
      */
     pointer-events: none;
-    scrollbar-width: thin;
+
+    /*
+     * Hide the scrollbar inside the preview card — pointer-events:
+     * none above means the user can't scroll manually anyway (taps
+     * open the full lyrics tab), and an empty visual scrollbar
+     * trail was the only chrome giving the card the look of a
+     * desktop widget.
+     */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
 }
 
 .lyrics-card-body * {
     color: inherit !important;
     text-shadow: 0 1px 2px rgb(0 0 0 / 60%);
+}
+
+.lyrics-card-body::-webkit-scrollbar {
+    display: none;
 }
 
 /*
