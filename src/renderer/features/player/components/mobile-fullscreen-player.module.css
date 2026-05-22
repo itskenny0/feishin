@@ -460,24 +460,21 @@
  */
 .visualizer-card {
     position: relative;
-    margin: 0 var(--theme-spacing-md) calc(var(--theme-spacing-lg) * 2 + env(safe-area-inset-bottom, 0px));
-    overflow: hidden;
+    margin: var(--theme-spacing-md) var(--theme-spacing-md);
 
     /*
-     * Solid translucent panel that always reads against the player
-     * face background. The previous version layered backdrop-filter
-     * + a 65%-opaque-black background, which on Capacitor's WebView
-     * rasterised to near-zero contrast — the blur filter took the
-     * uniformly-dark backdrop and produced visually nothing
-     * distinguishable from the page. A gradient-coloured background
-     * with a visible border + soft shadow means the card is
-     * unmistakable regardless of what's painted behind it or whether
-     * the WebView honours backdrop-filter.
+     * TEMPORARY high-contrast styling so we can confirm whether the
+     * card renders on the user's device at all. If they see this
+     * magenta panel, the card path is fine and the previous styles
+     * were just blending into the page. If they DON'T see it even at
+     * the top of the scroll stack, the render is being skipped
+     * somewhere upstream and we need to chase that.
      */
-    background: linear-gradient(180deg, rgb(35 35 45 / 95%) 0%, rgb(20 20 28 / 95%) 100%);
-    border: 1px solid rgb(255 255 255 / 14%);
+    overflow: hidden;
+    background: #c026d3;
+    border: 3px solid #fde047;
     border-radius: var(--theme-radius-lg);
-    box-shadow: 0 4px 24px rgb(0 0 0 / 35%);
+    box-shadow: 0 4px 24px rgb(0 0 0 / 50%);
 }
 
 /*
