@@ -107,6 +107,19 @@ export const MobileFullscreenVisualizerCard = memo(() => {
                             </Suspense>
                         </ComponentErrorBoundary>
                     )}
+                    {/*
+                     * Always-visible hint sitting in the middle of the
+                     * surface. Without this the card looks blank when
+                     * playback is paused (the visualizer libs only start
+                     * drawing once `isPlaying` is true), and users
+                     * couldn't tell whether the card was rendering or
+                     * not. The hint also doubles as a tap affordance.
+                     */}
+                    <span className={styles.visualizerCardHint}>
+                        {t('page.fullscreenPlayer.tapToExpandVisualizer', {
+                            defaultValue: 'Tap to open',
+                        })}
+                    </span>
                 </div>
             ) : (
                 <div className={styles.visualizerCardEmptyState}>
