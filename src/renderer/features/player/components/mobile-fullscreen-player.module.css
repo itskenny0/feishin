@@ -414,11 +414,10 @@
 }
 
 /*
- * Inline visualizer as the fullscreen player's background. Sits at
- * z-index 0 so the player face, cards, and overlays paint on top.
- * The existing BackgroundImageOverlay still renders above it,
- * providing a dim layer so the controls stay readable against the
- * visualizer's motion.
+ * Inline visualizer as the fullscreen player's background. Sits at the
+ * lowest layer behind the player face. The dim overlay below ensures
+ * the player's text stays readable against the visualizer's bright,
+ * animated colours.
  */
 .visualizer-background {
     position: absolute;
@@ -431,6 +430,28 @@
 .visualizer-background > * {
     width: 100%;
     height: 100%;
+}
+
+/*
+ * Dim wash that sits on top of the visualizer background but under
+ * the player face. Without this the player metadata + transport
+ * controls disappear into a bright section of the visualizer. The
+ * gradient is heavier at top/bottom (where the header and bottom-
+ * controls rows sit) and lighter in the middle so the cover art
+ * still reads as the bright centerpiece.
+ */
+.visualizer-background-scrim {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background: linear-gradient(
+        180deg,
+        rgb(0 0 0 / 60%) 0%,
+        rgb(0 0 0 / 30%) 30%,
+        rgb(0 0 0 / 30%) 70%,
+        rgb(0 0 0 / 60%) 100%
+    );
 }
 
 .visualizer-card-header {

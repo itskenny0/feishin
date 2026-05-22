@@ -86,17 +86,20 @@ const FullscreenVisualizerBackground = memo(() => {
     }
 
     return (
-        <div className={styles.visualizerBackground}>
-            <ComponentErrorBoundary>
-                <Suspense fallback={null}>
-                    {visualizerType === 'butterchurn' ? (
-                        <ButterchurnVisualizer />
-                    ) : (
-                        <AudioMotionAnalyzerVisualizer />
-                    )}
-                </Suspense>
-            </ComponentErrorBoundary>
-        </div>
+        <>
+            <div className={styles.visualizerBackground}>
+                <ComponentErrorBoundary>
+                    <Suspense fallback={null}>
+                        {visualizerType === 'butterchurn' ? (
+                            <ButterchurnVisualizer />
+                        ) : (
+                            <AudioMotionAnalyzerVisualizer />
+                        )}
+                    </Suspense>
+                </ComponentErrorBoundary>
+            </div>
+            <div className={styles.visualizerBackgroundScrim} />
+        </>
     );
 });
 
@@ -605,8 +608,13 @@ export const MobileFullscreenPlayer = () => {
     const { t } = useTranslation();
     const setFullScreenPlayerStore = useSetFullScreenPlayerStore();
     const { setStore } = useFullScreenPlayerStoreActions();
-    const { activeTab, dynamicBackground, dynamicImageBlur, dynamicIsImage } =
-        useFullScreenPlayerStore();
+    const {
+        activeTab,
+        dynamicBackground,
+        dynamicImageBlur,
+        dynamicIsImage,
+        visualizerAsBackground,
+    } = useFullScreenPlayerStore();
     const currentSong = usePlayerSong();
     const { currentSong: currentSongData } = usePlayerData();
     const isRadioActive = useIsRadioActive();
@@ -614,7 +622,16 @@ export const MobileFullscreenPlayer = () => {
     const server = useCurrentServer();
 
     const isPlayingRadio = isRadioActive && isRadioPlaying;
-    const effectiveDynamicBackground = dynamicBackground && !isPlayingRadio;
+    /*
+     * When the visualizer is the chosen background, suppress the
+     * album-art-derived dynamic background. The visualizer painting +
+     * the cover image painting together looked muddled (cover bled
+     * through any gaps in the visualizer canvas). The dim overlay
+     * still renders on top of the visualizer to keep player text
+     * legible.
+     */
+    const effectiveDynamicBackground =
+        dynamicBackground && !isPlayingRadio && !visualizerAsBackground;
     const setFavorite = useSetFavorite();
     const showRatingsSetting = useShowRatings();
     const setRating = useSetRating();
