@@ -831,6 +831,20 @@
 }
 
 /*
+ * Touch-target floors. Material's 48dp / Apple HIG's 44pt minimum
+ * makes the prev/next/shuffle/repeat buttons easier to hit while
+ * walking with the phone. Without this, the secondary transport
+ * buttons rendered at ~32-36px on a 360-wide phone and routinely
+ * missed taps.
+ */
+@media (pointer: coarse) {
+    .controls-container button {
+        min-width: 44px;
+        min-height: 44px;
+    }
+}
+
+/*
  * Spotify-style: the main play button is dramatically bigger than the
  * surrounding transport buttons (~70–80px circle vs ~36px icons). The
  * shared MainPlayButton.module.css renders the .main class as a circle
