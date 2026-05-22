@@ -500,6 +500,14 @@
 .visualizer-card-surface > * {
     width: 100%;
     height: 100%;
+
+    /*
+     * Children (the actual visualizer canvas + its chrome) are pure
+     * paint — let scroll / tap gestures fall through to the surface
+     * so the surface's onClick (open fullscreen visualizer) and the
+     * outer .player-state's vertical scroll both work.
+     */
+    pointer-events: none;
 }
 
 .player-state[style*='z-index: 2'],
