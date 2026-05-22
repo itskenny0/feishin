@@ -152,8 +152,35 @@ const useCapacitorMediaSession = () => {
                 plugin.setMetadata(buildMetadata(song));
             });
 
+            // Android 13+ requires POST_NOTIFICATIONS runtime permission
+            // before any FGS notification will show. The @jofr plugin
+            // doesn't request it on its own, so we have to — and we do it
+            // the first time the user actually starts playback (not at
+            // app launch) so the OS prompt arrives with obvious context
+            // ("I just hit play, this is asking about media controls").
+            // The Web `Notification.requestPermission()` API is routed
+            // through to the native POST_NOTIFICATIONS dialog by the
+            // Capacitor 8 / Chrome WebView.
+            let permissionAsked = false;
+            const ensureNotificationPermission = () => {
+                if (permissionAsked) return;
+                permissionAsked = true;
+                if (typeof Notification === 'undefined') return;
+                if (Notification.permission !== 'default') return;
+                // Fire-and-forget; the plugin will start showing the
+                // notification as soon as the user accepts. If they
+                // deny, the FGS keeps the process alive (background
+                // playback still works) — they just won't see the
+                // lockscreen / shade controls until they flip the
+                // permission in Android settings.
+                Notification.requestPermission().catch(() => {});
+            };
+
             unsubscribeStatus = subscribePlayerStatus(({ status }) => {
                 if (!plugin) return;
+                if (status === PlayerStatus.PLAYING) {
+                    ensureNotificationPermission();
+                }
                 const playbackState =
                     status === PlayerStatus.PLAYING
                         ? 'playing'
