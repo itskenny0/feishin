@@ -124,3 +124,15 @@
     color: var(--theme-colors-primary);
     text-shadow: 0 2px 12px rgb(0 0 0 / 60%);
 }
+
+/*
+ * Lyric lines on a vivid visualizer canvas need more contrast than the
+ * default --lyric-opacity (which assumes a flat background). Bump the
+ * inactive opacity floor so non-active lines stay readable above the
+ * visualizer's motion. Active line keeps full opacity via .active.
+ */
+.lyrics-overlay :global([id^='lyric-']) {
+    text-shadow: 0 1px 6px rgb(0 0 0 / 70%);
+
+    --lyric-opacity: 0.7;
+}
