@@ -9,7 +9,7 @@
  * to flex-start so the labels read flush with the left edge — Spotify
  * / Android Settings convention.
  */
-@media (max-width: 767px), (orientation: landscape) and (max-height: 480px) {
+@media (width <= 767px), (orientation: landscape) and (height <= 480px) {
     .row {
         align-items: flex-start;
     }
