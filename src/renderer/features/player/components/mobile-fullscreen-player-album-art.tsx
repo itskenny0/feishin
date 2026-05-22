@@ -107,7 +107,7 @@ export const MobileFullscreenPlayerAlbumArt = () => {
     const isRadioActive = useIsRadioActive();
     const { isPlaying: isRadioPlaying } = useRadioPlayer();
     const currentSong = usePlayerSong();
-    const { nextSong } = usePlayerData();
+    const { nextSong, previousSong } = usePlayerData();
 
     const isPlayingRadio = isRadioActive && isRadioPlaying;
 
@@ -120,6 +120,13 @@ export const MobileFullscreenPlayerAlbumArt = () => {
 
     const nextImageUrl = useItemImageUrl({
         id: nextSong?.imageId || undefined,
+        itemType: LibraryItem.SONG,
+        size: mainImageDimensions.idealSize,
+        type: 'fullScreenPlayer',
+    });
+
+    const previousImageUrl = useItemImageUrl({
+        id: previousSong?.imageId || undefined,
         itemType: LibraryItem.SONG,
         size: mainImageDimensions.idealSize,
         type: 'fullScreenPlayer',
@@ -223,21 +230,42 @@ export const MobileFullscreenPlayerAlbumArt = () => {
     );
 
     /*
-     * Spotify-style preview-of-next-cover during the swipe gesture. Render
-     * a faint preview of the upcoming song's cover offscreen to the
-     * right; while the user is dragging left, the main cover slides off
-     * and the preview slides in. The preview is positioned at left: 100%
-     * + a small gap so it sits in the negative-x space that opens up as
-     * coverSwipeX goes negative. The preview tracks the same swipeX
-     * motion value so it moves in lockstep with the main cover.
+     * Spotify-style swipe previews. The previous and next covers are
+     * rendered offscreen to the left and right of the active cover;
+     * both move with the same swipeX motion value as the main cover so
+     * the user sees the adjacent track sliding in as they drag.
      *
-     * Hidden when no nextSong is queued (or in radio mode) so the swipe
-     * gesture still feels clean when there's nothing to peek at.
+     * - Pulling LEFT (negative x) → next cover enters from the right
+     * - Pulling RIGHT (positive x) → previous cover enters from the left
+     *
+     * Both are hidden when the corresponding side has no song (or in
+     * radio mode), so the gesture still feels clean at queue boundaries.
      */
     const nextImageSrc = !isPlayingRadio && nextSong?._uniqueId ? nextImageUrl : null;
+    const previousImageSrc = !isPlayingRadio && previousSong?._uniqueId ? previousImageUrl : null;
 
     return (
         <div className={styles.imageContainer} ref={mainImageRef}>
+            {previousImageSrc && (
+                <motion.div
+                    aria-hidden
+                    className={clsx(styles.image, styles.imagePreviousPreview, {
+                        [styles.imageNativeAspectRatio]: useImageAspectRatio,
+                    })}
+                    style={{ x: coverSwipeX }}
+                >
+                    <img
+                        alt=""
+                        className={styles.albumImage}
+                        draggable={false}
+                        src={previousImageSrc}
+                        style={{
+                            objectFit: useImageAspectRatio ? 'contain' : 'cover',
+                            width: useImageAspectRatio ? 'auto' : '100%',
+                        }}
+                    />
+                </motion.div>
+            )}
             {nextImageSrc && (
                 <motion.div
                     aria-hidden

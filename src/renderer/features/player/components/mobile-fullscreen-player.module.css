@@ -607,6 +607,21 @@
     transform: translateY(-50%);
 }
 
+/*
+ * Mirror image of the next preview, positioned to the LEFT of the
+ * active cover (right edge at -1rem from the cover's left). Slides in
+ * from the left as the user pulls the cover right (positive x).
+ */
+.image-previous-preview {
+    position: absolute;
+    top: 50%;
+    right: calc(100% + var(--theme-spacing-md));
+    pointer-events: none;
+    opacity: 0.6;
+    filter: saturate(0.85);
+    transform: translateY(-50%);
+}
+
 .album-image {
     position: absolute;
     top: 0;
