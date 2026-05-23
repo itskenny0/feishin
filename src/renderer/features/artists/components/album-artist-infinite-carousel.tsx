@@ -5,7 +5,14 @@ import { Suspense, useCallback, useMemo } from 'react';
 
 import { api } from '/@/renderer/api';
 import { queryKeys } from '/@/renderer/api/query-keys';
-import { mergePage, readSnapshot, writeSnapshot } from '/@/renderer/cache';
+import {
+    getActiveCacheDb,
+    isCacheAvailableSync,
+    mergePage,
+    readSnapshot,
+    toCachedArtistRow,
+    writeSnapshot,
+} from '/@/renderer/cache';
 import {
     GridCarousel,
     GridCarouselSkeletonFallback,
@@ -183,6 +190,19 @@ function useAlbumArtistListInfinite(
                     ...additionalQuery,
                 },
             });
+            if (isCacheAvailableSync()) {
+                try {
+                    const db = getActiveCacheDb();
+                    const items = fresh?.items ?? [];
+                    if (db && items.length > 0) {
+                        await db.artists.bulkPut(
+                            items.map((a) => toCachedArtistRow(a, 'AlbumArtist')),
+                        );
+                    }
+                } catch {
+                    /* swallow */
+                }
+            }
             const existing =
                 readSnapshot<InfiniteData<AlbumArtistListResponse, string>>(effectiveQueryKey);
             writeSnapshot(effectiveQueryKey, mergePage(existing, String(startIndex), fresh));

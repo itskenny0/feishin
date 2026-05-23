@@ -5,7 +5,14 @@ import { useEffect, useMemo, useRef } from 'react';
 
 import { api } from '/@/renderer/api';
 import { queryKeys } from '/@/renderer/api/query-keys';
-import { mergePage, readSnapshot, writeSnapshot } from '/@/renderer/cache';
+import {
+    getActiveCacheDb,
+    isCacheAvailableSync,
+    mergePage,
+    readSnapshot,
+    toCachedAlbumRow,
+    writeSnapshot,
+} from '/@/renderer/cache';
 import { SingleFeatureCarousel } from '/@/renderer/components/feature-carousel/single-feature-carousel';
 import { useCurrentServerId } from '/@/renderer/store';
 import { Album, AlbumListResponse, AlbumListSort, SortOrder } from '/@/shared/types/domain-types';
@@ -55,6 +62,17 @@ export const AlbumInfiniteSingleFeatureCarousel = ({
                         startIndex,
                     },
                 });
+                if (isCacheAvailableSync()) {
+                    try {
+                        const db = getActiveCacheDb();
+                        const items = fresh?.items ?? [];
+                        if (db && items.length > 0) {
+                            await db.albums.bulkPut(items.map(toCachedAlbumRow));
+                        }
+                    } catch {
+                        /* swallow */
+                    }
+                }
                 const existing =
                     readSnapshot<InfiniteData<AlbumListResponse, string>>(effectiveQueryKey);
                 writeSnapshot(effectiveQueryKey, mergePage(existing, String(startIndex), fresh));
