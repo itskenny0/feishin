@@ -70,8 +70,17 @@ export const useSmoothSweep = (): SmoothSweepView => {
         const { entity } = sweep;
 
         let raf = 0;
+        // Cap how far the interpolator can run past the last real
+        // update. Without this, a worker pool that stalls right after
+        // a burst (e.g. fetches all hanging) leaves the smoother
+        // happily extrapolating off the stale itemsPerSec rate — the
+        // UI flew from 1.3k items to 17k while real `done` never moved.
+        // 2s keeps us responsive on healthy sweeps without lying for
+        // minutes on a stuck one.
+        const EXTRAPOLATION_CAP_SEC = 2;
         const tick = () => {
-            const elapsedSec = (performance.now() - baselineNow) / 1000;
+            const rawElapsed = (performance.now() - baselineNow) / 1000;
+            const elapsedSec = Math.min(EXTRAPOLATION_CAP_SEC, rawElapsed);
             // Clamp `done` to never overshoot `total - 1` when total is
             // known — we don't want the chip to claim "done" before the
             // real signal lands.

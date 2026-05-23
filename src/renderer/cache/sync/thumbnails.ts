@@ -276,12 +276,24 @@ export const runThumbnailsSweep = async (
     const queue = pending.slice();
     const workers: Promise<void>[] = [];
 
-    const work = async (): Promise<void> => {
+    const work = async (workerId: number): Promise<void> => {
         while (queue.length > 0) {
             if (signal.aborted) return;
             const next = queue.shift();
             if (!next) return;
-            const wasCached = existingKeys.has(`${next.itemId}:${next.size}`);
+            const itemKey = `${next.itemId}:${next.size}`;
+            const wasCached = existingKeys.has(itemKey);
+            // Stuck-worker watchdog: log if a single item takes more
+            // than 5s. Helps the user correlate "0 kB/s on the OS
+            // indicator" with which item the worker is wedged on.
+            const itemStart = Date.now();
+            const stuckTimer = setTimeout(() => {
+                console.warn('[cache] thumbnails sweep: worker stuck >5s on item', {
+                    itemId: next.itemId,
+                    size: next.size,
+                    workerId,
+                });
+            }, 5_000);
             try {
                 const { bytes } = await fetchOne(next, server.id, signal, existingKeys);
                 bytesDownloaded += bytes;
@@ -292,7 +304,20 @@ export const runThumbnailsSweep = async (
                 } else {
                     // Resolver returned 0 bytes for an uncached item — most
                     // likely a 404 (server has no artwork for this id).
+                    // It just wrote a negative-cache marker; add to the
+                    // in-memory skip set so a later iteration of this
+                    // sweep doesn't re-process it.
+                    existingKeys.add(itemKey);
                     skipped += 1;
+                }
+                const elapsedMs = Date.now() - itemStart;
+                if (elapsedMs > 5_000) {
+                    console.info('[cache] thumbnails sweep: slow item recovered', {
+                        elapsedMs,
+                        itemId: next.itemId,
+                        size: next.size,
+                        workerId,
+                    });
                 }
             } catch (err) {
                 failed += 1;
@@ -300,6 +325,8 @@ export const runThumbnailsSweep = async (
                     err: (err as Error).message,
                     item: next.itemId,
                 });
+            } finally {
+                clearTimeout(stuckTimer);
             }
             done += 1;
             flushProgress();
@@ -320,7 +347,7 @@ export const runThumbnailsSweep = async (
     };
 
     for (let i = 0; i < concurrency; i += 1) {
-        workers.push(work());
+        workers.push(work(i));
     }
 
     await Promise.all(workers);

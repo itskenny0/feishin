@@ -121,11 +121,26 @@ export const resolveThumbnail = async (
                 // so newly-added artwork on the server eventually wins.
             }
 
+            // 20s per-fetch timeout. Browser fetch() has no built-in
+            // timeout, so a server that accepts a connection but never
+            // responds (or a Capacitor WebView holding the request
+            // internally) would otherwise hang a worker indefinitely.
+            // The user-visible symptom of this was 64 workers all in a
+            // no-network state with the OS network indicator showing
+            // 0 kB/s for minutes at a time. The timeout fires an
+            // AbortError that the work loop catches; the worker moves
+            // on to the next item.
+            const timeoutAt = AbortSignal.timeout(20_000);
+            const combinedSignal = signal ? AbortSignal.any([signal, timeoutAt]) : timeoutAt;
             let res: Response;
             try {
-                res = await fetch(url, { credentials, headers, signal });
+                res = await fetch(url, { credentials, headers, signal: combinedSignal });
             } catch (err) {
                 if ((err as Error)?.name === 'AbortError') return undefined;
+                if ((err as Error)?.name === 'TimeoutError') {
+                    console.warn('[cache] thumbnail fetch timed out', { itemId, size });
+                    return undefined;
+                }
                 console.warn('[cache] thumbnail fetch threw', {
                     error: (err as Error)?.message ?? String(err),
                     errorName: (err as Error)?.name,
