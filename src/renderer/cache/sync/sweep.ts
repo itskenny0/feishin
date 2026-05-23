@@ -227,8 +227,11 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
         // Anomaly: this page's throughput collapsed compared to the
         // previous one (current rate < 25% of the prior page). Catches
         // a server going from healthy → degraded mid-sweep before the
-        // running average smears over it.
-        if (lastPageRate > 5 && pageRate < lastPageRate * 0.25) {
+        // running average smears over it. Skip the last page (items <
+        // pageSize) since small trailing pages are naturally slower
+        // per-item due to fixed request overhead.
+        const isLastPage = pageItems.length < pageSize;
+        if (!isLastPage && lastPageRate > 5 && pageRate < lastPageRate * 0.25) {
             console.warn(`[cache] sweep:${entity} ANOMALY: throughput drop`, {
                 currentRate: Math.round(pageRate),
                 previousRate: Math.round(lastPageRate),
