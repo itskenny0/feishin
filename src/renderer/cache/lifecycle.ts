@@ -1,7 +1,13 @@
 import { useEffect } from 'react';
 
 import { isCacheAvailable } from './capability';
-import { closeCacheDb, deleteCacheDb, getActiveCacheDb, setActiveCacheDb } from './db';
+import {
+    closeCacheDb,
+    deleteCacheDb,
+    getActiveCacheDb,
+    getLastOpenError,
+    setActiveCacheDb,
+} from './db';
 import { estimateBytes, evict } from './eviction';
 import { resolveThumbnail } from './images';
 import { startWorker } from './mutations';
@@ -12,6 +18,11 @@ import { cancelHydration, hydrate } from './sync';
 
 import { useAuthStore, useSettingsStore } from '/@/renderer/store';
 import { registerThumbnailResolver } from '/@/shared/components/image/use-native-image';
+import { toast } from '/@/shared/components/toast/toast';
+
+// Per-session de-dup so the "Cache unavailable" toast fires once per
+// (serverId, userId) rather than re-firing on every effect re-run.
+let lastToastedErrorKey: string | undefined;
 
 // Bridge the renderer-only thumbnail cache into the shared `useNativeImage`
 // hook. Registered eagerly at module load so even the first `<ItemImage>`
@@ -114,6 +125,21 @@ export const useCacheLifecycle = (): void => {
                 if (!db) {
                     console.warn('[cache] lifecycle: db unavailable for', { serverId, userId });
                     actions.setActiveServer(undefined);
+                    // If the open failed because a schema upgrade or
+                    // IndexedDB-level fault tripped, surface it to the
+                    // user immediately rather than waiting for them to
+                    // wander into Settings. The dashboard still renders
+                    // the recovery Alert when reached.
+                    const openErr = getLastOpenError();
+                    if (openErr && lastToastedErrorKey !== `${serverId}:${userId}`) {
+                        lastToastedErrorKey = `${serverId}:${userId}`;
+                        toast.error({
+                            autoClose: 8000,
+                            message:
+                                'Local cache database is corrupted. Go to Settings → Library sync to reset it.',
+                            title: 'Cache unavailable',
+                        });
+                    }
                     return;
                 }
                 console.info('[cache] lifecycle: db ready', { serverId, userId });
