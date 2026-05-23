@@ -90,9 +90,17 @@ export function BaseImage({
         isInSessionCache || !enableDebounce ? rawImageRequest : debouncedImageRequest;
 
     const [hasLoadedInInstance, setHasLoadedInInstance] = useState(false);
+    // Local error fallback. Distinct from `nativeImage.isError`, which is
+    // tracked inside useNativeImage's fetch path. This catches the rarer
+    // case where useNativeImage hands us a `displaySrc` (blob or remote
+    // URL) that the browser then fails to decode/load — without this,
+    // such items would render the browser's default broken-image icon
+    // instead of our themed `<ImageUnloader>`.
+    const [hasImgError, setHasImgError] = useState(false);
 
     useEffect(() => {
         setHasLoadedInInstance(false);
+        setHasImgError(false);
     }, [effectiveImageRequest?.cacheKey]);
 
     const shouldLoadImage = Boolean(
@@ -127,21 +135,24 @@ export function BaseImage({
             ref={ref}
             {...restContainerProps}
         >
-            {nativeImage.displaySrc ? (
+            {nativeImage.displaySrc && !hasImgError ? (
                 <img
                     className={clsx(styles.image, className, {
                         [styles.animated]: enableAnimation,
                     })}
                     decoding="async"
                     fetchPriority={fetchPriority}
-                    onError={onError}
+                    onError={(e) => {
+                        setHasImgError(true);
+                        onError?.(e);
+                    }}
                     onLoad={onLoad}
                     src={nativeImage.displaySrc}
                     {...props}
                 />
             ) : !src ? (
                 <ImageUnloader className={className} icon={unloaderIcon} />
-            ) : nativeImage.isError ? (
+            ) : nativeImage.isError || hasImgError ? (
                 includeUnloader ? (
                     <ImageUnloader className={className} icon={unloaderIcon} />
                 ) : null

@@ -221,14 +221,13 @@ export const evict = async (): Promise<void> => {
         for (const row of oldRows) {
             if (used - dropped <= cap) break;
             try {
-                await db.thumbnails.delete([row.ItemId, row.Size]);
+                await db.thumbnails.delete(row.ItemId);
                 dropped += row.ByteSize;
                 droppedCount += 1;
             } catch (err) {
                 console.warn('[cache] eviction: failed to delete row', {
                     err,
                     itemId: row.ItemId,
-                    size: row.Size,
                 });
             }
         }
@@ -244,14 +243,13 @@ export const evict = async (): Promise<void> => {
             for (const row of remaining) {
                 if (used - dropped <= cap) break;
                 try {
-                    await db.thumbnails.delete([row.ItemId, row.Size]);
+                    await db.thumbnails.delete(row.ItemId);
                     dropped += row.ByteSize;
                     droppedCount += 1;
                 } catch (err) {
                     console.warn('[cache] eviction: failed to delete row', {
                         err,
                         itemId: row.ItemId,
-                        size: row.Size,
                     });
                 }
             }

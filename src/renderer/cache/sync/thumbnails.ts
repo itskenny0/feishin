@@ -1,19 +1,20 @@
 // Thumbnail pre-cache sweep. Iterates every album / artist / playlist row
-// in Dexie and fetches its thumbnail blob at the user-configured set of
-// sizes via `resolveThumbnail`. The same Dexie `thumbnails` table that
-// the lazy `<BaseImage>` path writes to is reused, so subsequent mounts
-// hit the cache regardless of whether the pre-cache or the lazy path
-// landed the row first.
+// in Dexie and fetches its thumbnail blob through `resolveThumbnail`. The
+// cache stores ONE blob per item at `MAX_CACHE_SIZE` — the resolver
+// rewrites the upstream URL to that size and the browser downscales for
+// smaller display surfaces. The earlier per-(itemId,size) variant table
+// has been collapsed to a single primary key (see db.ts v4 + images.ts),
+// so the sweep no longer fans out across `imageRes` buckets.
 //
-// The sweep is explicitly opt-in: the user picks which `imageRes` size
-// buckets to pre-cache via Settings -> Library sync. With no sizes picked
-// the sweep is a no-op and we leave the lazy fetch unchanged.
+// The sweep is opt-in: an empty `localCache.thumbnailSizes` array means
+// "no pre-cache" (the lazy `<BaseImage>` path still fills the table
+// incidentally as the user browses). Any non-empty value enables it.
 
 import type { ServerListItem } from '/@/shared/types/domain-types';
 
 import { api } from '/@/renderer/api';
 import { getActiveCacheDb } from '/@/renderer/cache/db';
-import { resolveThumbnailWithBytes } from '/@/renderer/cache/images';
+import { MAX_CACHE_SIZE, resolveThumbnailWithBytes } from '/@/renderer/cache/images';
 import { useCacheStore } from '/@/renderer/cache/store';
 import { useSettingsStore } from '/@/renderer/store';
 import { LibraryItem } from '/@/shared/types/domain-types';
@@ -33,19 +34,18 @@ interface PendingThumbnail {
     itemId: string;
     itemType: LibraryItem;
     kind: EntityKind;
-    size: number;
 }
 
 /**
- * Collect the (id, type, size) triples we want to fetch. Reads each
- * Dexie table once and crosses each row with each selected size bucket.
- * We attempt every row that has an `id` — `imageId` is unreliable on
- * some servers (Jellyfin omits it from list endpoints even when the
- * entity has artwork accessible via the per-item endpoint), so the
- * earlier `if (!row.Payload?.imageId)` guard was rejecting most
- * candidates. Let the server return 404 instead.
+ * Collect the items we want to fetch — one entry per (album / artist /
+ * playlist) row regardless of any display-size configuration, because the
+ * cache holds one blob per item. We attempt every row that has an `id` —
+ * `imageId` is unreliable on some servers (Jellyfin omits it from list
+ * endpoints even when the entity has artwork accessible via the per-item
+ * endpoint), so the earlier `if (!row.Payload?.imageId)` guard was
+ * rejecting most candidates. Let the server return 404 instead.
  */
-const collectPending = async (sizes: number[]): Promise<PendingThumbnail[]> => {
+const collectPending = async (): Promise<PendingThumbnail[]> => {
     const db = getActiveCacheDb();
     if (!db) return [];
     const out: PendingThumbnail[] = [];
@@ -53,40 +53,31 @@ const collectPending = async (sizes: number[]): Promise<PendingThumbnail[]> => {
     const albums = await db.albums.toArray();
     for (const row of albums) {
         if (!row.Id) continue;
-        for (const size of sizes) {
-            out.push({
-                itemId: row.Id,
-                itemType: LibraryItem.ALBUM,
-                kind: 'album',
-                size,
-            });
-        }
+        out.push({
+            itemId: row.Id,
+            itemType: LibraryItem.ALBUM,
+            kind: 'album',
+        });
     }
 
     const artists = await db.artists.toArray();
     for (const row of artists) {
         if (!row.Id) continue;
-        for (const size of sizes) {
-            out.push({
-                itemId: row.Id,
-                itemType: LibraryItem.ALBUM_ARTIST,
-                kind: 'artist',
-                size,
-            });
-        }
+        out.push({
+            itemId: row.Id,
+            itemType: LibraryItem.ALBUM_ARTIST,
+            kind: 'artist',
+        });
     }
 
     const playlists = await db.playlists.toArray();
     for (const row of playlists) {
         if (!row.Id) continue;
-        for (const size of sizes) {
-            out.push({
-                itemId: row.Id,
-                itemType: LibraryItem.PLAYLIST,
-                kind: 'playlist',
-                size,
-            });
-        }
+        out.push({
+            itemId: row.Id,
+            itemType: LibraryItem.PLAYLIST,
+            kind: 'playlist',
+        });
     }
 
     return out;
@@ -95,14 +86,18 @@ const collectPending = async (sizes: number[]): Promise<PendingThumbnail[]> => {
 /**
  * Run one thumbnail fetch through the shared resolver. The resolver
  * dedups in-flight requests, checks the existing Dexie row, and writes
- * back to the table on miss — we don't have to do any of that here.
+ * back to the table on miss — we don't have to do any of that here. We
+ * always request `MAX_CACHE_SIZE` because that's what the resolver
+ * persists; the upstream URL is rewritten internally either way, but
+ * building the request at the cache size keeps the network request
+ * shape identical to what the cache lookup expects.
  *
- * `existingKeys` is a pre-computed set of `${itemId}:${size}` strings
- * built ONCE at sweep start. Without it, each of the 64 workers ran
- * its own `db.thumbnails.get()` against IndexedDB just to discover a
- * row already existed; the user reported 2.6 items/sec on re-syncs
- * because every cached item paid that Dexie round-trip. Bypassing the
- * lookup makes already-cached items effectively free.
+ * `existingKeys` is a pre-computed set of itemIds built ONCE at sweep
+ * start. Without it, each of the 64 workers ran its own
+ * `db.thumbnails.get()` against IndexedDB just to discover a row already
+ * existed; the user reported 2.6 items/sec on re-syncs because every
+ * cached item paid that Dexie round-trip. Bypassing the lookup makes
+ * already-cached items effectively free.
  */
 const fetchOne = async (
     pending: PendingThumbnail,
@@ -112,28 +107,26 @@ const fetchOne = async (
 ): Promise<{ bytes: number }> => {
     if (signal.aborted) return { bytes: 0 };
 
-    // Cheap in-memory skip for already-cached items.
-    const key = `${pending.itemId}:${pending.size}`;
-    if (existingKeys.has(key)) return { bytes: 0 };
+    if (existingKeys.has(pending.itemId)) return { bytes: 0 };
 
     const request = api.controller.getImageRequest({
         apiClientProps: { serverId },
-        query: { id: pending.itemId, itemType: pending.itemType, size: pending.size },
+        query: { id: pending.itemId, itemType: pending.itemType, size: MAX_CACHE_SIZE },
     });
     if (!request) return { bytes: 0 };
     const db = getActiveCacheDb();
     if (!db) return { bytes: 0 };
 
-    const { bytes } = await resolveThumbnailWithBytes(pending.itemId, pending.size, request, {
+    const { bytes } = await resolveThumbnailWithBytes(pending.itemId, MAX_CACHE_SIZE, request, {
         signal,
     });
-    if (bytes > 0) existingKeys.add(key);
+    if (bytes > 0) existingKeys.add(pending.itemId);
     return { bytes };
 };
 
 /**
  * Run the thumbnail pre-cache sweep for the given server. No-op when
- * the user hasn't picked any thumbnail sizes.
+ * the user has explicitly opted out (`thumbnailSizes` empty).
  */
 export const runThumbnailsSweep = async (
     args: { signal: AbortSignal },
@@ -141,22 +134,17 @@ export const runThumbnailsSweep = async (
 ): Promise<void> => {
     const { signal } = args;
     const localCache = useSettingsStore.getState().localCache;
-    const general = useSettingsStore.getState().general;
+    // Empty `thumbnailSizes` array = explicit opt-out. Any non-empty
+    // value (the legacy multi-bucket array, or the new sentinel
+    // `[MAX_CACHE_SIZE]` written by the dashboard toggle) enables the
+    // sweep — the cache stores one blob per item regardless.
     const buckets = localCache?.thumbnailSizes ?? [];
     if (buckets.length === 0) {
-        console.info('[cache] thumbnails sweep: no sizes selected, skipping');
+        console.info('[cache] thumbnails sweep: pre-cache disabled, skipping');
         return;
     }
 
-    const sizes = buckets
-        .map((b) => general.imageRes[b])
-        .filter((n): n is number => typeof n === 'number' && n > 0);
-    if (sizes.length === 0) {
-        console.warn('[cache] thumbnails sweep: configured buckets resolved to no sizes');
-        return;
-    }
-
-    const pending = await collectPending(sizes);
+    const pending = await collectPending();
     const total = pending.length;
     if (total === 0) {
         console.info('[cache] thumbnails sweep: no items to pre-cache yet');
@@ -173,10 +161,10 @@ export const runThumbnailsSweep = async (
     );
 
     console.info('[cache] thumbnails sweep: starting', {
+        cacheSize: MAX_CACHE_SIZE,
         concurrency,
         items: total,
         serverId: server.id,
-        sizes,
     });
     // Diagnostic banner: after a "Clear everything" the user expected
     // every item to need a real fetch. If something below this line
@@ -185,8 +173,6 @@ export const runThumbnailsSweep = async (
     // path. Logged BEFORE workers start so it's easy to spot.
     console.info('[cache] thumbnails sweep: pre-flight', {
         queueSize: total,
-        // existingKeys is filled below; we recompute its size after
-        // the prefetch finishes so this log stays useful.
     });
 
     const actions = useCacheStore.getState().actions;
@@ -201,8 +187,8 @@ export const runThumbnailsSweep = async (
     let failed = 0;
     let lastAnomalyWarnAt = 0;
 
-    // Pre-fetch every existing thumbnail row's [itemId, size] pair so the
-    // worker pool can skip them without a Dexie round-trip per item. On a
+    // Pre-fetch every existing thumbnail row's itemId so the worker
+    // pool can skip them without a Dexie round-trip per item. On a
     // re-sync where the cache is mostly warm this turns a 2.6 items/sec
     // crawl into a near-instant scan.
     //
@@ -225,7 +211,7 @@ export const runThumbnailsSweep = async (
             // store entirely), and separately read only the small
             // miss-marker rows to decide fresh vs stale.
             const [allKeys, missRows] = await Promise.all([
-                db.thumbnails.toCollection().primaryKeys() as Promise<[string, number][]>,
+                db.thumbnails.toCollection().primaryKeys() as Promise<string[]>,
                 db.thumbnails.where('MissAt').above(0).toArray(),
             ]);
             const now = Date.now();
@@ -233,15 +219,14 @@ export const runThumbnailsSweep = async (
             for (const row of missRows) {
                 const missAt = row.MissAt ?? 0;
                 if (now - missAt >= MISS_TTL_MS) {
-                    staleMissKeys.add(`${row.ItemId}:${row.Size}`);
+                    staleMissKeys.add(row.ItemId);
                     staleMissCount += 1;
                 } else {
                     freshMissCount += 1;
                 }
             }
-            for (const [itemId, size] of allKeys) {
-                const key = `${itemId}:${size}`;
-                if (!staleMissKeys.has(key)) existingKeys.add(key);
+            for (const itemId of allKeys) {
+                if (!staleMissKeys.has(itemId)) existingKeys.add(itemId);
             }
             console.info('[cache] thumbnails sweep: prefetched existing keys', {
                 count: existingKeys.size,
@@ -292,8 +277,7 @@ export const runThumbnailsSweep = async (
             if (signal.aborted) return;
             const next = queue.shift();
             if (!next) return;
-            const itemKey = `${next.itemId}:${next.size}`;
-            const wasCached = existingKeys.has(itemKey);
+            const wasCached = existingKeys.has(next.itemId);
             // Stuck-worker watchdog: log if a single item takes more
             // than 5s. Helps the user correlate "0 kB/s on the OS
             // indicator" with which item the worker is wedged on.
@@ -301,7 +285,6 @@ export const runThumbnailsSweep = async (
             const stuckTimer = setTimeout(() => {
                 console.warn('[cache] thumbnails sweep: worker stuck >5s on item', {
                     itemId: next.itemId,
-                    size: next.size,
                     workerId,
                 });
             }, 5_000);
@@ -318,7 +301,7 @@ export const runThumbnailsSweep = async (
                     // It just wrote a negative-cache marker; add to the
                     // in-memory skip set so a later iteration of this
                     // sweep doesn't re-process it.
-                    existingKeys.add(itemKey);
+                    existingKeys.add(next.itemId);
                     skipped += 1;
                 }
                 const elapsedMs = Date.now() - itemStart;
@@ -326,7 +309,6 @@ export const runThumbnailsSweep = async (
                     console.info('[cache] thumbnails sweep: slow item recovered', {
                         elapsedMs,
                         itemId: next.itemId,
-                        size: next.size,
                         workerId,
                     });
                 }

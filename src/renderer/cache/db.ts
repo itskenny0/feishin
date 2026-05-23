@@ -35,7 +35,7 @@ export class LibraryCacheDb extends Dexie {
     playlistSongs!: Table<CachedPlaylistSong, [string, number]>;
     songs!: EntityTable<CachedSong, 'Id'>;
     syncMeta!: EntityTable<SyncMetaRow, 'EntityType'>;
-    thumbnails!: Table<CachedThumbnail, [string, number]>;
+    thumbnails!: EntityTable<CachedThumbnail, 'ItemId'>;
 
     constructor(name: string) {
         super(name);
@@ -91,6 +91,28 @@ export class LibraryCacheDb extends Dexie {
             songs: 'Id, [AlbumId+ParentIndexNumber+IndexNumber], AlbumArtistId, DateLastSaved, [AlbumId+IndexNumber], __cachedAt',
             syncMeta: 'EntityType',
             thumbnails: '[ItemId+Size], LastUsed, ByteSize, MissAt, __cachedAt',
+        });
+
+        // v4: thumbnails table is rekeyed from the compound `[ItemId+Size]`
+        // to a single `ItemId` primary key. The cache now stores one blob
+        // per item at MAX_CACHE_SIZE (see images.ts) and lets the browser
+        // downscale for smaller display surfaces — this cuts the sweep
+        // queue and Jellyfin-side resize cost by 5x. Dexie discards the
+        // existing thumbnails rows when the primary key changes, which is
+        // fine: it's a cache, the user can refill it.
+        this.version(4).stores({
+            albums: 'Id, [AlbumArtistId+SortName], DateLastSaved, SortName, ProductionYear, __cachedAt',
+            artists: 'Id, SortName, Name, DateLastSaved, Kind, __cachedAt',
+            favorites:
+                '[ItemId+ItemType], IsFavorite, Rating, LastPlayedDate, PlayCount, __cachedAt',
+            genres: 'Id, SortName, Name, __cachedAt',
+            lyrics: 'SongId, __cachedAt',
+            mutationQueue: 'id, status, createdAt, idempotencyKey',
+            playlists: 'Id, SortName, DateLastSaved, __cachedAt',
+            playlistSongs: '[PlaylistId+ListOrder], PlaylistId, SongId, __cachedAt',
+            songs: 'Id, [AlbumId+ParentIndexNumber+IndexNumber], AlbumArtistId, DateLastSaved, [AlbumId+IndexNumber], __cachedAt',
+            syncMeta: 'EntityType',
+            thumbnails: 'ItemId, LastUsed, ByteSize, MissAt, __cachedAt',
         });
     }
 }

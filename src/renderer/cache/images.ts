@@ -1,12 +1,18 @@
 // Local thumbnail blob store. Reads/writes the `thumbnails` table in the
 // active cache DB, with in-flight dedup so concurrent `<CachedImage>`s for
-// the same item/size share a single fetch. Falls back to the original URL
+// the same item share a single fetch. Falls back to the original URL
 // whenever the cache is unavailable or any step throws — image rendering
 // must never break because of the cache.
 
 import type { ImageRequest } from '/@/shared/types/domain-types';
 
 import { getActiveCacheDb } from './db';
+
+// Single cache size for every blob. Covers any reasonable mobile / tablet
+// / desktop full-screen player display; on lower-DPR display surfaces the
+// browser downscales cleanly via CSS. Exposed so the sweep can request
+// the same upstream resize the resolver does.
+export const MAX_CACHE_SIZE = 1024;
 
 // Normalises the resolver's request argument so callers can pass either a
 // bare URL (legacy callers like `<CachedImage>`) OR a full `ImageRequest`
@@ -33,9 +39,42 @@ const normaliseRequest = (
     };
 };
 
-// Module-level dedup map. Keyed by `${itemId}:${size}`. Promises resolve to
-// the blob URL when the cache pipeline succeeds, or `undefined` when the
-// caller should fall back to the raw URL.
+// Rewrite any size-bearing query params on the upstream URL to
+// MAX_CACHE_SIZE so every cache fetch lands the same blob regardless of
+// the caller's display size. Jellyfin uses `width`/`height`; Subsonic
+// uses `size`; we cover the wider Jellyfin family (`fillWidth`,
+// `fillHeight`, `maxWidth`, `maxHeight`) defensively. If the URL can't
+// be parsed (some Capacitor schemes) we return it unchanged and let the
+// browser fetch what the caller provided.
+const rewriteUrlToCacheSize = (url: string): string => {
+    try {
+        const parsed = new URL(url);
+        const params = parsed.searchParams;
+        const target = String(MAX_CACHE_SIZE);
+        let touched = false;
+        for (const key of ['width', 'height', 'fillWidth', 'fillHeight', 'maxWidth', 'maxHeight']) {
+            if (params.has(key)) {
+                params.set(key, target);
+                touched = true;
+            }
+        }
+        // Subsonic uses `size`. Some servers also expose `imageSize`.
+        for (const key of ['size', 'imageSize']) {
+            if (params.has(key)) {
+                params.set(key, target);
+                touched = true;
+            }
+        }
+        if (!touched) return url;
+        return parsed.toString();
+    } catch {
+        return url;
+    }
+};
+
+// Module-level dedup map. Keyed by `itemId` — any concurrent calls for
+// the same item, regardless of caller-supplied display size, share the
+// single upstream fetch.
 const inFlight = new Map<string, Promise<string | undefined>>();
 
 // Sampled-logging counters. Hits fire on every render; logging each one
@@ -50,8 +89,6 @@ const HIT_LOG_SAMPLE = 50;
 // out of thin air, so a week between retries keeps the table small
 // without making the user manually clear it if they re-tag an album.
 const MISS_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-
-const keyFor = (itemId: string, size: number): string => `${itemId}:${size}`;
 
 const emitWritten = (): void => {
     if (typeof window !== 'undefined') {
@@ -70,12 +107,17 @@ export interface ResolveThumbnailOptions {
  * either a bare URL (legacy callers) or a full `ImageRequest` so the
  * Authorization header can ride along — on Capacitor / Android there are
  * no cookies, so without the header every Jellyfin image fetch 401s and
- * the Dexie table never gets populated. Falls back to the original URL
- * whenever the cache is unavailable or any step fails.
+ * the Dexie table never gets populated.
+ *
+ * The `size` argument is the caller's desired display size; the cache
+ * IGNORES it for keying (one blob per item) and the upstream fetch
+ * always requests `MAX_CACHE_SIZE`, letting the browser downscale via
+ * CSS for smaller surfaces. Falls back to the original URL whenever the
+ * cache is unavailable or any step fails.
  */
 export const resolveThumbnail = async (
     itemId: string,
-    size: number,
+    _size: number,
     request: ImageRequest | string,
     options?: ResolveThumbnailOptions,
 ): Promise<string> => {
@@ -86,8 +128,7 @@ export const resolveThumbnail = async (
     const signal = options?.signal;
     if (signal?.aborted) return url;
 
-    const key = keyFor(itemId, size);
-    const existing = inFlight.get(key);
+    const existing = inFlight.get(itemId);
     if (existing) {
         const result = await existing;
         return result ?? url;
@@ -96,11 +137,11 @@ export const resolveThumbnail = async (
     const task = (async (): Promise<string | undefined> => {
         try {
             if (signal?.aborted) return undefined;
-            const row = await db.thumbnails.get([itemId, size]);
+            const row = await db.thumbnails.get(itemId);
             if (row) {
                 // Real blob row: serve it.
                 if (row.Blob) {
-                    await db.thumbnails.update([itemId, size], { LastUsed: Date.now() });
+                    await db.thumbnails.update(itemId, { LastUsed: Date.now() });
                     hitCount += 1;
                     if (hitCount % HIT_LOG_SAMPLE === 0) {
                         console.info('[cache] thumbnail hits', { total: hitCount });
@@ -109,36 +150,37 @@ export const resolveThumbnail = async (
                 }
                 // Negative-cache marker. If it's still fresh, skip the
                 // network entirely and let the caller fall back to its
-                // inherited URL — the server already told us this size
-                // doesn't exist. Update LastUsed so the LRU eviction
-                // doesn't drop popular-but-art-less items prematurely.
+                // inherited URL — the server already told us this item
+                // doesn't have artwork. Update LastUsed so the LRU
+                // eviction doesn't drop popular-but-art-less items
+                // prematurely.
                 const missAt = row.MissAt ?? 0;
                 if (Date.now() - missAt < MISS_TTL_MS) {
-                    await db.thumbnails.update([itemId, size], { LastUsed: Date.now() });
+                    await db.thumbnails.update(itemId, { LastUsed: Date.now() });
                     return undefined;
                 }
                 // Stale miss: fall through to refetch. The TTL is there
                 // so newly-added artwork on the server eventually wins.
             }
 
+            // Always fetch at MAX_CACHE_SIZE regardless of what the
+            // caller wanted — one blob per item, downscaled by the
+            // browser for smaller surfaces.
+            const fetchUrl = rewriteUrlToCacheSize(url);
+
             // 20s per-fetch timeout. Browser fetch() has no built-in
             // timeout, so a server that accepts a connection but never
             // responds (or a Capacitor WebView holding the request
             // internally) would otherwise hang a worker indefinitely.
-            // The user-visible symptom of this was 64 workers all in a
-            // no-network state with the OS network indicator showing
-            // 0 kB/s for minutes at a time. The timeout fires an
-            // AbortError that the work loop catches; the worker moves
-            // on to the next item.
             const timeoutAt = AbortSignal.timeout(20_000);
             const combinedSignal = signal ? AbortSignal.any([signal, timeoutAt]) : timeoutAt;
             let res: Response;
             try {
-                res = await fetch(url, { credentials, headers, signal: combinedSignal });
+                res = await fetch(fetchUrl, { credentials, headers, signal: combinedSignal });
             } catch (err) {
                 if ((err as Error)?.name === 'AbortError') return undefined;
                 if ((err as Error)?.name === 'TimeoutError') {
-                    console.warn('[cache] thumbnail fetch timed out', { itemId, size });
+                    console.warn('[cache] thumbnail fetch timed out', { itemId });
                     return undefined;
                 }
                 console.warn('[cache] thumbnail fetch threw', {
@@ -146,10 +188,9 @@ export const resolveThumbnail = async (
                     errorName: (err as Error)?.name,
                     hasAuthHeader: Boolean(headers?.Authorization),
                     itemId,
-                    size,
                     urlHost: (() => {
                         try {
-                            return new URL(url).host;
+                            return new URL(fetchUrl).host;
                         } catch {
                             return 'unparseable';
                         }
@@ -158,12 +199,11 @@ export const resolveThumbnail = async (
                 return undefined;
             }
             if (!res.ok) {
-                // 404 = item has no artwork at this size, which is the
-                // norm for many items on most Jellyfin libraries. Write
-                // a negative-cache row so the next call (resolver,
-                // sweep, or list mount) skips the network instead of
-                // re-issuing the same 404. The MISS_TTL_MS window above
-                // bounds how long that marker is honored.
+                // 404 = item has no artwork, common on many Jellyfin
+                // libraries. Write a negative-cache row so the next call
+                // (resolver, sweep, or list mount) skips the network
+                // instead of re-issuing the same 404. The MISS_TTL_MS
+                // window above bounds how long that marker is honored.
                 if (res.status === 404) {
                     if (db === getActiveCacheDb()) {
                         try {
@@ -175,13 +215,12 @@ export const resolveThumbnail = async (
                                 ItemId: itemId,
                                 LastUsed: Date.now(),
                                 MissAt: Date.now(),
-                                Size: size,
+                                Size: MAX_CACHE_SIZE,
                             });
                         } catch (err) {
                             console.warn('[cache] thumbnail miss-write failed', {
                                 error: (err as Error)?.message,
                                 itemId,
-                                size,
                             });
                         }
                     }
@@ -189,7 +228,6 @@ export const resolveThumbnail = async (
                     console.warn('[cache] thumbnail HTTP error', {
                         hasAuthHeader: Boolean(headers?.Authorization),
                         itemId,
-                        size,
                         status: res.status,
                     });
                 }
@@ -213,7 +251,7 @@ export const resolveThumbnail = async (
                 ItemId: itemId,
                 LastUsed: Date.now(),
                 MissAt: undefined,
-                Size: size,
+                Size: MAX_CACHE_SIZE,
             });
             emitWritten();
             missCount += 1;
@@ -221,7 +259,6 @@ export const resolveThumbnail = async (
                 bytes: blob.size,
                 itemId,
                 missesSoFar: missCount,
-                size,
             });
             return URL.createObjectURL(blob);
         } catch (err) {
@@ -230,15 +267,14 @@ export const resolveThumbnail = async (
                 error: (err as Error)?.message ?? String(err),
                 errorName: (err as Error)?.name,
                 itemId,
-                size,
             });
             return undefined;
         } finally {
-            inFlight.delete(key);
+            inFlight.delete(itemId);
         }
     })();
 
-    inFlight.set(key, task);
+    inFlight.set(itemId, task);
     const result = await task;
     return result ?? url;
 };
@@ -260,7 +296,7 @@ export const resolveThumbnailWithBytes = async (
     const db = getActiveCacheDb();
     if (!db) return { bytes: 0, url: fallbackUrl };
 
-    const before = await db.thumbnails.get([itemId, size]);
+    const before = await db.thumbnails.get(itemId);
     const resolved = await resolveThumbnail(itemId, size, request, options);
     // A row with a Blob counts as a real cache hit (no new bytes). A
     // FRESH negative-cache marker also counts as "no new bytes" — the
@@ -275,7 +311,7 @@ export const resolveThumbnailWithBytes = async (
             return { bytes: 0, url: resolved };
         }
     }
-    const after = await db.thumbnails.get([itemId, size]);
+    const after = await db.thumbnails.get(itemId);
     return { bytes: after?.ByteSize ?? 0, url: resolved };
 };
 

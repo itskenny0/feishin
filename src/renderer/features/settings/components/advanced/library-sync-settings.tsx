@@ -471,36 +471,26 @@ export const LibrarySyncSettings = () => {
                     <Text c="dimmed" size="sm">
                         {t('page.setting.librarySyncDashboard.thumbnailsHint', {
                             defaultValue:
-                                'Pick image sizes to download during sync. Empty = cover art is fetched lazily as you browse. Pre-caching trades disk space for instant grid rendering.',
+                                'Pre-cache all artwork at the largest display size so the grid renders instantly. Disable if you want lazy fetching only.',
                         })}
                     </Text>
-                    <Stack gap={4}>
-                        {(
-                            ['itemCard', 'header', 'sidebar', 'table', 'fullScreenPlayer'] as const
-                        ).map((bucket) => {
-                            const checked = (thumbnailSizes ?? []).includes(bucket);
-                            return (
-                                <Switch
-                                    checked={checked}
-                                    key={`thumb-size-${bucket}`}
-                                    label={t(
-                                        `page.setting.librarySyncDashboard.thumbnailSize_${bucket}`,
-                                        {
-                                            defaultValue: bucket,
-                                        },
-                                    )}
-                                    onChange={(e) => {
-                                        const current = new Set(thumbnailSizes ?? []);
-                                        if (e.currentTarget.checked) current.add(bucket);
-                                        else current.delete(bucket);
-                                        setLocalCache({
-                                            thumbnailSizes: Array.from(current),
-                                        });
-                                    }}
-                                />
-                            );
+                    <Switch
+                        checked={(thumbnailSizes ?? []).length > 0}
+                        label={t('page.setting.librarySyncDashboard.thumbnailsToggleLabel', {
+                            defaultValue: 'Pre-cache thumbnails',
                         })}
-                    </Stack>
+                        onChange={(e) => {
+                            // The `thumbnailSizes` array is vestigial — the
+                            // cache now stores one blob per item at
+                            // MAX_CACHE_SIZE. Treat non-empty as "enabled"
+                            // and empty as "opt-out"; write `['itemCard']`
+                            // as the sentinel so older builds still
+                            // recognise the setting as populated.
+                            setLocalCache({
+                                thumbnailSizes: e.currentTarget.checked ? ['itemCard'] : [],
+                            });
+                        }}
+                    />
 
                     {/* Concurrency slider — how many thumbnail fetches to
                         run in parallel during the sweep. Higher saturates the
