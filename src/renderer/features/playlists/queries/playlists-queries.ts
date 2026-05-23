@@ -18,14 +18,12 @@ import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
 import { controller } from '/@/renderer/api/controller';
 import { queryKeys } from '/@/renderer/api/query-keys';
 import {
+    cachedSwr,
     getActiveCacheDb,
-    isCacheAvailableSync,
     markSearchDirty,
     readSnapshot,
     useCachedQuery,
-    writeSnapshot,
 } from '/@/renderer/cache';
-import { queryClient } from '/@/renderer/lib/react-query';
 import {
     Playlist,
     PlaylistDetailQuery,
@@ -151,44 +149,33 @@ export const usePlaylistListSuspenseQuery = (args: PlaylistListSuspenseQueryArgs
     return useSuspenseQuery<PlaylistListResponse>({
         initialData: () => readSnapshot<PlaylistListResponse>(queryKey),
         initialDataUpdatedAt: 0,
-        queryFn: async (ctx) => {
-            const db = isCacheAvailableSync() ? getActiveCacheDb() : undefined;
-
-            if (db && canServeListFromCache(query)) {
-                try {
-                    const rows = await db.playlists.orderBy('SortName').toArray();
-                    if (rows.length > 0) {
-                        writeSnapshot(queryKey, {
-                            items: rows.map((r) => r.Payload),
-                            startIndex: 0,
-                            totalRecordCount: rows.length,
-                        });
-                    }
-                } catch (err) {
-                    console.warn('[cache] playlists list fromCache failed', queryKey, err);
-                }
-            }
-
-            const fresh = (await controller.getPlaylistList({
-                apiClientProps: { serverId: serverId ?? '', signal: ctx.signal },
-                query,
-            })) as PlaylistListResponse;
-
-            if (db) {
-                try {
+        queryFn: (ctx) =>
+            cachedSwr<PlaylistListResponse>({
+                apply: async (db, fresh) => {
                     const items = fresh?.items ?? [];
                     if (items.length > 0) {
                         await db.playlists.bulkPut(items.map(toCachedPlaylistRow));
                         markSearchDirty('playlists');
                     }
-                } catch (err) {
-                    console.warn('[cache] playlists list apply failed', queryKey, err);
-                }
-            }
-
-            writeSnapshot(queryKey, fresh);
-            return fresh;
-        },
+                },
+                ctx,
+                fromCache: async (db) => {
+                    if (!canServeListFromCache(query)) return undefined;
+                    const rows = await db.playlists.orderBy('SortName').toArray();
+                    if (rows.length === 0) return undefined;
+                    return {
+                        items: rows.map((r) => r.Payload),
+                        startIndex: 0,
+                        totalRecordCount: rows.length,
+                    };
+                },
+                queryKey,
+                remote: (ctx) =>
+                    controller.getPlaylistList({
+                        apiClientProps: { serverId: serverId ?? '', signal: ctx.signal },
+                        query,
+                    }) as Promise<PlaylistListResponse>,
+            }),
         queryKey,
         staleTime: options?.staleTime,
     });
@@ -214,37 +201,28 @@ export const usePlaylistDetailQuery = (args: PlaylistDetailQueryArgs) => {
             if (callerPlaceholder !== undefined) return callerPlaceholder;
             return readSnapshot<PlaylistDetailResponse>(queryKey);
         }) as never,
-        queryFn: async (ctx) => {
-            const db = isCacheAvailableSync() ? getActiveCacheDb() : undefined;
-
-            if (db) {
-                try {
-                    const row = await db.playlists.get(query.id);
-                    if (row?.Payload !== undefined) {
-                        writeSnapshot(queryKey, row.Payload);
-                    }
-                } catch (err) {
-                    console.warn('[cache] playlist detail fromCache failed', queryKey, err);
-                }
-            }
-
-            const fresh = (await controller.getPlaylistDetail({
-                apiClientProps: { serverId: serverId ?? '', signal: ctx.signal },
-                query,
-            })) as PlaylistDetailResponse;
-
-            if (db && fresh) {
-                try {
+        queryFn: (ctx) =>
+            cachedSwr<PlaylistDetailResponse>({
+                apply: async (db, fresh) => {
+                    if (!fresh) return;
                     await db.playlists.put(toCachedPlaylistRow(fresh));
                     markSearchDirty('playlists');
-                } catch (err) {
-                    console.warn('[cache] playlist detail apply failed', queryKey, err);
-                }
-            }
-
-            writeSnapshot(queryKey, fresh);
-            return fresh;
-        },
+                },
+                ctx,
+                fromCache: async (db) => {
+                    const row = await db.playlists.get(query.id);
+                    if (row?.Payload !== undefined) {
+                        return row.Payload as PlaylistDetailResponse;
+                    }
+                    return undefined;
+                },
+                queryKey,
+                remote: (ctx) =>
+                    controller.getPlaylistDetail({
+                        apiClientProps: { serverId: serverId ?? '', signal: ctx.signal },
+                        query,
+                    }) as Promise<PlaylistDetailResponse>,
+            }),
         queryKey,
         staleTime: options?.staleTime,
     });
@@ -266,37 +244,28 @@ export const usePlaylistDetailSuspenseQuery = (args: PlaylistDetailSuspenseQuery
             return readSnapshot<PlaylistDetailResponse>(queryKey);
         },
         initialDataUpdatedAt: 0,
-        queryFn: async (ctx) => {
-            const db = isCacheAvailableSync() ? getActiveCacheDb() : undefined;
-
-            if (db) {
-                try {
-                    const row = await db.playlists.get(query.id);
-                    if (row?.Payload !== undefined) {
-                        writeSnapshot(queryKey, row.Payload);
-                    }
-                } catch (err) {
-                    console.warn('[cache] playlist detail fromCache failed', queryKey, err);
-                }
-            }
-
-            const fresh = (await controller.getPlaylistDetail({
-                apiClientProps: { serverId: serverId ?? '', signal: ctx.signal },
-                query,
-            })) as PlaylistDetailResponse;
-
-            if (db && fresh) {
-                try {
+        queryFn: (ctx) =>
+            cachedSwr<PlaylistDetailResponse>({
+                apply: async (db, fresh) => {
+                    if (!fresh) return;
                     await db.playlists.put(toCachedPlaylistRow(fresh));
                     markSearchDirty('playlists');
-                } catch (err) {
-                    console.warn('[cache] playlist detail apply failed', queryKey, err);
-                }
-            }
-
-            writeSnapshot(queryKey, fresh);
-            return fresh;
-        },
+                },
+                ctx,
+                fromCache: async (db) => {
+                    const row = await db.playlists.get(query.id);
+                    if (row?.Payload !== undefined) {
+                        return row.Payload as PlaylistDetailResponse;
+                    }
+                    return undefined;
+                },
+                queryKey,
+                remote: (ctx) =>
+                    controller.getPlaylistDetail({
+                        apiClientProps: { serverId: serverId ?? '', signal: ctx.signal },
+                        query,
+                    }) as Promise<PlaylistDetailResponse>,
+            }),
         queryKey,
         staleTime: options?.staleTime,
     });
@@ -364,97 +333,46 @@ export const usePlaylistSongListQuery = (args: PlaylistSongListQueryArgs) => {
 // Song list — suspense
 // ---------------------------------------------------------------------------
 
-// Tracks per-queryKey background refetches so a cache-fast-path return
-// doesn't fire multiple parallel network calls when the user navigates
-// in/out of a playlist quickly.
-const inFlightSongListRefetch = new Set<string>();
-
 export const usePlaylistSongListSuspenseQuery = (args: PlaylistSongListSuspenseQueryArgs) => {
     const { options, playlistId, query, queryKey: queryKeyOverride, serverId } = args;
 
     const queryKey = queryKeyOverride ?? queryKeys.playlists.songList(serverId ?? '', playlistId);
     const fullQuery: PlaylistSongListQuery = { id: playlistId, ...(query ?? {}) };
 
+    // Cache-fast-path: if Dexie has the songs, return them immediately so
+    // the suspense boundary resolves on the first frame. The fresh network
+    // call runs in the background and updates the query cache + Dexie +
+    // snapshot map when it lands — but the user sees the tracklist
+    // instantly. This is the fix for the "playlist page renders but the
+    // song list takes forever / never lands" symptom on large playlists.
     return useSuspenseQuery<PlaylistSongListResponse>({
         initialData: () => readSnapshot<PlaylistSongListResponse>(queryKey),
         initialDataUpdatedAt: 0,
-        queryFn: async (ctx) => {
-            const db = isCacheAvailableSync() ? getActiveCacheDb() : undefined;
-
-            // Cache-fast-path: if Dexie has the songs, return them
-            // immediately so the suspense boundary resolves on the first
-            // frame. The fresh network call runs in the background and
-            // updates the query cache + Dexie + snapshot map when it
-            // lands — but the user sees the tracklist instantly. This is
-            // the fix for the "playlist page renders but the song list
-            // takes forever / never lands" symptom on large playlists.
-            if (db) {
-                try {
+        queryFn: (ctx) =>
+            cachedSwr<PlaylistSongListResponse>({
+                apply: async (db, fresh) => {
+                    await replacePlaylistSongs(db, playlistId, fresh);
+                },
+                ctx,
+                fromCache: async (db) => {
                     const rows = await db.playlistSongs
                         .where('PlaylistId')
                         .equals(playlistId)
                         .sortBy('ListOrder');
-                    if (rows.length > 0) {
-                        const cached: PlaylistSongListResponse = {
-                            items: rows.map((r) => r.SongPayload),
-                            startIndex: 0,
-                            totalRecordCount: rows.length,
-                        };
-                        writeSnapshot(queryKey, cached);
-                        const flightKey = JSON.stringify(queryKey);
-                        if (!inFlightSongListRefetch.has(flightKey)) {
-                            inFlightSongListRefetch.add(flightKey);
-                            void (async () => {
-                                try {
-                                    const fresh = (await controller.getPlaylistSongList({
-                                        apiClientProps: { serverId: serverId ?? '' },
-                                        query: fullQuery,
-                                    })) as PlaylistSongListResponse;
-                                    try {
-                                        await replacePlaylistSongs(db, playlistId, fresh);
-                                    } catch (err) {
-                                        console.warn(
-                                            '[cache] playlist songs apply (bg) failed',
-                                            queryKey,
-                                            err,
-                                        );
-                                    }
-                                    writeSnapshot(queryKey, fresh);
-                                    queryClient.setQueryData(queryKey, fresh);
-                                } catch (err) {
-                                    console.warn(
-                                        '[cache] playlist songs revalidate (bg) failed',
-                                        queryKey,
-                                        err,
-                                    );
-                                } finally {
-                                    inFlightSongListRefetch.delete(flightKey);
-                                }
-                            })();
-                        }
-                        return cached;
-                    }
-                } catch (err) {
-                    console.warn('[cache] playlist songs fromCache failed', queryKey, err);
-                }
-            }
-
-            const fresh = (await controller.getPlaylistSongList({
-                apiClientProps: { serverId: serverId ?? '', signal: ctx.signal },
-                query: fullQuery,
-            })) as PlaylistSongListResponse;
-
-            if (db) {
-                try {
-                    await replacePlaylistSongs(db, playlistId, fresh);
-                } catch (err) {
-                    console.warn('[cache] playlist songs apply failed', queryKey, err);
-                }
-            }
-
-            writeSnapshot(queryKey, fresh);
-            return fresh;
-        },
+                    if (rows.length === 0) return undefined;
+                    return {
+                        items: rows.map((r) => r.SongPayload),
+                        startIndex: 0,
+                        totalRecordCount: rows.length,
+                    };
+                },
+                queryKey,
+                remote: (ctx) =>
+                    controller.getPlaylistSongList({
+                        apiClientProps: { serverId: serverId ?? '', signal: ctx.signal },
+                        query: fullQuery,
+                    }) as Promise<PlaylistSongListResponse>,
+            }),
         queryKey,
         staleTime: options?.staleTime,
     });

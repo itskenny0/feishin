@@ -23,6 +23,7 @@ import { useQuery, useSuspenseInfiniteQuery, useSuspenseQuery } from '@tanstack/
 import { controller } from '/@/renderer/api/controller';
 import { queryKeys } from '/@/renderer/api/query-keys';
 import {
+    cachedSwr,
     filterAlbumsLocal,
     getActiveCacheDb,
     isCacheAvailableSync,
@@ -32,6 +33,7 @@ import {
     useCachedQuery,
     writeSnapshot,
 } from '/@/renderer/cache';
+import { queryClient } from '/@/renderer/lib/react-query';
 import {
     Album,
     AlbumDetailQuery,
@@ -226,42 +228,29 @@ export const useAlbumListSuspenseQuery = (args: AlbumListSuspenseQueryArgs) => {
     return useSuspenseQuery<AlbumListResponse>({
         initialData: () => readSnapshot<AlbumListResponse>(queryKey),
         initialDataUpdatedAt: 0,
-        queryFn: async (ctx) => {
-            const db = isCacheAvailableSync() ? getActiveCacheDb() : undefined;
-
-            if (db) {
-                try {
-                    const cached = await readAlbumsFromCache(db, query);
-                    if (cached !== undefined) {
-                        writeSnapshot(queryKey, cached);
-                        logCacheHitSampled('list-suspense');
-                    }
-                } catch (err) {
-                    console.warn('[cache] albums list fromCache failed', queryKey, err);
-                }
-            }
-
-            const fresh = (await controller.getAlbumList({
-                apiClientProps: { serverId: serverId ?? '', signal: ctx.signal },
-                query,
-            })) as AlbumListResponse;
-
-            if (db) {
-                try {
+        queryFn: (ctx) =>
+            cachedSwr<AlbumListResponse>({
+                apply: async (db, fresh) => {
                     const items = fresh?.items ?? [];
                     if (items.length > 0) {
                         await db.albums.bulkPut(items.map(toCachedAlbumRow));
                         markSearchDirty('albums');
                         logApplied(items.length);
                     }
-                } catch (err) {
-                    console.warn('[cache] albums list apply failed', queryKey, err);
-                }
-            }
-
-            writeSnapshot(queryKey, fresh);
-            return fresh;
-        },
+                },
+                ctx,
+                fromCache: async (db) => {
+                    const cached = await readAlbumsFromCache(db, query);
+                    if (cached !== undefined) logCacheHitSampled('list-suspense');
+                    return cached;
+                },
+                queryKey,
+                remote: (ctx) =>
+                    controller.getAlbumList({
+                        apiClientProps: { serverId: serverId ?? '', signal: ctx.signal },
+                        query,
+                    }) as Promise<AlbumListResponse>,
+            }),
         queryKey,
         staleTime: options?.staleTime,
     });
@@ -301,37 +290,27 @@ export const useAlbumDetailQuery = (args: AlbumDetailQueryArgs) => {
             if (callerPlaceholder !== undefined) return callerPlaceholder;
             return readSnapshot<AlbumDetailResponse>(queryKey);
         }) as never,
-        queryFn: async (ctx) => {
-            const db = isCacheAvailableSync() ? getActiveCacheDb() : undefined;
-
-            if (db) {
-                try {
+        queryFn: (ctx) =>
+            cachedSwr<AlbumDetailResponse>({
+                apply: async (db, fresh) => {
+                    await applyAlbumDetail(db, fresh);
+                },
+                ctx,
+                fromCache: async (db) => {
                     const row = await db.albums.get(query.id);
                     if (row?.Payload !== undefined) {
-                        writeSnapshot(queryKey, row.Payload);
                         logCacheHitSampled('detail');
+                        return row.Payload as AlbumDetailResponse;
                     }
-                } catch (err) {
-                    console.warn('[cache] album detail fromCache failed', queryKey, err);
-                }
-            }
-
-            const fresh = (await controller.getAlbumDetail({
-                apiClientProps: { serverId: serverId ?? '', signal: ctx.signal },
-                query,
-            })) as AlbumDetailResponse;
-
-            if (db) {
-                try {
-                    await applyAlbumDetail(db, fresh);
-                } catch (err) {
-                    console.warn('[cache] album detail apply failed', queryKey, err);
-                }
-            }
-
-            writeSnapshot(queryKey, fresh);
-            return fresh;
-        },
+                    return undefined;
+                },
+                queryKey,
+                remote: (ctx) =>
+                    controller.getAlbumDetail({
+                        apiClientProps: { serverId: serverId ?? '', signal: ctx.signal },
+                        query,
+                    }) as Promise<AlbumDetailResponse>,
+            }),
         queryKey,
         staleTime: options?.staleTime,
     });
@@ -352,37 +331,27 @@ export const useAlbumDetailSuspenseQuery = (args: AlbumDetailSuspenseQueryArgs) 
             return readSnapshot<AlbumDetailResponse>(queryKey);
         },
         initialDataUpdatedAt: 0,
-        queryFn: async (ctx) => {
-            const db = isCacheAvailableSync() ? getActiveCacheDb() : undefined;
-
-            if (db) {
-                try {
+        queryFn: (ctx) =>
+            cachedSwr<AlbumDetailResponse>({
+                apply: async (db, fresh) => {
+                    await applyAlbumDetail(db, fresh);
+                },
+                ctx,
+                fromCache: async (db) => {
                     const row = await db.albums.get(query.id);
                     if (row?.Payload !== undefined) {
-                        writeSnapshot(queryKey, row.Payload);
                         logCacheHitSampled('detail-suspense');
+                        return row.Payload as AlbumDetailResponse;
                     }
-                } catch (err) {
-                    console.warn('[cache] album detail fromCache failed', queryKey, err);
-                }
-            }
-
-            const fresh = (await controller.getAlbumDetail({
-                apiClientProps: { serverId: serverId ?? '', signal: ctx.signal },
-                query,
-            })) as AlbumDetailResponse;
-
-            if (db) {
-                try {
-                    await applyAlbumDetail(db, fresh);
-                } catch (err) {
-                    console.warn('[cache] album detail apply failed', queryKey, err);
-                }
-            }
-
-            writeSnapshot(queryKey, fresh);
-            return fresh;
-        },
+                    return undefined;
+                },
+                queryKey,
+                remote: (ctx) =>
+                    controller.getAlbumDetail({
+                        apiClientProps: { serverId: serverId ?? '', signal: ctx.signal },
+                        query,
+                    }) as Promise<AlbumDetailResponse>,
+            }),
         queryKey,
         staleTime: options?.staleTime,
     });
@@ -427,29 +396,25 @@ export const useAlbumListCountQuery = (args: AlbumListCountQueryArgs) => {
     return useSuspenseQuery<number>({
         initialData: () => readSnapshot<number>(queryKey),
         initialDataUpdatedAt: 0,
-        queryFn: async (ctx) => {
-            const db = isCacheAvailableSync() ? getActiveCacheDb() : undefined;
-
-            if (db && isFullyUnfilteredCountQuery(query)) {
-                try {
+        queryFn: (ctx) =>
+            cachedSwr<number>({
+                ctx,
+                fromCache: async (db) => {
+                    if (!isFullyUnfilteredCountQuery(query)) return undefined;
                     const cachedCount = await db.albums.count();
                     if (cachedCount > 0) {
-                        writeSnapshot(queryKey, cachedCount);
                         logCacheHitSampled('listCount');
+                        return cachedCount;
                     }
-                } catch (err) {
-                    console.warn('[cache] album listCount fromCache failed', queryKey, err);
-                }
-            }
-
-            const fresh = await controller.getAlbumListCount({
-                apiClientProps: { serverId: serverId ?? '', signal: ctx.signal },
-                query,
-            });
-
-            writeSnapshot(queryKey, fresh);
-            return fresh;
-        },
+                    return undefined;
+                },
+                queryKey,
+                remote: (ctx) =>
+                    controller.getAlbumListCount({
+                        apiClientProps: { serverId: serverId ?? '', signal: ctx.signal },
+                        query,
+                    }),
+            }),
         queryKey,
         staleTime: options?.staleTime,
     });
@@ -515,21 +480,65 @@ export const useAlbumInfiniteListSuspenseQuery = (args: AlbumInfiniteListSuspens
             // background revalidation update the snapshot. This is what
             // turns "warm" into a real <50ms paint instead of a full
             // server round-trip.
+            let cached: AlbumListResponse | undefined;
             if (db) {
                 try {
-                    const cached = await readAlbumsFromCache(db, pageQuery);
-                    if (cached !== undefined && cached.items.length > 0) {
+                    const fromCache = await readAlbumsFromCache(db, pageQuery);
+                    if (fromCache !== undefined && fromCache.items.length > 0) {
+                        cached = fromCache;
                         logCacheHitSampled('infinite');
                         // Persist the cached page back into the snapshot
                         // so the next mount's initialData includes it.
                         const existing =
                             readSnapshot<InfiniteData<AlbumListResponse, string>>(queryKey);
                         writeSnapshot(queryKey, mergePage(existing, String(startIndex), cached));
-                        return cached;
                     }
                 } catch (err) {
                     console.warn('[cache] album infinite fromCache failed', queryKey, err);
                 }
+            }
+
+            if (cached !== undefined) {
+                // Background revalidate so an offline session never throws
+                // out of queryFn when the cache has the page.
+                void (async () => {
+                    try {
+                        const fresh = (await controller.getAlbumList({
+                            apiClientProps: { serverId: serverId ?? '', signal: ctx.signal },
+                            query: pageQuery,
+                        })) as AlbumListResponse;
+                        if (db) {
+                            try {
+                                const items = fresh?.items ?? [];
+                                if (items.length > 0) {
+                                    await db.albums.bulkPut(items.map(toCachedAlbumRow));
+                                    markSearchDirty('albums');
+                                    logApplied(items.length);
+                                }
+                            } catch (err) {
+                                console.warn(
+                                    '[cache] album infinite apply failed (bg)',
+                                    queryKey,
+                                    err,
+                                );
+                            }
+                        }
+                        const existing =
+                            readSnapshot<InfiniteData<AlbumListResponse, string>>(queryKey);
+                        const next = mergePage(existing, String(startIndex), fresh);
+                        writeSnapshot(queryKey, next);
+                        queryClient.setQueryData(queryKey, next);
+                    } catch (err) {
+                        if ((err as Error)?.name !== 'AbortError') {
+                            console.info(
+                                '[cache] album infinite bg revalidate failed',
+                                queryKey,
+                                err,
+                            );
+                        }
+                    }
+                })();
+                return cached;
             }
 
             const fresh = (await controller.getAlbumList({
