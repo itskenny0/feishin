@@ -84,6 +84,8 @@ export const LibrarySyncSettings = () => {
     const cacheEnabled = useSettingsStore((s) => s.localCache?.enabled === true);
     const localCacheCap = useSettingsStore((s) => s.localCache?.capacityBytes);
     const setLocalCache = useSettingsStore((s) => s.actions.setLocalCache);
+    const entities = useSettingsStore((s) => s.localCache?.entities);
+    const thumbnailSizes = useSettingsStore((s) => s.localCache?.thumbnailSizes);
 
     const [thumbnailCount, setThumbnailCount] = useState<number | undefined>(undefined);
     const [capBytes, setCapBytes] = useState<number | undefined>(undefined);
@@ -309,6 +311,88 @@ export const LibrarySyncSettings = () => {
                     </Text>
                 )}
             </Stack>
+
+            {/* Per-entity toggles */}
+            {cacheEnabled && (
+                <Stack gap="xs">
+                    <Title order={6}>
+                        {t('page.setting.librarySyncDashboard.entityTogglesTitle', {
+                            defaultValue: 'What to sync',
+                        })}
+                    </Title>
+                    <Text c="dimmed" size="sm">
+                        {t('page.setting.librarySyncDashboard.entityTogglesHint', {
+                            defaultValue:
+                                'Pick which library types the sync downloads to local storage. Disabled entries are skipped on the next sync.',
+                        })}
+                    </Text>
+                    <Stack gap={4}>
+                        {ENTITY_DISPLAY_ORDER.map((entity) => {
+                            const checked = entities?.[entity as keyof typeof entities] !== false;
+                            return (
+                                <Switch
+                                    checked={checked}
+                                    key={`entity-toggle-${entity}`}
+                                    label={t(ENTITY_LABEL_KEYS[entity])}
+                                    onChange={(e) => {
+                                        const next = e.currentTarget.checked;
+                                        setLocalCache({
+                                            entities: {
+                                                albums: entities?.albums ?? true,
+                                                artists: entities?.artists ?? true,
+                                                favorites: entities?.favorites ?? true,
+                                                genres: entities?.genres ?? true,
+                                                playlists: entities?.playlists ?? true,
+                                                songs: entities?.songs ?? true,
+                                                [entity]: next,
+                                            },
+                                        });
+                                    }}
+                                />
+                            );
+                        })}
+                    </Stack>
+
+                    <Title mt="sm" order={6}>
+                        {t('page.setting.librarySyncDashboard.thumbnailsTitle', {
+                            defaultValue: 'Thumbnail pre-cache',
+                        })}
+                    </Title>
+                    <Text c="dimmed" size="sm">
+                        {t('page.setting.librarySyncDashboard.thumbnailsHint', {
+                            defaultValue:
+                                'Pick image sizes to download during sync. Empty = cover art is fetched lazily as you browse. Pre-caching trades disk space for instant grid rendering.',
+                        })}
+                    </Text>
+                    <Stack gap={4}>
+                        {(['itemCard', 'header', 'sidebar', 'table', 'fullScreenPlayer'] as const).map(
+                            (bucket) => {
+                                const checked = (thumbnailSizes ?? []).includes(bucket);
+                                return (
+                                    <Switch
+                                        checked={checked}
+                                        key={`thumb-size-${bucket}`}
+                                        label={t(
+                                            `page.setting.librarySyncDashboard.thumbnailSize_${bucket}`,
+                                            {
+                                                defaultValue: bucket,
+                                            },
+                                        )}
+                                        onChange={(e) => {
+                                            const current = new Set(thumbnailSizes ?? []);
+                                            if (e.currentTarget.checked) current.add(bucket);
+                                            else current.delete(bucket);
+                                            setLocalCache({
+                                                thumbnailSizes: Array.from(current),
+                                            });
+                                        }}
+                                    />
+                                );
+                            },
+                        )}
+                    </Stack>
+                </Stack>
+            )}
 
             {/* Status + current sweep */}
             <Stack gap="xs">

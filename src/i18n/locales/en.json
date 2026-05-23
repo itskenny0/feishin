@@ -840,7 +840,16 @@
                 "pendingMutations": "Pending writes: {{count}}",
                 "storageUsed": "Storage used: {{used}} of {{cap}}",
                 "capLabel": "Storage cap",
-                "capSliderHelp": "Drag to set how much disk the cache may use. Eviction trims thumbnails (oldest first) to stay under this limit."
+                "capSliderHelp": "Drag to set how much disk the cache may use. Eviction trims thumbnails (oldest first) to stay under this limit.",
+                "entityTogglesTitle": "What to sync",
+                "entityTogglesHint": "Pick which library types the sync downloads to local storage. Disabled entries are skipped on the next sync.",
+                "thumbnailsTitle": "Thumbnail pre-cache",
+                "thumbnailsHint": "Pick image sizes to download during sync. Empty = cover art is fetched lazily as you browse. Pre-caching trades disk space for instant grid rendering.",
+                "thumbnailSize_itemCard": "Grid card (default browse views)",
+                "thumbnailSize_header": "Detail page header (large)",
+                "thumbnailSize_sidebar": "Sidebar (small)",
+                "thumbnailSize_table": "List table (tiny)",
+                "thumbnailSize_fullScreenPlayer": "Now-playing full-screen (largest)"
             },
             "librarySync": "Library sync",
             "librarySyncDescription": "Local-first cache for the Jellyfin library so every surface renders instantly.",
