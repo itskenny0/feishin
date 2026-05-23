@@ -483,13 +483,26 @@ export const LibrarySyncSettings = () => {
     const sweepProgressLabel = smoothSweep.entity
         ? `${formatCount(smoothSweep.done)}/${smoothSweep.total ? formatCount(smoothSweep.total) : '?'} · ${itemsPerSecLabel} items/sec`
         : '';
-    const sweepBytesLabel = smoothSweep.entity
-        ? `${formatBytesSI(smoothSweep.bytesDownloaded)}${
-              smoothSweep.estimatedTotalBytes
-                  ? ` / ${formatBytesSI(smoothSweep.estimatedTotalBytes)}`
-                  : ''
-          } · ${formatBytesSI(smoothSweep.bytesPerSec)}/s`
-        : '';
+    // Build the sweep bytes label. The previous "downloaded / total"
+    // format was misleading when most remaining items were cache hits
+    // or miss markers — the projected total reflected only the
+    // bytes that will be downloaded THIS RUN, but the user parsed it
+    // as total cache size. New format shows "downloaded" + "remaining"
+    // explicitly so it's clear what the second number means. The
+    // Storage used line below covers actual on-disk size.
+    const sweepBytesLabel = (() => {
+        if (!smoothSweep.entity) return '';
+        const downloaded = formatBytesSI(smoothSweep.bytesDownloaded);
+        const rate = `${formatBytesSI(smoothSweep.bytesPerSec)}/s`;
+        const remaining =
+            smoothSweep.estimatedTotalBytes !== undefined &&
+            smoothSweep.estimatedTotalBytes > smoothSweep.bytesDownloaded
+                ? formatBytesSI(smoothSweep.estimatedTotalBytes - smoothSweep.bytesDownloaded)
+                : undefined;
+        return remaining
+            ? `${downloaded} downloaded · ~${remaining} remaining · ${rate}`
+            : `${downloaded} downloaded · ${rate}`;
+    })();
 
     return (
         <Stack gap="lg">
