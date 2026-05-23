@@ -19,6 +19,7 @@ import {
     ListCountQuery,
     RandomSongListQuery,
     SimilarSongsQuery,
+    SongDetailQuery,
     SongListQuery,
 } from '/@/shared/types/domain-types';
 
@@ -61,6 +62,40 @@ export const songsQueries = {
                 });
             },
             queryKey: queryKeys.player.fetch({ type: 'queue' }),
+        });
+    },
+    detail: (args: QueryHookArgs<SongDetailQuery>) => {
+        const key = queryKeys.songs.detail(args.serverId, args.query);
+        return queryOptions({
+            initialData: (() => readSnapshot(key)) as never,
+            initialDataUpdatedAt: 0,
+            queryFn: async ({ signal }) => {
+                if (isCacheAvailableSync() && args.query?.id) {
+                    try {
+                        const db = getActiveCacheDb();
+                        const row = await db?.songs.get(args.query.id);
+                        if (row?.Payload) writeSnapshot(key, row.Payload);
+                    } catch {
+                        /* swallow */
+                    }
+                }
+                const fresh = await api.controller.getSongDetail({
+                    apiClientProps: { serverId: args.serverId, signal },
+                    query: args.query,
+                });
+                if (isCacheAvailableSync() && fresh) {
+                    try {
+                        const db = getActiveCacheDb();
+                        if (db) await db.songs.put(toCachedSongRow(fresh));
+                    } catch {
+                        /* swallow */
+                    }
+                }
+                writeSnapshot(key, fresh);
+                return fresh;
+            },
+            queryKey: key,
+            ...args.options,
         });
     },
     list: (args: QueryHookArgs<SongListQuery>, imageSize?: number) => {
