@@ -15,6 +15,7 @@ import {
     useSmoothSweep,
 } from '/@/renderer/cache';
 import {
+    cachedBytes,
     clearAllCacheData,
     clearThumbnails,
     estimateBytes,
@@ -150,14 +151,20 @@ export const LibrarySyncSettings = () => {
         }
         void (async () => {
             try {
-                const [count, rows, metaRows] = await Promise.all([
+                // Use cachedBytes() (which reads the ByteSize index
+                // instead of materialising every Blob). The dashboard
+                // refresh fires repeatedly during a sweep — pulling
+                // hundreds of MB of blobs out of IndexedDB on each
+                // refresh was the dominant contributor to slow
+                // thumbnail downloads.
+                const [count, bytes, metaRows] = await Promise.all([
                     db.thumbnails.count(),
-                    db.thumbnails.toArray(),
+                    cachedBytes(),
                     db.syncMeta.toArray(),
                 ]);
                 if (cancelled) return;
                 setThumbnailCount(count);
-                setThumbnailBytes(rows.reduce((acc, r) => acc + (r.ByteSize ?? 0), 0));
+                setThumbnailBytes(bytes);
                 const meta: typeof syncMeta = {};
                 for (const r of metaRows) {
                     meta[r.EntityType] = {

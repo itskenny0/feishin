@@ -145,21 +145,33 @@ export const useCacheLifecycle = (): void => {
                 // even when Dexie has thousands of rows.
                 void (async () => {
                     try {
-                        const [albums, artists, songs, playlists, favorites, genres, thumbnails] =
-                            await Promise.all([
-                                db.albums.count(),
-                                db.artists.count(),
-                                db.songs.count(),
-                                db.playlists.count(),
-                                db.favorites.count(),
-                                db.genres.count(),
-                                // Count only real blob rows; negative-
-                                // cache markers (Blob === undefined)
-                                // would otherwise inflate the displayed
-                                // thumbnail count past what the user
-                                // actually has on disk.
-                                db.thumbnails.filter((r) => r.Blob !== undefined).count(),
-                            ]);
+                        // Count blob thumbnails via the MissAt index:
+                        // miss rows have MissAt > 0 (indexed); blob
+                        // rows have MissAt undefined (skipped by the
+                        // index). totalRows - missRows = blobRows.
+                        // Avoids the .filter().count() table scan,
+                        // which loaded every Blob into memory on every
+                        // server activation.
+                        const [
+                            albums,
+                            artists,
+                            songs,
+                            playlists,
+                            favorites,
+                            genres,
+                            totalThumbs,
+                            missThumbs,
+                        ] = await Promise.all([
+                            db.albums.count(),
+                            db.artists.count(),
+                            db.songs.count(),
+                            db.playlists.count(),
+                            db.favorites.count(),
+                            db.genres.count(),
+                            db.thumbnails.count(),
+                            db.thumbnails.where('MissAt').above(0).count(),
+                        ]);
+                        const thumbnails = totalThumbs - missThumbs;
                         actions.setEntityCount('albums', albums);
                         actions.setEntityCount('artists', artists);
                         actions.setEntityCount('songs', songs);

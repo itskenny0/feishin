@@ -12,6 +12,8 @@
 
 import isElectron from 'is-electron';
 
+import type { LibraryCacheDb } from './db';
+
 import { getActiveCacheDb } from './db';
 import { useCacheStore } from './store';
 
@@ -40,6 +42,29 @@ export const isQuotaCapped = (): boolean => {
  * by the StorageManager API. Returns undefined when the API is
  * unavailable or throws.
  */
+/**
+ * Sum the `ByteSize` index on the thumbnails table without ever
+ * materialising blob rows. CRITICAL: `db.thumbnails.toArray()` pulls
+ * every Blob into memory — on a hydrated library that's tens to
+ * hundreds of megabytes per call, and `estimateBytes()` /
+ * `cachedBytes()` were being invoked on every successful thumbnail
+ * write via the `feishin:thumbnail-written` cascade. The resulting
+ * read traffic serialised the IndexedDB worker thread against
+ * concurrent puts, dropping the sweep's effective throughput to a
+ * tiny fraction of network capacity.
+ *
+ * Reading the `ByteSize` index via `.keys()` skips the row store
+ * entirely — IndexedDB hands back just the indexed integers.
+ */
+const sumThumbnailBytes = async (db: LibraryCacheDb): Promise<number> => {
+    const keys = await db.thumbnails.orderBy('ByteSize').keys();
+    let total = 0;
+    for (const k of keys) {
+        if (typeof k === 'number') total += k;
+    }
+    return total;
+};
+
 export const estimateBytes = async (): Promise<number | undefined> => {
     // Prefer summing actual Dexie row sizes — `navigator.storage.estimate()`
     // returns the WHOLE origin's quota usage (cookies, localStorage, every
@@ -52,7 +77,7 @@ export const estimateBytes = async (): Promise<number | undefined> => {
     if (db) {
         try {
             const [
-                thumbnailRows,
+                thumbnailBytes,
                 albums,
                 artists,
                 songs,
@@ -62,7 +87,7 @@ export const estimateBytes = async (): Promise<number | undefined> => {
                 lyrics,
                 playlistSongs,
             ] = await Promise.all([
-                db.thumbnails.toArray(),
+                sumThumbnailBytes(db),
                 db.albums.count(),
                 db.artists.count(),
                 db.songs.count(),
@@ -84,7 +109,6 @@ export const estimateBytes = async (): Promise<number | undefined> => {
             const genreBytes = genres * 192;
             const lyricsBytes = lyrics * 4096;
             const playlistSongBytes = playlistSongs * 256;
-            const thumbnailBytes = thumbnailRows.reduce((acc, r) => acc + (r.ByteSize ?? 0), 0);
             return (
                 thumbnailBytes +
                 albumBytes +
@@ -121,13 +145,16 @@ export const cachedBytes = async (): Promise<number> => {
     const db = getActiveCacheDb();
     if (!db) return 0;
     try {
-        const rows = await db.thumbnails.toArray();
-        if (rows.length >= LARGE_THUMBNAIL_ROW_WARN) {
+        // See sumThumbnailBytes() for why we read the ByteSize index
+        // keys instead of materialising every Blob via toArray().
+        const total = await sumThumbnailBytes(db);
+        const rowCount = await db.thumbnails.count();
+        if (rowCount >= LARGE_THUMBNAIL_ROW_WARN) {
             console.warn('[cache] thumbnail row count is very large', {
-                rows: rows.length,
+                rows: rowCount,
             });
         }
-        return rows.reduce((acc, r) => acc + r.ByteSize, 0);
+        return total;
     } catch (err) {
         console.warn('[cache] cachedBytes failed', { err });
         return 0;

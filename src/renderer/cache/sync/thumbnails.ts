@@ -209,25 +209,35 @@ export const runThumbnailsSweep = async (
     let freshMissCount = 0;
     if (db) {
         try {
-            const rows = await db.thumbnails.toArray();
+            // CRITICAL: do NOT call db.thumbnails.toArray() here — that
+            // would pull every Blob into memory. Instead read just the
+            // primary keys for the full table (which skips the row
+            // store entirely), and separately read only the small
+            // miss-marker rows to decide fresh vs stale.
+            const [allKeys, missRows] = await Promise.all([
+                db.thumbnails.toCollection().primaryKeys() as Promise<[string, number][]>,
+                db.thumbnails.where('MissAt').above(0).toArray(),
+            ]);
             const now = Date.now();
-            for (const row of rows) {
-                if (row.Blob) {
-                    existingKeys.add(`${row.ItemId}:${row.Size}`);
+            const staleMissKeys = new Set<string>();
+            for (const row of missRows) {
+                const missAt = row.MissAt ?? 0;
+                if (now - missAt >= MISS_TTL_MS) {
+                    staleMissKeys.add(`${row.ItemId}:${row.Size}`);
+                    staleMissCount += 1;
                 } else {
-                    const missAt = row.MissAt ?? 0;
-                    if (now - missAt < MISS_TTL_MS) {
-                        existingKeys.add(`${row.ItemId}:${row.Size}`);
-                        freshMissCount += 1;
-                    } else {
-                        staleMissCount += 1;
-                    }
+                    freshMissCount += 1;
                 }
+            }
+            for (const [itemId, size] of allKeys) {
+                const key = `${itemId}:${size}`;
+                if (!staleMissKeys.has(key)) existingKeys.add(key);
             }
             console.info('[cache] thumbnails sweep: prefetched existing keys', {
                 count: existingKeys.size,
                 freshMissCount,
                 staleMissCount,
+                totalRows: allKeys.length,
             });
         } catch (err) {
             console.warn('[cache] thumbnails sweep: prefetch failed', err);
