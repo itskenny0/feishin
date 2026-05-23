@@ -122,12 +122,18 @@ export const resolveThumbnail = async (
                 return undefined;
             }
             if (!res.ok) {
-                console.warn('[cache] thumbnail HTTP error', {
-                    hasAuthHeader: Boolean(headers?.Authorization),
-                    itemId,
-                    size,
-                    status: res.status,
-                });
+                // 404 = item has no artwork at this size, which is the
+                // norm for many items on most Jellyfin libraries.
+                // Silence so the console log viewer doesn't fill with
+                // unactionable warnings. Other statuses still warn.
+                if (res.status !== 404) {
+                    console.warn('[cache] thumbnail HTTP error', {
+                        hasAuthHeader: Boolean(headers?.Authorization),
+                        itemId,
+                        size,
+                        status: res.status,
+                    });
+                }
                 return undefined;
             }
 

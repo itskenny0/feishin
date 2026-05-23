@@ -13,6 +13,23 @@ import { queryClient } from '/@/renderer/lib/react-query';
 const activeDb = (): LibraryCacheDb | undefined =>
     useCacheStore.getState().cacheAvailable === true ? getActiveCacheDb() : undefined;
 
+// Per-queryKey throttle map for background revalidates. After a
+// successful bg refetch we record the timestamp and skip subsequent
+// bg revalidates from the same queryKey for `REVALIDATE_TTL_MS`. This
+// stops large-album / large-playlist surfaces from refetching the
+// entire payload every time the user navigates to them within a
+// session — the cached value is more than fresh enough.
+const lastRevalidateAt = new Map<string, number>();
+const REVALIDATE_TTL_MS = 60_000;
+
+const shouldRevalidate = (queryKey: QueryKey): boolean => {
+    const hash = JSON.stringify(queryKey);
+    const last = lastRevalidateAt.get(hash) ?? 0;
+    if (Date.now() - last < REVALIDATE_TTL_MS) return false;
+    lastRevalidateAt.set(hash, Date.now());
+    return true;
+};
+
 // Sentinel returned by remote() when the network call fails and we want
 // the cold path to resolve with a known-empty value (so Suspense doesn't
 // hang and the consumer's offline-safe render path can take over). We
@@ -44,17 +61,19 @@ export const snapshotSwr = async <TData>(args: {
     const { ctx, queryKey, remote } = args;
     const cached = readSnapshot<TData>(queryKey);
     if (cached !== undefined) {
-        void (async () => {
-            try {
-                const fresh = await remote(ctx);
-                writeSnapshot(queryKey, fresh);
-                queryClient.setQueryData(queryKey, fresh);
-            } catch (err) {
-                if ((err as Error)?.name !== 'AbortError') {
-                    console.info('[cache] background revalidate failed', queryKey, err);
+        if (shouldRevalidate(queryKey)) {
+            void (async () => {
+                try {
+                    const fresh = await remote(ctx);
+                    writeSnapshot(queryKey, fresh);
+                    queryClient.setQueryData(queryKey, fresh);
+                } catch (err) {
+                    if ((err as Error)?.name !== 'AbortError') {
+                        console.info('[cache] background revalidate failed', queryKey, err);
+                    }
                 }
-            }
-        })();
+            })();
+        }
         return cached;
     }
     try {
@@ -104,27 +123,32 @@ export const cachedSwr = async <TData>(args: {
     }
 
     if (cached !== undefined) {
-        // Background revalidate — never awaited. The user already has
-        // their data, so a slow or failed network call must not block
-        // the render or throw out of queryFn.
-        void (async () => {
-            try {
-                const fresh = await remote(ctx);
-                if (db && apply) {
-                    try {
-                        await apply(db, fresh);
-                    } catch (err) {
-                        console.warn('[cache] apply failed (bg)', queryKey, err);
+        // Background revalidate — never awaited AND throttled per
+        // queryKey. The user already has their data, so a slow or
+        // failed network call must not block the render or throw out
+        // of queryFn. The throttle prevents large-album / large-
+        // playlist re-renders every time the user re-enters the page
+        // within the TTL window.
+        if (shouldRevalidate(queryKey)) {
+            void (async () => {
+                try {
+                    const fresh = await remote(ctx);
+                    if (db && apply) {
+                        try {
+                            await apply(db, fresh);
+                        } catch (err) {
+                            console.warn('[cache] apply failed (bg)', queryKey, err);
+                        }
+                    }
+                    writeSnapshot(queryKey, fresh);
+                    queryClient.setQueryData(queryKey, fresh);
+                } catch (err) {
+                    if ((err as Error)?.name !== 'AbortError') {
+                        console.info('[cache] background revalidate failed', queryKey, err);
                     }
                 }
-                writeSnapshot(queryKey, fresh);
-                queryClient.setQueryData(queryKey, fresh);
-            } catch (err) {
-                if ((err as Error)?.name !== 'AbortError') {
-                    console.info('[cache] background revalidate failed', queryKey, err);
-                }
-            }
-        })();
+            })();
+        }
         return cached;
     }
 
