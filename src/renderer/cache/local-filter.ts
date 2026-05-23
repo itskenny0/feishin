@@ -400,7 +400,16 @@ export const filterArtistsLocal = (args: FilterSongArtistsArgs): ArtistListRespo
         out = out.filter((r) => r.Payload.genres?.some((g) => set.has(g.id)));
     }
 
-    out = sortArtists(out.slice(), query.sortBy);
+    if (query.sortBy === ArtistListSort.FAVORITED) {
+        if (!favoriteArtistIds) return undefined;
+        out = out.slice().sort((a, b) => {
+            const af = favoriteArtistIds.has(a.Id) ? 1 : 0;
+            const bf = favoriteArtistIds.has(b.Id) ? 1 : 0;
+            return bf - af;
+        });
+    } else {
+        out = sortArtists(out.slice(), query.sortBy);
+    }
     out = applyDirection(out, query.sortOrder);
 
     const totalRecordCount = out.length;

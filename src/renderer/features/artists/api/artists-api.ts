@@ -6,6 +6,8 @@ import { queryKeys } from '/@/renderer/api/query-keys';
 import { getOptimizedListCount } from '/@/renderer/api/utils-list-count';
 import {
     cachedSwr,
+    filterAlbumArtistsLocal,
+    filterArtistsLocal,
     readSnapshot,
     snapshotSwr,
     toCachedArtistRow,
@@ -19,8 +21,10 @@ import {
     AlbumArtistInfoResponse,
     AlbumArtistListQuery,
     AlbumArtistListResponse,
+    AlbumArtistListSort,
     ArtistListQuery,
     ArtistListResponse,
+    ArtistListSort,
     ListCountQuery,
     SongListResponse,
     SongListSort,
@@ -94,17 +98,28 @@ export const artistsQueries = {
                     },
                     ctx,
                     fromCache: async (db) => {
-                        // Serve the artist list from Dexie so the page paints
-                        // on cold mount and works offline.
-                        const rows = await db.artists.where('Kind').equals('AlbumArtist').toArray();
+                        const rows = await db.artists
+                            .where('Kind')
+                            .equals('AlbumArtist')
+                            .toArray();
                         if (rows.length === 0) return undefined;
-                        rows.sort((a, b) => (a.SortName ?? '').localeCompare(b.SortName ?? ''));
-                        const items = rows.map((r) => r.Payload);
-                        return {
-                            items,
-                            startIndex: 0,
-                            totalRecordCount: items.length,
-                        };
+                        const needsFavorites =
+                            args.query.favorite !== undefined ||
+                            args.query.sortBy === AlbumArtistListSort.FAVORITED;
+                        let favoriteArtistIds: Set<string> | undefined;
+                        if (needsFavorites) {
+                            const favRows = await db.favorites
+                                .filter((r) => r.ItemType === 'AlbumArtist' && r.IsFavorite)
+                                .toArray();
+                            favoriteArtistIds = new Set(favRows.map((r) => r.ItemId));
+                        }
+                        return (
+                            filterAlbumArtistsLocal({
+                                favoriteArtistIds,
+                                query: args.query,
+                                rows,
+                            }) ?? undefined
+                        );
                     },
                     queryKey: key,
                     remote: ({ signal }) =>
@@ -184,15 +199,31 @@ export const artistsQueries = {
                     },
                     ctx,
                     fromCache: async (db) => {
-                        const rows = await db.artists.where('Kind').equals('Artist').toArray();
+                        const rows = await db.artists
+                            .where('Kind')
+                            .equals('Artist')
+                            .toArray();
                         if (rows.length === 0) return undefined;
-                        rows.sort((a, b) => (a.SortName ?? '').localeCompare(b.SortName ?? ''));
-                        const items = rows.map((r) => r.Payload);
-                        return {
-                            items,
-                            startIndex: 0,
-                            totalRecordCount: items.length,
-                        };
+                        const needsFavorites =
+                            args.query.favorite !== undefined ||
+                            args.query.sortBy === ArtistListSort.FAVORITED;
+                        let favoriteArtistIds: Set<string> | undefined;
+                        if (needsFavorites) {
+                            // Jellyfin stores song-artist favorites under
+                            // the 'AlbumArtist' bucket — same underlying
+                            // record shared between both artist kinds.
+                            const favRows = await db.favorites
+                                .filter((r) => r.ItemType === 'AlbumArtist' && r.IsFavorite)
+                                .toArray();
+                            favoriteArtistIds = new Set(favRows.map((r) => r.ItemId));
+                        }
+                        return (
+                            filterArtistsLocal({
+                                favoriteArtistIds,
+                                query: args.query,
+                                rows,
+                            }) ?? undefined
+                        );
                     },
                     queryKey: key,
                     remote: ({ signal }) =>
