@@ -14,7 +14,7 @@ import { useSuspenseQuery } from '@tanstack/react-query';
 import { controller } from '/@/renderer/api/controller';
 import { queryKeys } from '/@/renderer/api/query-keys';
 import { cachedSwr, markSearchDirty, readSnapshot, useCachedQuery } from '/@/renderer/cache';
-import { Genre, GenreListQuery, GenreListResponse } from '/@/shared/types/domain-types';
+import { Genre, GenreListQuery, GenreListResponse, SortOrder } from '/@/shared/types/domain-types';
 
 interface CachedQueryHookOptions {
     enabled?: boolean;
@@ -65,9 +65,16 @@ export const useGenreListQuery = (args: GenreQueryArgs) => {
         fromCache: async (db) => {
             const rows = await db.genres.orderBy('SortName').toArray();
             if (rows.length === 0) return undefined;
+            if (query.sortOrder === SortOrder.DESC) rows.reverse();
+            const startIndex = query.startIndex ?? 0;
+            const limit = query.limit;
+            const page =
+                limit === undefined || limit < 0
+                    ? rows.slice(startIndex)
+                    : rows.slice(startIndex, startIndex + limit);
             return {
-                items: rows.map((r) => r.Payload),
-                startIndex: 0,
+                items: page.map((r) => r.Payload),
+                startIndex,
                 totalRecordCount: rows.length,
             };
         },

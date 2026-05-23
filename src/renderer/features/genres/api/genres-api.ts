@@ -41,11 +41,18 @@ export const genresQueries = {
                         const sorted = rows
                             .slice()
                             .sort((a, b) => (a.SortName ?? '').localeCompare(b.SortName ?? ''));
-                        const items = sorted.map((r) => r.Payload);
+                        if (args.query.sortOrder === SortOrder.DESC) sorted.reverse();
+                        const startIndex = args.query.startIndex ?? 0;
+                        const limit = args.query.limit;
+                        const page =
+                            limit === undefined || limit < 0
+                                ? sorted.slice(startIndex)
+                                : sorted.slice(startIndex, startIndex + limit);
+                        const items = page.map((r) => r.Payload);
                         return {
                             items,
-                            startIndex: 0,
-                            totalRecordCount: items.length,
+                            startIndex,
+                            totalRecordCount: sorted.length,
                         };
                     },
                     queryKey: key,
