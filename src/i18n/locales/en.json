@@ -502,6 +502,13 @@
         }
     },
     "page": {
+        "cacheOptIn": {
+            "title": "Enable local-first cache?",
+            "body1": "Feishin can keep a local copy of your Jellyfin library so every screen renders instantly, even on slow networks.",
+            "body2": "You can enable it now or anytime from Settings → Library sync.",
+            "enableButton": "Enable now",
+            "declineButton": "Set up later"
+        },
         "albumArtistDetail": {
             "about": "About {{artist}}",
             "appearsOn": "Appears on",
@@ -799,7 +806,11 @@
             "logger": "Logger",
             "playerFilters": "Player Filters",
             "trackmap": "Trackmap",
-            "visualizer": "Visualizer Settings"
+            "visualizer": "Visualizer Settings",
+            "librarySyncDashboard": {
+                "masterToggleLabel": "Enable local-first cache",
+                "masterToggleHint": "Enable the cache to use these controls."
+            }
         },
         "sidebar": {
             "albumArtists": "$t(entity.albumArtist, {\"count\": 2})",

@@ -316,10 +316,10 @@
 
 .subpage-description {
     overflow: hidden;
+    text-overflow: ellipsis;
     font-size: 0.78rem;
     line-height: 1.3;
     color: color-mix(in srgb, var(--theme-colors-foreground) 65%, transparent);
-    text-overflow: ellipsis;
     white-space: normal;
 }
 

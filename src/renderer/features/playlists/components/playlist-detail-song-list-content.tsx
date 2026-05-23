@@ -1,14 +1,15 @@
-import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router';
 
+import { queryKeys } from '/@/renderer/api/query-keys';
 import { useItemListPagination } from '/@/renderer/components/item-list/item-list-pagination/use-item-list-pagination';
 import { ItemListHandle } from '/@/renderer/components/item-list/types';
 import { useListContext } from '/@/renderer/context/list-context';
 import { eventEmitter } from '/@/renderer/events/event-emitter';
-import { playlistsQueries } from '/@/renderer/features/playlists/api/playlists-api';
 import { PlaylistDetailAlbumView } from '/@/renderer/features/playlists/components/playlist-detail-album-view';
 import { usePlaylistTrackList } from '/@/renderer/features/playlists/hooks/use-playlist-track-list';
+import { usePlaylistSongListSuspenseQuery } from '/@/renderer/features/playlists/queries/playlists-queries';
 import { useCurrentServer, useListSettings } from '/@/renderer/store';
 import { Spinner } from '/@/shared/components/spinner/spinner';
 import {
@@ -53,14 +54,10 @@ export const PlaylistDetailSongListContent = () => {
     const server = useCurrentServer();
     const queryClient = useQueryClient();
 
-    const playlistSongsQuery = useSuspenseQuery(
-        playlistsQueries.songList({
-            query: {
-                id: playlistId,
-            },
-            serverId: server?.id,
-        }),
-    );
+    const playlistSongsQuery = usePlaylistSongListSuspenseQuery({
+        playlistId,
+        serverId: server?.id,
+    });
 
     useEffect(() => {
         const handleRefresh = async (payload: { key: string }) => {
@@ -71,12 +68,7 @@ export const PlaylistDetailSongListContent = () => {
                 return;
             }
 
-            const queryKey = playlistsQueries.songList({
-                query: {
-                    id: playlistId,
-                },
-                serverId: server?.id,
-            }).queryKey;
+            const queryKey = queryKeys.playlists.songList(server?.id ?? '', playlistId);
 
             await queryClient.invalidateQueries({ queryKey });
             await queryClient.refetchQueries({ queryKey });

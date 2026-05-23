@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 
 import styles from './context-menu-preview.module.css';
 
+import { CachedImage } from '/@/renderer/cache';
 import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import {
     useShowFilesystemNameForAlbums,
@@ -65,6 +66,13 @@ const getItemImage = (item: unknown): null | string => {
     return null;
 };
 
+const getItemId = (item: unknown): null | string => {
+    if (item && typeof item === 'object' && 'id' in item && typeof item.id === 'string') {
+        return item.id;
+    }
+    return null;
+};
+
 export const ContextMenuPreview = ({ items, itemType }: ContextMenuPreviewProps) => {
     const { t } = useTranslation();
     const useFsForAlbums = useShowFilesystemNameForAlbums();
@@ -82,6 +90,7 @@ export const ContextMenuPreview = ({ items, itemType }: ContextMenuPreviewProps)
     const itemName = filesystemName || metadataName;
 
     const itemImage = firstItem ? getItemImage(firstItem) : null;
+    const itemId = firstItem ? getItemId(firstItem) : null;
     const isMultiple = itemCount > 1;
 
     const imageUrl = useItemImageUrl({
@@ -102,7 +111,17 @@ export const ContextMenuPreview = ({ items, itemType }: ContextMenuPreviewProps)
                 <div className={styles.content}>
                     {itemImage ? (
                         <div className={styles.imageContainer}>
-                            <img alt={itemName} className={styles.image} src={imageUrl} />
+                            {imageUrl && itemId ? (
+                                <CachedImage
+                                    alt={itemName}
+                                    className={styles.image}
+                                    itemId={itemId}
+                                    size={96}
+                                    src={imageUrl}
+                                />
+                            ) : (
+                                <img alt={itemName} className={styles.image} src={imageUrl ?? ''} />
+                            )}
                             <div className={styles.imageOverlay} />
                         </div>
                     ) : (

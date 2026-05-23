@@ -1,11 +1,9 @@
 import { closeAllModals, openModal } from '@mantine/modals';
-import { useSuspenseQuery } from '@tanstack/react-query';
 import { Suspense, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { generatePath, useNavigate, useParams } from 'react-router';
 
 import { ListContext, useListContext } from '/@/renderer/context/list-context';
-import { playlistsQueries } from '/@/renderer/features/playlists/api/playlists-api';
 import { ClientSideSongFilters } from '/@/renderer/features/playlists/components/client-side-song-filters';
 import { PlaylistDetailSongListContent } from '/@/renderer/features/playlists/components/playlist-detail-song-list-content';
 import { PlaylistDetailSongListHeader } from '/@/renderer/features/playlists/components/playlist-detail-song-list-header';
@@ -15,6 +13,7 @@ import { SaveAsPlaylistForm } from '/@/renderer/features/playlists/components/sa
 import { usePlaylistSongListFilters } from '/@/renderer/features/playlists/hooks/use-playlist-song-list-filters';
 import { useDeletePlaylist } from '/@/renderer/features/playlists/mutations/delete-playlist-mutation';
 import { useUpdatePlaylist } from '/@/renderer/features/playlists/mutations/update-playlist-mutation';
+import { usePlaylistDetailSuspenseQuery } from '/@/renderer/features/playlists/queries/playlists-queries';
 import { AnimatedPage } from '/@/renderer/features/shared/components/animated-page';
 import { ListWithSidebarContainer } from '/@/renderer/features/shared/components/list-with-sidebar-container';
 import { PageErrorBoundary } from '/@/renderer/features/shared/components/page-error-boundary';
@@ -77,8 +76,9 @@ const PlaylistDetailSongListRoute = () => {
     const { playlistId } = useParams() as { playlistId: string };
     const server = useCurrentServer();
 
-    const detailQuery = useSuspenseQuery({
-        ...playlistsQueries.detail({ query: { id: playlistId }, serverId: server?.id }),
+    const detailQuery = usePlaylistDetailSuspenseQuery({
+        query: { id: playlistId },
+        serverId: server?.id,
     });
     const deletePlaylistMutation = useDeletePlaylist({});
     const updatePlaylistMutation = useUpdatePlaylist({});

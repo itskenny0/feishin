@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { shuffle } from 'lodash';
 import { memo, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -9,7 +9,8 @@ import styles from './featured-genres.module.css';
 import { api } from '/@/renderer/api';
 import { queryKeys } from '/@/renderer/api/query-keys';
 import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
-import { genresQueries, useFuzzyGenreIds } from '/@/renderer/features/genres/api/genres-api';
+import { useFuzzyGenreIds } from '/@/renderer/features/genres/api/genres-api';
+import { useGenreListSuspenseQuery } from '/@/renderer/features/genres/queries/genres-queries';
 import { isCleanGenreName } from '/@/renderer/features/home/utils/genre-filter';
 import { useIsPlayerFetching, usePlayer } from '/@/renderer/features/player/context/player-context';
 import { PlayButton } from '/@/renderer/features/shared/components/play-button';
@@ -74,17 +75,15 @@ export const FeaturedGenres = () => {
         sm: 360,
     });
 
-    const genresQuery = useSuspenseQuery({
-        ...genresQueries.list({
-            query: {
-                limit: -1,
-                sortBy: GenreListSort.NAME,
-                sortOrder: SortOrder.ASC,
-                startIndex: 0,
-            },
-            serverId: server?.id,
-        }),
+    const genresQuery = useGenreListSuspenseQuery({
+        query: {
+            limit: -1,
+            sortBy: GenreListSort.NAME,
+            sortOrder: SortOrder.ASC,
+            startIndex: 0,
+        },
         queryKey: [server.id, 'home', 'featured-genres'],
+        serverId: server?.id,
     });
 
     const randomGenres = useMemo(() => {

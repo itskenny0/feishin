@@ -1,5 +1,4 @@
 import { closeModal, ContextModalProps } from '@mantine/modals';
-import { useQuery } from '@tanstack/react-query';
 import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -15,8 +14,8 @@ import {
     getPlaylistSongsById,
     getSongsByFolder,
 } from '/@/renderer/features/player/utils';
-import { playlistsQueries } from '/@/renderer/features/playlists/api/playlists-api';
 import { useAddToPlaylist } from '/@/renderer/features/playlists/mutations/add-to-playlist-mutation';
+import { usePlaylistListQuery } from '/@/renderer/features/playlists/queries/playlists-queries';
 import { queryClient } from '/@/renderer/lib/react-query';
 import { useCurrentServerId } from '/@/renderer/store';
 import { formatDurationString } from '/@/renderer/utils';
@@ -81,17 +80,15 @@ export const AddToPlaylistContextModal = ({
 
     const addToPlaylistMutation = useAddToPlaylist({});
 
-    const playlistList = useQuery(
-        playlistsQueries.list({
-            query: {
-                excludeSmartPlaylists: true,
-                sortBy: PlaylistListSort.NAME,
-                sortOrder: SortOrder.ASC,
-                startIndex: 0,
-            },
-            serverId,
-        }),
-    );
+    const playlistList = usePlaylistListQuery({
+        query: {
+            excludeSmartPlaylists: true,
+            sortBy: PlaylistListSort.NAME,
+            sortOrder: SortOrder.ASC,
+            startIndex: 0,
+        },
+        serverId,
+    });
 
     const [playlistSelect, playlistMap] = useMemo(() => {
         const existingPlaylists = new Array<Playlist & { label: string; value: string }>();

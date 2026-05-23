@@ -1,8 +1,6 @@
-import { QueryFunctionContext, useSuspenseInfiniteQuery } from '@tanstack/react-query';
+import { QueryFunctionContext } from '@tanstack/react-query';
 import { Suspense, useCallback, useMemo } from 'react';
 
-import { api } from '/@/renderer/api';
-import { queryKeys } from '/@/renderer/api/query-keys';
 import {
     GridCarousel,
     GridCarouselSkeletonFallback,
@@ -11,6 +9,7 @@ import {
 import { DataRow, MemoizedItemCard } from '/@/renderer/components/item-card/item-card';
 import { useDefaultItemListControls } from '/@/renderer/components/item-list/helpers/item-list-controls';
 import { useGridRows } from '/@/renderer/components/item-list/helpers/use-grid-rows';
+import { useAlbumInfiniteListSuspenseQuery } from '/@/renderer/features/albums/queries/albums-queries';
 import { useCurrentServerId } from '/@/renderer/store';
 import {
     Album,
@@ -144,37 +143,14 @@ function useAlbumListInfinite(
 ) {
     const serverId = useCurrentServerId();
 
-    const defaultQueryKey = queryKeys.albums.infiniteList(serverId, {
-        sortBy,
-        sortOrder,
-        ...additionalQuery,
-    });
-
-    const query = useSuspenseInfiniteQuery<AlbumListResponse>({
-        getNextPageParam: (lastPage, _allPages, lastPageParam) => {
-            if (lastPage.items.length < itemLimit) {
-                return undefined;
-            }
-
-            const nextPageParam = Number(lastPageParam) + itemLimit;
-
-            return String(nextPageParam);
+    return useAlbumInfiniteListSuspenseQuery({
+        itemLimit,
+        query: {
+            sortBy,
+            sortOrder,
+            ...additionalQuery,
         },
-        initialPageParam: '0',
-        queryFn: ({ pageParam, signal }) => {
-            return api.controller.getAlbumList({
-                apiClientProps: { serverId, signal },
-                query: {
-                    limit: itemLimit,
-                    sortBy,
-                    sortOrder,
-                    startIndex: Number(pageParam),
-                    ...additionalQuery,
-                },
-            });
-        },
-        queryKey: overrideQueryKey || defaultQueryKey,
+        queryKey: overrideQueryKey,
+        serverId,
     });
-
-    return query;
 }

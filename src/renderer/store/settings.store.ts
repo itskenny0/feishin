@@ -793,6 +793,22 @@ const AutoDJSettingsSchema = z.object({
 });
 
 /**
+ * Local-first cache opt-in slice.
+ *
+ *  - `enabled` — three-state knob driving the first-launch opt-in flow.
+ *    `undefined` means the user has never been asked (the modal opens on
+ *    next launch when at least one server is configured). `true` activates
+ *    the cache lifecycle, hydration banner, sync chip, and mutation
+ *    worker. `false` keeps the subsystem inert.
+ *  - `capacityBytes` — user-configurable storage cap on web / Android.
+ *    `undefined` falls back to the platform default (see `eviction.ts`).
+ */
+const LocalCacheSettingsSchema = z.object({
+    capacityBytes: z.number().optional(),
+    enabled: z.boolean().optional(),
+});
+
+/**
  * This schema is used for validation of the imported settings json
  */
 export const ValidationSettingsStateSchema = z.object({
@@ -803,6 +819,7 @@ export const ValidationSettingsStateSchema = z.object({
     general: GeneralSettingsSchema,
     hotkeys: HotkeysSettingsSchema,
     lists: z.record(z.nativeEnum(ItemListKey), ItemListConfigSchema),
+    localCache: LocalCacheSettingsSchema,
     lyrics: LyricsSettingsSchema,
     lyricsDisplay: z.record(z.string(), LyricsDisplaySettingsSchema),
     playback: PlaybackSettingsSchema,
@@ -1000,6 +1017,8 @@ export type ItemListSettings = {
     table: DataTableProps;
 };
 
+export type LocalCacheSettings = z.infer<typeof LocalCacheSettingsSchema>;
+
 export type PlayerFilter = z.infer<typeof PlayerFilterSchema>;
 
 export type PlayerFilterField = z.infer<typeof PlayerFilterFieldSchema>;
@@ -1017,6 +1036,7 @@ export interface SettingsSlice extends z.infer<typeof SettingsStateSchema> {
         setGenreBehavior: (target: GenreTarget) => void;
         setHomeItems: (item: SortableItem<HomeItem>[]) => void;
         setList: (type: ItemListKey, data: DeepPartial<ItemListSettings>) => void;
+        setLocalCache: (partial: Partial<LocalCacheSettings>) => void;
         setPlaybackFilters: (filters: PlayerFilter[]) => void;
         setPlayerItems: (items: SortableItem<PlayerItem>[]) => void;
         setPlaylistBehavior: (target: PlaylistTarget) => void;
@@ -1988,6 +2008,10 @@ const initialState: SettingsState = {
             },
         },
     },
+    localCache: {
+        capacityBytes: undefined,
+        enabled: undefined,
+    },
     lyrics: {
         alignment: 'center',
         delayMs: 0,
@@ -2227,6 +2251,11 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                                 if (listState) {
                                     Object.assign(listState, data);
                                 }
+                            });
+                        },
+                        setLocalCache: (partial) => {
+                            set((state) => {
+                                state.localCache = { ...state.localCache, ...partial };
                             });
                         },
                         setPlaybackFilters: (filters: PlayerFilter[]) => {
@@ -2875,10 +2904,24 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
+                if (version <= 44) {
+                    // Seed the new localCache slice for users upgrading from
+                    // a build that predates the opt-in modal. `enabled` left
+                    // undefined so the modal opens on next launch; capacity
+                    // left undefined so eviction falls back to the platform
+                    // default until the user picks a cap.
+                    if (!state.localCache || typeof state.localCache !== 'object') {
+                        state.localCache = {
+                            capacityBytes: undefined,
+                            enabled: undefined,
+                        };
+                    }
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 44,
+            version: 45,
         },
     ),
 );

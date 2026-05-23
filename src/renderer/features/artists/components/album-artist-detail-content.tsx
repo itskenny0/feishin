@@ -1,9 +1,4 @@
-import {
-    useQuery,
-    useQueryClient,
-    useSuspenseQuery,
-    UseSuspenseQueryResult,
-} from '@tanstack/react-query';
+import { useQueryClient, useSuspenseQuery, UseSuspenseQueryResult } from '@tanstack/react-query';
 import { motion } from 'motion/react';
 import { memo, Suspense, useCallback, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -22,8 +17,13 @@ import { SONG_TABLE_COLUMNS } from '/@/renderer/components/item-list/item-table-
 import { ItemTableList } from '/@/renderer/components/item-list/item-table-list/item-table-list';
 import { ItemTableListColumn } from '/@/renderer/components/item-list/item-table-list/item-table-list-column';
 import { ItemControls } from '/@/renderer/components/item-list/types';
-import { artistsQueries } from '/@/renderer/features/artists/api/artists-api';
 import { AlbumArtistGridCarousel } from '/@/renderer/features/artists/components/album-artist-grid-carousel';
+import {
+    useAlbumArtistDetailQuery,
+    useAlbumArtistInfoQuery,
+    useArtistFavoriteSongsQuery,
+    useArtistTopSongsQuery,
+} from '/@/renderer/features/artists/queries/artists-queries';
 import { useIsPlayerFetching, usePlayer } from '/@/renderer/features/player/context/player-context';
 import {
     ListConfigMenu,
@@ -210,20 +210,16 @@ const AlbumArtistMetadataBiography = ({
     const { t } = useTranslation();
     const server = useCurrentServer();
 
-    const artistInfoQuery = useQuery({
-        ...artistsQueries.albumArtistInfo({
-            query: { id: routeId, limit: 10 },
-            serverId: server?.id,
-        }),
-        enabled: Boolean(server?.id && routeId),
+    const artistInfoQuery = useAlbumArtistInfoQuery({
+        options: { enabled: Boolean(server?.id && routeId) },
+        query: { id: routeId, limit: 10 },
+        serverId: server?.id,
     });
 
-    const detailQuery = useQuery({
-        ...artistsQueries.albumArtistDetail({
-            query: { id: routeId },
-            serverId: server?.id,
-        }),
-        enabled: Boolean(server?.id && routeId),
+    const detailQuery = useAlbumArtistDetailQuery({
+        options: { enabled: Boolean(server?.id && routeId) },
+        query: { id: routeId },
+        serverId: server?.id,
     });
 
     const biography = artistInfoQuery.data?.biography || detailQuery.data?.biography;
@@ -329,16 +325,14 @@ const AlbumArtistMetadataTopSongsContent = ({
 
     const canStartQuery = server?.type === ServerType.JELLYFIN || !!detailQuery.data?.name;
 
-    const topSongsQuery = useQuery({
-        ...artistsQueries.topSongs({
-            query: {
-                artist: detailQuery.data?.name || '',
-                artistId: routeId,
-                type: topSongsQueryType,
-            },
-            serverId: serverId,
-        }),
-        enabled: canStartQuery,
+    const topSongsQuery = useArtistTopSongsQuery({
+        options: { enabled: canStartQuery },
+        query: {
+            artist: detailQuery.data?.name || '',
+            artistId: routeId,
+            type: topSongsQueryType,
+        },
+        serverId: serverId,
     });
 
     const songs = useMemo(() => topSongsQuery.data?.items || [], [topSongsQuery.data?.items]);
@@ -618,13 +612,11 @@ const AlbumArtistMetadataFavoriteSongs = ({
     const player = usePlayer();
     const serverId = useCurrentServerId();
 
-    const favoriteSongsQuery = useQuery({
-        ...artistsQueries.favoriteSongs({
-            query: {
-                artistId: routeId,
-            },
-            serverId: serverId,
-        }),
+    const favoriteSongsQuery = useArtistFavoriteSongsQuery({
+        query: {
+            artistId: routeId,
+        },
+        serverId: serverId,
     });
 
     const songs = useMemo(
@@ -1035,12 +1027,10 @@ const AlbumArtistMetadataSimilarArtists = ({
     const server = useCurrentServer();
     const serverId = useCurrentServerId();
 
-    const artistInfoQuery = useQuery({
-        ...artistsQueries.albumArtistInfo({
-            query: { id: routeId, limit: 10 },
-            serverId: server?.id,
-        }),
-        enabled: Boolean(server?.id && routeId),
+    const artistInfoQuery = useAlbumArtistInfoQuery({
+        options: { enabled: Boolean(server?.id && routeId) },
+        query: { id: routeId, limit: 10 },
+        serverId: server?.id,
     });
 
     const relatedArtists = artistInfoQuery.data?.similarArtists ?? null;

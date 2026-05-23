@@ -1,5 +1,5 @@
 import { openContextModal } from '@mantine/modals';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import Fuse from 'fuse.js';
 import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -13,9 +13,9 @@ import {
     getPlaylistSongsById,
     getSongsByFolder,
 } from '/@/renderer/features/player/utils';
-import { playlistsQueries } from '/@/renderer/features/playlists/api/playlists-api';
 import { useRecentPlaylists } from '/@/renderer/features/playlists/hooks/use-recent-playlists';
 import { useAddToPlaylist } from '/@/renderer/features/playlists/mutations/add-to-playlist-mutation';
+import { usePlaylistListQuery } from '/@/renderer/features/playlists/queries/playlists-queries';
 import { useCurrentServer, useCurrentServerId } from '/@/renderer/store';
 import { Checkbox } from '/@/shared/components/checkbox/checkbox';
 import { ContextMenu } from '/@/shared/components/context-menu/context-menu';
@@ -44,17 +44,15 @@ export const AddToPlaylistAction = ({ items, itemType }: AddToPlaylistActionProp
     });
     const addToPlaylistMutation = useAddToPlaylist({});
 
-    const playlistsQuery = useQuery(
-        playlistsQueries.list({
-            query: {
-                excludeSmartPlaylists: true,
-                sortBy: PlaylistListSort.NAME,
-                sortOrder: SortOrder.ASC,
-                startIndex: 0,
-            },
-            serverId: server?.id,
-        }),
-    );
+    const playlistsQuery = usePlaylistListQuery({
+        query: {
+            excludeSmartPlaylists: true,
+            sortBy: PlaylistListSort.NAME,
+            sortOrder: SortOrder.ASC,
+            startIndex: 0,
+        },
+        serverId: server?.id,
+    });
 
     const { recentPlaylistId } = useRecentPlaylists(serverId);
 

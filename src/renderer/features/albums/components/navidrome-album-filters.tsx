@@ -1,11 +1,10 @@
-import { useQuery } from '@tanstack/react-query';
 import { ChangeEvent, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { getItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { useAlbumListFilters } from '/@/renderer/features/albums/hooks/use-album-list-filters';
-import { artistsQueries } from '/@/renderer/features/artists/api/artists-api';
-import { genresQueries } from '/@/renderer/features/genres/api/genres-api';
+import { useAlbumArtistListQuery } from '/@/renderer/features/artists/queries/artists-queries';
+import { useGenreListQuery } from '/@/renderer/features/genres/queries/genres-queries';
 import {
     ArtistMultiSelectRow,
     GenreMultiSelectRow,
@@ -59,20 +58,17 @@ export const NavidromeAlbumFilters = ({
         setRecentlyPlayed,
     } = useAlbumListFilters();
 
-    const genreListQuery = useQuery(
-        genresQueries.list({
-            options: {
-                gcTime: 1000 * 60 * 2,
-                staleTime: 1000 * 60 * 1,
-            },
-            query: {
-                sortBy: GenreListSort.NAME,
-                sortOrder: SortOrder.ASC,
-                startIndex: 0,
-            },
-            serverId,
-        }),
-    );
+    const genreListQuery = useGenreListQuery({
+        options: {
+            staleTime: 1000 * 60 * 1,
+        },
+        query: {
+            sortBy: GenreListSort.NAME,
+            sortOrder: SortOrder.ASC,
+            startIndex: 0,
+        },
+        serverId,
+    });
 
     const genreList = useMemo(() => {
         if (!genreListQuery?.data) return [];
@@ -153,20 +149,17 @@ export const NavidromeAlbumFilters = ({
         [setMinYear, setMaxYear],
     );
 
-    const albumArtistListQuery = useQuery(
-        artistsQueries.albumArtistList({
-            options: {
-                gcTime: 1000 * 60 * 2,
-                staleTime: 1000 * 60 * 1,
-            },
-            query: {
-                sortBy: AlbumArtistListSort.NAME,
-                sortOrder: SortOrder.ASC,
-                startIndex: 0,
-            },
-            serverId,
-        }),
-    );
+    const albumArtistListQuery = useAlbumArtistListQuery({
+        options: {
+            staleTime: 1000 * 60 * 1,
+        },
+        query: {
+            sortBy: AlbumArtistListSort.NAME,
+            sortOrder: SortOrder.ASC,
+            startIndex: 0,
+        },
+        serverId,
+    });
 
     const selectableAlbumArtists = useMemo(() => {
         if (!albumArtistListQuery?.data?.items) return [];

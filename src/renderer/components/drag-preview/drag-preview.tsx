@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 
 import styles from './drag-preview.module.css';
 
+import { CachedImage } from '/@/renderer/cache';
 import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { Icon } from '/@/shared/components/icon/icon';
 import { LibraryItem } from '/@/shared/types/domain-types';
@@ -46,7 +47,17 @@ export const DragPreview = memo(({ data }: DragPreviewProps) => {
                 <div className={styles.content}>
                     {itemImage ? (
                         <div className={styles['image-container']}>
-                            <img alt={itemName} className={styles.image} src={itemImage} />
+                            {data.id[0] ? (
+                                <CachedImage
+                                    alt={itemName}
+                                    className={styles.image}
+                                    itemId={data.id[0]}
+                                    size={96}
+                                    src={itemImage}
+                                />
+                            ) : (
+                                <img alt={itemName} className={styles.image} src={itemImage} />
+                            )}
                             <div className={styles['image-overlay']} />
                         </div>
                     ) : (

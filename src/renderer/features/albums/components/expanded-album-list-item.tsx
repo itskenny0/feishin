@@ -1,4 +1,3 @@
-import { useSuspenseQuery } from '@tanstack/react-query';
 import clsx from 'clsx';
 import formatDuration from 'format-duration';
 import { t } from 'i18next';
@@ -18,7 +17,7 @@ import {
     useItemSelectionState,
 } from '/@/renderer/components/item-list/helpers/item-list-state';
 import { ItemListItem } from '/@/renderer/components/item-list/types';
-import { albumQueries } from '/@/renderer/features/albums/api/album-api';
+import { useAlbumDetailSuspenseQuery } from '/@/renderer/features/albums/queries/albums-queries';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
 import { PlayButtonGroup } from '/@/renderer/features/shared/components/play-button-group';
 import { RouteSkeleton } from '/@/renderer/features/shared/components/route-skeleton';
@@ -333,12 +332,10 @@ const ExpandedAlbumListItemContent = ({ albumData }: ExpandedAlbumListItemConten
 };
 
 const ExpandedAlbumListItemWithFetch = ({ item }: { item: ItemListStateItem }) => {
-    const { data } = useSuspenseQuery(
-        albumQueries.detail({
-            query: { id: item.id },
-            serverId: item._serverId,
-        }),
-    );
+    const { data } = useAlbumDetailSuspenseQuery({
+        query: { id: item.id },
+        serverId: item._serverId,
+    });
 
     const albumData: ExpandedAlbumData = {
         _serverId: item._serverId,

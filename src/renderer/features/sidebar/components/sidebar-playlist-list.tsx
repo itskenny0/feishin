@@ -1,5 +1,4 @@
 import { openContextModal } from '@mantine/modals';
-import { useQuery } from '@tanstack/react-query';
 import clsx from 'clsx';
 import { motion } from 'motion/react';
 import { createContext, memo, MouseEvent, useCallback, useContext, useMemo, useState } from 'react';
@@ -11,9 +10,9 @@ import styles from './sidebar-playlist-list.module.css';
 import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { ContextMenuController } from '/@/renderer/features/context-menu/context-menu-controller';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
-import { playlistsQueries } from '/@/renderer/features/playlists/api/playlists-api';
 import { openCreatePlaylistModal } from '/@/renderer/features/playlists/components/create-playlist-form';
 import { useIsMutatingSidebarPlaylistFolderMove } from '/@/renderer/features/playlists/mutations/sidebar-playlist-folder-move-mutation';
+import { usePlaylistListQuery } from '/@/renderer/features/playlists/queries/playlists-queries';
 import { ItemRowPlayControls } from '/@/renderer/features/shared/components/item-row-play-controls';
 import {
     collectFolderPaths,
@@ -373,16 +372,14 @@ export const SidebarPlaylistList = () => {
     const sidebarPlaylistSorting = useSidebarPlaylistSorting();
     const filterRegex = useSidebarPlaylistListFilterRegex();
 
-    const playlistsQuery = useQuery(
-        playlistsQueries.list({
-            query: {
-                sortBy: PlaylistListSort.NAME,
-                sortOrder: SortOrder.ASC,
-                startIndex: 0,
-            },
-            serverId: server?.id,
-        }),
-    );
+    const playlistsQuery = usePlaylistListQuery({
+        query: {
+            sortBy: PlaylistListSort.NAME,
+            sortOrder: SortOrder.ASC,
+            startIndex: 0,
+        },
+        serverId: server?.id,
+    });
 
     const handlePlayPlaylist = useCallback(
         (id: string, playType: Play) => {
@@ -633,16 +630,14 @@ export const SidebarSharedPlaylistList = () => {
     const sidebarPlaylistSorting = useSidebarPlaylistSorting();
     const filterRegex = useSidebarPlaylistListFilterRegex();
 
-    const playlistsQuery = useQuery(
-        playlistsQueries.list({
-            query: {
-                sortBy: PlaylistListSort.NAME,
-                sortOrder: SortOrder.ASC,
-                startIndex: 0,
-            },
-            serverId: server?.id,
-        }),
-    );
+    const playlistsQuery = usePlaylistListQuery({
+        query: {
+            sortBy: PlaylistListSort.NAME,
+            sortOrder: SortOrder.ASC,
+            startIndex: 0,
+        },
+        serverId: server?.id,
+    });
 
     const handlePlayPlaylist = useCallback(
         (id: string, playType: Play) => {

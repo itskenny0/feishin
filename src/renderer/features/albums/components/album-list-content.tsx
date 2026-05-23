@@ -1,10 +1,9 @@
-import { useSuspenseQuery } from '@tanstack/react-query';
 import { lazy, Suspense, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useListContext } from '/@/renderer/context/list-context';
-import { albumQueries } from '/@/renderer/features/albums/api/album-api';
 import { useAlbumListFilters } from '/@/renderer/features/albums/hooks/use-album-list-filters';
+import { useAlbumListCountQuery } from '/@/renderer/features/albums/queries/albums-queries';
 import { EmptyState, EmptyStateProps } from '/@/renderer/features/shared/components/empty-state';
 import { ListFilters, ListFiltersTitle } from '/@/renderer/features/shared/components/list-filters';
 import { ListWithSidebarContainer } from '/@/renderer/features/shared/components/list-with-sidebar-container';
@@ -134,12 +133,10 @@ export const AlbumListView = ({
         };
     }, [query, overrideQuery]);
 
-    const countQuery = useSuspenseQuery(
-        albumQueries.listCount({
-            query: { ...mergedQuery, limit: itemsPerPage },
-            serverId: server.id,
-        }),
-    );
+    const countQuery = useAlbumListCountQuery({
+        query: { ...mergedQuery, limit: itemsPerPage },
+        serverId: server.id,
+    });
 
     if (countQuery.data === 0) {
         const fallback: EmptyStateProps = {

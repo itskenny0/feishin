@@ -1,5 +1,4 @@
 import { openContextModal } from '@mantine/modals';
-import { useQuery } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router';
@@ -12,9 +11,9 @@ import {
 } from '/@/renderer/components/item-list/item-table-list/default-columns';
 import { useListContext } from '/@/renderer/context/list-context';
 import { ContextMenuController } from '/@/renderer/features/context-menu/context-menu-controller';
-import { playlistsQueries } from '/@/renderer/features/playlists/api/playlists-api';
 import { ClientSideSongFilters } from '/@/renderer/features/playlists/components/client-side-song-filters';
 import { usePlaylistSongListFilters } from '/@/renderer/features/playlists/hooks/use-playlist-song-list-filters';
+import { usePlaylistDetailQuery } from '/@/renderer/features/playlists/queries/playlists-queries';
 import { FilterButton } from '/@/renderer/features/shared/components/filter-button';
 import {
     ListConfigMenu,
@@ -124,7 +123,7 @@ export const PlaylistDetailSongListHeaderFilters = ({
     const { setPlaylistBehavior } = useSettingsStoreActions();
     const serverId = useCurrentServerId();
 
-    const detailQuery = useQuery(playlistsQueries.detail({ query: { id: playlistId }, serverId }));
+    const detailQuery = usePlaylistDetailQuery({ query: { id: playlistId }, serverId });
 
     const handleMore = (event: React.MouseEvent<HTMLButtonElement>) => {
         if (!detailQuery.data) return;

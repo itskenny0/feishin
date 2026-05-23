@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { forwardRef, Fragment, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router';
@@ -6,8 +6,8 @@ import { Link, useParams } from 'react-router';
 import styles from './album-detail-header.module.css';
 
 import { queryKeys } from '/@/renderer/api/query-keys';
-import { albumQueries } from '/@/renderer/features/albums/api/album-api';
 import { JoinedArtists } from '/@/renderer/features/albums/components/joined-artists';
+import { useAlbumDetailQuery } from '/@/renderer/features/albums/queries/albums-queries';
 import { ContextMenuController } from '/@/renderer/features/context-menu/context-menu-controller';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
 import {
@@ -51,9 +51,10 @@ export const AlbumDetailHeader = forwardRef<HTMLDivElement>((_props, ref) => {
     const queryClient = useQueryClient();
     const albumRadioCount = useArtistRadioCount();
     const [artistsExpanded, setArtistsExpanded] = useState(false);
-    const detailQuery = useQuery(
-        albumQueries.detail({ query: { id: albumId }, serverId: server?.id }),
-    );
+    const detailQuery = useAlbumDetailQuery({
+        query: { id: albumId },
+        serverId: server?.id,
+    });
 
     const showRating =
         showRatings &&

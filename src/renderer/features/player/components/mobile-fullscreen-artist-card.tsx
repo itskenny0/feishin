@@ -1,12 +1,12 @@
-import { useQuery } from '@tanstack/react-query';
 import { memo, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { generatePath, Link } from 'react-router';
 
 import styles from './mobile-fullscreen-player.module.css';
 
+import { CachedImage } from '/@/renderer/cache';
 import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
-import { artistsQueries } from '/@/renderer/features/artists/api/artists-api';
+import { useAlbumArtistDetailQuery } from '/@/renderer/features/artists/queries/artists-queries';
 import { AppRoute } from '/@/renderer/router/routes';
 import { useCurrentServer, useSetFullScreenPlayerStore } from '/@/renderer/store';
 import { sanitize } from '/@/renderer/utils/sanitize';
@@ -33,12 +33,10 @@ export const MobileFullscreenArtistCard = memo(
         const server = useCurrentServer();
         const setFullScreenPlayerStore = useSetFullScreenPlayerStore();
 
-        const detailQuery = useQuery({
-            ...artistsQueries.albumArtistDetail({
-                query: { id: artistId ?? '' },
-                serverId: server?.id,
-            }),
-            enabled: Boolean(server?.id && artistId),
+        const detailQuery = useAlbumArtistDetailQuery({
+            options: { enabled: Boolean(server?.id && artistId) },
+            query: { id: artistId ?? '' },
+            serverId: server?.id,
         });
 
         // Two-layer "do we have a real portrait?" check. (1) Pre-emptive:
@@ -94,12 +92,14 @@ export const MobileFullscreenArtistCard = memo(
                     to={artistHref}
                 >
                     <div className={styles.artistCardBody}>
-                        {imageUrl && (
-                            <img
+                        {imageUrl && artistId && (
+                            <CachedImage
                                 alt={artistName}
                                 className={styles.artistCardImage}
+                                itemId={artistId}
                                 loading="lazy"
                                 onError={() => setImageFailedFor(artistId)}
+                                size={96}
                                 src={imageUrl}
                             />
                         )}

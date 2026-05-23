@@ -3,6 +3,7 @@ import { AxiosError } from 'axios';
 
 import { api } from '/@/renderer/api';
 import { queryKeys } from '/@/renderer/api/query-keys';
+import { enqueueMutation } from '/@/renderer/cache';
 import { MutationOptions } from '/@/renderer/lib/react-query';
 import { incrementQueuePlayCount } from '/@/renderer/store/player.store';
 import { ScrobbleArgs, ScrobbleResponse } from '/@/shared/types/domain-types';
@@ -11,7 +12,20 @@ export const useSendScrobble = (options?: MutationOptions) => {
     const queryClient = useQueryClient();
 
     return useMutation<ScrobbleResponse, AxiosError, ScrobbleArgs, null>({
-        mutationFn: (args) => {
+        mutationFn: async (args) => {
+            if (args.query.submission) {
+                // Route play-count submissions through the durable queue so they
+                // survive offline/reconnect cycles.
+                await enqueueMutation('incrementPlayCount', {
+                    ...args,
+                    apiClientProps: { serverId: args.apiClientProps.serverId },
+                });
+                return null;
+            }
+
+            // Non-submission events (progress, pause, seek, start) are fire-and-forget
+            // position/state updates to the server — they don't affect play counts and
+            // don't need durability.
             return api.controller.scrobble({
                 ...args,
                 apiClientProps: { serverId: args.apiClientProps.serverId },

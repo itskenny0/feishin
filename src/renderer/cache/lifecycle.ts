@@ -1,0 +1,233 @@
+import { useEffect } from 'react';
+
+import { isCacheAvailable } from './capability';
+import { closeCacheDb, deleteCacheDb, getActiveCacheDb, setActiveCacheDb } from './db';
+import { estimateBytes, evict } from './eviction';
+import { startWorker } from './mutations';
+import { resetSearchIndexes } from './search';
+import { clearAllSnapshots, dropSnapshotsForServer } from './snapshot';
+import { useCacheActions, useCacheStore } from './store';
+import { cancelHydration, hydrate } from './sync';
+
+import { useAuthStore, useSettingsStore } from '/@/renderer/store';
+
+/**
+ * Mount-once renderer hook that wires the Dexie-backed cache to the
+ * current auth-store server. It performs four jobs, one per effect:
+ *
+ *  1. Probes IndexedDB capability once at startup and writes the result
+ *     into `useCacheStore.cacheAvailable`.
+ *  2. On `currentServer` changes, opens the matching `(serverId, userId)`
+ *     Dexie DB, updates `useCacheStore.activeServer`, kicks the mutation
+ *     queue worker so any queued writes drain on cold start, and seeds the
+ *     dashboard's bytes-used readout with a best-effort eviction pass.
+ *  3. On `currentServer` changes, checks whether any fully-hydrated entity
+ *     is more than 24 hours stale and, if so, triggers a fresh full
+ *     hydration automatically.
+ *  4. Subscribes to the `feishin:server-deleted` window event so the
+ *     matching Dexie DB is dropped when the user removes a server.
+ *
+ * All four effects short-circuit when `localCache.enabled !== true` so the
+ * subsystem stays inert until the user opts in via the first-launch modal
+ * or the dashboard master toggle. Flipping the toggle off cleanly closes
+ * the active DB; flipping it back on re-runs every effect because `enabled`
+ * is in their dep arrays.
+ */
+export const useCacheLifecycle = (): void => {
+    const currentServer = useAuthStore((s) => s.currentServer);
+    const enabled = useSettingsStore((s) => s.localCache?.enabled === true);
+    const actions = useCacheActions();
+
+    // Job 1 — capability probe (runs once on first mount).
+    useEffect(() => {
+        if (!enabled) {
+            console.info('[cache] lifecycle: subsystem disabled (enabled !== true)');
+            actions.setCacheAvailable(false);
+            return;
+        }
+        let cancelled = false;
+        console.info('[cache] lifecycle: probing IndexedDB');
+        isCacheAvailable().then((available) => {
+            if (cancelled) return;
+            console.info('[cache] lifecycle: capability', { available });
+            actions.setCacheAvailable(available);
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [actions, enabled]);
+
+    // Job 2 — open/close DB on currentServer change.
+    useEffect(() => {
+        if (!enabled) {
+            // Read the previously-active server straight from the auth store
+            // so that signing-out-then-disabling still finds the right Dexie
+            // DB to close. Using React closure here would miss the case where
+            // the user signed out between renders (Bug 8).
+            const prevServer = useAuthStore.getState().currentServer;
+            console.info('[cache] lifecycle: subsystem disabled (enabled !== true)', {
+                hadPrevServer: Boolean(prevServer),
+            });
+            // Cancel any in-flight hydration sweep BEFORE closing the DB so
+            // the sweep doesn't keep writing to a closed handle (Bug 2).
+            cancelHydration();
+            // Wipe in-memory caches so a re-enable starts fresh and we don't
+            // replay stale snapshot/search data from before the toggle.
+            clearAllSnapshots();
+            resetSearchIndexes();
+            actions.setActiveServer(undefined);
+            if (prevServer?.type === 'jellyfin' && prevServer.userId) {
+                void closeCacheDb(prevServer.id, prevServer.userId).catch((err) =>
+                    console.warn('[cache] lifecycle: closeCacheDb on disable failed', err),
+                );
+            }
+            return;
+        }
+        // Jellyfin-only. For non-Jellyfin servers (or no server) the
+        // cache stays inactive.
+        if (!currentServer || currentServer.type !== 'jellyfin') {
+            actions.setActiveServer(undefined);
+            console.info('[cache] lifecycle: no jellyfin server active');
+            return;
+        }
+        const { id: serverId, userId } = currentServer;
+        if (!userId) {
+            console.warn(
+                '[cache] lifecycle: current jellyfin server has no userId; cache inactive',
+            );
+            actions.setActiveServer(undefined);
+            return;
+        }
+
+        let cancelled = false;
+        console.info('[cache] lifecycle: opening db', { serverId, userId });
+        setActiveCacheDb(serverId, userId)
+            .then((db) => {
+                if (cancelled) return;
+                if (!db) {
+                    console.warn('[cache] lifecycle: db unavailable for', { serverId, userId });
+                    actions.setActiveServer(undefined);
+                    return;
+                }
+                console.info('[cache] lifecycle: db ready', { serverId, userId });
+                // Bug 9 — only emit setActiveServer when the (serverId,userId)
+                // pair actually changes; the cache store stores a fresh object
+                // on every call and subscribers can't distinguish a cosmetic
+                // re-emit from a true switch.
+                const existing = useCacheStore.getState().activeServer;
+                if (existing?.serverId !== serverId || existing?.userId !== userId) {
+                    actions.setActiveServer({ serverId, userId });
+                } else {
+                    console.info('[cache] lifecycle: activeServer unchanged, skipping re-emit', {
+                        serverId,
+                        userId,
+                    });
+                }
+                // Kick the mutation worker so any queued writes drain on
+                // cold start.
+                void startWorker();
+                // Seed the dashboard's bytes-used readout once on activation.
+                void estimateBytes().then((n) => actions.setBytesUsed(n));
+                // Run an eviction pass on activation in case quotas changed
+                // between sessions (best-effort, no-op when under cap).
+                void evict();
+            })
+            .catch((err) => {
+                if (cancelled) return;
+                console.warn('[cache] lifecycle: db open failed', err);
+                actions.setActiveServer(undefined);
+            });
+
+        // Capture `serverId` so the cleanup closure (running on the NEXT
+        // render) can drop snapshots scoped to what was *previously* active.
+        const previousServerId = serverId;
+        return () => {
+            cancelled = true;
+            // Bug 3 — the in-flight hydration sweep was writing to the
+            // previous server's DB. Cancel it before the next effect run
+            // swaps the active DB to a different server.
+            cancelHydration();
+            // Bug 3 — drop the snapshot map entries for the previous server
+            // so that server-A's query data never bleeds into server-B's
+            // placeholderData reads on the next mount.
+            dropSnapshotsForServer(previousServerId);
+            console.info('[cache] lifecycle: cleanup for previous server', {
+                previousServerId,
+            });
+            // We intentionally don't close on currentServer change — the
+            // user may switch back. Closure on actual deleteServer is
+            // handled by Job 5; closure on opt-out is handled by the
+            // disabled branch above.
+        };
+    }, [actions, currentServer, enabled]);
+
+    // Job 4 — daily auto-resync: if any fully-hydrated entity is more than
+    // 24 hours stale, trigger a fresh full hydration once on mount.
+    useEffect(() => {
+        if (!enabled) {
+            console.info('[cache] lifecycle: subsystem disabled (enabled !== true)');
+            return;
+        }
+        if (!currentServer || currentServer.type !== 'jellyfin') return;
+        const db = getActiveCacheDb();
+        if (!db) return;
+
+        let cancelled = false;
+        void (async () => {
+            try {
+                const rows = await db.syncMeta.toArray();
+                if (cancelled) return;
+                const fullRows = rows.filter(
+                    (r) => r.hydrationState === 'full' && (r.lastFullSyncAt ?? 0) > 0,
+                );
+                if (fullRows.length === 0) {
+                    console.info(
+                        '[cache] lifecycle: no full-hydrated entities; auto-resync skipped',
+                    );
+                    return;
+                }
+                const oldest = Math.min(...fullRows.map((r) => r.lastFullSyncAt ?? 0));
+                const ageMs = Date.now() - oldest;
+                const oneDayMs = 24 * 60 * 60 * 1000;
+                if (ageMs > oneDayMs) {
+                    console.info('[cache] lifecycle: oldest full sync stale, auto re-hydrating', {
+                        ageHours: Math.round(ageMs / (60 * 60 * 1000)),
+                        oldestAt: oldest,
+                    });
+                    void hydrate(currentServer, 'full');
+                } else {
+                    console.info('[cache] lifecycle: full sync still fresh', {
+                        ageHours: Math.round(ageMs / (60 * 60 * 1000)),
+                    });
+                }
+            } catch (err) {
+                console.warn('[cache] lifecycle: auto-resync check failed', err);
+            }
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [currentServer, enabled]);
+
+    // Job 5 — listen for the server-delete event.
+    useEffect(() => {
+        if (!enabled) {
+            console.info('[cache] lifecycle: subsystem disabled (enabled !== true)');
+            return;
+        }
+        const handler = (e: Event) => {
+            const detail = (e as CustomEvent<{ serverId: string; userId: string }>).detail;
+            if (!detail?.serverId || !detail?.userId) return;
+            console.info('[cache] lifecycle: server deleted, dropping db', detail);
+            deleteCacheDb(detail.serverId, detail.userId).catch((err) =>
+                console.warn('[cache] lifecycle: deleteCacheDb failed', err),
+            );
+        };
+        if (typeof window !== 'undefined') {
+            window.addEventListener('feishin:server-deleted', handler);
+            return () => window.removeEventListener('feishin:server-deleted', handler);
+        }
+        return undefined;
+    }, [enabled]);
+};

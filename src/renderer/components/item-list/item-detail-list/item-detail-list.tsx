@@ -9,7 +9,7 @@ import {
     dropTargetForElements,
 } from '@atlaskit/pragmatic-drag-and-drop/element/adapter';
 import { disableNativeDragPreview } from '@atlaskit/pragmatic-drag-and-drop/element/disable-native-drag-preview';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
 import throttle from 'lodash/throttle';
 import { AnimatePresence } from 'motion/react';
@@ -65,7 +65,7 @@ import {
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
 import { useIsMutatingCreateFavorite } from '/@/renderer/features/shared/mutations/create-favorite-mutation';
 import { useIsMutatingDeleteFavorite } from '/@/renderer/features/shared/mutations/delete-favorite-mutation';
-import { songsQueries } from '/@/renderer/features/songs/api/songs-api';
+import { useSongListQuery } from '/@/renderer/features/songs/queries/songs-queries';
 import { useDragDrop } from '/@/renderer/hooks/use-drag-drop';
 import { useLongPress } from '/@/renderer/hooks/use-long-press';
 import { AppRoute } from '/@/renderer/router/routes';
@@ -838,14 +838,14 @@ const RowContent = memo(
             };
         }, [item, useClientSideSongs]);
 
-        const { data: songListData, isLoading: isSongsQueryLoading } = useQuery({
-            enabled: !!songListQuery,
-            ...(songListQuery
-                ? songsQueries.list(songListQuery)
-                : {
-                      queryFn: async () => ({ items: [], startIndex: 0, totalRecordCount: 0 }),
-                      queryKey: ['item-detail', 'list', 'disabled'],
-                  }),
+        const { data: songListData, isLoading: isSongsQueryLoading } = useSongListQuery({
+            options: { enabled: !!songListQuery },
+            query: songListQuery?.query ?? {
+                sortBy: SongListSort.ALBUM,
+                sortOrder: SortOrder.ASC,
+                startIndex: 0,
+            },
+            serverId: songListQuery?.serverId,
         });
 
         const songItemsFromQuery = songListData?.items;

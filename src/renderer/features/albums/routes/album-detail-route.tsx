@@ -1,12 +1,11 @@
-import { useSuspenseQuery } from '@tanstack/react-query';
 import { useRef } from 'react';
 import { useParams } from 'react-router';
 
 import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { NativeScrollArea } from '/@/renderer/components/native-scroll-area/native-scroll-area';
-import { albumQueries } from '/@/renderer/features/albums/api/album-api';
 import { AlbumDetailContent } from '/@/renderer/features/albums/components/album-detail-content';
 import { AlbumDetailHeader } from '/@/renderer/features/albums/components/album-detail-header';
+import { useAlbumDetailSuspenseQuery } from '/@/renderer/features/albums/queries/albums-queries';
 import { AnimatedPage } from '/@/renderer/features/shared/components/animated-page';
 import {
     LibraryBackgroundImage,
@@ -29,8 +28,9 @@ const AlbumDetailRoute = () => {
     const { albumId } = useParams() as { albumId: string };
     const serverId = useCurrentServerId();
 
-    const detailQuery = useSuspenseQuery({
-        ...albumQueries.detail({ query: { id: albumId }, serverId }),
+    const detailQuery = useAlbumDetailSuspenseQuery({
+        query: { id: albumId },
+        serverId,
     });
 
     const imageUrl =

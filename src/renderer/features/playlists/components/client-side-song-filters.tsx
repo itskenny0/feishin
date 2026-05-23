@@ -1,14 +1,13 @@
 import type { RowComponentProps } from 'react-window-v2';
 
-import { useSuspenseQuery } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router';
 
 import { getItemImageUrl } from '/@/renderer/components/item-image/item-image';
-import { playlistsQueries } from '/@/renderer/features/playlists/api/playlists-api';
 import { usePlaylistSongListFilters } from '/@/renderer/features/playlists/hooks/use-playlist-song-list-filters';
 import { applyClientSideSongFilters } from '/@/renderer/features/playlists/hooks/use-playlist-track-list';
+import { usePlaylistSongListSuspenseQuery } from '/@/renderer/features/playlists/queries/playlists-queries';
 import {
     ArtistMultiSelectRow,
     GenreMultiSelectRow,
@@ -229,12 +228,10 @@ export const ClientSideSongFilters = () => {
         setMinYear,
     } = usePlaylistSongListFilters();
 
-    const playlistSongsQuery = useSuspenseQuery(
-        playlistsQueries.songList({
-            query: { id: playlistId },
-            serverId: server?.id,
-        }),
-    );
+    const playlistSongsQuery = usePlaylistSongListSuspenseQuery({
+        playlistId,
+        serverId: server?.id,
+    });
 
     const albumArtistSelectMode = useAppStore((state) => state.albumArtistSelectMode);
     const artistSelectMode = useAppStore((state) => state.artistSelectMode);

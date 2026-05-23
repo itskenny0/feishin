@@ -2,8 +2,8 @@ import { useIsMutating, useMutation, useQueryClient } from '@tanstack/react-quer
 import { AxiosError } from 'axios';
 import { useTranslation } from 'react-i18next';
 
-import { api } from '/@/renderer/api';
 import { queryKeys } from '/@/renderer/api/query-keys';
+import { enqueueMutation } from '/@/renderer/cache';
 import { eventEmitter } from '/@/renderer/events/event-emitter';
 import { PreviousQueryData } from '/@/renderer/features/shared/mutations/favorite-optimistic-updates';
 import {
@@ -22,11 +22,12 @@ export const useSetRatingMutation = (args: MutationHookArgs) => {
     const { t } = useTranslation();
 
     return useMutation<RatingResponse, AxiosError, SetRatingArgs, PreviousQueryData[]>({
-        mutationFn: (args) => {
-            return api.controller.setRating({
+        mutationFn: async (args) => {
+            await enqueueMutation('setRating', {
                 ...args,
                 apiClientProps: { serverId: args.apiClientProps.serverId },
             });
+            return undefined;
         },
         mutationKey: setRatingMutationKey,
         onError: (_error, _variables, context) => {

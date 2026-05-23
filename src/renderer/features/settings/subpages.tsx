@@ -3,7 +3,7 @@ import type { TFunction } from 'i18next';
 
 import { Capacitor } from '@capacitor/core';
 import isElectron from 'is-electron';
-import { lazy, ReactNode } from 'react';
+import { ComponentType, lazy, ReactNode } from 'react';
 import {
     RiAccountBoxLine,
     RiAlertLine,
@@ -54,7 +54,9 @@ const isTouchOnly = () => {
 const isLinuxDesktop = () => isElectron() && Boolean(window.api?.utils?.isLinux?.());
 
 export interface SubpageDef {
-    Component: () => ReactNode;
+    // Accepts both eager and lazy-wrapped components. Subpages are rendered
+    // inside <Suspense> upstream, so a LazyExoticComponent is the common case.
+    Component: ComponentType;
     description?: (t: TFunction) => string;
     Icon: (props: { size?: string }) => ReactNode;
     id: string;
@@ -222,6 +224,10 @@ const CacheSubpage = lazyDefault(
     () => import('/@/renderer/features/settings/components/window/cache-settngs'),
     'CacheSettings',
 );
+const LibrarySyncSubpage = lazyDefault(
+    () => import('/@/renderer/features/settings/components/advanced/library-sync-settings'),
+    'LibrarySyncSettings',
+);
 const StylesSubpage = lazyDefault(
     () => import('/@/renderer/features/settings/components/advanced/styles-settings'),
     'StylesSettings',
@@ -308,6 +314,17 @@ export const SETTINGS_SUBPAGES: Record<string, SubpageDef[]> = {
             Icon: RiBugLine,
             id: 'logger',
             label: (t) => t('page.setting.logger', { defaultValue: 'Logs' }),
+        },
+        {
+            Component: LibrarySyncSubpage,
+            description: (t) =>
+                t('page.setting.librarySyncDescription', {
+                    defaultValue: 'Local-first cache for the Jellyfin library.',
+                }),
+            Icon: RiDatabase2Line,
+            id: 'library-sync',
+            label: (t) => t('page.setting.librarySync', { defaultValue: 'Library sync' }),
+            visible: (server) => server?.type === 'jellyfin',
         },
         {
             Component: CacheSubpage,

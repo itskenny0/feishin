@@ -1,4 +1,3 @@
-import { useQuery } from '@tanstack/react-query';
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useParams } from 'react-router';
@@ -7,10 +6,10 @@ import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { PageHeader } from '/@/renderer/components/page-header/page-header';
 import { useListContext } from '/@/renderer/context/list-context';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
-import { playlistsQueries } from '/@/renderer/features/playlists/api/playlists-api';
 import { PlaylistDetailSongListHeaderFilters } from '/@/renderer/features/playlists/components/playlist-detail-song-list-header-filters';
 import { useDeletePlaylistImage } from '/@/renderer/features/playlists/mutations/delete-playlist-image-mutation';
 import { useUploadPlaylistImage } from '/@/renderer/features/playlists/mutations/upload-playlist-image-mutation';
+import { usePlaylistDetailQuery } from '/@/renderer/features/playlists/queries/playlists-queries';
 import { FilterBar } from '/@/renderer/features/shared/components/filter-bar';
 import {
     LibraryHeader,
@@ -120,9 +119,10 @@ export const PlaylistDetailSongListHeader = ({
     const server = useCurrentServer();
     const location = useLocation();
 
-    const detailQuery = useQuery({
-        ...playlistsQueries.detail({ query: { id: playlistId }, serverId: server?.id }),
-        placeholderData: location.state?.item,
+    const detailQuery = usePlaylistDetailQuery({
+        options: { placeholderData: location.state?.item },
+        query: { id: playlistId },
+        serverId: server?.id,
     });
 
     const playlistDuration = detailQuery?.data?.duration;

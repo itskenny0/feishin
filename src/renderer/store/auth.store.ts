@@ -35,6 +35,13 @@ export const useAuthStore = createWithEqualityFn<AuthSlice>()(
                         });
                     },
                     deleteServer: (id) => {
+                        // Capture the server entry BEFORE the set() call so we
+                        // can fire the `feishin:server-deleted` window event with
+                        // the userId attached — the cache lifecycle hook needs
+                        // both (serverId, userId) to drop the matching Dexie DB.
+                        // Without this dispatch, orphan Dexie databases leak on
+                        // disk forever after a server is removed.
+                        const serverBeforeDelete = get().serverList[id];
                         set((state) => {
                             delete state.serverList[id];
 
@@ -42,6 +49,20 @@ export const useAuthStore = createWithEqualityFn<AuthSlice>()(
                                 state.currentServer = null;
                             }
                         });
+                        if (typeof window !== 'undefined' && serverBeforeDelete?.userId) {
+                            console.info('[cache] auth: dispatching feishin:server-deleted', {
+                                serverId: id,
+                                userId: serverBeforeDelete.userId,
+                            });
+                            window.dispatchEvent(
+                                new CustomEvent('feishin:server-deleted', {
+                                    detail: {
+                                        serverId: id,
+                                        userId: serverBeforeDelete.userId,
+                                    },
+                                }),
+                            );
+                        }
                     },
                     getServer: (id) => {
                         const server = get().serverList[id];

@@ -1,4 +1,3 @@
-import { useQuery } from '@tanstack/react-query';
 import clone from 'lodash/clone';
 import get from 'lodash/get';
 import setWith from 'lodash/setWith';
@@ -15,7 +14,7 @@ import {
 import { useTranslation } from 'react-i18next';
 
 import { QueryBuilder } from '/@/renderer/components/query-builder';
-import { playlistsQueries } from '/@/renderer/features/playlists/api/playlists-api';
+import { usePlaylistListQuery } from '/@/renderer/features/playlists/queries/playlists-queries';
 import { convertNDQueryToQueryGroup } from '/@/renderer/features/playlists/utils';
 import { useCurrentServer } from '/@/renderer/store';
 import { useQueryBuilderSettings } from '/@/renderer/store/settings.store';
@@ -189,12 +188,10 @@ export const PlaylistQueryBuilder = forwardRef(
             }
         }, [query]);
 
-        const { data: playlists } = useQuery(
-            playlistsQueries.list({
-                query: { sortBy: PlaylistListSort.NAME, sortOrder: SortOrder.ASC, startIndex: 0 },
-                serverId: server?.id,
-            }),
-        );
+        const { data: playlists } = usePlaylistListQuery({
+            query: { sortBy: PlaylistListSort.NAME, sortOrder: SortOrder.ASC, startIndex: 0 },
+            serverId: server?.id,
+        });
 
         const playlistData = useMemo(() => {
             if (!playlists) return [];

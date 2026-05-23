@@ -3,8 +3,8 @@ import { AxiosError } from 'axios';
 import isElectron from 'is-electron';
 import { useTranslation } from 'react-i18next';
 
-import { api } from '/@/renderer/api';
 import { queryKeys } from '/@/renderer/api/query-keys';
+import { enqueueMutation } from '/@/renderer/cache';
 import { eventEmitter } from '/@/renderer/events/event-emitter';
 import {
     applyFavoriteOptimisticUpdates,
@@ -25,11 +25,12 @@ export const useDeleteFavorite = (args: MutationHookArgs) => {
     const { t } = useTranslation();
 
     return useMutation<FavoriteResponse, AxiosError, FavoriteArgs, PreviousQueryData[]>({
-        mutationFn: (args) => {
-            return api.controller.deleteFavorite({
+        mutationFn: async (args) => {
+            await enqueueMutation('deleteFavorite', {
                 ...args,
                 apiClientProps: { serverId: args.apiClientProps.serverId },
             });
+            return undefined;
         },
         mutationKey: deleteFavoriteMutationKey,
         onError: (_error, _variables, context) => {

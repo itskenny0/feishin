@@ -3,7 +3,6 @@ import type {
     ItemListStateItemWithRequiredProperties,
 } from '/@/renderer/components/item-list/helpers/item-list-state';
 
-import { useSuspenseQuery } from '@tanstack/react-query';
 import { ReactNode, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { generatePath, useParams } from 'react-router';
@@ -19,8 +18,8 @@ import { SONG_TABLE_COLUMNS } from '/@/renderer/components/item-list/item-table-
 import { ItemTableList } from '/@/renderer/components/item-list/item-table-list/item-table-list';
 import { ItemTableListColumn } from '/@/renderer/components/item-list/item-table-list/item-table-list-column';
 import { ItemControls } from '/@/renderer/components/item-list/types';
-import { albumQueries } from '/@/renderer/features/albums/api/album-api';
 import { AlbumInfiniteCarousel } from '/@/renderer/features/albums/components/album-infinite-carousel';
+import { useAlbumDetailSuspenseQuery } from '/@/renderer/features/albums/queries/albums-queries';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
 import {
     ListConfigMenu,
@@ -595,9 +594,10 @@ const ExternalLinksContent = ({
 export const AlbumDetailContent = () => {
     const { albumId } = useParams() as { albumId: string };
     const server = useCurrentServer();
-    const detailQuery = useSuspenseQuery(
-        albumQueries.detail({ query: { id: albumId }, serverId: server.id }),
-    );
+    const detailQuery = useAlbumDetailSuspenseQuery({
+        query: { id: albumId },
+        serverId: server.id,
+    });
 
     const { externalLinks, lastFM, listenBrainz, musicBrainz, nativeSpotify, qobuz, spotify } =
         useExternalLinks();

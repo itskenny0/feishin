@@ -5,6 +5,7 @@ import { generatePath, Link } from 'react-router';
 
 import styles from './mobile-fullscreen-player.module.css';
 
+import { CachedImage } from '/@/renderer/cache';
 import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { albumQueries } from '/@/renderer/features/albums/api/album-api';
 import { AppRoute } from '/@/renderer/router/routes';
@@ -67,7 +68,16 @@ export const MobileFullscreenAlbumCard = memo(
                     to={albumHref}
                 >
                     <div className={styles.albumCardBody}>
-                        {imageUrl ? (
+                        {imageUrl && albumId ? (
+                            <CachedImage
+                                alt={albumName}
+                                className={styles.albumCardImage}
+                                itemId={albumId}
+                                loading="lazy"
+                                size={96}
+                                src={imageUrl}
+                            />
+                        ) : imageUrl ? (
                             <img
                                 alt={albumName}
                                 className={styles.albumCardImage}

@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 
 import styles from './sidebar.module.css';
 
+import { CachedImage } from '/@/renderer/cache';
 import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { ContextMenuController } from '/@/renderer/features/context-menu/context-menu-controller';
 import {
@@ -299,14 +300,16 @@ const SidebarImage = () => {
                     >
                         <Icon color="muted" icon="radio" size="40%" />
                     </Center>
-                ) : imageUrl ? (
-                    <img
+                ) : imageUrl && currentSong?.id ? (
+                    <CachedImage
                         className={clsx(styles.sidebarImage, {
                             [styles.censored]:
                                 currentSong?.explicitStatus === ExplicitStatus.EXPLICIT &&
                                 blurExplicitImages,
                         })}
+                        itemId={currentSong.id}
                         loading="eager"
+                        size={360}
                         src={imageUrl}
                     />
                 ) : (

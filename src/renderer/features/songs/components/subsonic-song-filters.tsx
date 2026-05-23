@@ -1,9 +1,8 @@
-import { useSuspenseQuery } from '@tanstack/react-query';
 import { ChangeEvent, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { getItemImageUrl } from '/@/renderer/components/item-image/item-image';
-import { artistsQueries } from '/@/renderer/features/artists/api/artists-api';
+import { useAlbumArtistListQuery } from '/@/renderer/features/artists/queries/artists-queries';
 import { useGenreList } from '/@/renderer/features/genres/api/genres-api';
 import {
     ArtistMultiSelectRow,
@@ -46,20 +45,17 @@ export const SubsonicSongFilters = ({
 
     const selectedGenreIds = useMemo(() => query.genreIds || [], [query.genreIds]);
 
-    const albumArtistListQuery = useSuspenseQuery(
-        artistsQueries.albumArtistList({
-            options: {
-                gcTime: 1000 * 60 * 2,
-                staleTime: 1000 * 60 * 1,
-            },
-            query: {
-                sortBy: AlbumArtistListSort.NAME,
-                sortOrder: SortOrder.ASC,
-                startIndex: 0,
-            },
-            serverId,
-        }),
-    );
+    const albumArtistListQuery = useAlbumArtistListQuery({
+        options: {
+            staleTime: 1000 * 60 * 1,
+        },
+        query: {
+            sortBy: AlbumArtistListSort.NAME,
+            sortOrder: SortOrder.ASC,
+            startIndex: 0,
+        },
+        serverId,
+    });
 
     const items = albumArtistListQuery?.data?.items;
 

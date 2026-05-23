@@ -490,7 +490,7 @@ const MobilePlayerContainer = memo(
                         '--mobile-fullscreen-overlay-strength': overlayStrength,
                         backgroundColor,
                         y: swipeY,
-                    } as CSSProperties
+                    } as unknown as CSSProperties
                 }
             >
                 <BackgroundImage

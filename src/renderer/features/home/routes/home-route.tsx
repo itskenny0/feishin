@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 
 import styles from './home-route.module.css';
 
+import { HydrationBanner, SyncChip } from '/@/renderer/cache';
 import { useGridCarouselContainerQuery } from '/@/renderer/components/grid-carousel/grid-carousel-v2';
 import { NativeScrollArea } from '/@/renderer/components/native-scroll-area/native-scroll-area';
 import { AlbumInfiniteCarousel } from '/@/renderer/features/albums/components/album-infinite-carousel';
@@ -234,6 +235,7 @@ const HomeRoute = () => {
                     children: (
                         <LibraryHeaderBar>
                             <LibraryHeaderBar.Title>{t('page.home.title')}</LibraryHeaderBar.Title>
+                            <SyncChip />
                         </LibraryHeaderBar>
                     ),
                     offset: 200,
@@ -249,6 +251,7 @@ const HomeRoute = () => {
                         pt={windowBarStyle === Platform.WEB ? '5rem' : '3rem'}
                         ref={containerQuery.ref}
                     >
+                        <HydrationBanner />
                         {/* Per-widget error boundaries so a thrown error in one
                             widget (e.g. a transient malformed-response from a
                             specific carousel) doesn't black-hole the entire

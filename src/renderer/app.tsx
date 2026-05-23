@@ -11,6 +11,7 @@ import isElectron from 'is-electron';
 import { lazy, memo, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 
 import i18n from '/@/i18n/i18n';
+import { EnableCacheModal, useCacheLifecycle } from '/@/renderer/cache';
 import { WebAudioContext } from '/@/renderer/features/player/context/webaudio-context';
 import { useDocumentTitle } from '/@/renderer/features/shared/hooks/use-document-title';
 import {
@@ -84,6 +85,7 @@ const AppShell = memo(function AppShell() {
     return (
         <>
             <AppEffects />
+            <EnableCacheModal />
             <Notifications
                 containerWidth="300px"
                 position="bottom-center"
@@ -113,8 +115,15 @@ const AppEffects = () => (
         <NativeMenuSyncEffect />
         <DocumentTitleEffect />
         <AndroidNativeEffect />
+        <CacheLifecycleEffect />
     </>
 );
+
+const CacheLifecycleEffect = () => {
+    useCacheLifecycle();
+
+    return null;
+};
 
 const AndroidNativeEffect = () => {
     useAndroidStatusBar();
