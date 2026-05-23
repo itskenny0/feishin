@@ -4,6 +4,12 @@ import { api } from '/@/renderer/api';
 import { controller } from '/@/renderer/api/controller';
 import { queryKeys } from '/@/renderer/api/query-keys';
 import { getOptimizedListCount } from '/@/renderer/api/utils-list-count';
+import {
+    getActiveCacheDb,
+    isCacheAvailableSync,
+    readSnapshot,
+    writeSnapshot,
+} from '/@/renderer/cache';
 import { QueryHookArgs } from '/@/renderer/lib/react-query';
 import {
     AlbumRadioQuery,
@@ -57,21 +63,53 @@ export const songsQueries = {
         });
     },
     list: (args: QueryHookArgs<SongListQuery>, imageSize?: number) => {
+        const key = queryKeys.songs.list(args.serverId, { ...args.query, imageSize });
         return queryOptions({
-            queryFn: ({ signal }) => {
-                return controller.getSongList({
+            initialData: (() => readSnapshot(key)) as never,
+            initialDataUpdatedAt: 0,
+            queryFn: async ({ signal }) => {
+                const fresh = await controller.getSongList({
                     apiClientProps: { serverId: args.serverId, signal },
                     query: { ...args.query, imageSize },
                 });
+                writeSnapshot(key, fresh);
+                return fresh;
             },
-            queryKey: queryKeys.songs.list(args.serverId, { ...args.query, imageSize }),
+            queryKey: key,
             ...args.options,
         });
     },
     listCount: (args: QueryHookArgs<ListCountQuery<SongListQuery>>) => {
+        const key = queryKeys.songs.count(
+            args.serverId,
+            Object.keys(args.query).length === 0 ? undefined : args.query,
+        );
         return queryOptions({
             gcTime: 1000 * 60 * 60,
+            initialData: (() => readSnapshot(key)) as never,
+            initialDataUpdatedAt: 0,
             queryFn: async ({ client, signal }) => {
+                // Cache-first: an unfiltered song count comes straight from
+                // `db.songs.count()` so the count tile / header paints
+                // before the network revalidation lands.
+                if (
+                    isCacheAvailableSync() &&
+                    !args.query.albumIds &&
+                    !args.query.artistIds &&
+                    !args.query.genreIds &&
+                    args.query.favorite === undefined
+                ) {
+                    try {
+                        const db = getActiveCacheDb();
+                        if (db) {
+                            const cachedCount = await db.songs.count();
+                            if (cachedCount > 0) writeSnapshot(key, cachedCount);
+                        }
+                    } catch {
+                        /* swallow */
+                    }
+                }
+
                 const optimizedCount = await getOptimizedListCount<
                     ListCountQuery<SongListQuery>,
                     SongListQuery,
@@ -86,18 +124,18 @@ export const songsQueries = {
                 });
 
                 if (optimizedCount !== null) {
+                    writeSnapshot(key, optimizedCount);
                     return optimizedCount;
                 }
 
-                return api.controller.getSongListCount({
+                const fresh = await api.controller.getSongListCount({
                     apiClientProps: { serverId: args.serverId, signal },
                     query: args.query,
                 });
+                writeSnapshot(key, fresh);
+                return fresh;
             },
-            queryKey: queryKeys.songs.count(
-                args.serverId,
-                Object.keys(args.query).length === 0 ? undefined : args.query,
-            ),
+            queryKey: key,
             staleTime: 1000 * 60 * 60,
             ...args.options,
         });

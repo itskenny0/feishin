@@ -67,20 +67,36 @@ export const genresQueries = {
         });
     },
     listCount: (args: QueryHookArgs<ListCountQuery<GenreListQuery>>) => {
+        const key = queryKeys.genres.count(
+            args.serverId,
+            Object.keys(args.query).length === 0 ? undefined : args.query,
+        );
         return queryOptions({
             gcTime: 1000 * 60 * 60,
-            queryFn: ({ signal }) => {
-                return api.controller
+            initialData: (() => readSnapshot(key)) as never,
+            initialDataUpdatedAt: 0,
+            queryFn: async ({ signal }) => {
+                if (isCacheAvailableSync()) {
+                    try {
+                        const db = getActiveCacheDb();
+                        if (db) {
+                            const cachedCount = await db.genres.count();
+                            if (cachedCount > 0) writeSnapshot(key, cachedCount);
+                        }
+                    } catch {
+                        /* swallow */
+                    }
+                }
+                const fresh = await api.controller
                     .getGenreList({
                         apiClientProps: { serverId: args.serverId, signal },
                         query: { ...args.query, limit: 1, startIndex: 0 },
                     })
                     .then((result) => result?.totalRecordCount ?? 0);
+                writeSnapshot(key, fresh);
+                return fresh;
             },
-            queryKey: queryKeys.genres.count(
-                args.serverId,
-                Object.keys(args.query).length === 0 ? undefined : args.query,
-            ),
+            queryKey: key,
             staleTime: 1000 * 60 * 60,
             ...args.options,
         });

@@ -7,6 +7,12 @@ import styles from './dummy-album-detail-route.module.css';
 
 import { api } from '/@/renderer/api';
 import { queryKeys } from '/@/renderer/api/query-keys';
+import {
+    getActiveCacheDb,
+    isCacheAvailableSync,
+    readSnapshot,
+    writeSnapshot,
+} from '/@/renderer/cache';
 import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
 import { AnimatedPage } from '/@/renderer/features/shared/components/animated-page';
@@ -40,11 +46,24 @@ const DummyAlbumDetailRoute = () => {
     const server = useCurrentServer();
     const queryKey = queryKeys.songs.detail(server?.id || '', albumId);
     const detailQuery = useSuspenseQuery({
-        queryFn: ({ signal }) => {
-            return api.controller.getSongDetail({
+        initialData: (() => readSnapshot<SongDetailResponse>(queryKey)) as never,
+        initialDataUpdatedAt: 0,
+        queryFn: async ({ signal }) => {
+            if (isCacheAvailableSync() && albumId) {
+                try {
+                    const db = getActiveCacheDb();
+                    const row = await db?.songs.get(albumId);
+                    if (row?.Payload) writeSnapshot(queryKey, row.Payload);
+                } catch {
+                    /* swallow */
+                }
+            }
+            const fresh = await api.controller.getSongDetail({
                 apiClientProps: { serverId: server?.id || '', signal },
                 query: { id: albumId },
             });
+            writeSnapshot(queryKey, fresh);
+            return fresh;
         },
         queryKey,
     });

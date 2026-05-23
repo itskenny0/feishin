@@ -49,25 +49,54 @@ export const albumQueries = {
         });
     },
     list: (args: QueryHookArgs<AlbumListQuery>) => {
+        const key = queryKeys.albums.list(
+            args.serverId,
+            args.query,
+            args.query?.artistIds?.length === 1 ? args.query?.artistIds[0] : undefined,
+        );
         return queryOptions({
-            queryFn: ({ signal }) => {
-                return api.controller.getAlbumList({
+            initialData: (() => readSnapshot(key)) as never,
+            initialDataUpdatedAt: 0,
+            queryFn: async ({ signal }) => {
+                const fresh = await api.controller.getAlbumList({
                     apiClientProps: { serverId: args.serverId, signal },
                     query: args.query,
                 });
+                writeSnapshot(key, fresh);
+                return fresh;
             },
-            queryKey: queryKeys.albums.list(
-                args.serverId,
-                args.query,
-                args.query?.artistIds?.length === 1 ? args.query?.artistIds[0] : undefined,
-            ),
+            queryKey: key,
             ...args.options,
         });
     },
     listCount: (args: QueryHookArgs<ListCountQuery<AlbumListQuery>>) => {
+        const key = queryKeys.albums.count(
+            args.serverId,
+            args.query,
+            args.query?.artistIds?.length === 1 ? args.query?.artistIds[0] : undefined,
+        );
         return queryOptions({
             gcTime: 1000 * 60 * 60,
+            initialData: (() => readSnapshot(key)) as never,
+            initialDataUpdatedAt: 0,
             queryFn: async ({ client, signal }) => {
+                if (
+                    isCacheAvailableSync() &&
+                    !args.query.artistIds &&
+                    !args.query.genreIds &&
+                    args.query.favorite === undefined
+                ) {
+                    try {
+                        const db = getActiveCacheDb();
+                        if (db) {
+                            const cachedCount = await db.albums.count();
+                            if (cachedCount > 0) writeSnapshot(key, cachedCount);
+                        }
+                    } catch {
+                        /* swallow */
+                    }
+                }
+
                 const optimizedCount = await getOptimizedListCount<
                     ListCountQuery<AlbumListQuery>,
                     AlbumListQuery,
@@ -82,19 +111,18 @@ export const albumQueries = {
                 });
 
                 if (optimizedCount !== null) {
+                    writeSnapshot(key, optimizedCount);
                     return optimizedCount;
                 }
 
-                return api.controller.getAlbumListCount({
+                const fresh = await api.controller.getAlbumListCount({
                     apiClientProps: { serverId: args.serverId, signal },
                     query: args.query,
                 });
+                writeSnapshot(key, fresh);
+                return fresh;
             },
-            queryKey: queryKeys.albums.count(
-                args.serverId,
-                args.query,
-                args.query?.artistIds?.length === 1 ? args.query?.artistIds[0] : undefined,
-            ),
+            queryKey: key,
             staleTime: 1000 * 60 * 60,
             ...args.options,
         });
