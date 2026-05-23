@@ -184,18 +184,40 @@ export const resolveThumbnail = async (
             }
 
             const fetchUrl = rewriteUrlToCacheSize(url);
-            const timeoutAt = AbortSignal.timeout(20_000);
-            const combinedSignal = signal ? AbortSignal.any([signal, timeoutAt]) : timeoutAt;
+            // Manual AbortController + setTimeout for the per-fetch
+            // 20s timeout. `AbortSignal.timeout()` and
+            // `AbortSignal.any()` are recent (2023) APIs that aren't
+            // universally implemented in Android WebView versions —
+            // the user reported workers stuck for 30+ minutes on a
+            // single item, which means the previous timeout was a
+            // no-op on their device. The manual pattern is supported
+            // by every fetch-capable runtime.
+            const fetchController = new AbortController();
+            let timedOut = false;
+            const timeoutId = setTimeout(() => {
+                timedOut = true;
+                fetchController.abort();
+            }, 20_000);
+            // Forward the caller's abort signal too.
+            const upstreamAbort = signal ? () => fetchController.abort() : undefined;
+            if (signal && upstreamAbort) {
+                if (signal.aborted) fetchController.abort();
+                else signal.addEventListener('abort', upstreamAbort);
+            }
             let res: Response;
             try {
-                res = await fetch(fetchUrl, { credentials, headers, signal: combinedSignal });
+                res = await fetch(fetchUrl, {
+                    credentials,
+                    headers,
+                    signal: fetchController.signal,
+                });
             } catch (err) {
-                if ((err as Error)?.name === 'AbortError') {
-                    return { blob: undefined, bytes: 0 };
-                }
-                if ((err as Error)?.name === 'TimeoutError') {
+                if (timedOut) {
                     console.warn('[cache] thumbnail fetch timed out', { itemId });
                     recordStat('failed');
+                    return { blob: undefined, bytes: 0 };
+                }
+                if ((err as Error)?.name === 'AbortError') {
                     return { blob: undefined, bytes: 0 };
                 }
                 console.warn('[cache] thumbnail fetch threw', {
@@ -206,6 +228,11 @@ export const resolveThumbnail = async (
                 });
                 recordStat('failed');
                 return { blob: undefined, bytes: 0 };
+            } finally {
+                clearTimeout(timeoutId);
+                if (signal && upstreamAbort) {
+                    signal.removeEventListener('abort', upstreamAbort);
+                }
             }
             if (!res.ok) {
                 if (res.status === 404) {
