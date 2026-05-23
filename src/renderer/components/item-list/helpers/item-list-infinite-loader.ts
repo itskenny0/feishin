@@ -168,7 +168,7 @@ export const useItemListInfiniteLoader = ({
             // spinner when the cache had the data. On a true cache miss
             // we still await the network call so the page eventually
             // populates.
-            let cachedItems: unknown[] | undefined;
+            let cachedItems: undefined | unknown[];
             if (localFetchPage) {
                 try {
                     const cached = await localFetchPage({
@@ -203,10 +203,7 @@ export const useItemListInfiniteLoader = ({
                 })
                 .then((result) => {
                     writePageIntoDataMap(pageNumber, startIndex, result.items, true);
-                    lastFetchedPageRef.current = Math.max(
-                        lastFetchedPageRef.current,
-                        pageNumber,
-                    );
+                    lastFetchedPageRef.current = Math.max(lastFetchedPageRef.current, pageNumber);
                 });
 
             if (cachedItems) {

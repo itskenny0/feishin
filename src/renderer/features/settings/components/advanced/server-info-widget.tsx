@@ -15,8 +15,7 @@ import { ServerType } from '/@/shared/types/domain-types';
 const useServerInfo = (serverId: string | undefined) =>
     useQuery({
         enabled: Boolean(serverId),
-        placeholderData: (() =>
-            readSnapshot(['server-info', serverId ?? ''])) as never,
+        placeholderData: (() => readSnapshot(['server-info', serverId ?? ''])) as never,
         queryFn: async ({ signal }) => {
             const key = ['server-info', serverId ?? ''] as const;
             if (!serverId) return null;

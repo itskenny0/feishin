@@ -123,26 +123,21 @@ export const playlistsQueries = {
                         // Replace the playlist's tracklist in db.playlistSongs
                         // so the next cold mount can rebuild it offline.
                         // Order is preserved via ListOrder.
-                        await db.transaction(
-                            'rw',
-                            db.playlistSongs,
-                            db.songs,
-                            async () => {
-                                await db.playlistSongs
-                                    .where('PlaylistId')
-                                    .equals(args.query.id)
-                                    .delete();
-                                await db.playlistSongs.bulkPut(
-                                    items.map((song, i) => ({
-                                        __cachedAt: Date.now(),
-                                        ListOrder: i,
-                                        PlaylistId: args.query.id,
-                                        SongId: song.id,
-                                        SongPayload: song,
-                                    })),
-                                );
-                            },
-                        );
+                        await db.transaction('rw', db.playlistSongs, db.songs, async () => {
+                            await db.playlistSongs
+                                .where('PlaylistId')
+                                .equals(args.query.id)
+                                .delete();
+                            await db.playlistSongs.bulkPut(
+                                items.map((song, i) => ({
+                                    __cachedAt: Date.now(),
+                                    ListOrder: i,
+                                    PlaylistId: args.query.id,
+                                    SongId: song.id,
+                                    SongPayload: song,
+                                })),
+                            );
+                        });
                     },
                     ctx,
                     fromCache: async (db) => {

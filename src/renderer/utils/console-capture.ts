@@ -5,13 +5,13 @@
 // time and tee every call into a bounded in-memory buffer. The user opens
 // "Show logs" in Settings → Library sync to view + copy the buffer.
 
-export type ConsoleEntryLevel = 'debug' | 'error' | 'info' | 'log' | 'warn';
-
 export interface ConsoleEntry {
     args: string;
     level: ConsoleEntryLevel;
     timestamp: number;
 }
+
+export type ConsoleEntryLevel = 'debug' | 'error' | 'info' | 'log' | 'warn';
 
 const MAX_ENTRIES = 1000;
 
@@ -27,10 +27,14 @@ const safeStringify = (value: unknown): string => {
         return `${value.name}: ${value.message}${value.stack ? `\n${value.stack}` : ''}`;
     }
     try {
-        return JSON.stringify(value, (_, v) => {
-            if (typeof v === 'bigint') return v.toString();
-            return v;
-        }, 2);
+        return JSON.stringify(
+            value,
+            (_, v) => {
+                if (typeof v === 'bigint') return v.toString();
+                return v;
+            },
+            2,
+        );
     } catch {
         try {
             return String(value);

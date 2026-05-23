@@ -3,12 +3,12 @@
 // can't open devtools) have somewhere to read cache logs / warnings /
 // errors from.
 
+import type { ConsoleEntry } from '/@/renderer/utils/console-capture';
+
 import { Button, Group, Modal, ScrollArea, Stack, Text } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-
-import type { ConsoleEntry } from '/@/renderer/utils/console-capture';
 
 import {
     clearConsoleBuffer,
@@ -128,13 +128,13 @@ export const ConsoleLogViewer = () => {
                                         // a modal session; using array index as the key is
                                         // safe and avoids hashing the (potentially large)
                                         // args string on every render.
-                                        // eslint-disable-next-line react/no-array-index-key
+
                                         key={`${entry.timestamp}-${idx}`}
                                         size="xs"
                                         style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
                                     >
-                                        [{formatTime(entry.timestamp)}] [
-                                        {entry.level.toUpperCase()}] {entry.args}
+                                        [{formatTime(entry.timestamp)}] [{entry.level.toUpperCase()}
+                                        ] {entry.args}
                                     </Text>
                                 ))
                             )}

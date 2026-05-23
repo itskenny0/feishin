@@ -84,10 +84,7 @@ export const estimateBytes = async (): Promise<number | undefined> => {
             const genreBytes = genres * 192;
             const lyricsBytes = lyrics * 4096;
             const playlistSongBytes = playlistSongs * 256;
-            const thumbnailBytes = thumbnailRows.reduce(
-                (acc, r) => acc + (r.ByteSize ?? 0),
-                0,
-            );
+            const thumbnailBytes = thumbnailRows.reduce((acc, r) => acc + (r.ByteSize ?? 0), 0);
             return (
                 thumbnailBytes +
                 albumBytes +

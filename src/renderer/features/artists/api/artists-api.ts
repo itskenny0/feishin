@@ -45,9 +45,7 @@ export const artistsQueries = {
                     fromCache: async (db) => {
                         if (!args.query?.id) return undefined;
                         const row = await db.artists.get(args.query.id);
-                        return (row?.Payload ?? undefined) as
-                            | AlbumArtistDetailResponse
-                            | undefined;
+                        return (row?.Payload ?? undefined) as AlbumArtistDetailResponse | undefined;
                     },
                     queryKey: key,
                     remote: ({ signal }) =>
@@ -98,14 +96,9 @@ export const artistsQueries = {
                     fromCache: async (db) => {
                         // Serve the artist list from Dexie so the page paints
                         // on cold mount and works offline.
-                        const rows = await db.artists
-                            .where('Kind')
-                            .equals('AlbumArtist')
-                            .toArray();
+                        const rows = await db.artists.where('Kind').equals('AlbumArtist').toArray();
                         if (rows.length === 0) return undefined;
-                        rows.sort((a, b) =>
-                            (a.SortName ?? '').localeCompare(b.SortName ?? ''),
-                        );
+                        rows.sort((a, b) => (a.SortName ?? '').localeCompare(b.SortName ?? ''));
                         const items = rows.map((r) => r.Payload);
                         return {
                             items,
@@ -191,14 +184,9 @@ export const artistsQueries = {
                     },
                     ctx,
                     fromCache: async (db) => {
-                        const rows = await db.artists
-                            .where('Kind')
-                            .equals('Artist')
-                            .toArray();
+                        const rows = await db.artists.where('Kind').equals('Artist').toArray();
                         if (rows.length === 0) return undefined;
-                        rows.sort((a, b) =>
-                            (a.SortName ?? '').localeCompare(b.SortName ?? ''),
-                        );
+                        rows.sort((a, b) => (a.SortName ?? '').localeCompare(b.SortName ?? ''));
                         const items = rows.map((r) => r.Payload);
                         return {
                             items,
@@ -233,10 +221,7 @@ export const artistsQueries = {
                         if (args.query.favorite !== undefined || args.query._custom) {
                             return undefined;
                         }
-                        const cachedCount = await db.artists
-                            .where('Kind')
-                            .equals('Artist')
-                            .count();
+                        const cachedCount = await db.artists.where('Kind').equals('Artist').count();
                         return cachedCount > 0 ? cachedCount : undefined;
                     },
                     queryKey: key,

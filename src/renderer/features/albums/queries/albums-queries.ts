@@ -355,8 +355,7 @@ export const useAlbumDetailSuspenseQuery = (args: AlbumDetailSuspenseQueryArgs) 
                             songs = songRows
                                 .sort(
                                     (a, b) =>
-                                        (a.ParentIndexNumber ?? 0) -
-                                            (b.ParentIndexNumber ?? 0) ||
+                                        (a.ParentIndexNumber ?? 0) - (b.ParentIndexNumber ?? 0) ||
                                         (a.IndexNumber ?? 0) - (b.IndexNumber ?? 0),
                                 )
                                 .map((r) => r.Payload);

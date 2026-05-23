@@ -297,8 +297,7 @@ export const useCachedInfiniteQuery = <TPage, TPageParam = number>(
                                 console.warn('[cache] apply failed (bg)', queryKey, err);
                             }
                         }
-                        const existing =
-                            readSnapshot<InfiniteData<TPage, TPageParam>>(queryKey);
+                        const existing = readSnapshot<InfiniteData<TPage, TPageParam>>(queryKey);
                         const next = mergePage(existing, pageParam, fresh);
                         writeSnapshot(queryKey, next);
                         queryClient.setQueryData(queryKey, next);

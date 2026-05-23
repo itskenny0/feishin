@@ -226,9 +226,7 @@ export const resolvePlaylistPage = async (
     let sorted = rows.slice();
     if (query.searchTerm) {
         const needle = query.searchTerm.toLowerCase();
-        sorted = sorted.filter((r) =>
-            (r.Payload?.name ?? '').toLowerCase().includes(needle),
-        );
+        sorted = sorted.filter((r) => (r.Payload?.name ?? '').toLowerCase().includes(needle));
     }
 
     // Honour every PlaylistListSort variant the type defines. Falling back
@@ -236,26 +234,18 @@ export const resolvePlaylistPage = async (
     // for newer sort enums and unknown shapes from the wire.
     switch (query.sortBy) {
         case PlaylistListSort.DURATION:
-            sorted.sort(
-                (a, b) => (a.Payload?.duration ?? 0) - (b.Payload?.duration ?? 0),
-            );
+            sorted.sort((a, b) => (a.Payload?.duration ?? 0) - (b.Payload?.duration ?? 0));
             break;
         case PlaylistListSort.OWNER:
-            sorted.sort((a, b) =>
-                (a.Payload?.owner ?? '').localeCompare(b.Payload?.owner ?? ''),
-            );
+            sorted.sort((a, b) => (a.Payload?.owner ?? '').localeCompare(b.Payload?.owner ?? ''));
             break;
         case PlaylistListSort.PUBLIC:
             sorted.sort(
-                (a, b) =>
-                    Number(b.Payload?.public ?? false) - Number(a.Payload?.public ?? false),
+                (a, b) => Number(b.Payload?.public ?? false) - Number(a.Payload?.public ?? false),
             );
             break;
         case PlaylistListSort.SONG_COUNT:
-            sorted.sort(
-                (a, b) =>
-                    (a.Payload?.songCount ?? 0) - (b.Payload?.songCount ?? 0),
-            );
+            sorted.sort((a, b) => (a.Payload?.songCount ?? 0) - (b.Payload?.songCount ?? 0));
             break;
         case PlaylistListSort.UPDATED_AT:
             // DateLastSaved is the cached `updatedAt`; empty strings sort

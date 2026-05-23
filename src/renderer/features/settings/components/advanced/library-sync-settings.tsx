@@ -1,6 +1,7 @@
 import type { EntityType } from '/@/renderer/cache/types';
 import type { ServerListItem } from '/@/shared/types/domain-types';
 
+import { Capacitor } from '@capacitor/core';
 import { Alert, Button, Group, Progress, Slider, Stack, Switch, Text, Title } from '@mantine/core';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -24,7 +25,6 @@ import { cancelHydration } from '/@/renderer/cache/sync';
 import { ConsoleLogViewer } from '/@/renderer/features/settings/components/advanced/console-log-viewer';
 import { useAuthStore, useSettingsStore } from '/@/renderer/store';
 import { toast } from '/@/shared/components/toast/toast';
-import { Capacitor } from '@capacitor/core';
 
 const MIB = 1024 * 1024;
 const GIB = 1024 * MIB;
@@ -102,9 +102,7 @@ export const LibrarySyncSettings = () => {
     const setLocalCache = useSettingsStore((s) => s.actions.setLocalCache);
     const entities = useSettingsStore((s) => s.localCache?.entities);
     const thumbnailSizes = useSettingsStore((s) => s.localCache?.thumbnailSizes);
-    const thumbnailConcurrency = useSettingsStore(
-        (s) => s.localCache?.thumbnailConcurrency,
-    );
+    const thumbnailConcurrency = useSettingsStore((s) => s.localCache?.thumbnailConcurrency);
 
     const [thumbnailCount, setThumbnailCount] = useState<number | undefined>(undefined);
     const [thumbnailBytes, setThumbnailBytes] = useState<number | undefined>(undefined);
@@ -400,11 +398,11 @@ export const LibrarySyncSettings = () => {
                                             entities: {
                                                 albums: entities?.albums ?? true,
                                                 artists: entities?.artists ?? true,
+                                                [entity]: next,
                                                 favorites: entities?.favorites ?? true,
                                                 genres: entities?.genres ?? true,
                                                 playlists: entities?.playlists ?? true,
                                                 songs: entities?.songs ?? true,
-                                                [entity]: next,
                                             },
                                         });
                                     }}
@@ -425,31 +423,31 @@ export const LibrarySyncSettings = () => {
                         })}
                     </Text>
                     <Stack gap={4}>
-                        {(['itemCard', 'header', 'sidebar', 'table', 'fullScreenPlayer'] as const).map(
-                            (bucket) => {
-                                const checked = (thumbnailSizes ?? []).includes(bucket);
-                                return (
-                                    <Switch
-                                        checked={checked}
-                                        key={`thumb-size-${bucket}`}
-                                        label={t(
-                                            `page.setting.librarySyncDashboard.thumbnailSize_${bucket}`,
-                                            {
-                                                defaultValue: bucket,
-                                            },
-                                        )}
-                                        onChange={(e) => {
-                                            const current = new Set(thumbnailSizes ?? []);
-                                            if (e.currentTarget.checked) current.add(bucket);
-                                            else current.delete(bucket);
-                                            setLocalCache({
-                                                thumbnailSizes: Array.from(current),
-                                            });
-                                        }}
-                                    />
-                                );
-                            },
-                        )}
+                        {(
+                            ['itemCard', 'header', 'sidebar', 'table', 'fullScreenPlayer'] as const
+                        ).map((bucket) => {
+                            const checked = (thumbnailSizes ?? []).includes(bucket);
+                            return (
+                                <Switch
+                                    checked={checked}
+                                    key={`thumb-size-${bucket}`}
+                                    label={t(
+                                        `page.setting.librarySyncDashboard.thumbnailSize_${bucket}`,
+                                        {
+                                            defaultValue: bucket,
+                                        },
+                                    )}
+                                    onChange={(e) => {
+                                        const current = new Set(thumbnailSizes ?? []);
+                                        if (e.currentTarget.checked) current.add(bucket);
+                                        else current.delete(bucket);
+                                        setLocalCache({
+                                            thumbnailSizes: Array.from(current),
+                                        });
+                                    }}
+                                />
+                            );
+                        })}
                     </Stack>
 
                     {/* Concurrency slider — how many thumbnail fetches to
@@ -458,10 +456,9 @@ export const LibrarySyncSettings = () => {
                     <Stack gap={4} mt="sm">
                         <Group justify="space-between">
                             <Text size="sm">
-                                {t(
-                                    'page.setting.librarySyncDashboard.thumbnailConcurrency',
-                                    { defaultValue: 'Parallel downloads' },
-                                )}
+                                {t('page.setting.librarySyncDashboard.thumbnailConcurrency', {
+                                    defaultValue: 'Parallel downloads',
+                                })}
                             </Text>
                             <Text c="dimmed" size="sm">
                                 {thumbnailConcurrency ?? 24}
@@ -471,20 +468,15 @@ export const LibrarySyncSettings = () => {
                             label={(value) => `${value}`}
                             max={64}
                             min={1}
-                            onChangeEnd={(value) =>
-                                setLocalCache({ thumbnailConcurrency: value })
-                            }
+                            onChangeEnd={(value) => setLocalCache({ thumbnailConcurrency: value })}
                             step={1}
                             value={thumbnailConcurrency ?? 24}
                         />
                         <Text c="dimmed" size="xs">
-                            {t(
-                                'page.setting.librarySyncDashboard.thumbnailConcurrencyHelp',
-                                {
-                                    defaultValue:
-                                        'Number of cover-art fetches the sweep runs in parallel. Raise it to saturate a fast LAN; lower it if the server gets unhappy.',
-                                },
-                            )}
+                            {t('page.setting.librarySyncDashboard.thumbnailConcurrencyHelp', {
+                                defaultValue:
+                                    'Number of cover-art fetches the sweep runs in parallel. Raise it to saturate a fast LAN; lower it if the server gets unhappy.',
+                            })}
                         </Text>
                     </Stack>
                 </Stack>
@@ -547,9 +539,7 @@ export const LibrarySyncSettings = () => {
                     <Stack gap={0}>
                         <Text>{t('page.setting.librarySyncDashboard.entityThumbnails')}</Text>
                         <Text c="dimmed" size="xs">
-                            {thumbnailBytes !== undefined
-                                ? formatBytesSI(thumbnailBytes)
-                                : '—'}
+                            {thumbnailBytes !== undefined ? formatBytesSI(thumbnailBytes) : '—'}
                         </Text>
                     </Stack>
                     <Text c="dimmed" size="sm">
@@ -598,11 +588,7 @@ export const LibrarySyncSettings = () => {
                         })}
                     </Text>
                     <Text c="dimmed" size="sm">
-                        {cacheAvailable === undefined
-                            ? '—'
-                            : cacheAvailable
-                              ? 'yes'
-                              : 'no'}
+                        {cacheAvailable === undefined ? '—' : cacheAvailable ? 'yes' : 'no'}
                     </Text>
                 </Group>
                 <Group justify="flex-end" mt="xs">

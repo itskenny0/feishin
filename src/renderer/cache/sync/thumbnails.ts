@@ -45,9 +45,7 @@ interface PendingThumbnail {
  * earlier `if (!row.Payload?.imageId)` guard was rejecting most
  * candidates. Let the server return 404 instead.
  */
-const collectPending = async (
-    sizes: number[],
-): Promise<PendingThumbnail[]> => {
+const collectPending = async (sizes: number[]): Promise<PendingThumbnail[]> => {
     const db = getActiveCacheDb();
     if (!db) return [];
     const out: PendingThumbnail[] = [];
@@ -126,12 +124,9 @@ const fetchOne = async (
     const db = getActiveCacheDb();
     if (!db) return { bytes: 0 };
 
-    const { bytes } = await resolveThumbnailWithBytes(
-        pending.itemId,
-        pending.size,
-        request,
-        { signal },
-    );
+    const { bytes } = await resolveThumbnailWithBytes(pending.itemId, pending.size, request, {
+        signal,
+    });
     if (bytes > 0) existingKeys.add(key);
     return { bytes };
 };

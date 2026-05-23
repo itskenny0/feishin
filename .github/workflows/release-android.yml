@@ -116,11 +116,30 @@ jobs:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
                   TAG: ${{ needs.prepare.outputs.tag }}
               run: |
-                  if ! gh release view "$TAG" >/dev/null 2>&1; then
-                      gh release create "$TAG" \
-                          --title "Feishin $TAG" \
-                          --generate-notes \
-                          --target "$(git rev-parse HEAD)"
+                  # Poll briefly for an existing release — the parallel
+                  # desktop "Release (fork)" workflow creates the same
+                  # GitHub Release for the same tag, and the bare
+                  # view-then-create check below would race with it and
+                  # error out 422 "already exists". Up to ~30s of polling
+                  # lets the desktop job win the race cleanly.
+                  for i in $(seq 1 15); do
+                      if gh release view "$TAG" >/dev/null 2>&1; then
+                          exit 0
+                      fi
+                      sleep 2
+                  done
+                  # Still missing — create it ourselves but swallow the
+                  # "already exists" 422 in case the other job pipped us
+                  # at the last possible moment.
+                  if ! gh release create "$TAG" \
+                      --title "Feishin $TAG" \
+                      --generate-notes \
+                      --target "$(git rev-parse HEAD)" 2>&1 | tee /tmp/gh-out; then
+                      if grep -q "already_exists\|already exists" /tmp/gh-out; then
+                          echo "Release was created concurrently — continuing."
+                          exit 0
+                      fi
+                      exit 1
                   fi
             - name: Upload APK to release
               env:

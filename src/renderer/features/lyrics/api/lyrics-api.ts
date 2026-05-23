@@ -287,11 +287,7 @@ export const lyricsQueries = {
         // The heavy `remote` step assembles local + remote-auto + override
         // lyrics in parallel and persists the local flavour back to Dexie
         // so future loads can paint instantly across app restarts.
-        const remote = async ({
-            signal,
-        }: {
-            signal?: AbortSignal;
-        }): Promise<LyricsQueryResult> => {
+        const remote = async ({ signal }: { signal?: AbortSignal }): Promise<LyricsQueryResult> => {
             if (!song) return emptyResult();
 
             const prev = queryClient.getQueryData<LyricsQueryResult>(lyricsKey);

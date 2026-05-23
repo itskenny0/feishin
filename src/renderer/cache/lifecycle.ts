@@ -10,8 +10,8 @@ import { clearAllSnapshots, dropSnapshotsForServer } from './snapshot';
 import { useCacheActions, useCacheStore } from './store';
 import { cancelHydration, hydrate } from './sync';
 
-import { registerThumbnailResolver } from '/@/shared/components/image/use-native-image';
 import { useAuthStore, useSettingsStore } from '/@/renderer/store';
+import { registerThumbnailResolver } from '/@/shared/components/image/use-native-image';
 
 // Bridge the renderer-only thumbnail cache into the shared `useNativeImage`
 // hook. Registered eagerly at module load so even the first `<ItemImage>`

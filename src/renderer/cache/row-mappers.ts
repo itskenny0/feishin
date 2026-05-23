@@ -6,13 +6,15 @@
 // truth.
 
 import type {
-    CachedAlbum,
-    CachedArtist,
-    CachedGenre,
-    CachedPlaylist,
-    CachedSong,
-} from './types';
-import type { Album, AlbumArtist, Artist, Genre, Playlist, Song } from '/@/shared/types/domain-types';
+    Album,
+    AlbumArtist,
+    Artist,
+    Genre,
+    Playlist,
+    Song,
+} from '/@/shared/types/domain-types';
+
+import type { CachedAlbum, CachedArtist, CachedGenre, CachedPlaylist, CachedSong } from './types';
 
 const nowMs = (): number => Date.now();
 
@@ -31,8 +33,7 @@ export const toCachedArtistRow = (
     kind: 'AlbumArtist' | 'Artist',
 ): CachedArtist => ({
     __cachedAt: nowMs(),
-    DateLastSaved:
-        (artist as { updatedAt?: string }).updatedAt ?? '',
+    DateLastSaved: (artist as { updatedAt?: string }).updatedAt ?? '',
     Id: artist.id,
     Kind: kind,
     Name: artist.name,
