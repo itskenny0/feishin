@@ -5,7 +5,6 @@ import { useTranslation } from 'react-i18next';
 import styles from './add-to-playlist-context-modal.module.css';
 
 import { api } from '/@/renderer/api';
-import { queryKeys } from '/@/renderer/api/query-keys';
 import { ItemImage } from '/@/renderer/components/item-image/item-image';
 import {
     getAlbumSongsById,
@@ -14,6 +13,7 @@ import {
     getPlaylistSongsById,
     getSongsByFolder,
 } from '/@/renderer/features/player/utils';
+import { playlistsQueries } from '/@/renderer/features/playlists/api/playlists-api';
 import { useAddToPlaylist } from '/@/renderer/features/playlists/mutations/add-to-playlist-mutation';
 import { usePlaylistListQuery } from '/@/renderer/features/playlists/queries/playlists-queries';
 import { queryClient } from '/@/renderer/lib/react-query';
@@ -228,22 +228,12 @@ export const AddToPlaylistContextModal = ({
                 const uniqueSongIds: string[] = [];
 
                 if (values.skipDuplicates) {
-                    const queryKey = queryKeys.playlists.songList(serverId, playlistId);
-
-                    const playlistSongsRes = await queryClient.fetchQuery({
-                        queryFn: ({ signal }) => {
-                            return api.controller.getPlaylistSongList({
-                                apiClientProps: {
-                                    serverId,
-                                    signal,
-                                },
-                                query: {
-                                    id: playlistId,
-                                },
-                            });
-                        },
-                        queryKey,
-                    });
+                    const playlistSongsRes = await queryClient.fetchQuery(
+                        playlistsQueries.songList({
+                            query: { id: playlistId },
+                            serverId,
+                        }),
+                    );
 
                     const playlistSongIds = playlistSongsRes?.items?.map((song) => song.id);
 
