@@ -2,7 +2,7 @@ import { queryOptions } from '@tanstack/react-query';
 
 import { api } from '/@/renderer/api';
 import { queryKeys } from '/@/renderer/api/query-keys';
-import { cachedSwr, readSnapshot, snapshotSwr, toCachedPlaylistRow } from '/@/renderer/cache';
+import { cachedSwr, readSnapshot, toCachedPlaylistRow } from '/@/renderer/cache';
 import { QueryHookArgs } from '/@/renderer/lib/react-query';
 import {
     ListCountQuery,
@@ -58,6 +58,19 @@ export const playlistsQueries = {
                         }
                     },
                     ctx,
+                    fromCache: async (db) => {
+                        // Read every cached playlist and assemble a list
+                        // response so the playlist surface paints from
+                        // local storage on cold mount + works offline.
+                        const rows = await db.playlists.orderBy('SortName').toArray();
+                        if (rows.length === 0) return undefined;
+                        const items = rows.map((r) => r.Payload);
+                        return {
+                            items,
+                            startIndex: 0,
+                            totalRecordCount: items.length,
+                        };
+                    },
                     queryKey: key,
                     remote: ({ signal }) =>
                         api.controller.getPlaylistList({
@@ -103,8 +116,50 @@ export const playlistsQueries = {
             initialData: (() => readSnapshot(key)) as never,
             initialDataUpdatedAt: 0,
             queryFn: (ctx) =>
-                snapshotSwr<PlaylistSongListResponse>({
+                cachedSwr<PlaylistSongListResponse>({
+                    apply: async (db, fresh) => {
+                        const items = fresh?.items ?? [];
+                        if (items.length === 0 || !args.query?.id) return;
+                        // Replace the playlist's tracklist in db.playlistSongs
+                        // so the next cold mount can rebuild it offline.
+                        // Order is preserved via ListOrder.
+                        await db.transaction(
+                            'rw',
+                            db.playlistSongs,
+                            db.songs,
+                            async () => {
+                                await db.playlistSongs
+                                    .where('PlaylistId')
+                                    .equals(args.query.id)
+                                    .delete();
+                                await db.playlistSongs.bulkPut(
+                                    items.map((song, i) => ({
+                                        __cachedAt: Date.now(),
+                                        ListOrder: i,
+                                        PlaylistId: args.query.id,
+                                        SongId: song.id,
+                                        SongPayload: song,
+                                    })),
+                                );
+                            },
+                        );
+                    },
                     ctx,
+                    fromCache: async (db) => {
+                        if (!args.query?.id) return undefined;
+                        const rows = await db.playlistSongs
+                            .where('PlaylistId')
+                            .equals(args.query.id)
+                            .toArray();
+                        if (rows.length === 0) return undefined;
+                        rows.sort((a, b) => a.ListOrder - b.ListOrder);
+                        const items = rows.map((r) => r.SongPayload);
+                        return {
+                            items,
+                            startIndex: 0,
+                            totalRecordCount: items.length,
+                        };
+                    },
                     queryKey: key,
                     remote: ({ signal }) =>
                         api.controller.getPlaylistSongList({
