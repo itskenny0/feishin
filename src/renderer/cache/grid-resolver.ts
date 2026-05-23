@@ -12,7 +12,7 @@
 //     compilation flag, _custom, ...)
 // The loader treats `undefined` as "no cache hit; go to network".
 
-import type { CachedAlbum } from './types';
+import type { CachedAlbum, CachedFavoriteKind } from './types';
 
 import { isCacheAvailableSync } from './capability';
 import { getActiveCacheDb } from './db';
@@ -58,7 +58,7 @@ const logHit = (label: string, count: number): void => {
 
 const readFavoriteIds = async (
     db: NonNullable<ReturnType<typeof getActiveCacheDb>>,
-    itemType: 'Album' | 'Artist' | 'Song',
+    itemType: CachedFavoriteKind,
 ): Promise<Set<string>> => {
     const rows = await db.favorites.filter((r) => r.ItemType === itemType).toArray();
     return new Set(rows.filter((r) => r.IsFavorite).map((r) => r.ItemId));
@@ -108,7 +108,7 @@ export const resolveAlbumArtistPage = async (
     if (rows.length === 0) return undefined;
 
     const favoriteArtistIds =
-        query.favorite !== undefined ? await readFavoriteIds(db, 'Artist') : undefined;
+        query.favorite !== undefined ? await readFavoriteIds(db, 'AlbumArtist') : undefined;
 
     const out = filterAlbumArtistsLocal({
         favoriteArtistIds,
@@ -134,8 +134,11 @@ export const resolveArtistPage = async (
     const rows = await db.artists.where('Kind').equals('Artist').toArray();
     if (rows.length === 0) return undefined;
 
+    // Jellyfin doesn't distinguish song-artist favorites from album-artist
+    // favorites — the same underlying record is toggled. Our favorites sweep
+    // stores them as 'AlbumArtist', so we read from that bucket here too.
     const favoriteArtistIds =
-        query.favorite !== undefined ? await readFavoriteIds(db, 'Artist') : undefined;
+        query.favorite !== undefined ? await readFavoriteIds(db, 'AlbumArtist') : undefined;
 
     const out = filterArtistsLocal({
         favoriteArtistIds,
