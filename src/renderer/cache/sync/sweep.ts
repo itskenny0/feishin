@@ -49,6 +49,32 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
 
     while (!signal.aborted) {
         const pageStartedAt = Date.now();
+        // Flip the sweep into the 'fetching' sub-phase BEFORE we
+        // await the network so the dashboard can label this period
+        // clearly. On slow Jellyfin instances a 500-item page fetch
+        // can take 20-30s with no visible progress; without this
+        // hint the user sees a frozen counter and assumes the sweep
+        // is stuck. We do this from page 2 onward — page 1 has no
+        // prior progress object to inherit from.
+        if (itemsDone > 0) {
+            const elapsedSec = Math.max(1, (pageStartedAt - sweepStartedAt) / 1000);
+            actions.setSweep({
+                entity,
+                progress: {
+                    bytesDownloaded,
+                    bytesPerSec: bytesDownloaded / elapsedSec,
+                    done: itemsDone,
+                    estimatedTotalBytes:
+                        total !== undefined && itemsDone > 0
+                            ? bytesDownloaded * (total / itemsDone)
+                            : undefined,
+                    itemsPerSec: itemsDone / elapsedSec,
+                    phase: 'fetching',
+                    startedAt: sweepStartedAt,
+                    total,
+                },
+            });
+        }
         let result: { items: TItem[]; total: number };
         try {
             result = await fetchPage(startIndex, pageSize, signal);
@@ -177,6 +203,7 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
                 done: itemsDone,
                 estimatedTotalBytes,
                 itemsPerSec,
+                phase: 'processing',
                 startedAt: sweepStartedAt,
                 total,
             },

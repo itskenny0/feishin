@@ -36,6 +36,14 @@ export interface SweepProgress {
     // Undefined if `total` is unknown (server returned no total).
     estimatedTotalBytes: number | undefined;
     itemsPerSec: number;
+    // Coarse sub-phase the sweep is in right now. `fetching` means a
+    // network request is in flight for the next batch and no items are
+    // landing in Dexie; `processing` means items just landed and the
+    // sweep is about to advance. The dashboard surfaces this so a
+    // slow page fetch doesn't look like a stall. Undefined for sweeps
+    // that don't have a discrete fetch phase (e.g. the thumbnail
+    // worker pool).
+    phase?: 'fetching' | 'processing';
     startedAt: number;
     total: number | undefined;
 }

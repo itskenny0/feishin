@@ -17,6 +17,7 @@ export interface SmoothSweepView {
         | undefined;
     estimatedTotalBytes: number | undefined;
     itemsPerSec: number;
+    phase: 'fetching' | 'processing' | undefined;
     startedAt: number | undefined;
     total: number | undefined;
 }
@@ -28,6 +29,7 @@ const EMPTY_VIEW: SmoothSweepView = {
     entity: undefined,
     estimatedTotalBytes: undefined,
     itemsPerSec: 0,
+    phase: undefined,
     startedAt: undefined,
     total: undefined,
 };
@@ -67,6 +69,7 @@ export const useSmoothSweep = (): SmoothSweepView => {
         const { total } = sweep.progress;
         const { estimatedTotalBytes } = sweep.progress;
         const { startedAt } = sweep.progress;
+        const { phase } = sweep.progress;
         const { entity } = sweep;
 
         let raf = 0;
@@ -104,6 +107,7 @@ export const useSmoothSweep = (): SmoothSweepView => {
                 entity,
                 estimatedTotalBytes,
                 itemsPerSec,
+                phase,
                 startedAt,
                 total,
             });

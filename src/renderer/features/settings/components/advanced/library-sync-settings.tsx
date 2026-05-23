@@ -542,6 +542,12 @@ export const LibrarySyncSettings = () => {
                             {t('page.setting.librarySyncDashboard.statusSweeping', {
                                 entity: t(ENTITY_LABEL_KEYS[sweep.entity]),
                             })}
+                            {smoothSweep.phase === 'fetching'
+                                ? ' · ' +
+                                  t('page.setting.librarySyncDashboard.statusFetchingPage', {
+                                      defaultValue: 'fetching next page…',
+                                  })
+                                : ''}
                         </Text>
                         <Progress value={sweepProgress} />
                         <Text c="dimmed" size="sm">
