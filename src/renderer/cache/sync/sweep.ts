@@ -181,6 +181,7 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
             bytesPerSec: Math.round(bytesPerSec),
             estimatedTotalBytes,
             fetched: pageItems.length,
+            fetchedRaw: result.items.length,
             itemsPerSec: Math.round(itemsPerSec),
             pageBytes,
             pageElapsedMs,
@@ -205,7 +206,9 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
         // a transient cache, but it can also mean the sweep is stuck —
         // we'd otherwise exit the loop below and silently mark this
         // entity "full" with a partial dataset.
-        if (pageItems.length === 0 && itemsDone < result.total) {
+        // Use result.items.length (pre-filter) so a delta-sync page
+        // that the client filtered to zero doesn't fire a false alarm.
+        if (result.items.length === 0 && itemsDone < result.total) {
             console.warn(`[cache] sweep:${entity} ANOMALY: empty page below total`, {
                 claimedTotal: result.total,
                 itemsDone,
