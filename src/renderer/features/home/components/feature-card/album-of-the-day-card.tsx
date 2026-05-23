@@ -6,7 +6,13 @@ import { generatePath, Link } from 'react-router';
 import styles from './album-of-the-day-card.module.css';
 
 import { api } from '/@/renderer/api';
-import { readSnapshot, writeSnapshot } from '/@/renderer/cache';
+import {
+    getActiveCacheDb,
+    isCacheAvailableSync,
+    readSnapshot,
+    toCachedAlbumRow,
+    writeSnapshot,
+} from '/@/renderer/cache';
 import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { albumQueries } from '/@/renderer/features/albums/api/album-api';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
@@ -75,6 +81,18 @@ const useAlbumOfTheDayCandidates = (serverId: string | undefined, dateKey: strin
                 },
             });
             const items = (res?.items ?? []) as Album[];
+            // Write the random pool through to the Dexie albums table so
+            // subsequent visits to those album detail pages paint from
+            // cache. RANDOM is server-side so the order changes per call,
+            // but each album payload is still a valid cache row.
+            if (isCacheAvailableSync() && items.length > 0) {
+                try {
+                    const db = getActiveCacheDb();
+                    if (db) await db.albums.bulkPut(items.map(toCachedAlbumRow));
+                } catch {
+                    /* swallow */
+                }
+            }
             // Prefer albums with covers (they look great in the big-cover
             // layout) but fall back to the full pool if the library doesn't
             // have any cover art — otherwise the card would stay stuck on
