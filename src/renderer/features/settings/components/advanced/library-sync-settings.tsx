@@ -21,8 +21,10 @@ import {
     isQuotaCapped,
 } from '/@/renderer/cache/eviction';
 import { cancelHydration } from '/@/renderer/cache/sync';
+import { ConsoleLogViewer } from '/@/renderer/features/settings/components/advanced/console-log-viewer';
 import { useAuthStore, useSettingsStore } from '/@/renderer/store';
 import { toast } from '/@/shared/components/toast/toast';
+import { Capacitor } from '@capacitor/core';
 
 const MIB = 1024 * 1024;
 const GIB = 1024 * MIB;
@@ -48,6 +50,20 @@ const ENTITY_DISPLAY_ORDER: EntityType[] = [
     'playlists',
     'favorites',
 ];
+
+const formatRelative = (timestamp: number): string => {
+    const diff = Date.now() - timestamp;
+    if (diff < 0) return 'just now';
+    const sec = Math.floor(diff / 1000);
+    if (sec < 60) return `${sec}s ago`;
+    const min = Math.floor(sec / 60);
+    if (min < 60) return `${min}m ago`;
+    const hr = Math.floor(min / 60);
+    if (hr < 24) return `${hr}h ago`;
+    const day = Math.floor(hr / 24);
+    if (day < 7) return `${day}d ago`;
+    return new Date(timestamp).toLocaleDateString();
+};
 
 const formatBytes = (n: number | undefined): string => {
     if (n === undefined || !Number.isFinite(n)) return '—';
@@ -88,35 +104,76 @@ export const LibrarySyncSettings = () => {
     const thumbnailSizes = useSettingsStore((s) => s.localCache?.thumbnailSizes);
 
     const [thumbnailCount, setThumbnailCount] = useState<number | undefined>(undefined);
+    const [thumbnailBytes, setThumbnailBytes] = useState<number | undefined>(undefined);
     const [capBytes, setCapBytes] = useState<number | undefined>(undefined);
+    // Per-entity diagnostics from `db.syncMeta`. Keyed by entity name.
+    const [syncMeta, setSyncMeta] = useState<
+        Partial<
+            Record<
+                EntityType,
+                {
+                    lastFullSyncAt: number | undefined;
+                    lastSweepAt: number | undefined;
+                    totalCount: number | undefined;
+                }
+            >
+        >
+    >({});
     // Local slider state — mirrors the persisted setting but lets the user
     // drag freely before we commit. `undefined` while we're still resolving
     // the platform default.
     const [sliderValue, setSliderValue] = useState<number | undefined>(undefined);
+    // Diagnostic surface: runtime + IndexedDB capability info.
+    const diagnostics = useMemo(() => {
+        const cap = Capacitor.getPlatform?.();
+        const ua = typeof navigator !== 'undefined' ? navigator.userAgent : 'n/a';
+        const online = typeof navigator !== 'undefined' ? navigator.onLine : true;
+        return { online, platform: cap ?? 'web', userAgent: ua };
+    }, []);
 
     const quotaCapped = useMemo(() => isQuotaCapped(), []);
 
-    // Refresh thumbnail count on mount and whenever the sweep state changes
-    // (a finished sweep typically yields new thumbnail rows from CachedImage
-    // misses fetched during the sweep) or when the active server changes.
+    // Refresh thumbnail count + total byte size + per-entity sync metadata
+    // on mount, whenever the sweep state changes, and on server switch.
+    // Reads everything in one batch so the dashboard is consistent.
     useEffect(() => {
         let cancelled = false;
         const db = getActiveCacheDb();
         if (!db) {
             setThumbnailCount(undefined);
+            setThumbnailBytes(undefined);
+            setSyncMeta({});
             return () => {
                 cancelled = true;
             };
         }
-        db.thumbnails
-            .count()
-            .then((n) => {
-                if (!cancelled) setThumbnailCount(n);
-            })
-            .catch((err) => {
-                console.warn('[cache] dashboard: thumbnail count failed', { err });
-                if (!cancelled) setThumbnailCount(undefined);
-            });
+        void (async () => {
+            try {
+                const [count, rows, metaRows] = await Promise.all([
+                    db.thumbnails.count(),
+                    db.thumbnails.toArray(),
+                    db.syncMeta.toArray(),
+                ]);
+                if (cancelled) return;
+                setThumbnailCount(count);
+                setThumbnailBytes(rows.reduce((acc, r) => acc + (r.ByteSize ?? 0), 0));
+                const meta: typeof syncMeta = {};
+                for (const r of metaRows) {
+                    meta[r.EntityType] = {
+                        lastFullSyncAt: r.lastFullSyncAt,
+                        lastSweepAt: r.lastSweepAt,
+                        totalCount: r.totalCount,
+                    };
+                }
+                setSyncMeta(meta);
+            } catch (err) {
+                console.warn('[cache] dashboard: diagnostics read failed', { err });
+                if (!cancelled) {
+                    setThumbnailCount(undefined);
+                    setThumbnailBytes(undefined);
+                }
+            }
+        })();
         return () => {
             cancelled = true;
         };
@@ -416,14 +473,26 @@ export const LibrarySyncSettings = () => {
                 )}
             </Stack>
 
-            {/* Entity counts */}
+            {/* Entity counts + per-entity diagnostics */}
             <Stack gap={4}>
                 {ENTITY_DISPLAY_ORDER.map((entity) => {
                     const count = entityCounts[entity] ?? 0;
                     const state = hydrationStates[entity] ?? 'none';
+                    const meta = syncMeta[entity];
+                    const lastSyncAt = meta?.lastFullSyncAt ?? meta?.lastSweepAt;
                     return (
-                        <Group justify="space-between" key={entity}>
-                            <Text>{t(ENTITY_LABEL_KEYS[entity])}</Text>
+                        <Group align="flex-start" justify="space-between" key={entity}>
+                            <Stack gap={0}>
+                                <Text>{t(ENTITY_LABEL_KEYS[entity])}</Text>
+                                {lastSyncAt && (
+                                    <Text c="dimmed" size="xs">
+                                        {t('page.setting.librarySyncDashboard.lastSynced', {
+                                            defaultValue: 'last sync {{when}}',
+                                            when: formatRelative(lastSyncAt),
+                                        })}
+                                    </Text>
+                                )}
+                            </Stack>
                             <Group gap="md">
                                 <Text c="dimmed" size="sm">
                                     {count.toLocaleString()}
@@ -436,10 +505,69 @@ export const LibrarySyncSettings = () => {
                     );
                 })}
                 <Group justify="space-between">
-                    <Text>{t('page.setting.librarySyncDashboard.entityThumbnails')}</Text>
+                    <Stack gap={0}>
+                        <Text>{t('page.setting.librarySyncDashboard.entityThumbnails')}</Text>
+                        <Text c="dimmed" size="xs">
+                            {thumbnailBytes !== undefined
+                                ? formatBytesSI(thumbnailBytes)
+                                : '—'}
+                        </Text>
+                    </Stack>
                     <Text c="dimmed" size="sm">
                         {thumbnailCount === undefined ? '—' : thumbnailCount.toLocaleString()}
                     </Text>
+                </Group>
+            </Stack>
+
+            {/* Diagnostics + logs */}
+            <Stack gap={4}>
+                <Title order={6}>
+                    {t('page.setting.librarySyncDashboard.diagnosticsTitle', {
+                        defaultValue: 'Diagnostics',
+                    })}
+                </Title>
+                <Group gap="md" justify="space-between">
+                    <Text size="sm">
+                        {t('page.setting.librarySyncDashboard.diagPlatform', {
+                            defaultValue: 'Platform',
+                        })}
+                    </Text>
+                    <Text c="dimmed" size="sm">
+                        {diagnostics.platform}
+                    </Text>
+                </Group>
+                <Group gap="md" justify="space-between">
+                    <Text size="sm">
+                        {t('page.setting.librarySyncDashboard.diagOnline', {
+                            defaultValue: 'Network',
+                        })}
+                    </Text>
+                    <Text c={diagnostics.online ? 'dimmed' : 'yellow'} size="sm">
+                        {diagnostics.online
+                            ? t('page.setting.librarySyncDashboard.diagOnlineYes', {
+                                  defaultValue: 'online',
+                              })
+                            : t('page.setting.librarySyncDashboard.diagOnlineNo', {
+                                  defaultValue: 'offline',
+                              })}
+                    </Text>
+                </Group>
+                <Group gap="md" justify="space-between">
+                    <Text size="sm">
+                        {t('page.setting.librarySyncDashboard.diagCacheAvailable', {
+                            defaultValue: 'IndexedDB available',
+                        })}
+                    </Text>
+                    <Text c="dimmed" size="sm">
+                        {cacheAvailable === undefined
+                            ? '—'
+                            : cacheAvailable
+                              ? 'yes'
+                              : 'no'}
+                    </Text>
+                </Group>
+                <Group justify="flex-end" mt="xs">
+                    <ConsoleLogViewer />
                 </Group>
             </Stack>
 

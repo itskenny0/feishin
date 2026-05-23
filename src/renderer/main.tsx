@@ -9,6 +9,12 @@ import { createRoot } from 'react-dom/client';
 
 import { App } from '/@/renderer/app';
 import { queryClient } from '/@/renderer/lib/react-query';
+import { installConsoleCapture } from '/@/renderer/utils/console-capture';
+
+// Capture every console.log/warn/error/info into an in-memory ring buffer
+// so mobile users (Capacitor on Android / iOS) can view logs from the
+// settings panel — they have no devtools console.
+installConsoleCapture();
 
 /*
  * On a Capacitor Android cold start, the WebView often restores the
