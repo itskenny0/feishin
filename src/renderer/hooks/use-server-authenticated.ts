@@ -7,8 +7,14 @@ import { useNavigate } from 'react-router';
 
 import { api } from '/@/renderer/api';
 import { controller } from '/@/renderer/api/controller';
+import { getActiveCacheDb } from '/@/renderer/cache';
 import { AppRoute } from '/@/renderer/router/routes';
-import { getServerById, useAuthStoreActions, useCurrentServerId } from '/@/renderer/store';
+import {
+    getServerById,
+    useAuthStoreActions,
+    useCurrentServerId,
+    useSettingsStore,
+} from '/@/renderer/store';
 import { LogCategory, logFn } from '/@/renderer/utils/logger';
 import { logMsg } from '/@/renderer/utils/logger-message';
 import { toast } from '/@/shared/components/toast/toast';
@@ -301,7 +307,15 @@ export const useServerAuthenticated = () => {
                     return authenticateServer(serverWithAuth, nextRetry);
                 }
 
-                // If network error and retries exhausted, redirect to no-network page
+                // If network error and retries exhausted, fall back to
+                // offline mode when the local cache is populated.
+                // Previously this always navigated to NO_NETWORK, which
+                // blocked offline launches even when the user had a
+                // fully-hydrated Dexie cache. Now: if cache is enabled
+                // and has rows, set VALID, surface a toast, and let
+                // the user into the app — react-query reads from
+                // Dexie via cachedSwr / snapshotSwr and degrades
+                // gracefully per surface.
                 if (isNetwork && retryAttempt >= MAX_NETWORK_RETRIES) {
                     logFn.error(logMsg[LogCategory.SYSTEM].serverAuthenticationFailed, {
                         category: LogCategory.SYSTEM,
@@ -314,6 +328,31 @@ export const useServerAuthenticated = () => {
                             serverType: serverWithAuth.type,
                         },
                     });
+
+                    const cacheEnabled = useSettingsStore.getState().localCache?.enabled === true;
+                    let cacheHasData = false;
+                    if (cacheEnabled) {
+                        try {
+                            const db = getActiveCacheDb();
+                            if (db) {
+                                const albumCount = await db.albums.count();
+                                cacheHasData = albumCount > 0;
+                            }
+                        } catch {
+                            /* fall through to NO_NETWORK */
+                        }
+                    }
+
+                    if (cacheHasData) {
+                        toast.warn({
+                            autoClose: 6000,
+                            message:
+                                'You are offline. Reading from local cache only — playback and updates won’t work until the server is reachable.',
+                            title: 'Offline',
+                        });
+                        setReady(AuthState.VALID);
+                        return;
+                    }
 
                     // Don't clear credentials on network failure - preserve them for when network returns
                     setReady(AuthState.INVALID);

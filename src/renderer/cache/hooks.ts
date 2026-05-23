@@ -165,10 +165,9 @@ export const cachedSwr = async <TData>(args: {
     }
 
     // Cold-path hard timeout. On Capacitor WebView offline, `fetch()`
-    // can hang indefinitely instead of throwing — the user reported
-    // spinners that never resolve on the artist page's Top songs /
-    // Favorite songs sections. Force a return with `null` after 8s so
-    // Suspense ends and the consumer can render an empty state.
+    // can hang indefinitely instead of throwing. Force a return after
+    // 8s so Suspense ends and the consumer can render the snapshot or
+    // an empty state.
     const COLD_NETWORK_TIMEOUT_MS = 8_000;
     let timedOut = false;
     const timeoutPromise = new Promise<TData>((resolve) => {
@@ -178,11 +177,28 @@ export const cachedSwr = async <TData>(args: {
         }, COLD_NETWORK_TIMEOUT_MS);
     });
 
+    // Helper for the offline / failure return path. If we already have
+    // a snapshot for this queryKey (placeholderData rendered it on
+    // mount), return that instead of `null` — otherwise the user sees
+    // the data load, then erase a split-second later when the queryFn
+    // resolves with null.
+    const fallbackOnFailure = (): TData => {
+        const snap = readSnapshot<TData>(queryKey);
+        if (snap !== undefined) {
+            console.info('[cache] cold network failed; falling back to snapshot', queryKey);
+            return snap;
+        }
+        return null as unknown as TData;
+    };
+
     try {
         const fresh = await Promise.race([remote(ctx), timeoutPromise]);
         if (timedOut) {
-            console.info('[cache] cold network timed out; returning null', queryKey);
-            return null as unknown as TData;
+            console.info('[cache] cold network timed out', queryKey);
+            return fallbackOnFailure();
+        }
+        if (fresh === null || fresh === undefined) {
+            return fallbackOnFailure();
         }
         if (db && apply) {
             try {
@@ -195,10 +211,10 @@ export const cachedSwr = async <TData>(args: {
         return fresh;
     } catch (err) {
         if (isLikelyNetworkError(err)) {
-            console.info('[cache] cold network failed; returning null', queryKey, {
+            console.info('[cache] cold network failed', queryKey, {
                 error: (err as Error)?.message,
             });
-            return null as unknown as TData;
+            return fallbackOnFailure();
         }
         throw err;
     }
