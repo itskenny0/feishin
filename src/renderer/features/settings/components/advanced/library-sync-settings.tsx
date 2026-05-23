@@ -6,6 +6,8 @@ import { Alert, Button, Group, Progress, Slider, Stack, Switch, Text, Title } fr
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import packageJson from '../../../../../../package.json';
+
 import {
     clearLastOpenError,
     formatBytes as formatBytesSI,
@@ -715,6 +717,16 @@ export const LibrarySyncSettings = () => {
                     </Text>
                     <Text c="dimmed" size="sm">
                         {cacheAvailable === undefined ? '—' : cacheAvailable ? 'yes' : 'no'}
+                    </Text>
+                </Group>
+                <Group gap="md" justify="space-between">
+                    <Text size="sm">
+                        {t('page.setting.librarySyncDashboard.diagBuild', {
+                            defaultValue: 'Build',
+                        })}
+                    </Text>
+                    <Text c="dimmed" size="sm">
+                        v{packageJson.version}
                     </Text>
                 </Group>
                 <Group justify="flex-end" mt="xs">
