@@ -8,7 +8,11 @@ import { ImageRequest } from '/@/shared/types/domain-types';
 // through it. When the resolver isn't registered (test contexts, the
 // shared bundle being imported elsewhere), the hook falls back to a plain
 // network fetch.
-type ThumbnailResolver = (itemId: string, size: number, url: string) => Promise<string>;
+type ThumbnailResolver = (
+    itemId: string,
+    size: number,
+    request: ImageRequest | string,
+) => Promise<string>;
 
 let resolveThumbnailRef: null | ThumbnailResolver = null;
 
@@ -19,12 +23,12 @@ export const registerThumbnailResolver = (fn: null | ThumbnailResolver): void =>
 const tryResolveThumbnail = async (
     itemId: string,
     size: number,
-    url: string,
+    request: ImageRequest,
 ): Promise<string | undefined> => {
     if (!resolveThumbnailRef) return undefined;
     try {
-        const resolved = await resolveThumbnailRef(itemId, size, url);
-        return resolved === url ? undefined : resolved;
+        const resolved = await resolveThumbnailRef(itemId, size, request);
+        return resolved === request.url ? undefined : resolved;
     } catch {
         return undefined;
     }
@@ -128,7 +132,7 @@ export function useNativeImage({
                     const cached = await tryResolveThumbnail(
                         request.cacheItemId,
                         request.cacheSize,
-                        request.url,
+                        request,
                     );
                     if (abortController.signal.aborted) {
                         // The resolver creates a fresh blob: URL even on a

@@ -4,7 +4,27 @@
 // whenever the cache is unavailable or any step throws — image rendering
 // must never break because of the cache.
 
+import type { ImageRequest } from '/@/shared/types/domain-types';
+
 import { getActiveCacheDb } from './db';
+
+// Normalises the resolver's request argument so callers can pass either a
+// bare URL (legacy callers like `<CachedImage>`) OR a full `ImageRequest`
+// with auth headers + credentials. Without the latter form, Capacitor /
+// Android can't pass the Jellyfin Authorization header — every fetch
+// silently 401s and the Dexie `thumbnails` table never gets populated.
+const normaliseRequest = (
+    request: ImageRequest | string,
+): { credentials?: RequestCredentials; headers?: Record<string, string>; url: string } => {
+    if (typeof request === 'string') {
+        return { credentials: 'include', url: request };
+    }
+    return {
+        credentials: request.credentials ?? 'include',
+        headers: request.headers,
+        url: request.url,
+    };
+};
 
 // Module-level dedup map. Keyed by `${itemId}:${size}`. Promises resolve to
 // the blob URL when the cache pipeline succeeds, or `undefined` when the
@@ -33,15 +53,20 @@ export interface ResolveThumbnailOptions {
 }
 
 /**
- * Resolve a thumbnail to a `blob:` URL backed by the local cache. Falls
- * back to the original `url` when the cache is disabled or any step fails.
+ * Resolve a thumbnail to a `blob:` URL backed by the local cache. Accepts
+ * either a bare URL (legacy callers) or a full `ImageRequest` so the
+ * Authorization header can ride along — on Capacitor / Android there are
+ * no cookies, so without the header every Jellyfin image fetch 401s and
+ * the Dexie table never gets populated. Falls back to the original URL
+ * whenever the cache is unavailable or any step fails.
  */
 export const resolveThumbnail = async (
     itemId: string,
     size: number,
-    url: string,
+    request: ImageRequest | string,
     options?: ResolveThumbnailOptions,
 ): Promise<string> => {
+    const { credentials, headers, url } = normaliseRequest(request);
     const db = getActiveCacheDb();
     if (!db) return url;
 
@@ -68,7 +93,7 @@ export const resolveThumbnail = async (
                 return URL.createObjectURL(row.Blob);
             }
 
-            const res = await fetch(url, { credentials: 'include', signal });
+            const res = await fetch(url, { credentials, headers, signal });
             if (!res.ok) {
                 console.warn('[cache] thumbnail fetch failed', {
                     itemId,
@@ -129,14 +154,15 @@ export const resolveThumbnail = async (
 export const resolveThumbnailWithBytes = async (
     itemId: string,
     size: number,
-    url: string,
+    request: ImageRequest | string,
     options?: ResolveThumbnailOptions,
 ): Promise<{ bytes: number; url: string }> => {
+    const fallbackUrl = typeof request === 'string' ? request : request.url;
     const db = getActiveCacheDb();
-    if (!db) return { bytes: 0, url };
+    if (!db) return { bytes: 0, url: fallbackUrl };
 
     const before = await db.thumbnails.get([itemId, size]);
-    const resolved = await resolveThumbnail(itemId, size, url, options);
+    const resolved = await resolveThumbnail(itemId, size, request, options);
     if (before) return { bytes: 0, url: resolved };
     const after = await db.thumbnails.get([itemId, size]);
     return { bytes: after?.ByteSize ?? 0, url: resolved };

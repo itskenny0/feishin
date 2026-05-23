@@ -100,11 +100,15 @@ const fetchOne = async (
     signal: AbortSignal,
 ): Promise<{ bytes: number }> => {
     if (signal.aborted) return { bytes: 0 };
-    const url = api.controller.getImageUrl({
+    // getImageRequest returns the URL + the Authorization header. We need
+    // the header on Capacitor / Android where there are no cookies — the
+    // bare URL path was 401-ing every fetch and producing 0 cached
+    // thumbnails. Pass the whole request through to the resolver.
+    const request = api.controller.getImageRequest({
         apiClientProps: { serverId },
         query: { id: pending.itemId, itemType: pending.itemType, size: pending.size },
     });
-    if (!url) return { bytes: 0 };
+    if (!request) return { bytes: 0 };
     const db = getActiveCacheDb();
     if (!db) return { bytes: 0 };
 
@@ -116,7 +120,7 @@ const fetchOne = async (
     const { bytes } = await resolveThumbnailWithBytes(
         pending.itemId,
         pending.size,
-        url,
+        request,
         { signal },
     );
     return { bytes };
