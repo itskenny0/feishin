@@ -341,10 +341,16 @@ export const useAlbumDetailSuspenseQuery = (args: AlbumDetailSuspenseQueryArgs) 
                     const row = await db.albums.get(query.id);
                     const payload = row?.Payload as AlbumDetailResponse | undefined;
                     if (!payload) return undefined;
-                    // If we have a row but it came from the list endpoint
-                    // (no songs nested) try to assemble the tracklist from
-                    // db.songs.where('AlbumId') so the user sees songs on
-                    // first paint even when this is the first detail visit.
+                    // Three-tier song resolution: nested in album payload →
+                    // db.songs.where('AlbumId') → snapshot. The third tier
+                    // protects against the "tracklist draws then erases"
+                    // case the user surfaced — initialData paints songs
+                    // from the snapshot, but if Dexie has 0 song rows for
+                    // this album (sweep partial or AlbumId mismatch), the
+                    // queryFn would otherwise return empty songs and
+                    // erase the tracklist on its first render after
+                    // initialData. By falling back to the snapshot here
+                    // we keep the visible state.
                     let songs = payload.songs ?? [];
                     if (songs.length === 0) {
                         try {
@@ -360,10 +366,15 @@ export const useAlbumDetailSuspenseQuery = (args: AlbumDetailSuspenseQueryArgs) 
                                 )
                                 .map((r) => r.Payload);
                         } catch {
-                            /* swallow — falls through to network */
+                            /* swallow */
                         }
                     }
-                    if (songs.length === 0) return undefined;
+                    if (songs.length === 0) {
+                        const snap = readSnapshot<AlbumDetailResponse>(queryKey);
+                        if (snap?.songs && snap.songs.length > 0) {
+                            songs = snap.songs;
+                        }
+                    }
                     logCacheHitSampled('detail-suspense');
                     return { ...payload, songs } as AlbumDetailResponse;
                 },
