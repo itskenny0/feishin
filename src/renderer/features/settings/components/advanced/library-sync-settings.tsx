@@ -94,6 +94,7 @@ export const LibrarySyncSettings = () => {
     const pendingMutations = useCacheStore((s) => s.pendingMutations);
     const bytesUsed = useCacheStore((s) => s.bytesUsed);
     const activeServer = useCacheStore((s) => s.activeServer);
+    const cacheActions = useCacheStore((s) => s.actions);
     // Three-state opt-in flag. `true` = cache is active and the controls
     // below operate on a live DB. `false` / `undefined` = subsystem is
     // inert and we render a muted hint instead of letting the user fire
@@ -252,12 +253,39 @@ export const LibrarySyncSettings = () => {
         }
     }, []);
 
+    const resetEntityCountsForClear = useCallback(() => {
+        // clearAllCacheData() empties Dexie but doesn't touch the
+        // in-memory cache store. Without this reset the dashboard
+        // keeps showing the pre-clear counts (and the sweep prefetch
+        // log misleads about what's actually in the table). Wipe both
+        // counts and hydration states so the new hydration writes
+        // clean numbers as it progresses.
+        const entities = [
+            'albums',
+            'artists',
+            'favorites',
+            'genres',
+            'playlists',
+            'songs',
+            'thumbnails',
+        ] as const;
+        for (const e of entities) {
+            cacheActions.setEntityCount(e, 0);
+            cacheActions.setHydrationState(e, 'none');
+        }
+        cacheActions.setBytesUsed(0);
+    }, [cacheActions]);
+
     const handleResync = useCallback(
         async (server: ServerListItem) => {
             if (!safeConfirm(t('page.setting.librarySyncDashboard.confirmResync'))) return;
             try {
                 console.info('[cache] dashboard: re-sync confirmed');
                 await clearAllCacheData();
+                resetEntityCountsForClear();
+                setThumbnailCount(0);
+                setThumbnailBytes(0);
+                setSyncMeta({});
                 void hydrate(server, 'full');
                 await refreshBytesUsed();
             } catch (err) {
@@ -265,7 +293,7 @@ export const LibrarySyncSettings = () => {
                 toast.error({ message: (err as Error).message ?? String(err) });
             }
         },
-        [refreshBytesUsed, t],
+        [refreshBytesUsed, resetEntityCountsForClear, t],
     );
 
     const handleClearThumbnails = useCallback(async () => {
@@ -289,13 +317,16 @@ export const LibrarySyncSettings = () => {
         try {
             console.info('[cache] dashboard: clear all confirmed');
             await clearAllCacheData();
+            resetEntityCountsForClear();
             setThumbnailCount(0);
+            setThumbnailBytes(0);
+            setSyncMeta({});
             await refreshBytesUsed();
         } catch (err) {
             console.warn('[cache] dashboard: clear all failed', { err });
             toast.error({ message: (err as Error).message ?? String(err) });
         }
-    }, [refreshBytesUsed, t]);
+    }, [refreshBytesUsed, resetEntityCountsForClear, t]);
 
     const handleSliderCommit = useCallback(
         (bytes: number) => {
@@ -401,17 +432,31 @@ export const LibrarySyncSettings = () => {
                                     label={t(ENTITY_LABEL_KEYS[entity])}
                                     onChange={(e) => {
                                         const next = e.currentTarget.checked;
-                                        setLocalCache({
-                                            entities: {
-                                                albums: entities?.albums ?? true,
-                                                artists: entities?.artists ?? true,
-                                                [entity]: next,
-                                                favorites: entities?.favorites ?? true,
-                                                genres: entities?.genres ?? true,
-                                                playlists: entities?.playlists ?? true,
-                                                songs: entities?.songs ?? true,
-                                            },
-                                        });
+                                        // Build the next entities object
+                                        // imperatively. The previous
+                                        // implementation used a single
+                                        // literal with `[entity]: next`
+                                        // alongside explicit per-entity
+                                        // keys; the perfectionist lint
+                                        // rule re-sorted them alpha-
+                                        // betically, which dropped the
+                                        // computed key into the middle
+                                        // of the literal — so toggling
+                                        // any entity sorted after
+                                        // `artists` (favorites / genres
+                                        // / playlists / songs) was
+                                        // silently a no-op because the
+                                        // later explicit key won.
+                                        const updated = {
+                                            albums: entities?.albums ?? true,
+                                            artists: entities?.artists ?? true,
+                                            favorites: entities?.favorites ?? true,
+                                            genres: entities?.genres ?? true,
+                                            playlists: entities?.playlists ?? true,
+                                            songs: entities?.songs ?? true,
+                                        };
+                                        updated[entity as keyof typeof updated] = next;
+                                        setLocalCache({ entities: updated });
                                     }}
                                 />
                             );

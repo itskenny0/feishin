@@ -178,6 +178,16 @@ export const runThumbnailsSweep = async (
         serverId: server.id,
         sizes,
     });
+    // Diagnostic banner: after a "Clear everything" the user expected
+    // every item to need a real fetch. If something below this line
+    // says skipImmediately > 0, the clear didn't actually wipe the
+    // thumbnails table — or a stale row leaked through some other
+    // path. Logged BEFORE workers start so it's easy to spot.
+    console.info('[cache] thumbnails sweep: pre-flight', {
+        queueSize: total,
+        // existingKeys is filled below; we recompute its size after
+        // the prefetch finishes so this log stays useful.
+    });
 
     const actions = useCacheStore.getState().actions;
     const startedAt = Date.now();
@@ -236,6 +246,7 @@ export const runThumbnailsSweep = async (
             console.info('[cache] thumbnails sweep: prefetched existing keys', {
                 count: existingKeys.size,
                 freshMissCount,
+                queueToFetch: total - existingKeys.size,
                 staleMissCount,
                 totalRows: allKeys.length,
             });
