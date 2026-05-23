@@ -40,6 +40,7 @@ import {
     AlbumDetailResponse,
     AlbumListQuery,
     AlbumListResponse,
+    AlbumListSort,
     ListCountQuery,
     Song,
 } from '/@/shared/types/domain-types';
@@ -174,8 +175,9 @@ const readAlbumsFromCache = async (
     } else {
         rows = await db.albums.toArray();
     }
-    const favoriteAlbumIds =
-        query.favorite !== undefined ? await readFavoriteAlbumIds(db) : undefined;
+    const needsFavorites =
+        query.favorite !== undefined || query.sortBy === AlbumListSort.FAVORITED;
+    const favoriteAlbumIds = needsFavorites ? await readFavoriteAlbumIds(db) : undefined;
     return filterAlbumsLocal({ favoriteAlbumIds, query, rows });
 };
 
