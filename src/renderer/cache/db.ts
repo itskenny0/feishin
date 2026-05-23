@@ -145,6 +145,26 @@ export class LibraryCacheDb extends Dexie {
             syncMeta: 'EntityType',
             thumbnails: 'ItemId, LastUsed, ByteSize, MissAt, __cachedAt',
         });
+
+        // v6: add standalone `AlbumArtistId` index to albums so `where('AlbumArtistId').equals()`
+        // works when loading an artist's album list. Previously AlbumArtistId only appeared in
+        // the compound index [AlbumArtistId+SortName], which Dexie cannot address as a standalone
+        // field — it throws SchemaError caught silently, causing artist-album pages to always
+        // fetch from the network instead of cache. Purely additive; no row-copy work.
+        this.version(6).stores({
+            albums: 'Id, AlbumArtistId, [AlbumArtistId+SortName], DateLastSaved, SortName, ProductionYear, __cachedAt',
+            artists: 'Id, SortName, Name, DateLastSaved, Kind, __cachedAt',
+            favorites:
+                '[ItemId+ItemType], IsFavorite, Rating, LastPlayedDate, PlayCount, __cachedAt',
+            genres: 'Id, SortName, Name, __cachedAt',
+            lyrics: 'SongId, __cachedAt',
+            mutationQueue: 'id, status, createdAt, idempotencyKey',
+            playlists: 'Id, SortName, DateLastSaved, __cachedAt',
+            playlistSongs: '[PlaylistId+ListOrder], PlaylistId, SongId, __cachedAt',
+            songs: 'Id, AlbumId, [AlbumId+ParentIndexNumber+IndexNumber], AlbumArtistId, DateLastSaved, [AlbumId+IndexNumber], __cachedAt',
+            syncMeta: 'EntityType',
+            thumbnails: 'ItemId, LastUsed, ByteSize, MissAt, __cachedAt',
+        });
     }
 }
 const handles = new Map<Key, LibraryCacheDb>();
