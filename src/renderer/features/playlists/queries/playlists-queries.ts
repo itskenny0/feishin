@@ -19,6 +19,7 @@ import { controller } from '/@/renderer/api/controller';
 import { queryKeys } from '/@/renderer/api/query-keys';
 import {
     cachedSwr,
+    filterPlaylistsLocal,
     getActiveCacheDb,
     markSearchDirty,
     readSnapshot,
@@ -30,10 +31,8 @@ import {
     PlaylistDetailResponse,
     PlaylistListQuery,
     PlaylistListResponse,
-    PlaylistListSort,
     PlaylistSongListQuery,
     PlaylistSongListResponse,
-    SortOrder,
 } from '/@/shared/types/domain-types';
 
 interface CachedQueryHookOptions {
@@ -89,18 +88,6 @@ const toCachedPlaylistRow = (playlist: Playlist) => ({
     SortName: playlist.name ?? '',
 });
 
-// Determine whether a list-query can be served from the local cache. The
-// Dexie `playlists` table is indexed by `SortName`, so we can serve queries
-// that sort by NAME ASC with no server-side filters. Anything else (smart-
-// playlist exclusion, search terms, alternative sorts) must go to network.
-const canServeListFromCache = (query: PlaylistListQuery): boolean => {
-    if (query.searchTerm) return false;
-    if (query.excludeSmartPlaylists) return false;
-    if (query._custom && Object.keys(query._custom).length > 0) return false;
-    if (query.sortBy !== undefined && query.sortBy !== PlaylistListSort.NAME) return false;
-    if (query.sortOrder !== undefined && query.sortOrder !== SortOrder.ASC) return false;
-    return true;
-};
 
 // ---------------------------------------------------------------------------
 // List — non-suspense
@@ -118,14 +105,9 @@ export const usePlaylistListQuery = (args: PlaylistListQueryArgs) => {
         },
         enabled: options?.enabled ?? Boolean(serverId),
         fromCache: async (db) => {
-            if (!canServeListFromCache(query)) return undefined;
-            const rows = await db.playlists.orderBy('SortName').toArray();
+            const rows = await db.playlists.toArray();
             if (rows.length === 0) return undefined;
-            return {
-                items: rows.map((r) => r.Payload),
-                startIndex: 0,
-                totalRecordCount: rows.length,
-            };
+            return filterPlaylistsLocal({ query, rows }) ?? undefined;
         },
         queryKey: queryKeys.playlists.list(serverId ?? '', query),
         remote: (ctx) =>
@@ -160,14 +142,9 @@ export const usePlaylistListSuspenseQuery = (args: PlaylistListSuspenseQueryArgs
                 },
                 ctx,
                 fromCache: async (db) => {
-                    if (!canServeListFromCache(query)) return undefined;
-                    const rows = await db.playlists.orderBy('SortName').toArray();
+                    const rows = await db.playlists.toArray();
                     if (rows.length === 0) return undefined;
-                    return {
-                        items: rows.map((r) => r.Payload),
-                        startIndex: 0,
-                        totalRecordCount: rows.length,
-                    };
+                    return filterPlaylistsLocal({ query, rows }) ?? undefined;
                 },
                 queryKey,
                 remote: (ctx) =>

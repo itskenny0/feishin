@@ -2,7 +2,7 @@ import { queryOptions } from '@tanstack/react-query';
 
 import { api } from '/@/renderer/api';
 import { queryKeys } from '/@/renderer/api/query-keys';
-import { cachedSwr, readSnapshot, toCachedPlaylistRow } from '/@/renderer/cache';
+import { cachedSwr, filterPlaylistsLocal, readSnapshot, toCachedPlaylistRow } from '/@/renderer/cache';
 import { QueryHookArgs } from '/@/renderer/lib/react-query';
 import {
     ListCountQuery,
@@ -59,17 +59,9 @@ export const playlistsQueries = {
                     },
                     ctx,
                     fromCache: async (db) => {
-                        // Read every cached playlist and assemble a list
-                        // response so the playlist surface paints from
-                        // local storage on cold mount + works offline.
-                        const rows = await db.playlists.orderBy('SortName').toArray();
+                        const rows = await db.playlists.toArray();
                         if (rows.length === 0) return undefined;
-                        const items = rows.map((r) => r.Payload);
-                        return {
-                            items,
-                            startIndex: 0,
-                            totalRecordCount: items.length,
-                        };
+                        return filterPlaylistsLocal({ query: args.query, rows }) ?? undefined;
                     },
                     queryKey: key,
                     remote: ({ signal }) =>

@@ -30,11 +30,13 @@ export {
     filterAlbumArtistsLocal,
     filterAlbumsLocal,
     filterArtistsLocal,
+    filterPlaylistsLocal,
     filterSongsLocal,
 } from './local-filter';
 export type {
     FilterAlbumsArgs,
     FilterArtistsArgs,
+    FilterPlaylistsArgs,
     FilterSongArtistsArgs,
     FilterSongsArgs,
 } from './local-filter';

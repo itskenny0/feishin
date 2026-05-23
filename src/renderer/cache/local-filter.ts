@@ -23,17 +23,21 @@ import type {
     AlbumListResponse,
     ArtistListQuery,
     ArtistListResponse,
+    Playlist,
+    PlaylistListQuery,
+    PlaylistListResponse,
     Song,
     SongListQuery,
     SongListResponse,
 } from '/@/shared/types/domain-types';
 
-import type { CachedAlbum, CachedArtist, CachedSong } from './types';
+import type { CachedAlbum, CachedArtist, CachedPlaylist, CachedSong } from './types';
 
 import {
     AlbumArtistListSort,
     AlbumListSort,
     ArtistListSort,
+    PlaylistListSort,
     SongListSort,
     SortOrder,
 } from '/@/shared/types/domain-types';
@@ -572,6 +576,76 @@ export const filterSongsLocal = (args: FilterSongsArgs): SongListResponse | unde
     const items = paginate(out, startIndex, query.limit).map<Song>((r) => r.Payload);
 
     console.info('[cache] filter: songs', {
+        fromCount,
+        hits: totalRecordCount,
+        ms: Math.round(performance.now() - start),
+        page: items.length,
+    });
+
+    return { items, startIndex, totalRecordCount };
+};
+
+// ---------------------------------------------------------------------------
+// Playlist filter / sort
+// ---------------------------------------------------------------------------
+
+export interface FilterPlaylistsArgs {
+    query: PlaylistListQuery;
+    rows: CachedPlaylist[];
+}
+
+/**
+ * Filter, sort, and paginate a set of cached playlist rows. Returns
+ * `undefined` when the query contains server-only flags (`_custom`,
+ * `excludeSmartPlaylists`) that the cache cannot answer.
+ */
+export const filterPlaylistsLocal = (
+    args: FilterPlaylistsArgs,
+): PlaylistListResponse | undefined => {
+    const { query, rows } = args;
+    if (query.excludeSmartPlaylists) return undefined;
+    if (query._custom && Object.keys(query._custom).length > 0) return undefined;
+
+    const start = performance.now();
+    const fromCount = rows.length;
+
+    let out = rows.slice();
+
+    if (query.searchTerm) {
+        const needle = query.searchTerm.toLowerCase();
+        out = out.filter((r) => (r.Payload?.name ?? '').toLowerCase().includes(needle));
+    }
+
+    switch (query.sortBy) {
+        case PlaylistListSort.DURATION:
+            out.sort((a, b) => cmpNum(a.Payload?.duration, b.Payload?.duration));
+            break;
+        case PlaylistListSort.OWNER:
+            out.sort((a, b) => cmpStr(a.Payload?.owner ?? '', b.Payload?.owner ?? ''));
+            break;
+        case PlaylistListSort.PUBLIC:
+            out.sort(
+                (a, b) => Number(b.Payload?.public ?? false) - Number(a.Payload?.public ?? false),
+            );
+            break;
+        case PlaylistListSort.SONG_COUNT:
+            out.sort((a, b) => cmpNum(a.Payload?.songCount, b.Payload?.songCount));
+            break;
+        case PlaylistListSort.UPDATED_AT:
+            out.sort((a, b) => cmpStr(a.DateLastSaved ?? '', b.DateLastSaved ?? ''));
+            break;
+        case PlaylistListSort.NAME:
+        default:
+            out.sort((a, b) => cmpStr(a.SortName ?? '', b.SortName ?? ''));
+            break;
+    }
+    out = applyDirection(out, query.sortOrder);
+
+    const totalRecordCount = out.length;
+    const startIndex = query.startIndex ?? 0;
+    const items = paginate(out, startIndex, query.limit).map<Playlist>((r) => r.Payload);
+
+    console.info('[cache] filter: playlists', {
         fromCount,
         hits: totalRecordCount,
         ms: Math.round(performance.now() - start),
