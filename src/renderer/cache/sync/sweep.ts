@@ -77,9 +77,7 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
             bytesDownloaded: 0,
             bytesPerSec: 0,
             done: itemsDone,
-            estimatedTotalBytes: total !== undefined && itemsDone > 0
-                ? 0 * (total / itemsDone)
-                : undefined,
+            estimatedTotalBytes: undefined,
             itemsPerSec: 0,
             pageIndex: 1,
             pageTotal: total !== undefined ? Math.ceil(total / pageSize) : undefined,
