@@ -67,6 +67,28 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
         resumeFromIndex: startIndex,
     });
 
+    // Emit an initial "fetching" state immediately so the dashboard shows
+    // "Syncing <entity>…" from the first page, not "Idle". Without this,
+    // entities with slow first pages (e.g. songs ~13s per page) display
+    // "Idle" until the page completes.
+    actions.setSweep({
+        entity,
+        progress: {
+            bytesDownloaded: 0,
+            bytesPerSec: 0,
+            done: itemsDone,
+            estimatedTotalBytes: total !== undefined && itemsDone > 0
+                ? 0 * (total / itemsDone)
+                : undefined,
+            itemsPerSec: 0,
+            pageIndex: 1,
+            pageTotal: total !== undefined ? Math.ceil(total / pageSize) : undefined,
+            phase: 'fetching',
+            startedAt: sweepStartedAt,
+            total,
+        },
+    });
+
     let pageIndex = 0;
     while (!signal.aborted) {
         pageIndex += 1;
@@ -77,8 +99,8 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
         // clearly. On slow Jellyfin instances a 500-item page fetch
         // can take 20-30s with no visible progress; without this
         // hint the user sees a frozen counter and assumes the sweep
-        // is stuck. We do this from page 2 onward — page 1 has no
-        // prior progress object to inherit from.
+        // is stuck. This applies from page 2 onward (page 1 is handled
+        // by the initial state emitted above).
         if (itemsDone > 0) {
             const elapsedSec = Math.max(1, (pageStartedAt - sweepStartedAt) / 1000);
             actions.setSweep({

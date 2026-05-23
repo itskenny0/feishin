@@ -1013,7 +1013,10 @@ export const JellyfinController: InternalControllerEndpoint = {
                 Fields: JF_FIELDS.PLAYLIST_LIST,
                 IncludeItemTypes: 'Playlist',
                 Limit: query.limit,
-                MediaTypes: 'Audio',
+                // MediaTypes:Audio causes Jellyfin to report a non-zero
+                // TotalRecordCount but return Items:[] — playlists are
+                // containers, not media items, so filtering by media type
+                // produces this mismatch. Omit it to get correct results.
                 Recursive: true,
                 SearchTerm: query.searchTerm,
                 SortBy: playlistListSortMap.jellyfin[query.sortBy],

@@ -272,6 +272,7 @@ export const runFavoritesSweep = async (
 
     actions.setEntityCount('favorites', totalRows);
     actions.setHydrationState('favorites', 'full');
+    actions.setSweep(undefined);
     console.info('[cache] sweep:favorites done', {
         durationMs: Date.now() - now,
         totalRows,
