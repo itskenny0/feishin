@@ -264,7 +264,7 @@ const sortArtists = (rows: CachedArtist[], sortBy: AnyArtistSort | undefined): C
             rows.sort((a, b) => cmpNum(a.Payload.userRating, b.Payload.userRating));
             break;
         case AlbumArtistListSort.RECENTLY_ADDED:
-            rows.sort((a, b) => cmpDate(a.Payload.lastPlayedAt, b.Payload.lastPlayedAt));
+            rows.sort((a, b) => cmpDate(a.Payload.createdAt, b.Payload.createdAt));
             break;
         case AlbumArtistListSort.SONG_COUNT:
             rows.sort((a, b) => cmpNum(a.Payload.songCount, b.Payload.songCount));
