@@ -252,6 +252,15 @@ const HomeRoute = () => {
                         ref={containerQuery.ref}
                     >
                         <HydrationBanner />
+                        {/* SyncChip is also mounted in the page-header chrome
+                            above, but that chrome only fades in after the user
+                            scrolls past the 200px offset. While sitting at the
+                            top of home during the initial hydration the user
+                            wouldn't see it; render a second copy here so the
+                            sync progress is glanceable from the entry point.
+                            The chip self-gates on enabled + active sweep so
+                            both mounts are no-ops outside that window. */}
+                        <SyncChip />
                         {/* Per-widget error boundaries so a thrown error in one
                             widget (e.g. a transient malformed-response from a
                             specific carousel) doesn't black-hole the entire

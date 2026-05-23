@@ -173,7 +173,6 @@
         "warning": "Warning",
         "error": "Error",
         "info": "Info",
-        "back": "Back",
         "explicit": "Explicit",
         "clean": "Clean",
         "gridRows": "Grid rows",
@@ -764,7 +763,15 @@
             "newlyAdded": "Newly added releases",
             "recentlyPlayed": "Recently played",
             "recentlyReleased": "Recently released",
-            "title": "$t(common.home)"
+            "title": "$t(common.home)",
+            "syncChip": {
+                "albums": "Syncing albums",
+                "artists": "Syncing artists",
+                "songs": "Syncing songs",
+                "playlists": "Syncing playlists",
+                "favorites": "Syncing favourites",
+                "genres": "Syncing genres"
+            }
         },
         "itemDetail": {
             "copyPath": "Copy path to clipboard",
@@ -809,8 +816,38 @@
             "visualizer": "Visualizer Settings",
             "librarySyncDashboard": {
                 "masterToggleLabel": "Enable local-first cache",
-                "masterToggleHint": "Enable the cache to use these controls."
-            }
+                "masterToggleHint": "Enable the cache to use these controls.",
+                "statusIdle": "Idle",
+                "statusSweeping": "Syncing {{entity}}…",
+                "statusUnavailable": "Cache unavailable on this platform.",
+                "statusJellyfinOnly": "The local-first cache is only available on Jellyfin servers.",
+                "actionSyncNow": "Sync now",
+                "actionResync": "Re-sync",
+                "actionPause": "Pause",
+                "actionClearThumbnails": "Clear thumbnails",
+                "actionClearAll": "Clear everything",
+                "confirmResync": "This will reset the cache and re-fetch every entity. Continue?",
+                "confirmClearAll": "This will erase every cached row including the mutation queue. Continue?",
+                "entityArtists": "Artists",
+                "entityAlbums": "Albums",
+                "entitySongs": "Songs",
+                "entityPlaylists": "Playlists",
+                "entityFavorites": "Favourites",
+                "entityGenres": "Genres",
+                "entityThumbnails": "Thumbnails",
+                "hydrationState": "State",
+                "count": "Cached",
+                "pendingMutations": "Pending writes: {{count}}",
+                "storageUsed": "Storage used: {{used}} of {{cap}}",
+                "capLabel": "Storage cap",
+                "capSliderHelp": "Drag to set how much disk the cache may use. Eviction trims thumbnails (oldest first) to stay under this limit."
+            },
+            "librarySync": "Library sync",
+            "librarySyncDescription": "Local-first cache for the Jellyfin library so every surface renders instantly.",
+            "librarySyncBannerTitle": "Cache your library for instant browsing?",
+            "librarySyncBannerSubtitle": "We'll fetch your library and keep it in sync in the background, so every screen renders instantly.",
+            "librarySyncBannerYes": "Sync now",
+            "librarySyncBannerNo": "Not now"
         },
         "sidebar": {
             "albumArtists": "$t(entity.albumArtist, {\"count\": 2})",
