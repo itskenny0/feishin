@@ -770,7 +770,8 @@
                 "songs": "Syncing songs",
                 "playlists": "Syncing playlists",
                 "favorites": "Syncing favourites",
-                "genres": "Syncing genres"
+                "genres": "Syncing genres",
+                "thumbnails": "Caching thumbnails"
             }
         },
         "itemDetail": {
