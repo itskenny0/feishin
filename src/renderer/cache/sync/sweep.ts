@@ -149,6 +149,14 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
             await writePage(db, pageItems);
         }
 
+        // Live entity-count + hydration-state update so the dashboard
+        // shows real numbers as the sweep progresses, not "0 none"
+        // until the very last page lands. The end-of-sweep
+        // `setEntityCount` below still fires to lock in the final
+        // total once we mark the entity 'full'.
+        actions.setEntityCount(entity, itemsDone);
+        actions.setHydrationState(entity, 'partial');
+
         // Persist progress so we can resume on next launch.
         const nextStart = startIndex + pageItems.length;
         await db.syncMeta.put({
