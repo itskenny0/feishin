@@ -265,6 +265,7 @@ const normalizeAlbumArtist = (
         _serverType: ServerType.SUBSONIC,
         albumCount: item.albumCount ? Number(item.albumCount) : 0,
         biography: null,
+        createdAt: null,
         duration: null,
         genres: [],
         id: item.id.toString(),

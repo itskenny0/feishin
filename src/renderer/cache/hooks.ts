@@ -13,6 +13,41 @@ import { queryClient } from '/@/renderer/lib/react-query';
 const activeDb = (): LibraryCacheDb | undefined =>
     useCacheStore.getState().cacheAvailable === true ? getActiveCacheDb() : undefined;
 
+// Awaitable version of activeDb() for use in async queryFn paths (cachedSwr,
+// cachedInfiniteSwr). When the cache subsystem is still initializing (capability
+// probe in flight, or DB.open() not yet complete) this waits up to 3 s before
+// giving up and returning undefined so the cold network path takes over.
+// Returns immediately when the DB is already open or when cacheAvailable=false.
+const waitForActiveDb = (): Promise<LibraryCacheDb | undefined> => {
+    const immediate = activeDb();
+    if (immediate !== undefined) return Promise.resolve(immediate);
+
+    const available = useCacheStore.getState().cacheAvailable;
+    if (available === false) return Promise.resolve(undefined);
+
+    return new Promise((resolve) => {
+        const timer = setTimeout(() => {
+            unsub();
+            resolve(undefined);
+        }, 3000);
+
+        const unsub = useCacheStore.subscribe((state) => {
+            if (state.cacheAvailable === false) {
+                clearTimeout(timer);
+                unsub();
+                resolve(undefined);
+                return;
+            }
+            const db = activeDb();
+            if (db) {
+                clearTimeout(timer);
+                unsub();
+                resolve(db);
+            }
+        });
+    });
+};
+
 // Per-queryKey throttle map for background revalidates. After a
 // successful bg refetch we record the timestamp and skip subsequent
 // bg revalidates from the same queryKey for `REVALIDATE_TTL_MS`. This
@@ -110,7 +145,7 @@ export const cachedSwr = async <TData>(args: {
     remote: (ctx: QueryFunctionContext) => Promise<TData>;
 }): Promise<TData> => {
     const { apply, ctx, fromCache, queryKey, remote } = args;
-    const db = activeDb();
+    const db = fromCache ? await waitForActiveDb() : activeDb();
 
     let cached: TData | undefined;
     if (db && fromCache) {
@@ -309,7 +344,7 @@ export const useCachedInfiniteQuery = <TPage, TPageParam = number>(
             // Stale-while-revalidate per page (same shape as `cachedSwr`
             // but the per-page snapshot merge means we have to wrap the
             // logic here instead of reusing the helper).
-            const db = activeDb();
+            const db = fromCache ? await waitForActiveDb() : activeDb();
             const pageParam = ctx.pageParam as TPageParam;
 
             let cachedPage: TPage | undefined;
