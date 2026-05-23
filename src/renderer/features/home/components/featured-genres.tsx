@@ -8,7 +8,13 @@ import styles from './featured-genres.module.css';
 
 import { api } from '/@/renderer/api';
 import { queryKeys } from '/@/renderer/api/query-keys';
-import { readSnapshot, writeSnapshot } from '/@/renderer/cache';
+import {
+    getActiveCacheDb,
+    isCacheAvailableSync,
+    readSnapshot,
+    toCachedAlbumRow,
+    writeSnapshot,
+} from '/@/renderer/cache';
 import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { useFuzzyGenreIds } from '/@/renderer/features/genres/api/genres-api';
 import { useGenreListSuspenseQuery } from '/@/renderer/features/genres/queries/genres-queries';
@@ -180,6 +186,16 @@ const useGenreCoverAlbum = (genreId: string, serverId: string) =>
                 },
             });
             const result = res?.items?.[0] ?? null;
+            // Write-through to Dexie albums table so clicking through to
+            // the album detail page paints from cache.
+            if (result && isCacheAvailableSync()) {
+                try {
+                    const db = getActiveCacheDb();
+                    if (db) await db.albums.put(toCachedAlbumRow(result));
+                } catch {
+                    /* swallow */
+                }
+            }
             writeSnapshot(key, result);
             return result;
         },
