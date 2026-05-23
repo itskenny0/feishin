@@ -8,6 +8,7 @@ import {
     getActiveCacheDb,
     isCacheAvailableSync,
     readSnapshot,
+    toCachedSongRow,
     writeSnapshot,
 } from '/@/renderer/cache';
 import { QueryHookArgs } from '/@/renderer/lib/react-query';
@@ -72,6 +73,17 @@ export const songsQueries = {
                     apiClientProps: { serverId: args.serverId, signal },
                     query: { ...args.query, imageSize },
                 });
+                if (isCacheAvailableSync()) {
+                    try {
+                        const db = getActiveCacheDb();
+                        const items = fresh?.items ?? [];
+                        if (db && items.length > 0) {
+                            await db.songs.bulkPut(items.map(toCachedSongRow));
+                        }
+                    } catch {
+                        /* swallow */
+                    }
+                }
                 writeSnapshot(key, fresh);
                 return fresh;
             },

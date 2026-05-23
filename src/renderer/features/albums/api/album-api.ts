@@ -8,6 +8,8 @@ import {
     getActiveCacheDb,
     isCacheAvailableSync,
     readSnapshot,
+    toCachedAlbumRow,
+    toCachedSongRow,
     writeSnapshot,
 } from '/@/renderer/cache';
 import { QueryHookArgs } from '/@/renderer/lib/react-query';
@@ -41,6 +43,20 @@ export const albumQueries = {
                     apiClientProps: { serverId: args.serverId, signal },
                     query: args.query,
                 });
+                if (isCacheAvailableSync() && fresh) {
+                    try {
+                        const db = getActiveCacheDb();
+                        if (db) {
+                            await db.albums.put(toCachedAlbumRow(fresh));
+                            const songs = fresh.songs ?? [];
+                            if (songs.length > 0) {
+                                await db.songs.bulkPut(songs.map(toCachedSongRow));
+                            }
+                        }
+                    } catch {
+                        /* swallow */
+                    }
+                }
                 writeSnapshot(key, fresh);
                 return fresh;
             },
@@ -62,6 +78,17 @@ export const albumQueries = {
                     apiClientProps: { serverId: args.serverId, signal },
                     query: args.query,
                 });
+                if (isCacheAvailableSync()) {
+                    try {
+                        const db = getActiveCacheDb();
+                        const items = fresh?.items ?? [];
+                        if (db && items.length > 0) {
+                            await db.albums.bulkPut(items.map(toCachedAlbumRow));
+                        }
+                    } catch {
+                        /* swallow */
+                    }
+                }
                 writeSnapshot(key, fresh);
                 return fresh;
             },

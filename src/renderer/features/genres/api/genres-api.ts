@@ -7,6 +7,7 @@ import {
     getActiveCacheDb,
     isCacheAvailableSync,
     readSnapshot,
+    toCachedGenreRow,
     writeSnapshot,
 } from '/@/renderer/cache';
 import { QueryHookArgs } from '/@/renderer/lib/react-query';
@@ -58,6 +59,17 @@ export const genresQueries = {
                     apiClientProps: { serverId: args.serverId, signal },
                     query: args.query,
                 });
+                if (isCacheAvailableSync()) {
+                    try {
+                        const db = getActiveCacheDb();
+                        const items = fresh?.items ?? [];
+                        if (db && items.length > 0) {
+                            await db.genres.bulkPut(items.map(toCachedGenreRow));
+                        }
+                    } catch {
+                        /* swallow */
+                    }
+                }
                 writeSnapshot(key, fresh);
                 return fresh;
             },

@@ -8,6 +8,8 @@ import {
     getActiveCacheDb,
     isCacheAvailableSync,
     readSnapshot,
+    toCachedArtistRow,
+    toCachedSongRow,
     writeSnapshot,
 } from '/@/renderer/cache';
 import { QueryHookArgs } from '/@/renderer/lib/react-query';
@@ -46,6 +48,14 @@ export const artistsQueries = {
                     apiClientProps: { serverId: args.serverId, signal },
                     query: args.query,
                 });
+                if (isCacheAvailableSync() && fresh) {
+                    try {
+                        const db = getActiveCacheDb();
+                        if (db) await db.artists.put(toCachedArtistRow(fresh, 'AlbumArtist'));
+                    } catch {
+                        /* swallow */
+                    }
+                }
                 writeSnapshot(key, fresh);
                 return fresh;
             },
@@ -80,6 +90,19 @@ export const artistsQueries = {
                     apiClientProps: { serverId: args.serverId, signal },
                     query: args.query,
                 });
+                if (isCacheAvailableSync()) {
+                    try {
+                        const db = getActiveCacheDb();
+                        const items = fresh?.items ?? [];
+                        if (db && items.length > 0) {
+                            await db.artists.bulkPut(
+                                items.map((a) => toCachedArtistRow(a, 'AlbumArtist')),
+                            );
+                        }
+                    } catch {
+                        /* swallow */
+                    }
+                }
                 writeSnapshot(key, fresh);
                 return fresh;
             },
@@ -156,6 +179,19 @@ export const artistsQueries = {
                     apiClientProps: { serverId: args.serverId, signal },
                     query: args.query,
                 });
+                if (isCacheAvailableSync()) {
+                    try {
+                        const db = getActiveCacheDb();
+                        const items = fresh?.items ?? [];
+                        if (db && items.length > 0) {
+                            await db.artists.bulkPut(
+                                items.map((a) => toCachedArtistRow(a, 'Artist')),
+                            );
+                        }
+                    } catch {
+                        /* swallow */
+                    }
+                }
                 writeSnapshot(key, fresh);
                 return fresh;
             },
@@ -252,6 +288,17 @@ export const artistsQueries = {
                     apiClientProps: { serverId: args.serverId, signal },
                     query: args.query,
                 });
+                if (isCacheAvailableSync()) {
+                    try {
+                        const db = getActiveCacheDb();
+                        const items = fresh?.items ?? [];
+                        if (db && items.length > 0) {
+                            await db.songs.bulkPut(items.map(toCachedSongRow));
+                        }
+                    } catch {
+                        /* swallow */
+                    }
+                }
                 writeSnapshot(key, fresh);
                 return fresh;
             },

@@ -45,6 +45,13 @@ export {
     searchSongsLocal,
 } from './search';
 export type { SearchLocalResult } from './search';
+export {
+    toCachedAlbumRow,
+    toCachedArtistRow,
+    toCachedGenreRow,
+    toCachedPlaylistRow,
+    toCachedSongRow,
+} from './row-mappers';
 export { dropSnapshotsForServer, readSnapshot, writeSnapshot } from './snapshot';
 export { useCacheActions, useCacheStore } from './store';
 export {

@@ -6,6 +6,7 @@ import {
     getActiveCacheDb,
     isCacheAvailableSync,
     readSnapshot,
+    toCachedPlaylistRow,
     writeSnapshot,
 } from '/@/renderer/cache';
 import { QueryHookArgs } from '/@/renderer/lib/react-query';
@@ -36,6 +37,14 @@ export const playlistsQueries = {
                     apiClientProps: { serverId: args.serverId, signal },
                     query: args.query,
                 });
+                if (isCacheAvailableSync() && fresh) {
+                    try {
+                        const db = getActiveCacheDb();
+                        if (db) await db.playlists.put(toCachedPlaylistRow(fresh));
+                    } catch {
+                        /* swallow */
+                    }
+                }
                 writeSnapshot(key, fresh);
                 return fresh;
             },
@@ -54,6 +63,17 @@ export const playlistsQueries = {
                     apiClientProps: { serverId: args.serverId, signal },
                     query: args.query,
                 });
+                if (isCacheAvailableSync()) {
+                    try {
+                        const db = getActiveCacheDb();
+                        const items = fresh?.items ?? [];
+                        if (db && items.length > 0) {
+                            await db.playlists.bulkPut(items.map(toCachedPlaylistRow));
+                        }
+                    } catch {
+                        /* swallow */
+                    }
+                }
                 writeSnapshot(key, fresh);
                 return fresh;
             },
