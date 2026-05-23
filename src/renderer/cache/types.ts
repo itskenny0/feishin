@@ -52,6 +52,13 @@ export interface CachedGenre extends CachedBase {
 
 export interface CachedLyrics extends CachedBase {
     Lyrics: string;
+    // Optional structured payload — the full `FullLyricsMetadata` blob from
+    // the server / IPC layer. Stored as JSON so the lyrics surface can
+    // reconstruct artist/source/synced state from cache without making a
+    // network call. Older rows written before this field was introduced
+    // simply have Payload === undefined and the caller falls back to the
+    // legacy `Lyrics` + `Synced` columns.
+    Payload?: import('/@/shared/types/domain-types').FullLyricsMetadata;
     SongId: string;
     Synced: boolean;
 }

@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 
 import { api } from '/@/renderer/api';
 import { queryKeys } from '/@/renderer/api/query-keys';
+import { getActiveCacheDb, isCacheAvailableSync, readSnapshot, writeSnapshot } from '/@/renderer/cache';
 import { queryClient, QueryHookArgs } from '/@/renderer/lib/react-query';
 import { getServerById, useSettingsStore } from '/@/renderer/store';
 import { hasFeature } from '/@/shared/api/utils';
@@ -275,6 +276,10 @@ export const lyricsQueries = {
         const lyricsKey = queryKeys.songs.lyrics(args.serverId, args.query);
         return queryOptions({
             gcTime: Infinity,
+            // Paint the previous result from the snapshot map synchronously
+            // so revisiting a song you've already loaded shows lyrics on
+            // the first frame instead of a skeleton.
+            placeholderData: (() => readSnapshot<LyricsQueryResult>(lyricsKey)) as never,
             queryFn: async ({ signal }): Promise<LyricsQueryResult> => {
                 if (!song) return emptyResult();
 
@@ -284,6 +289,32 @@ export const lyricsQueries = {
                 const selectedStructuredIndex = prev?.selectedStructuredIndex ?? 0;
                 const selectedOffsetMs = prev?.selectedOffsetMs ?? 0;
                 const preferLocalLyrics = useSettingsStore.getState().lyrics.preferLocalLyrics;
+
+                // Dexie read-through. If the lyrics for this track were
+                // cached on a previous load, populate the snapshot map so
+                // any concurrent mounts during the network round-trip see
+                // a primed value. The persisted `Payload` carries the full
+                // FullLyricsMetadata so artist/source/synced state survives
+                // an app restart, not just the lyric text itself.
+                if (isCacheAvailableSync() && song?.id) {
+                    try {
+                        const db = getActiveCacheDb();
+                        if (db) {
+                            const cached = await db.lyrics.get(song.id);
+                            if (cached?.Payload) {
+                                const seed: LyricsQueryResult = {
+                                    ...emptyResult(),
+                                    local: cached.Payload,
+                                    selected: cached.Payload,
+                                    selectedSynced: Array.isArray(cached.Payload.lyrics),
+                                };
+                                writeSnapshot(lyricsKey, seed);
+                            }
+                        }
+                    } catch (err) {
+                        console.warn('[cache] lyrics fromCache failed', song.id, err);
+                    }
+                }
 
                 // Fetch local lyrics
                 const localPromise = fetchLocalLyrics({ serverId: args.serverId, signal, song });
@@ -336,7 +367,7 @@ export const lyricsQueries = {
                 );
                 const resultSelectedOffsetMs = displayOffset;
 
-                return {
+                const result: LyricsQueryResult = {
                     ...emptyResult(),
                     ...partial,
                     selected,
@@ -345,6 +376,36 @@ export const lyricsQueries = {
                     selectedSynced,
                     suppressRemoteAuto,
                 };
+
+                writeSnapshot(lyricsKey, result);
+
+                // Persist the lyrics payload to Dexie keyed by SongId so
+                // future loads (including across app restarts) can paint
+                // instantly. We only persist the `local` flavour because
+                // the remote-auto / override branches depend on third-party
+                // state that may change independently.
+                if (isCacheAvailableSync() && song?.id && local && !Array.isArray(local)) {
+                    try {
+                        const db = getActiveCacheDb();
+                        if (db) {
+                            const lyricsText =
+                                typeof local.lyrics === 'string'
+                                    ? local.lyrics
+                                    : JSON.stringify(local.lyrics);
+                            await db.lyrics.put({
+                                __cachedAt: Date.now(),
+                                Lyrics: lyricsText,
+                                Payload: local,
+                                SongId: song.id,
+                                Synced: Array.isArray(local.lyrics),
+                            });
+                        }
+                    } catch (err) {
+                        console.warn('[cache] lyrics apply failed', song.id, err);
+                    }
+                }
+
+                return result;
             },
             queryKey: lyricsKey,
             staleTime: Infinity,
