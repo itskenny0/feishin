@@ -6,6 +6,7 @@ import { queryKeys } from '/@/renderer/api/query-keys';
 import { getOptimizedListCount } from '/@/renderer/api/utils-list-count';
 import {
     cachedSwr,
+    filterAlbumsLocal,
     readSnapshot,
     toCachedAlbumRow,
     toCachedSongRow,
@@ -47,11 +48,18 @@ export const albumQueries = {
                     fromCache: async (db) => {
                         if (!args.query?.id) return undefined;
                         const row = await db.albums.get(args.query.id);
-                        // Album is a structural subset of AlbumDetailResponse
-                        // (missing `songs`). Consumers guard `.songs ?? []`
-                        // so handing back the base Album is safe; the
-                        // background revalidate fills in the songs.
-                        return row?.Payload as AlbumDetailResponse | undefined;
+                        // Only return the cached row if it carries a tracklist.
+                        // A row written by the list endpoint is missing `songs`
+                        // — returning it here would resolve the detail query
+                        // with an empty song list (bad UX). When songs aren't
+                        // present we fall through to the network so the user
+                        // sees a real tracklist instead of an empty one
+                        // during the background revalidate.
+                        const payload = row?.Payload as AlbumDetailResponse | undefined;
+                        if (!payload || !payload.songs || payload.songs.length === 0) {
+                            return undefined;
+                        }
+                        return payload;
                     },
                     queryKey: key,
                     remote: ({ signal }) =>
@@ -82,6 +90,38 @@ export const albumQueries = {
                         }
                     },
                     ctx,
+                    fromCache: async (db) => {
+                        // Read the filtered album subset from Dexie so the
+                        // artist-detail "albums by this artist" surface, the
+                        // sidebar favourites, and every other list consumer
+                        // serves from local storage instead of awaiting the
+                        // network. Picks the cheapest available Dexie index.
+                        let rows;
+                        if (args.query?.artistIds && args.query.artistIds.length === 1) {
+                            rows = await db.albums
+                                .where('AlbumArtistId')
+                                .equals(args.query.artistIds[0])
+                                .toArray();
+                        } else {
+                            rows = await db.albums.toArray();
+                        }
+                        if (rows.length === 0) return undefined;
+                        let favoriteAlbumIds: Set<string> | undefined;
+                        if (args.query?.favorite !== undefined) {
+                            const favs = await db.favorites
+                                .filter((r) => r.ItemType === 'Album')
+                                .toArray();
+                            favoriteAlbumIds = new Set(
+                                favs.filter((f) => f.IsFavorite).map((f) => f.ItemId),
+                            );
+                        }
+                        const out = filterAlbumsLocal({
+                            favoriteAlbumIds,
+                            query: args.query,
+                            rows,
+                        });
+                        return out as AlbumListResponse | undefined;
+                    },
                     queryKey: key,
                     remote: ({ signal }) =>
                         api.controller.getAlbumList({

@@ -93,9 +93,30 @@ export const resolveThumbnail = async (
                 return URL.createObjectURL(row.Blob);
             }
 
-            const res = await fetch(url, { credentials, headers, signal });
+            let res: Response;
+            try {
+                res = await fetch(url, { credentials, headers, signal });
+            } catch (err) {
+                if ((err as Error)?.name === 'AbortError') return undefined;
+                console.warn('[cache] thumbnail fetch threw', {
+                    error: (err as Error)?.message ?? String(err),
+                    errorName: (err as Error)?.name,
+                    hasAuthHeader: Boolean(headers?.Authorization),
+                    itemId,
+                    size,
+                    urlHost: (() => {
+                        try {
+                            return new URL(url).host;
+                        } catch {
+                            return 'unparseable';
+                        }
+                    })(),
+                });
+                return undefined;
+            }
             if (!res.ok) {
-                console.warn('[cache] thumbnail fetch failed', {
+                console.warn('[cache] thumbnail HTTP error', {
+                    hasAuthHeader: Boolean(headers?.Authorization),
                     itemId,
                     size,
                     status: res.status,
@@ -132,7 +153,12 @@ export const resolveThumbnail = async (
             return URL.createObjectURL(blob);
         } catch (err) {
             if ((err as Error)?.name === 'AbortError') return undefined;
-            console.warn('[cache] thumbnail fetch failed', { err, itemId, size });
+            console.warn('[cache] thumbnail fetch failed', {
+                error: (err as Error)?.message ?? String(err),
+                errorName: (err as Error)?.name,
+                itemId,
+                size,
+            });
             return undefined;
         } finally {
             inFlight.delete(key);

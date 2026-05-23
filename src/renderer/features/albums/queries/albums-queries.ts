@@ -339,11 +339,34 @@ export const useAlbumDetailSuspenseQuery = (args: AlbumDetailSuspenseQueryArgs) 
                 ctx,
                 fromCache: async (db) => {
                     const row = await db.albums.get(query.id);
-                    if (row?.Payload !== undefined) {
-                        logCacheHitSampled('detail-suspense');
-                        return row.Payload as AlbumDetailResponse;
+                    const payload = row?.Payload as AlbumDetailResponse | undefined;
+                    if (!payload) return undefined;
+                    // If we have a row but it came from the list endpoint
+                    // (no songs nested) try to assemble the tracklist from
+                    // db.songs.where('AlbumId') so the user sees songs on
+                    // first paint even when this is the first detail visit.
+                    let songs = payload.songs ?? [];
+                    if (songs.length === 0) {
+                        try {
+                            const songRows = await db.songs
+                                .where('AlbumId')
+                                .equals(query.id)
+                                .toArray();
+                            songs = songRows
+                                .sort(
+                                    (a, b) =>
+                                        (a.ParentIndexNumber ?? 0) -
+                                            (b.ParentIndexNumber ?? 0) ||
+                                        (a.IndexNumber ?? 0) - (b.IndexNumber ?? 0),
+                                )
+                                .map((r) => r.Payload);
+                        } catch {
+                            /* swallow — falls through to network */
+                        }
                     }
-                    return undefined;
+                    if (songs.length === 0) return undefined;
+                    logCacheHitSampled('detail-suspense');
+                    return { ...payload, songs } as AlbumDetailResponse;
                 },
                 queryKey,
                 remote: (ctx) =>

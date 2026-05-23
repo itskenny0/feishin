@@ -41,6 +41,70 @@ export const isQuotaCapped = (): boolean => {
  * unavailable or throws.
  */
 export const estimateBytes = async (): Promise<number | undefined> => {
+    // Prefer summing actual Dexie row sizes — `navigator.storage.estimate()`
+    // returns the WHOLE origin's quota usage (cookies, localStorage, every
+    // IndexedDB database the origin touches), and on Chromium-based engines
+    // it lags behind by tens of seconds while the user is actively
+    // writing. Summing `db.thumbnails.ByteSize` + a coarse per-row
+    // estimate for the entity tables is more responsive AND more
+    // accurate to what the user means by "cache size".
+    const db = getActiveCacheDb();
+    if (db) {
+        try {
+            const [
+                thumbnailRows,
+                albums,
+                artists,
+                songs,
+                playlists,
+                favorites,
+                genres,
+                lyrics,
+                playlistSongs,
+            ] = await Promise.all([
+                db.thumbnails.toArray(),
+                db.albums.count(),
+                db.artists.count(),
+                db.songs.count(),
+                db.playlists.count(),
+                db.favorites.count(),
+                db.genres.count(),
+                db.lyrics.count(),
+                db.playlistSongs.count(),
+            ]);
+            // Rough per-row sizes from observed payload widths in dev. We
+            // could JSON.stringify every Payload for an exact number but
+            // counting 18k rows is too slow for a UI refresh; the
+            // estimates are conservative averages.
+            const albumBytes = albums * 1024;
+            const artistBytes = artists * 768;
+            const songBytes = songs * 1536;
+            const playlistBytes = playlists * 512;
+            const favoriteBytes = favorites * 96;
+            const genreBytes = genres * 192;
+            const lyricsBytes = lyrics * 4096;
+            const playlistSongBytes = playlistSongs * 256;
+            const thumbnailBytes = thumbnailRows.reduce(
+                (acc, r) => acc + (r.ByteSize ?? 0),
+                0,
+            );
+            return (
+                thumbnailBytes +
+                albumBytes +
+                artistBytes +
+                songBytes +
+                playlistBytes +
+                favoriteBytes +
+                genreBytes +
+                lyricsBytes +
+                playlistSongBytes
+            );
+        } catch (err) {
+            console.warn('[cache] estimateBytes Dexie sum failed', err);
+        }
+    }
+    // Fallback to the navigator API when no DB is active or the sum
+    // failed.
     try {
         if (typeof navigator === 'undefined') return undefined;
         const est = await navigator.storage?.estimate?.();
