@@ -6,7 +6,12 @@ import { Link } from 'react-router';
 import styles from './library-stats.module.css';
 
 import { api } from '/@/renderer/api';
-import { getActiveCacheDb, isCacheAvailableSync, readSnapshot, writeSnapshot } from '/@/renderer/cache';
+import {
+    getActiveCacheDb,
+    isCacheAvailableSync,
+    readSnapshot,
+    writeSnapshot,
+} from '/@/renderer/cache';
 import { AppRoute } from '/@/renderer/router/routes';
 import { useCurrentServer } from '/@/renderer/store';
 import {
@@ -46,7 +51,9 @@ const formatCount = (n: null | number | undefined, locale: string): string => {
 // `.count()` against the table), then revalidate against the server. The
 // snapshot map persists the last fetched count across reloads so the tile
 // paints with a number before the network round-trip lands.
-const cachedCount = async (entity: 'albums' | 'artists' | 'genres' | 'songs'): Promise<number | undefined> => {
+const cachedCount = async (
+    entity: 'albums' | 'artists' | 'genres' | 'songs',
+): Promise<number | undefined> => {
     if (!isCacheAvailableSync()) return undefined;
     const db = getActiveCacheDb();
     if (!db) return undefined;

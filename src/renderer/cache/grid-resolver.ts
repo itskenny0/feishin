@@ -65,7 +65,7 @@ const readFavoriteIds = async (
 
 export const resolveAlbumPage = async (
     args: BaseArgs<AlbumListQuery>,
-): Promise<{ items: unknown[] } | undefined> => {
+): Promise<undefined | { items: unknown[] }> => {
     const db = getDb();
     if (!db) return undefined;
 
@@ -98,7 +98,7 @@ export const resolveAlbumPage = async (
 
 export const resolveAlbumArtistPage = async (
     args: BaseArgs<AlbumArtistListQuery>,
-): Promise<{ items: unknown[] } | undefined> => {
+): Promise<undefined | { items: unknown[] }> => {
     const db = getDb();
     if (!db) return undefined;
 
@@ -125,7 +125,7 @@ export const resolveAlbumArtistPage = async (
 
 export const resolveArtistPage = async (
     args: BaseArgs<ArtistListQuery>,
-): Promise<{ items: unknown[] } | undefined> => {
+): Promise<undefined | { items: unknown[] }> => {
     const db = getDb();
     if (!db) return undefined;
 
@@ -152,7 +152,7 @@ export const resolveArtistPage = async (
 
 export const resolveSongPage = async (
     args: BaseArgs<SongListQuery>,
-): Promise<{ items: unknown[] } | undefined> => {
+): Promise<undefined | { items: unknown[] }> => {
     const db = getDb();
     if (!db) return undefined;
 
@@ -190,7 +190,7 @@ export const resolveSongPage = async (
 
 export const resolveGenrePage = async (
     args: BaseArgs<GenreListQuery>,
-): Promise<{ items: unknown[] } | undefined> => {
+): Promise<undefined | { items: unknown[] }> => {
     const db = getDb();
     if (!db) return undefined;
 
@@ -214,7 +214,7 @@ export const resolveGenrePage = async (
 
 export const resolvePlaylistPage = async (
     args: BaseArgs<PlaylistListQuery>,
-): Promise<{ items: unknown[] } | undefined> => {
+): Promise<undefined | { items: unknown[] }> => {
     const db = getDb();
     if (!db) return undefined;
 

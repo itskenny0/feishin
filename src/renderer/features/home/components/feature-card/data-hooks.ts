@@ -87,10 +87,7 @@ const useArtistCandidates = (serverId: string | undefined) =>
         enabled: Boolean(serverId),
         gcTime: 1000 * 60 * 60,
         placeholderData: (() =>
-            readSnapshot<ArtistCandidate[]>([
-                'feature-card-artists-v2',
-                serverId ?? '',
-            ])) as never,
+            readSnapshot<ArtistCandidate[]>(['feature-card-artists-v2', serverId ?? ''])) as never,
         queryFn: async ({ signal }) => {
             const key = ['feature-card-artists-v2', serverId ?? ''] as const;
             if (!serverId) return [] as ArtistCandidate[];
@@ -151,11 +148,7 @@ const useArtistSongs = (artistId: null | string, serverId: string | undefined) =
         // reads as 'wrong songs for this artist'. Better to flash a brief
         // skeleton than to display inconsistent state.
         queryFn: async ({ signal }) => {
-            const key = [
-                'feature-card-artist-songs',
-                serverId ?? '',
-                artistId ?? '',
-            ] as const;
+            const key = ['feature-card-artist-songs', serverId ?? '', artistId ?? ''] as const;
             if (!artistId || !serverId) return [] as Song[];
             // Over-fetch so dedupeSongsByTitle still produces a full grid for
             // libraries where the same track is tagged on a single + album +
@@ -309,10 +302,7 @@ const useGenreCandidates = (serverId: string | undefined) =>
         enabled: Boolean(serverId),
         gcTime: 1000 * 60 * 60,
         placeholderData: (() =>
-            readSnapshot<GenreCandidate[]>([
-                'feature-card-genres',
-                serverId ?? '',
-            ])) as never,
+            readSnapshot<GenreCandidate[]>(['feature-card-genres', serverId ?? ''])) as never,
         queryFn: async ({ signal }) => {
             const key = ['feature-card-genres', serverId ?? ''] as const;
             if (!serverId) return [] as GenreCandidate[];
@@ -358,11 +348,7 @@ const useGenreSongs = (
         // title and songs are never out of sync. Brief skeleton flash is
         // acceptable; lingering wrong-genre songs under a new title is not.
         queryFn: async ({ signal }) => {
-            const key = [
-                'feature-card-genre-songs',
-                serverId ?? '',
-                genreId ?? '',
-            ] as const;
+            const key = ['feature-card-genre-songs', serverId ?? '', genreId ?? ''] as const;
             if (!genreId || !serverId) return [] as Song[];
             // Jellyfin uses genre id; navidrome/subsonic use genre name. Pass the
             // form that matches the server (mirrors the shuffle-all modal logic).
@@ -437,10 +423,7 @@ const useRecentlyPlayedSongs = (serverId: string | undefined) =>
     useQuery({
         enabled: Boolean(serverId),
         placeholderData: (() =>
-            readSnapshot<Song[]>([
-                'feature-card-recently-played',
-                serverId ?? '',
-            ])) as never,
+            readSnapshot<Song[]>(['feature-card-recently-played', serverId ?? ''])) as never,
         queryFn: async ({ signal }) => {
             const key = ['feature-card-recently-played', serverId ?? ''] as const;
             if (!serverId) return [] as Song[];
@@ -700,11 +683,7 @@ const useTimeMachineSongs = (year: null | number, serverId: string | undefined) 
         // hides those transitions from the user; React-Query keeping
         // stale data here would just confuse the dispatch path.
         queryFn: async ({ signal }) => {
-            const key = [
-                'feature-card-time-machine',
-                serverId ?? '',
-                year ?? 0,
-            ] as const;
+            const key = ['feature-card-time-machine', serverId ?? '', year ?? 0] as const;
             if (!year || !serverId) return [] as Song[];
             const res = await api.controller.getRandomSongList({
                 apiClientProps: { serverId, signal },
@@ -834,11 +813,7 @@ const useDecadeSongs = (decadeStart: null | number, serverId: string | undefined
             ])) as never,
         // See useTimeMachineSongs — no keepPreviousData here either.
         queryFn: async ({ signal }) => {
-            const key = [
-                'feature-card-decade',
-                serverId ?? '',
-                decadeStart ?? -1,
-            ] as const;
+            const key = ['feature-card-decade', serverId ?? '', decadeStart ?? -1] as const;
             if (decadeStart === null || !serverId) return [] as Song[];
             const res = await api.controller.getRandomSongList({
                 apiClientProps: { serverId, signal },

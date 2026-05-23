@@ -59,11 +59,7 @@ const useAlbumOfTheDayCandidates = (serverId: string | undefined, dateKey: strin
                 dateKey,
             ])) as never,
         queryFn: async ({ signal }) => {
-            const key = [
-                'feature-card-album-of-the-day-pool',
-                serverId ?? '',
-                dateKey,
-            ] as const;
+            const key = ['feature-card-album-of-the-day-pool', serverId ?? '', dateKey] as const;
             if (!serverId) {
                 const empty = [] as Album[];
                 writeSnapshot(key, empty);
