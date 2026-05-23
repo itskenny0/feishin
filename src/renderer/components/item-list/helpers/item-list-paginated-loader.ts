@@ -8,6 +8,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 
 import { queryKeys } from '/@/renderer/api/query-keys';
+import { readSnapshot, writeSnapshot } from '/@/renderer/cache';
 import { useListContext } from '/@/renderer/context/list-context';
 import { eventEmitter } from '/@/renderer/events/event-emitter';
 import { UserFavoriteEventPayload, UserRatingEventPayload } from '/@/renderer/events/events';
@@ -40,6 +41,14 @@ interface UseItemListPaginatedLoaderProps {
     itemType: LibraryItem;
     listCountQuery: UseSuspenseQueryOptions<number, Error, number, readonly unknown[]>;
     listQueryFn: (args: { apiClientProps: any; query: any }) => Promise<{ items: unknown[] }>;
+    // Optional cache-first page resolver (same contract as the infinite
+    // loader). When provided, the cached page is returned immediately and
+    // the network revalidate runs in the background.
+    localFetchPage?: (args: {
+        limit: number;
+        query: Record<string, any>;
+        startIndex: number;
+    }) => Promise<{ items: unknown[] } | undefined>;
     query: Record<string, any>;
     serverId: string;
 }
@@ -55,6 +64,7 @@ export const useItemListPaginatedLoader = ({
     itemType,
     listCountQuery,
     listQueryFn,
+    localFetchPage,
     query = {},
     serverId,
 }: UseItemListPaginatedLoaderProps) => {
@@ -85,18 +95,46 @@ export const useItemListPaginatedLoader = ({
         [itemsPerPage, startIndex, query],
     );
 
+    const queryKey = queryKeys[getQueryKeyName(itemType)].list(serverId, queryParams);
+
     const { data } = useQuery({
         gcTime: 1000 * 15,
-        placeholderData: { items: getInitialData(itemsPerPage) },
+        // Prefer a cached page from the snapshot map on first paint; fall
+        // back to skeleton items only when the cache has nothing for this
+        // (entity, query) pair.
+        placeholderData: (() => {
+            const cached = readSnapshot<{ items: unknown[] }>(queryKey);
+            return cached ?? { items: getInitialData(itemsPerPage) };
+        }) as never,
         queryFn: async ({ signal }) => {
+            // Cache-first read-through (same contract as the infinite
+            // loader). The cached items are dropped into the snapshot map
+            // so the next mount paints with them; the network call always
+            // runs to revalidate.
+            if (localFetchPage) {
+                try {
+                    const cached = await localFetchPage({
+                        limit: itemsPerPage,
+                        query,
+                        startIndex,
+                    });
+                    if (cached && cached.items.length > 0) {
+                        writeSnapshot(queryKey, cached);
+                    }
+                } catch (err) {
+                    console.warn('[cache] paginated localFetchPage failed', itemType, err);
+                }
+            }
+
             const result = await listQueryFn({
                 apiClientProps: { serverId, signal },
                 query: queryParams,
             });
 
+            writeSnapshot(queryKey, result);
             return result;
         },
-        queryKey: queryKeys[getQueryKeyName(itemType)].list(serverId, queryParams),
+        queryKey,
         staleTime: 1000 * 15,
     });
 

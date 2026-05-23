@@ -1,6 +1,7 @@
 import { UseSuspenseQueryOptions } from '@tanstack/react-query';
 
 import { api } from '/@/renderer/api';
+import { resolveAlbumPage } from '/@/renderer/cache';
 import { useItemListPaginatedLoader } from '/@/renderer/components/item-list/helpers/item-list-paginated-loader';
 import { useItemListColumnReorder } from '/@/renderer/components/item-list/helpers/use-item-list-column-reorder';
 import { useItemListColumnResize } from '/@/renderer/components/item-list/helpers/use-item-list-column-resize';
@@ -57,6 +58,12 @@ export const AlbumListPaginatedTable = ({
         itemType: LibraryItem.ALBUM,
         listCountQuery,
         listQueryFn,
+        localFetchPage: (args) =>
+            resolveAlbumPage({
+                limit: args.limit,
+                query: args.query as AlbumListQuery,
+                startIndex: args.startIndex,
+            }),
         query,
         serverId,
     });

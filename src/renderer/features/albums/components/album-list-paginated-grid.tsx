@@ -1,6 +1,7 @@
 import { UseSuspenseQueryOptions } from '@tanstack/react-query';
 
 import { api } from '/@/renderer/api';
+import { resolveAlbumPage } from '/@/renderer/cache';
 import { useItemListPaginatedLoader } from '/@/renderer/components/item-list/helpers/item-list-paginated-loader';
 import { useGridRows } from '/@/renderer/components/item-list/helpers/use-grid-rows';
 import { useItemListScrollPersist } from '/@/renderer/components/item-list/helpers/use-item-list-scroll-persist';
@@ -50,6 +51,12 @@ export const AlbumListPaginatedGrid = ({
         itemType: LibraryItem.ALBUM,
         listCountQuery,
         listQueryFn,
+        localFetchPage: (args) =>
+            resolveAlbumPage({
+                limit: args.limit,
+                query: args.query as AlbumListQuery,
+                startIndex: args.startIndex,
+            }),
         query,
         serverId,
     });

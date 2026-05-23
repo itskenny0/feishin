@@ -1,6 +1,7 @@
 import { UseSuspenseQueryOptions } from '@tanstack/react-query';
 
 import { api } from '/@/renderer/api';
+import { resolveSongPage } from '/@/renderer/cache';
 import { useItemListPaginatedLoader } from '/@/renderer/components/item-list/helpers/item-list-paginated-loader';
 import { useItemListColumnReorder } from '/@/renderer/components/item-list/helpers/use-item-list-column-reorder';
 import { useItemListColumnResize } from '/@/renderer/components/item-list/helpers/use-item-list-column-resize';
@@ -53,6 +54,12 @@ export const SongListPaginatedTable = ({
         itemType: LibraryItem.SONG,
         listCountQuery,
         listQueryFn,
+        localFetchPage: (args) =>
+            resolveSongPage({
+                limit: args.limit,
+                query: args.query as SongListQuery,
+                startIndex: args.startIndex,
+            }),
         query,
         serverId,
     });
