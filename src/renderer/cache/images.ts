@@ -10,17 +10,24 @@ import { getActiveCacheDb } from './db';
 
 // Normalises the resolver's request argument so callers can pass either a
 // bare URL (legacy callers like `<CachedImage>`) OR a full `ImageRequest`
-// with auth headers + credentials. Without the latter form, Capacitor /
-// Android can't pass the Jellyfin Authorization header — every fetch
-// silently 401s and the Dexie `thumbnails` table never gets populated.
+// with auth headers + credentials.
+//
+// IMPORTANT: do NOT default `credentials` to 'include'. The previous
+// build forced `credentials: 'include'` on every image fetch, which
+// turned Jellyfin's image preflight into a credentialed CORS check.
+// Jellyfin replies `Access-Control-Allow-Origin: *` to image OPTIONS
+// requests, and the browser rejects that combination — every fetch
+// then throws `TypeError: Failed to fetch` (this is exactly what the
+// user surfaced via the console log viewer). The Authorization header
+// alone is enough to authenticate the request.
 const normaliseRequest = (
     request: ImageRequest | string,
 ): { credentials?: RequestCredentials; headers?: Record<string, string>; url: string } => {
     if (typeof request === 'string') {
-        return { credentials: 'include', url: request };
+        return { url: request };
     }
     return {
-        credentials: request.credentials ?? 'include',
+        credentials: request.credentials,
         headers: request.headers,
         url: request.url,
     };
