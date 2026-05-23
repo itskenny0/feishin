@@ -57,7 +57,7 @@ const songCreatedAtMs = (song: CachedSong): number | undefined => {
     // RECENTLY_ADDED orders by it. We compare against the user's
     // `lastFullSyncAt` to short-circuit pagination once we've walked
     // past the items added since then.
-    const created = (song.Payload as { createdAt?: string }).createdAt;
+    const created = song.Payload.createdAt;
     if (!created) return undefined;
     const ms = Date.parse(created);
     return Number.isFinite(ms) ? ms : undefined;

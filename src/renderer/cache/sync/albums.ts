@@ -48,7 +48,7 @@ const writeAlbumsPage = async (db: LibraryCacheDb, items: CachedAlbum[]): Promis
 };
 
 const albumCreatedAtMs = (album: CachedAlbum): number | undefined => {
-    const created = (album.Payload as { createdAt?: string }).createdAt;
+    const created = album.Payload.createdAt;
     if (!created) return undefined;
     const ms = Date.parse(created);
     return Number.isFinite(ms) ? ms : undefined;
