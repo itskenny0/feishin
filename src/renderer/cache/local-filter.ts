@@ -421,8 +421,22 @@ const sortSongs = (rows: CachedSong[], sortBy: SongListSort | undefined): Cached
                 cmpStr(a.Payload.albumArtistName ?? '', b.Payload.albumArtistName ?? ''),
             );
             break;
+        case SongListSort.BPM:
+            rows.sort((a, b) => cmpNum(a.Payload.bpm, b.Payload.bpm));
+            break;
+        case SongListSort.CHANNELS:
+            rows.sort((a, b) => cmpNum(a.Payload.channels, b.Payload.channels));
+            break;
+        case SongListSort.COMMENT:
+            rows.sort((a, b) => cmpStr(a.Payload.comment ?? '', b.Payload.comment ?? ''));
+            break;
         case SongListSort.DURATION:
             rows.sort((a, b) => cmpNum(a.Payload.duration, b.Payload.duration));
+            break;
+        case SongListSort.GENRE:
+            rows.sort((a, b) =>
+                cmpStr(a.Payload.genres?.[0]?.name ?? '', b.Payload.genres?.[0]?.name ?? ''),
+            );
             break;
         case SongListSort.PLAY_COUNT:
             rows.sort((a, b) => cmpNum(a.Payload.playCount, b.Payload.playCount));
