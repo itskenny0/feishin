@@ -107,13 +107,11 @@ export const useItemListPaginatedLoader = ({
             return cached ?? { items: getInitialData(itemsPerPage) };
         }) as never,
         queryFn: async ({ signal }) => {
-            // Cache-first read-through. We push the cached page into both
-            // the snapshot map AND react-query's cache via setQueryData
-            // BEFORE awaiting the network. setQueryData fires a re-render
-            // for the current mount with the cached items, so the user
-            // sees real data on the first frame instead of the skeleton
-            // placeholder. The network result still wins when queryFn
-            // resolves a moment later.
+            // Stale-while-revalidate. If the cache returns items we
+            // RETURN them from queryFn so react-query's pending state
+            // ends immediately (no spinner) and an offline session
+            // doesn't break. The network call still runs in the
+            // background to revalidate; failures are swallowed.
             if (localFetchPage) {
                 try {
                     const cached = await localFetchPage({
@@ -123,7 +121,25 @@ export const useItemListPaginatedLoader = ({
                     });
                     if (cached && cached.items.length > 0) {
                         writeSnapshot(queryKey, cached);
-                        queryClient.setQueryData(queryKey, cached);
+                        void (async () => {
+                            try {
+                                const fresh = await listQueryFn({
+                                    apiClientProps: { serverId, signal },
+                                    query: queryParams,
+                                });
+                                writeSnapshot(queryKey, fresh);
+                                queryClient.setQueryData(queryKey, fresh);
+                            } catch (err) {
+                                if ((err as Error)?.name !== 'AbortError') {
+                                    console.info(
+                                        '[cache] paginated background revalidate failed',
+                                        itemType,
+                                        (err as Error)?.message,
+                                    );
+                                }
+                            }
+                        })();
+                        return cached;
                     }
                 } catch (err) {
                     console.warn('[cache] paginated localFetchPage failed', itemType, err);

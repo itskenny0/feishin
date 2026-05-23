@@ -2,19 +2,16 @@ import { queryOptions } from '@tanstack/react-query';
 
 import { api } from '/@/renderer/api';
 import { queryKeys } from '/@/renderer/api/query-keys';
-import {
-    getActiveCacheDb,
-    isCacheAvailableSync,
-    readSnapshot,
-    toCachedPlaylistRow,
-    writeSnapshot,
-} from '/@/renderer/cache';
+import { cachedSwr, readSnapshot, snapshotSwr, toCachedPlaylistRow } from '/@/renderer/cache';
 import { QueryHookArgs } from '/@/renderer/lib/react-query';
 import {
     ListCountQuery,
+    Playlist,
     PlaylistDetailQuery,
     PlaylistListQuery,
+    PlaylistListResponse,
     PlaylistSongListQuery,
+    PlaylistSongListResponse,
 } from '/@/shared/types/domain-types';
 
 export const playlistsQueries = {
@@ -23,31 +20,25 @@ export const playlistsQueries = {
         return queryOptions({
             initialData: (() => readSnapshot(key)) as never,
             initialDataUpdatedAt: 0,
-            queryFn: async ({ signal }) => {
-                if (isCacheAvailableSync() && args.query?.id) {
-                    try {
-                        const db = getActiveCacheDb();
-                        const row = await db?.playlists.get(args.query.id);
-                        if (row?.Payload) writeSnapshot(key, row.Payload);
-                    } catch {
-                        /* swallow */
-                    }
-                }
-                const fresh = await api.controller.getPlaylistDetail({
-                    apiClientProps: { serverId: args.serverId, signal },
-                    query: args.query,
-                });
-                if (isCacheAvailableSync() && fresh) {
-                    try {
-                        const db = getActiveCacheDb();
-                        if (db) await db.playlists.put(toCachedPlaylistRow(fresh));
-                    } catch {
-                        /* swallow */
-                    }
-                }
-                writeSnapshot(key, fresh);
-                return fresh;
-            },
+            queryFn: (ctx) =>
+                cachedSwr<Playlist>({
+                    apply: async (db, fresh) => {
+                        if (!fresh) return;
+                        await db.playlists.put(toCachedPlaylistRow(fresh));
+                    },
+                    ctx,
+                    fromCache: async (db) => {
+                        if (!args.query?.id) return undefined;
+                        const row = await db.playlists.get(args.query.id);
+                        return row?.Payload;
+                    },
+                    queryKey: key,
+                    remote: ({ signal }) =>
+                        api.controller.getPlaylistDetail({
+                            apiClientProps: { serverId: args.serverId, signal },
+                            query: args.query,
+                        }) as Promise<Playlist>,
+                }),
             queryKey: key,
             ...args.options,
         });
@@ -58,25 +49,22 @@ export const playlistsQueries = {
             gcTime: 1000 * 60 * 60,
             initialData: (() => readSnapshot(key)) as never,
             initialDataUpdatedAt: 0,
-            queryFn: async ({ signal }) => {
-                const fresh = await api.controller.getPlaylistList({
-                    apiClientProps: { serverId: args.serverId, signal },
-                    query: args.query,
-                });
-                if (isCacheAvailableSync()) {
-                    try {
-                        const db = getActiveCacheDb();
+            queryFn: (ctx) =>
+                cachedSwr<PlaylistListResponse>({
+                    apply: async (db, fresh) => {
                         const items = fresh?.items ?? [];
-                        if (db && items.length > 0) {
+                        if (items.length > 0) {
                             await db.playlists.bulkPut(items.map(toCachedPlaylistRow));
                         }
-                    } catch {
-                        /* swallow */
-                    }
-                }
-                writeSnapshot(key, fresh);
-                return fresh;
-            },
+                    },
+                    ctx,
+                    queryKey: key,
+                    remote: ({ signal }) =>
+                        api.controller.getPlaylistList({
+                            apiClientProps: { serverId: args.serverId, signal },
+                            query: args.query,
+                        }) as Promise<PlaylistListResponse>,
+                }),
             queryKey: key,
             ...args.options,
         });
@@ -90,25 +78,20 @@ export const playlistsQueries = {
             gcTime: 1000 * 60 * 60,
             initialData: (() => readSnapshot(key)) as never,
             initialDataUpdatedAt: 0,
-            queryFn: async ({ signal }) => {
-                if (isCacheAvailableSync()) {
-                    try {
-                        const db = getActiveCacheDb();
-                        if (db) {
-                            const cachedCount = await db.playlists.count();
-                            if (cachedCount > 0) writeSnapshot(key, cachedCount);
-                        }
-                    } catch {
-                        /* swallow */
-                    }
-                }
-                const fresh = await api.controller.getPlaylistListCount({
-                    apiClientProps: { serverId: args.serverId, signal },
-                    query: args.query,
-                });
-                writeSnapshot(key, fresh);
-                return fresh;
-            },
+            queryFn: (ctx) =>
+                cachedSwr<number>({
+                    ctx,
+                    fromCache: async (db) => {
+                        const cachedCount = await db.playlists.count();
+                        return cachedCount > 0 ? cachedCount : undefined;
+                    },
+                    queryKey: key,
+                    remote: ({ signal }) =>
+                        api.controller.getPlaylistListCount({
+                            apiClientProps: { serverId: args.serverId, signal },
+                            query: args.query,
+                        }),
+                }),
             queryKey: key,
             staleTime: 1000 * 60 * 60,
             ...args.options,
@@ -119,14 +102,16 @@ export const playlistsQueries = {
         return queryOptions({
             initialData: (() => readSnapshot(key)) as never,
             initialDataUpdatedAt: 0,
-            queryFn: async ({ signal }) => {
-                const fresh = await api.controller.getPlaylistSongList({
-                    apiClientProps: { serverId: args.serverId, signal },
-                    query: args.query,
-                });
-                writeSnapshot(key, fresh);
-                return fresh;
-            },
+            queryFn: (ctx) =>
+                snapshotSwr<PlaylistSongListResponse>({
+                    ctx,
+                    queryKey: key,
+                    remote: ({ signal }) =>
+                        api.controller.getPlaylistSongList({
+                            apiClientProps: { serverId: args.serverId, signal },
+                            query: args.query,
+                        }) as Promise<PlaylistSongListResponse>,
+                }),
             queryKey: key,
             ...args.options,
         });

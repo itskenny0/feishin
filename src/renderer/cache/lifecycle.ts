@@ -138,6 +138,47 @@ export const useCacheLifecycle = (): void => {
                 // Run an eviction pass on activation in case quotas changed
                 // between sessions (best-effort, no-op when under cap).
                 void evict();
+                // Restore the cache store from the persistent layer so the
+                // dashboard shows accurate counts + hydration states after
+                // a cold start. Both fields live in memory only; without
+                // this step the user sees "0 / none" on every restart
+                // even when Dexie has thousands of rows.
+                void (async () => {
+                    try {
+                        const [albums, artists, songs, playlists, favorites, genres, thumbnails] =
+                            await Promise.all([
+                                db.albums.count(),
+                                db.artists.count(),
+                                db.songs.count(),
+                                db.playlists.count(),
+                                db.favorites.count(),
+                                db.genres.count(),
+                                db.thumbnails.count(),
+                            ]);
+                        actions.setEntityCount('albums', albums);
+                        actions.setEntityCount('artists', artists);
+                        actions.setEntityCount('songs', songs);
+                        actions.setEntityCount('playlists', playlists);
+                        actions.setEntityCount('favorites', favorites);
+                        actions.setEntityCount('genres', genres);
+                        actions.setEntityCount('thumbnails', thumbnails);
+                        const metas = await db.syncMeta.toArray();
+                        for (const meta of metas) {
+                            actions.setHydrationState(meta.EntityType, meta.hydrationState);
+                        }
+                        console.info('[cache] lifecycle: restored counts + hydration', {
+                            albums,
+                            artists,
+                            favorites,
+                            genres,
+                            playlists,
+                            songs,
+                            thumbnails,
+                        });
+                    } catch (err) {
+                        console.warn('[cache] lifecycle: restore counts failed', err);
+                    }
+                })();
             })
             .catch((err) => {
                 if (cancelled) return;

@@ -4,13 +4,7 @@ import { api } from '/@/renderer/api';
 import { controller } from '/@/renderer/api/controller';
 import { queryKeys } from '/@/renderer/api/query-keys';
 import { getOptimizedListCount } from '/@/renderer/api/utils-list-count';
-import {
-    getActiveCacheDb,
-    isCacheAvailableSync,
-    readSnapshot,
-    toCachedSongRow,
-    writeSnapshot,
-} from '/@/renderer/cache';
+import { cachedSwr, readSnapshot, toCachedSongRow } from '/@/renderer/cache';
 import { QueryHookArgs } from '/@/renderer/lib/react-query';
 import {
     AlbumRadioQuery,
@@ -19,8 +13,10 @@ import {
     ListCountQuery,
     RandomSongListQuery,
     SimilarSongsQuery,
+    Song,
     SongDetailQuery,
     SongListQuery,
+    SongListResponse,
 } from '/@/shared/types/domain-types';
 
 export const songsQueries = {
@@ -59,31 +55,25 @@ export const songsQueries = {
         return queryOptions({
             initialData: (() => readSnapshot(key)) as never,
             initialDataUpdatedAt: 0,
-            queryFn: async ({ signal }) => {
-                if (isCacheAvailableSync() && args.query?.id) {
-                    try {
-                        const db = getActiveCacheDb();
-                        const row = await db?.songs.get(args.query.id);
-                        if (row?.Payload) writeSnapshot(key, row.Payload);
-                    } catch {
-                        /* swallow */
-                    }
-                }
-                const fresh = await api.controller.getSongDetail({
-                    apiClientProps: { serverId: args.serverId, signal },
-                    query: args.query,
-                });
-                if (isCacheAvailableSync() && fresh) {
-                    try {
-                        const db = getActiveCacheDb();
-                        if (db) await db.songs.put(toCachedSongRow(fresh));
-                    } catch {
-                        /* swallow */
-                    }
-                }
-                writeSnapshot(key, fresh);
-                return fresh;
-            },
+            queryFn: (ctx) =>
+                cachedSwr<Song>({
+                    apply: async (db, fresh) => {
+                        if (!fresh) return;
+                        await db.songs.put(toCachedSongRow(fresh));
+                    },
+                    ctx,
+                    fromCache: async (db) => {
+                        if (!args.query?.id) return undefined;
+                        const row = await db.songs.get(args.query.id);
+                        return row?.Payload;
+                    },
+                    queryKey: key,
+                    remote: ({ signal }) =>
+                        api.controller.getSongDetail({
+                            apiClientProps: { serverId: args.serverId, signal },
+                            query: args.query,
+                        }) as Promise<Song>,
+                }),
             queryKey: key,
             ...args.options,
         });
@@ -103,25 +93,22 @@ export const songsQueries = {
         return queryOptions({
             initialData: (() => readSnapshot(key)) as never,
             initialDataUpdatedAt: 0,
-            queryFn: async ({ signal }) => {
-                const fresh = await controller.getSongList({
-                    apiClientProps: { serverId: args.serverId, signal },
-                    query: { ...args.query, imageSize },
-                });
-                if (isCacheAvailableSync()) {
-                    try {
-                        const db = getActiveCacheDb();
+            queryFn: (ctx) =>
+                cachedSwr<SongListResponse>({
+                    apply: async (db, fresh) => {
                         const items = fresh?.items ?? [];
-                        if (db && items.length > 0) {
+                        if (items.length > 0) {
                             await db.songs.bulkPut(items.map(toCachedSongRow));
                         }
-                    } catch {
-                        /* swallow */
-                    }
-                }
-                writeSnapshot(key, fresh);
-                return fresh;
-            },
+                    },
+                    ctx,
+                    queryKey: key,
+                    remote: ({ signal }) =>
+                        controller.getSongList({
+                            apiClientProps: { serverId: args.serverId, signal },
+                            query: { ...args.query, imageSize },
+                        }) as Promise<SongListResponse>,
+                }),
             queryKey: key,
             ...args.options,
         });
@@ -135,53 +122,44 @@ export const songsQueries = {
             gcTime: 1000 * 60 * 60,
             initialData: (() => readSnapshot(key)) as never,
             initialDataUpdatedAt: 0,
-            queryFn: async ({ client, signal }) => {
-                // Cache-first: an unfiltered song count comes straight from
-                // `db.songs.count()` so the count tile / header paints
-                // before the network revalidation lands.
-                if (
-                    isCacheAvailableSync() &&
-                    !args.query.albumIds &&
-                    !args.query.artistIds &&
-                    !args.query.genreIds &&
-                    args.query.favorite === undefined
-                ) {
-                    try {
-                        const db = getActiveCacheDb();
-                        if (db) {
-                            const cachedCount = await db.songs.count();
-                            if (cachedCount > 0) writeSnapshot(key, cachedCount);
+            queryFn: (ctx) =>
+                cachedSwr<number>({
+                    ctx,
+                    fromCache: async (db) => {
+                        if (
+                            args.query.albumIds ||
+                            args.query.artistIds ||
+                            args.query.genreIds ||
+                            args.query.favorite !== undefined
+                        ) {
+                            return undefined;
                         }
-                    } catch {
-                        /* swallow */
-                    }
-                }
+                        const cachedCount = await db.songs.count();
+                        return cachedCount > 0 ? cachedCount : undefined;
+                    },
+                    queryKey: key,
+                    remote: async ({ signal }) => {
+                        const optimizedCount = await getOptimizedListCount<
+                            ListCountQuery<SongListQuery>,
+                            SongListQuery,
+                            { totalRecordCount: null | number }
+                        >({
+                            client: ctx.client,
+                            listQueryFn: controller.getSongList,
+                            listQueryKeyFn: queryKeys.songs.list,
+                            query: args.query,
+                            serverId: args.serverId,
+                            signal,
+                        });
 
-                const optimizedCount = await getOptimizedListCount<
-                    ListCountQuery<SongListQuery>,
-                    SongListQuery,
-                    { totalRecordCount: null | number }
-                >({
-                    client,
-                    listQueryFn: controller.getSongList,
-                    listQueryKeyFn: queryKeys.songs.list,
-                    query: args.query,
-                    serverId: args.serverId,
-                    signal,
-                });
+                        if (optimizedCount !== null) return optimizedCount;
 
-                if (optimizedCount !== null) {
-                    writeSnapshot(key, optimizedCount);
-                    return optimizedCount;
-                }
-
-                const fresh = await api.controller.getSongListCount({
-                    apiClientProps: { serverId: args.serverId, signal },
-                    query: args.query,
-                });
-                writeSnapshot(key, fresh);
-                return fresh;
-            },
+                        return api.controller.getSongListCount({
+                            apiClientProps: { serverId: args.serverId, signal },
+                            query: args.query,
+                        });
+                    },
+                }),
             queryKey: key,
             staleTime: 1000 * 60 * 60,
             ...args.options,

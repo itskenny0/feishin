@@ -5,60 +5,57 @@ import { controller } from '/@/renderer/api/controller';
 import { queryKeys } from '/@/renderer/api/query-keys';
 import { getOptimizedListCount } from '/@/renderer/api/utils-list-count';
 import {
-    getActiveCacheDb,
-    isCacheAvailableSync,
+    cachedSwr,
     readSnapshot,
+    snapshotSwr,
     toCachedArtistRow,
     toCachedSongRow,
-    writeSnapshot,
 } from '/@/renderer/cache';
 import { QueryHookArgs } from '/@/renderer/lib/react-query';
 import {
     AlbumArtistDetailQuery,
+    AlbumArtistDetailResponse,
     AlbumArtistInfoQuery,
+    AlbumArtistInfoResponse,
     AlbumArtistListQuery,
+    AlbumArtistListResponse,
     ArtistListQuery,
+    ArtistListResponse,
     ListCountQuery,
+    SongListResponse,
     SongListSort,
     SortOrder,
     TopSongListQuery,
+    TopSongListResponse,
 } from '/@/shared/types/domain-types';
 
 export const artistsQueries = {
     albumArtistDetail: (args: QueryHookArgs<AlbumArtistDetailQuery>) => {
         const key = queryKeys.albumArtists.detail(args.serverId, args.query);
         return queryOptions({
-            initialData: (() => readSnapshot(key)) as never,
+            initialData: () => readSnapshot<AlbumArtistDetailResponse>(key),
             initialDataUpdatedAt: 0,
-            queryFn: async ({ signal }) => {
-                // Dexie read-through: paint the cached artist payload while
-                // the network call is in flight. Works for both the
-                // suspense and non-suspense callers because we seed the
-                // snapshot map before the controller resolves.
-                if (isCacheAvailableSync() && args.query?.id) {
-                    try {
-                        const db = getActiveCacheDb();
-                        const row = await db?.artists.get(args.query.id);
-                        if (row?.Payload) writeSnapshot(key, row.Payload);
-                    } catch {
-                        /* cache reads must never break the query */
-                    }
-                }
-                const fresh = await api.controller.getAlbumArtistDetail({
-                    apiClientProps: { serverId: args.serverId, signal },
-                    query: args.query,
-                });
-                if (isCacheAvailableSync() && fresh) {
-                    try {
-                        const db = getActiveCacheDb();
-                        if (db) await db.artists.put(toCachedArtistRow(fresh, 'AlbumArtist'));
-                    } catch {
-                        /* swallow */
-                    }
-                }
-                writeSnapshot(key, fresh);
-                return fresh;
-            },
+            queryFn: (ctx) =>
+                cachedSwr<AlbumArtistDetailResponse>({
+                    apply: async (db, fresh) => {
+                        if (!fresh) return;
+                        await db.artists.put(toCachedArtistRow(fresh, 'AlbumArtist'));
+                    },
+                    ctx,
+                    fromCache: async (db) => {
+                        if (!args.query?.id) return undefined;
+                        const row = await db.artists.get(args.query.id);
+                        return (row?.Payload ?? undefined) as
+                            | AlbumArtistDetailResponse
+                            | undefined;
+                    },
+                    queryKey: key,
+                    remote: ({ signal }) =>
+                        api.controller.getAlbumArtistDetail({
+                            apiClientProps: { serverId: args.serverId, signal },
+                            query: args.query,
+                        }) as Promise<AlbumArtistDetailResponse>,
+                }),
             queryKey: key,
             ...args.options,
         });
@@ -68,14 +65,16 @@ export const artistsQueries = {
         return queryOptions({
             initialData: (() => readSnapshot(key)) as never,
             initialDataUpdatedAt: 0,
-            queryFn: async ({ signal }) => {
-                const fresh = await (api.controller.getAlbumArtistInfo?.({
-                    apiClientProps: { serverId: args.serverId, signal },
-                    query: args.query,
-                }) ?? Promise.resolve(null));
-                writeSnapshot(key, fresh);
-                return fresh;
-            },
+            queryFn: (ctx) =>
+                snapshotSwr<AlbumArtistInfoResponse | null>({
+                    ctx,
+                    queryKey: key,
+                    remote: ({ signal }) =>
+                        api.controller.getAlbumArtistInfo?.({
+                            apiClientProps: { serverId: args.serverId, signal },
+                            query: args.query,
+                        }) ?? Promise.resolve(null),
+                }),
             queryKey: key,
             ...args.options,
         });
@@ -85,27 +84,24 @@ export const artistsQueries = {
         return queryOptions({
             initialData: (() => readSnapshot(key)) as never,
             initialDataUpdatedAt: 0,
-            queryFn: async ({ signal }) => {
-                const fresh = await api.controller.getAlbumArtistList({
-                    apiClientProps: { serverId: args.serverId, signal },
-                    query: args.query,
-                });
-                if (isCacheAvailableSync()) {
-                    try {
-                        const db = getActiveCacheDb();
+            queryFn: (ctx) =>
+                cachedSwr<AlbumArtistListResponse>({
+                    apply: async (db, fresh) => {
                         const items = fresh?.items ?? [];
-                        if (db && items.length > 0) {
+                        if (items.length > 0) {
                             await db.artists.bulkPut(
                                 items.map((a) => toCachedArtistRow(a, 'AlbumArtist')),
                             );
                         }
-                    } catch {
-                        /* swallow */
-                    }
-                }
-                writeSnapshot(key, fresh);
-                return fresh;
-            },
+                    },
+                    ctx,
+                    queryKey: key,
+                    remote: ({ signal }) =>
+                        api.controller.getAlbumArtistList({
+                            apiClientProps: { serverId: args.serverId, signal },
+                            query: args.query,
+                        }) as Promise<AlbumArtistListResponse>,
+                }),
             queryKey: key,
             ...args.options,
         });
@@ -119,51 +115,42 @@ export const artistsQueries = {
             gcTime: 1000 * 60 * 60,
             initialData: (() => readSnapshot(key)) as never,
             initialDataUpdatedAt: 0,
-            queryFn: async ({ client, signal }) => {
-                if (
-                    isCacheAvailableSync() &&
-                    args.query.favorite === undefined &&
-                    !args.query._custom
-                ) {
-                    try {
-                        const db = getActiveCacheDb();
-                        if (db) {
-                            const cachedCount = await db.artists
-                                .where('Kind')
-                                .equals('AlbumArtist')
-                                .count();
-                            if (cachedCount > 0) writeSnapshot(key, cachedCount);
+            queryFn: (ctx) =>
+                cachedSwr<number>({
+                    ctx,
+                    fromCache: async (db) => {
+                        if (args.query.favorite !== undefined || args.query._custom) {
+                            return undefined;
                         }
-                    } catch {
-                        /* swallow */
-                    }
-                }
+                        const cachedCount = await db.artists
+                            .where('Kind')
+                            .equals('AlbumArtist')
+                            .count();
+                        return cachedCount > 0 ? cachedCount : undefined;
+                    },
+                    queryKey: key,
+                    remote: async ({ signal }) => {
+                        const optimizedCount = await getOptimizedListCount<
+                            ListCountQuery<AlbumArtistListQuery>,
+                            AlbumArtistListQuery,
+                            { totalRecordCount: null | number }
+                        >({
+                            client: ctx.client,
+                            listQueryFn: controller.getAlbumArtistList,
+                            listQueryKeyFn: queryKeys.albumArtists.list,
+                            query: args.query,
+                            serverId: args.serverId,
+                            signal,
+                        });
 
-                const optimizedCount = await getOptimizedListCount<
-                    ListCountQuery<AlbumArtistListQuery>,
-                    AlbumArtistListQuery,
-                    { totalRecordCount: null | number }
-                >({
-                    client,
-                    listQueryFn: controller.getAlbumArtistList,
-                    listQueryKeyFn: queryKeys.albumArtists.list,
-                    query: args.query,
-                    serverId: args.serverId,
-                    signal,
-                });
+                        if (optimizedCount !== null) return optimizedCount;
 
-                if (optimizedCount !== null) {
-                    writeSnapshot(key, optimizedCount);
-                    return optimizedCount;
-                }
-
-                const fresh = await api.controller.getAlbumArtistListCount({
-                    apiClientProps: { serverId: args.serverId, signal },
-                    query: args.query,
-                });
-                writeSnapshot(key, fresh);
-                return fresh;
-            },
+                        return api.controller.getAlbumArtistListCount({
+                            apiClientProps: { serverId: args.serverId, signal },
+                            query: args.query,
+                        });
+                    },
+                }),
             queryKey: key,
             staleTime: 1000 * 60 * 60,
             ...args.options,
@@ -174,27 +161,24 @@ export const artistsQueries = {
         return queryOptions({
             initialData: (() => readSnapshot(key)) as never,
             initialDataUpdatedAt: 0,
-            queryFn: async ({ signal }) => {
-                const fresh = await api.controller.getArtistList({
-                    apiClientProps: { serverId: args.serverId, signal },
-                    query: args.query,
-                });
-                if (isCacheAvailableSync()) {
-                    try {
-                        const db = getActiveCacheDb();
+            queryFn: (ctx) =>
+                cachedSwr<ArtistListResponse>({
+                    apply: async (db, fresh) => {
                         const items = fresh?.items ?? [];
-                        if (db && items.length > 0) {
+                        if (items.length > 0) {
                             await db.artists.bulkPut(
                                 items.map((a) => toCachedArtistRow(a, 'Artist')),
                             );
                         }
-                    } catch {
-                        /* swallow */
-                    }
-                }
-                writeSnapshot(key, fresh);
-                return fresh;
-            },
+                    },
+                    ctx,
+                    queryKey: key,
+                    remote: ({ signal }) =>
+                        api.controller.getArtistList({
+                            apiClientProps: { serverId: args.serverId, signal },
+                            query: args.query,
+                        }) as Promise<ArtistListResponse>,
+                }),
             queryKey: key,
             ...args.options,
         });
@@ -208,53 +192,44 @@ export const artistsQueries = {
             gcTime: 1000 * 60 * 60,
             initialData: (() => readSnapshot(key)) as never,
             initialDataUpdatedAt: 0,
-            queryFn: async ({ client, signal }) => {
-                if (
-                    isCacheAvailableSync() &&
-                    args.query.favorite === undefined &&
-                    !args.query._custom
-                ) {
-                    try {
-                        const db = getActiveCacheDb();
-                        if (db) {
-                            const cachedCount = await db.artists
-                                .where('Kind')
-                                .equals('Artist')
-                                .count();
-                            if (cachedCount > 0) writeSnapshot(key, cachedCount);
+            queryFn: (ctx) =>
+                cachedSwr<number>({
+                    ctx,
+                    fromCache: async (db) => {
+                        if (args.query.favorite !== undefined || args.query._custom) {
+                            return undefined;
                         }
-                    } catch {
-                        /* swallow */
-                    }
-                }
+                        const cachedCount = await db.artists
+                            .where('Kind')
+                            .equals('Artist')
+                            .count();
+                        return cachedCount > 0 ? cachedCount : undefined;
+                    },
+                    queryKey: key,
+                    remote: async ({ signal }) => {
+                        const optimizedCount = await getOptimizedListCount<
+                            ListCountQuery<ArtistListQuery>,
+                            ArtistListQuery,
+                            { totalRecordCount: null | number }
+                        >({
+                            client: ctx.client,
+                            listQueryFn: controller.getArtistList,
+                            listQueryKeyFn: queryKeys.artists.list,
+                            query: args.query,
+                            serverId: args.serverId,
+                            signal,
+                        });
 
-                const optimizedCount = await getOptimizedListCount<
-                    ListCountQuery<ArtistListQuery>,
-                    ArtistListQuery,
-                    { totalRecordCount: null | number }
-                >({
-                    client,
-                    listQueryFn: controller.getArtistList,
-                    listQueryKeyFn: queryKeys.artists.list,
-                    query: args.query,
-                    serverId: args.serverId,
-                    signal,
-                });
+                        if (optimizedCount !== null) return optimizedCount;
 
-                if (optimizedCount !== null) {
-                    writeSnapshot(key, optimizedCount);
-                    return optimizedCount;
-                }
-
-                const fresh = await api.controller
-                    .getArtistList({
-                        apiClientProps: { serverId: args.serverId, signal },
-                        query: { ...args.query, limit: 1, startIndex: 0 },
-                    })
-                    .then((result) => result?.totalRecordCount ?? 0);
-                writeSnapshot(key, fresh);
-                return fresh;
-            },
+                        return api.controller
+                            .getArtistList({
+                                apiClientProps: { serverId: args.serverId, signal },
+                                query: { ...args.query, limit: 1, startIndex: 0 },
+                            })
+                            .then((result) => result?.totalRecordCount ?? 0);
+                    },
+                }),
             queryKey: key,
             staleTime: 1000 * 60 * 60,
             ...args.options,
@@ -265,32 +240,29 @@ export const artistsQueries = {
         return queryOptions({
             initialData: (() => readSnapshot(key)) as never,
             initialDataUpdatedAt: 0,
-            queryFn: async ({ signal }) => {
-                const fresh = await api.controller.getSongList({
-                    apiClientProps: { serverId: args.serverId, signal },
-                    query: {
-                        artistIds: [args.query.artistId],
-                        favorite: true,
-                        limit: -1,
-                        sortBy: SongListSort.RELEASE_DATE,
-                        sortOrder: SortOrder.ASC,
-                        startIndex: 0,
-                    },
-                });
-                if (isCacheAvailableSync()) {
-                    try {
-                        const db = getActiveCacheDb();
+            queryFn: (ctx) =>
+                cachedSwr<SongListResponse>({
+                    apply: async (db, fresh) => {
                         const items = fresh?.items ?? [];
-                        if (db && items.length > 0) {
+                        if (items.length > 0) {
                             await db.songs.bulkPut(items.map(toCachedSongRow));
                         }
-                    } catch {
-                        /* swallow */
-                    }
-                }
-                writeSnapshot(key, fresh);
-                return fresh;
-            },
+                    },
+                    ctx,
+                    queryKey: key,
+                    remote: ({ signal }) =>
+                        api.controller.getSongList({
+                            apiClientProps: { serverId: args.serverId, signal },
+                            query: {
+                                artistIds: [args.query.artistId],
+                                favorite: true,
+                                limit: -1,
+                                sortBy: SongListSort.RELEASE_DATE,
+                                sortOrder: SortOrder.ASC,
+                                startIndex: 0,
+                            },
+                        }) as Promise<SongListResponse>,
+                }),
             queryKey: key,
         });
     },
@@ -299,25 +271,22 @@ export const artistsQueries = {
         return queryOptions({
             initialData: (() => readSnapshot(key)) as never,
             initialDataUpdatedAt: 0,
-            queryFn: async ({ signal }) => {
-                const fresh = await api.controller.getTopSongs({
-                    apiClientProps: { serverId: args.serverId, signal },
-                    query: args.query,
-                });
-                if (isCacheAvailableSync()) {
-                    try {
-                        const db = getActiveCacheDb();
+            queryFn: (ctx) =>
+                cachedSwr<TopSongListResponse>({
+                    apply: async (db, fresh) => {
                         const items = fresh?.items ?? [];
-                        if (db && items.length > 0) {
+                        if (items.length > 0) {
                             await db.songs.bulkPut(items.map(toCachedSongRow));
                         }
-                    } catch {
-                        /* swallow */
-                    }
-                }
-                writeSnapshot(key, fresh);
-                return fresh;
-            },
+                    },
+                    ctx,
+                    queryKey: key,
+                    remote: ({ signal }) =>
+                        api.controller.getTopSongs({
+                            apiClientProps: { serverId: args.serverId, signal },
+                            query: args.query,
+                        }) as Promise<TopSongListResponse>,
+                }),
             queryKey: key,
             ...args.options,
         });

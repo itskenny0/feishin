@@ -34,8 +34,11 @@ interface PendingThumbnail {
 /**
  * Collect the (id, type, size) triples we want to fetch. Reads each
  * Dexie table once and crosses each row with each selected size bucket.
- * Returns the resolved size from `general.imageRes` so the caller can
- * just call `api.controller.getImageUrl` and `resolveThumbnail`.
+ * We attempt every row that has an `id` — `imageId` is unreliable on
+ * some servers (Jellyfin omits it from list endpoints even when the
+ * entity has artwork accessible via the per-item endpoint), so the
+ * earlier `if (!row.Payload?.imageId)` guard was rejecting most
+ * candidates. Let the server return 404 instead.
  */
 const collectPending = async (
     sizes: number[],
@@ -46,7 +49,7 @@ const collectPending = async (
 
     const albums = await db.albums.toArray();
     for (const row of albums) {
-        if (!row.Payload?.imageId && !row.Payload?.id) continue;
+        if (!row.Id) continue;
         for (const size of sizes) {
             out.push({
                 itemId: row.Id,
@@ -59,7 +62,7 @@ const collectPending = async (
 
     const artists = await db.artists.toArray();
     for (const row of artists) {
-        if (!row.Payload?.id) continue;
+        if (!row.Id) continue;
         for (const size of sizes) {
             out.push({
                 itemId: row.Id,
@@ -72,7 +75,7 @@ const collectPending = async (
 
     const playlists = await db.playlists.toArray();
     for (const row of playlists) {
-        if (!row.Payload?.id) continue;
+        if (!row.Id) continue;
         for (const size of sizes) {
             out.push({
                 itemId: row.Id,

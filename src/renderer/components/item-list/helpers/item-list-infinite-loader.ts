@@ -161,12 +161,14 @@ export const useItemListInfiniteLoader = ({
                 ...query,
             };
 
-            // Cache-first: paint cached items immediately so the grid never
-            // shows a skeleton while the network call is in flight. The
-            // network call always runs after — if it returns different items
-            // the dataMap is overwritten when it lands, and the page-loaded
-            // flag is only set then. If the resolver returns `undefined`
-            // (cache cold / unsupported query) we just go to the network.
+            // Cache-first with stale-while-revalidate. If the cache
+            // returns items we mark the page as loaded immediately and
+            // fire the network call only in the background; failures
+            // (offline / 500) stay silent so the user never sees a
+            // spinner when the cache had the data. On a true cache miss
+            // we still await the network call so the page eventually
+            // populates.
+            let cachedItems: unknown[] | undefined;
             if (localFetchPage) {
                 try {
                     const cached = await localFetchPage({
@@ -175,29 +177,53 @@ export const useItemListInfiniteLoader = ({
                         startIndex,
                     });
                     if (cached && cached.items.length > 0) {
-                        writePageIntoDataMap(pageNumber, startIndex, cached.items, false);
+                        cachedItems = cached.items;
+                        writePageIntoDataMap(pageNumber, startIndex, cached.items, true);
+                        lastFetchedPageRef.current = Math.max(
+                            lastFetchedPageRef.current,
+                            pageNumber,
+                        );
                     }
                 } catch (err) {
                     console.warn('[cache] grid localFetchPage failed', itemType, err);
                 }
             }
 
-            const result = await queryClient.fetchQuery({
-                queryFn: async ({ signal }) => {
-                    const result = await listQueryFn({
-                        apiClientProps: { serverId, signal },
-                        query: queryParams,
-                    });
+            const networkPromise = queryClient
+                .fetchQuery({
+                    queryFn: async ({ signal }) => {
+                        const result = await listQueryFn({
+                            apiClientProps: { serverId, signal },
+                            query: queryParams,
+                        });
 
-                    return result;
-                },
-                queryKey: queryKeys[getListQueryKeyName(itemType)].list(serverId, queryParams),
-            });
+                        return result;
+                    },
+                    queryKey: queryKeys[getListQueryKeyName(itemType)].list(serverId, queryParams),
+                })
+                .then((result) => {
+                    writePageIntoDataMap(pageNumber, startIndex, result.items, true);
+                    lastFetchedPageRef.current = Math.max(
+                        lastFetchedPageRef.current,
+                        pageNumber,
+                    );
+                });
 
-            writePageIntoDataMap(pageNumber, startIndex, result.items, true);
+            if (cachedItems) {
+                // Background revalidate. Swallow errors so an offline
+                // session keeps showing the cached page instead of
+                // exposing the fetch failure.
+                void networkPromise.catch((err) => {
+                    console.info(
+                        '[cache] grid background revalidate failed',
+                        itemType,
+                        (err as Error)?.message,
+                    );
+                });
+                return;
+            }
 
-            // Track the last fetched page
-            lastFetchedPageRef.current = Math.max(lastFetchedPageRef.current, pageNumber);
+            await networkPromise;
         },
         [
             itemsPerPage,

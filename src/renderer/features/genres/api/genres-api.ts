@@ -3,17 +3,12 @@ import { useMemo } from 'react';
 
 import { api } from '/@/renderer/api';
 import { queryKeys } from '/@/renderer/api/query-keys';
-import {
-    getActiveCacheDb,
-    isCacheAvailableSync,
-    readSnapshot,
-    toCachedGenreRow,
-    writeSnapshot,
-} from '/@/renderer/cache';
+import { cachedSwr, readSnapshot, toCachedGenreRow } from '/@/renderer/cache';
 import { QueryHookArgs } from '/@/renderer/lib/react-query';
 import { useCurrentServerId } from '/@/renderer/store';
 import {
     GenreListQuery,
+    GenreListResponse,
     GenreListSort,
     ListCountQuery,
     SortOrder,
@@ -26,53 +21,40 @@ export const genresQueries = {
             gcTime: 1000 * 60 * 60,
             initialData: (() => readSnapshot(key)) as never,
             initialDataUpdatedAt: 0,
-            queryFn: async ({ signal }) => {
-                // Cache-first: if the Dexie genres table has rows, populate
-                // the snapshot map with a synthetic GenreListResponse so
-                // any concurrent mounts during the network round-trip see
-                // a primed value. Filters that the cache can't answer fall
-                // through to the network unchanged.
-                if (isCacheAvailableSync()) {
-                    try {
-                        const db = getActiveCacheDb();
-                        if (db) {
-                            const rows = await db.genres.toArray();
-                            if (rows.length > 0) {
-                                const sorted = rows
-                                    .slice()
-                                    .sort((a, b) =>
-                                        (a.SortName ?? '').localeCompare(b.SortName ?? ''),
-                                    );
-                                const items = sorted.map((r) => r.Payload);
-                                writeSnapshot(key, {
-                                    items,
-                                    startIndex: 0,
-                                    totalRecordCount: items.length,
-                                });
-                            }
-                        }
-                    } catch {
-                        /* swallow */
-                    }
-                }
-                const fresh = await api.controller.getGenreList({
-                    apiClientProps: { serverId: args.serverId, signal },
-                    query: args.query,
-                });
-                if (isCacheAvailableSync()) {
-                    try {
-                        const db = getActiveCacheDb();
+            queryFn: (ctx) =>
+                cachedSwr<GenreListResponse>({
+                    apply: async (db, fresh) => {
                         const items = fresh?.items ?? [];
-                        if (db && items.length > 0) {
+                        if (items.length > 0) {
                             await db.genres.bulkPut(items.map(toCachedGenreRow));
                         }
-                    } catch {
-                        /* swallow */
-                    }
-                }
-                writeSnapshot(key, fresh);
-                return fresh;
-            },
+                    },
+                    ctx,
+                    // Cache-first: if the Dexie genres table has rows, return
+                    // a synthetic GenreListResponse so any concurrent mounts
+                    // during the network round-trip see a primed value.
+                    // Filters that the cache can't answer fall through to
+                    // the network unchanged.
+                    fromCache: async (db) => {
+                        const rows = await db.genres.toArray();
+                        if (rows.length === 0) return undefined;
+                        const sorted = rows
+                            .slice()
+                            .sort((a, b) => (a.SortName ?? '').localeCompare(b.SortName ?? ''));
+                        const items = sorted.map((r) => r.Payload);
+                        return {
+                            items,
+                            startIndex: 0,
+                            totalRecordCount: items.length,
+                        };
+                    },
+                    queryKey: key,
+                    remote: ({ signal }) =>
+                        api.controller.getGenreList({
+                            apiClientProps: { serverId: args.serverId, signal },
+                            query: args.query,
+                        }) as Promise<GenreListResponse>,
+                }),
             queryKey: key,
             staleTime: 1000 * 60 * 60,
             ...args.options,
@@ -87,27 +69,22 @@ export const genresQueries = {
             gcTime: 1000 * 60 * 60,
             initialData: (() => readSnapshot(key)) as never,
             initialDataUpdatedAt: 0,
-            queryFn: async ({ signal }) => {
-                if (isCacheAvailableSync()) {
-                    try {
-                        const db = getActiveCacheDb();
-                        if (db) {
-                            const cachedCount = await db.genres.count();
-                            if (cachedCount > 0) writeSnapshot(key, cachedCount);
-                        }
-                    } catch {
-                        /* swallow */
-                    }
-                }
-                const fresh = await api.controller
-                    .getGenreList({
-                        apiClientProps: { serverId: args.serverId, signal },
-                        query: { ...args.query, limit: 1, startIndex: 0 },
-                    })
-                    .then((result) => result?.totalRecordCount ?? 0);
-                writeSnapshot(key, fresh);
-                return fresh;
-            },
+            queryFn: (ctx) =>
+                cachedSwr<number>({
+                    ctx,
+                    fromCache: async (db) => {
+                        const cachedCount = await db.genres.count();
+                        return cachedCount > 0 ? cachedCount : undefined;
+                    },
+                    queryKey: key,
+                    remote: ({ signal }) =>
+                        api.controller
+                            .getGenreList({
+                                apiClientProps: { serverId: args.serverId, signal },
+                                query: { ...args.query, limit: 1, startIndex: 0 },
+                            })
+                            .then((result) => result?.totalRecordCount ?? 0),
+                }),
             queryKey: key,
             staleTime: 1000 * 60 * 60,
             ...args.options,
