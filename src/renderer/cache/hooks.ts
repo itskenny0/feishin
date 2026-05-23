@@ -326,28 +326,33 @@ export const useCachedInfiniteQuery = <TPage, TPageParam = number>(
             }
 
             if (cachedPage !== undefined) {
-                // Background revalidate so an offline session never throws
-                // out of queryFn when the cache has the page.
-                void (async () => {
-                    try {
-                        const fresh = await remote(ctx);
-                        if (db && apply) {
-                            try {
-                                await apply(db, fresh, pageParam);
-                            } catch (err) {
-                                console.warn('[cache] apply failed (bg)', queryKey, err);
+                // Background revalidate — throttled per [queryKey, pageParam]
+                // so repeated navigations to the same page don't spam the
+                // network within the REVALIDATE_TTL_MS window.
+                const pageQueryKey = [...(queryKey as unknown[]), pageParam];
+                if (shouldRevalidate(pageQueryKey)) {
+                    void (async () => {
+                        try {
+                            const fresh = await remote(ctx);
+                            if (db && apply) {
+                                try {
+                                    await apply(db, fresh, pageParam);
+                                } catch (err) {
+                                    console.warn('[cache] apply failed (bg)', queryKey, err);
+                                }
+                            }
+                            const existing =
+                                readSnapshot<InfiniteData<TPage, TPageParam>>(queryKey);
+                            const next = mergePage(existing, pageParam, fresh);
+                            writeSnapshot(queryKey, next);
+                            queryClient.setQueryData(queryKey, next);
+                        } catch (err) {
+                            if ((err as Error)?.name !== 'AbortError') {
+                                console.info('[cache] background revalidate failed', queryKey, err);
                             }
                         }
-                        const existing = readSnapshot<InfiniteData<TPage, TPageParam>>(queryKey);
-                        const next = mergePage(existing, pageParam, fresh);
-                        writeSnapshot(queryKey, next);
-                        queryClient.setQueryData(queryKey, next);
-                    } catch (err) {
-                        if ((err as Error)?.name !== 'AbortError') {
-                            console.info('[cache] background revalidate failed', queryKey, err);
-                        }
-                    }
-                })();
+                    })();
+                }
                 return cachedPage;
             }
 
