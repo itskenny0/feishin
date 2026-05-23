@@ -268,6 +268,30 @@ export const artistsQueries = {
                         }
                     },
                     ctx,
+                    fromCache: async (db) => {
+                        // Pull every song by this artist that's flagged
+                        // favorite in db.favorites. Approximate offline
+                        // — the live query uses server-side ranking we
+                        // can't reproduce — but at least the section
+                        // renders something instead of spinning.
+                        const songRows = await db.songs
+                            .where('AlbumArtistId')
+                            .equals(args.query.artistId)
+                            .toArray();
+                        if (songRows.length === 0) return undefined;
+                        const favs = await db.favorites
+                            .filter((f) => f.ItemType === 'Song' && f.IsFavorite)
+                            .toArray();
+                        const favSet = new Set(favs.map((f) => f.ItemId));
+                        const items = songRows
+                            .filter((r) => favSet.has(r.Id))
+                            .map((r) => r.Payload);
+                        return {
+                            items,
+                            startIndex: 0,
+                            totalRecordCount: items.length,
+                        } as SongListResponse;
+                    },
                     queryKey: key,
                     remote: ({ signal }) =>
                         api.controller.getSongList({
@@ -299,6 +323,31 @@ export const artistsQueries = {
                         }
                     },
                     ctx,
+                    fromCache: async (db) => {
+                        // Approximate "top songs" from cached rows: take
+                        // every song by this artist sorted by playCount
+                        // desc. Server uses richer ranking we can't
+                        // reproduce, but cold-offline should render
+                        // SOMETHING rather than spinning forever.
+                        const rows = await db.songs
+                            .where('AlbumArtistId')
+                            .equals(args.query.artistId)
+                            .toArray();
+                        if (rows.length === 0) return undefined;
+                        const items = rows
+                            .map((r) => r.Payload)
+                            .sort(
+                                (a, b) =>
+                                    ((b as { playCount?: number }).playCount ?? 0) -
+                                    ((a as { playCount?: number }).playCount ?? 0),
+                            )
+                            .slice(0, args.query.limit ?? 20);
+                        return {
+                            items,
+                            startIndex: 0,
+                            totalRecordCount: items.length,
+                        } as TopSongListResponse;
+                    },
                     queryKey: key,
                     remote: ({ signal }) =>
                         api.controller.getTopSongs({

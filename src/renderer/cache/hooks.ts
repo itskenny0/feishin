@@ -133,6 +133,18 @@ export const cachedSwr = async <TData>(args: {
             void (async () => {
                 try {
                     const fresh = await remote(ctx);
+                    // Defensive: skip setQueryData if the network came
+                    // back with something less useful than what's
+                    // cached. Without this guard, a barely-alive
+                    // network that returns null / undefined / an empty
+                    // list-response would overwrite the rendered
+                    // cached data — the user observed albums showing
+                    // their tracklist briefly then going blank a
+                    // split-second later when a partial network
+                    // response landed.
+                    if (fresh === null || fresh === undefined) {
+                        return;
+                    }
                     if (db && apply) {
                         try {
                             await apply(db, fresh);
@@ -152,8 +164,26 @@ export const cachedSwr = async <TData>(args: {
         return cached;
     }
 
+    // Cold-path hard timeout. On Capacitor WebView offline, `fetch()`
+    // can hang indefinitely instead of throwing — the user reported
+    // spinners that never resolve on the artist page's Top songs /
+    // Favorite songs sections. Force a return with `null` after 8s so
+    // Suspense ends and the consumer can render an empty state.
+    const COLD_NETWORK_TIMEOUT_MS = 8_000;
+    let timedOut = false;
+    const timeoutPromise = new Promise<TData>((resolve) => {
+        setTimeout(() => {
+            timedOut = true;
+            resolve(null as unknown as TData);
+        }, COLD_NETWORK_TIMEOUT_MS);
+    });
+
     try {
-        const fresh = await remote(ctx);
+        const fresh = await Promise.race([remote(ctx), timeoutPromise]);
+        if (timedOut) {
+            console.info('[cache] cold network timed out; returning null', queryKey);
+            return null as unknown as TData;
+        }
         if (db && apply) {
             try {
                 await apply(db, fresh);
@@ -164,11 +194,6 @@ export const cachedSwr = async <TData>(args: {
         writeSnapshot(queryKey, fresh);
         return fresh;
     } catch (err) {
-        // Cold network failure with no cache to fall back on. For
-        // recoverable errors (offline, DNS, TLS, etc.) we resolve with
-        // `null` so Suspense ends and the consumer can render an empty
-        // state instead of throwing. Unknown / programmatic errors
-        // still propagate so they reach the error boundary.
         if (isLikelyNetworkError(err)) {
             console.info('[cache] cold network failed; returning null', queryKey, {
                 error: (err as Error)?.message,

@@ -48,18 +48,36 @@ export const albumQueries = {
                     fromCache: async (db) => {
                         if (!args.query?.id) return undefined;
                         const row = await db.albums.get(args.query.id);
-                        // Only return the cached row if it carries a tracklist.
-                        // A row written by the list endpoint is missing `songs`
-                        // — returning it here would resolve the detail query
-                        // with an empty song list (bad UX). When songs aren't
-                        // present we fall through to the network so the user
-                        // sees a real tracklist instead of an empty one
-                        // during the background revalidate.
                         const payload = row?.Payload as AlbumDetailResponse | undefined;
-                        if (!payload || !payload.songs || payload.songs.length === 0) {
-                            return undefined;
+                        if (!payload) return undefined;
+                        // If the row came from the list endpoint it lacks a
+                        // nested `songs` array. Previously we returned
+                        // undefined here so the queryFn fell through to the
+                        // network — but on a cold-offline session that
+                        // produced a `null` from `cachedSwr` and the UI
+                        // erased its already-rendered tracklist a split-
+                        // second after first paint. Assemble the tracklist
+                        // from `db.songs.where('AlbumId')` instead, so the
+                        // cached path always returns something usable.
+                        let songs = payload.songs ?? [];
+                        if (songs.length === 0) {
+                            try {
+                                const rows = await db.songs
+                                    .where('AlbumId')
+                                    .equals(args.query.id)
+                                    .toArray();
+                                rows.sort((a, b) => {
+                                    const aDisc = a.ParentIndexNumber ?? 1;
+                                    const bDisc = b.ParentIndexNumber ?? 1;
+                                    if (aDisc !== bDisc) return aDisc - bDisc;
+                                    return (a.IndexNumber ?? 0) - (b.IndexNumber ?? 0);
+                                });
+                                songs = rows.map((r) => r.Payload);
+                            } catch {
+                                /* fall through with empty songs */
+                            }
                         }
-                        return payload;
+                        return { ...payload, songs } as AlbumDetailResponse;
                     },
                     queryKey: key,
                     remote: ({ signal }) =>
