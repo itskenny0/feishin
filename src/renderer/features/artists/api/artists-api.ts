@@ -261,9 +261,12 @@ export const artistsQueries = {
         });
     },
     favoriteSongs: (args: QueryHookArgs<{ artistId: string }>) => {
+        const key = queryKeys.albumArtists.favoriteSongs(args.serverId, args.query.artistId);
         return queryOptions({
-            queryFn: ({ signal }) => {
-                return api.controller.getSongList({
+            initialData: (() => readSnapshot(key)) as never,
+            initialDataUpdatedAt: 0,
+            queryFn: async ({ signal }) => {
+                const fresh = await api.controller.getSongList({
                     apiClientProps: { serverId: args.serverId, signal },
                     query: {
                         artistIds: [args.query.artistId],
@@ -274,8 +277,21 @@ export const artistsQueries = {
                         startIndex: 0,
                     },
                 });
+                if (isCacheAvailableSync()) {
+                    try {
+                        const db = getActiveCacheDb();
+                        const items = fresh?.items ?? [];
+                        if (db && items.length > 0) {
+                            await db.songs.bulkPut(items.map(toCachedSongRow));
+                        }
+                    } catch {
+                        /* swallow */
+                    }
+                }
+                writeSnapshot(key, fresh);
+                return fresh;
             },
-            queryKey: queryKeys.albumArtists.favoriteSongs(args.serverId, args.query.artistId),
+            queryKey: key,
         });
     },
     topSongs: (args: QueryHookArgs<TopSongListQuery>) => {
