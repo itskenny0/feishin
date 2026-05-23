@@ -13,10 +13,28 @@ import { queryClient } from '/@/renderer/lib/react-query';
 const activeDb = (): LibraryCacheDb | undefined =>
     useCacheStore.getState().cacheAvailable === true ? getActiveCacheDb() : undefined;
 
+// Sentinel returned by remote() when the network call fails and we want
+// the cold path to resolve with a known-empty value (so Suspense doesn't
+// hang and the consumer's offline-safe render path can take over). We
+// use `null` rather than an entity-shaped empty because non-list queries
+// (detail / count / info) have a sensible null state.
+const isLikelyNetworkError = (err: unknown): boolean => {
+    const name = (err as Error)?.name;
+    const message = (err as Error)?.message ?? '';
+    if (name === 'AbortError') return false;
+    return (
+        name === 'TypeError' ||
+        name === 'NetworkError' ||
+        /network|fetch|offline|ECONNREFUSED|ETIMEDOUT|ENOTFOUND/i.test(message)
+    );
+};
+
 /**
  * Snapshot-only SWR runner for queries that don't have a Dexie table to
  * fall back on (sidecar lists, etc.). Same shape as `cachedSwr` minus
- * the Dexie hooks.
+ * the Dexie hooks. Cold network failures resolve with `null` (cast to
+ * TData) so Suspense ends and offline-safe consumers see an empty
+ * state instead of a thrown error.
  */
 export const snapshotSwr = async <TData>(args: {
     ctx: QueryFunctionContext;
@@ -39,9 +57,19 @@ export const snapshotSwr = async <TData>(args: {
         })();
         return cached;
     }
-    const fresh = await remote(ctx);
-    writeSnapshot(queryKey, fresh);
-    return fresh;
+    try {
+        const fresh = await remote(ctx);
+        writeSnapshot(queryKey, fresh);
+        return fresh;
+    } catch (err) {
+        if (isLikelyNetworkError(err)) {
+            console.info('[cache] cold network failed; returning null', queryKey, {
+                error: (err as Error)?.message,
+            });
+            return null as unknown as TData;
+        }
+        throw err;
+    }
 };
 
 /**
@@ -100,16 +128,31 @@ export const cachedSwr = async <TData>(args: {
         return cached;
     }
 
-    const fresh = await remote(ctx);
-    if (db && apply) {
-        try {
-            await apply(db, fresh);
-        } catch (err) {
-            console.warn('[cache] apply failed', queryKey, err);
+    try {
+        const fresh = await remote(ctx);
+        if (db && apply) {
+            try {
+                await apply(db, fresh);
+            } catch (err) {
+                console.warn('[cache] apply failed', queryKey, err);
+            }
         }
+        writeSnapshot(queryKey, fresh);
+        return fresh;
+    } catch (err) {
+        // Cold network failure with no cache to fall back on. For
+        // recoverable errors (offline, DNS, TLS, etc.) we resolve with
+        // `null` so Suspense ends and the consumer can render an empty
+        // state instead of throwing. Unknown / programmatic errors
+        // still propagate so they reach the error boundary.
+        if (isLikelyNetworkError(err)) {
+            console.info('[cache] cold network failed; returning null', queryKey, {
+                error: (err as Error)?.message,
+            });
+            return null as unknown as TData;
+        }
+        throw err;
     }
-    writeSnapshot(queryKey, fresh);
-    return fresh;
 };
 
 // Bug 6 — helper to merge a single page into an existing InfiniteData

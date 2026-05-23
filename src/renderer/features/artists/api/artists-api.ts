@@ -95,6 +95,24 @@ export const artistsQueries = {
                         }
                     },
                     ctx,
+                    fromCache: async (db) => {
+                        // Serve the artist list from Dexie so the page paints
+                        // on cold mount and works offline.
+                        const rows = await db.artists
+                            .where('Kind')
+                            .equals('AlbumArtist')
+                            .toArray();
+                        if (rows.length === 0) return undefined;
+                        rows.sort((a, b) =>
+                            (a.SortName ?? '').localeCompare(b.SortName ?? ''),
+                        );
+                        const items = rows.map((r) => r.Payload);
+                        return {
+                            items,
+                            startIndex: 0,
+                            totalRecordCount: items.length,
+                        };
+                    },
                     queryKey: key,
                     remote: ({ signal }) =>
                         api.controller.getAlbumArtistList({
@@ -172,6 +190,22 @@ export const artistsQueries = {
                         }
                     },
                     ctx,
+                    fromCache: async (db) => {
+                        const rows = await db.artists
+                            .where('Kind')
+                            .equals('Artist')
+                            .toArray();
+                        if (rows.length === 0) return undefined;
+                        rows.sort((a, b) =>
+                            (a.SortName ?? '').localeCompare(b.SortName ?? ''),
+                        );
+                        const items = rows.map((r) => r.Payload);
+                        return {
+                            items,
+                            startIndex: 0,
+                            totalRecordCount: items.length,
+                        };
+                    },
                     queryKey: key,
                     remote: ({ signal }) =>
                         api.controller.getArtistList({
