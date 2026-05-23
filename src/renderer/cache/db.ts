@@ -125,6 +125,26 @@ export class LibraryCacheDb extends Dexie {
                     console.warn('[cache] v4 upgrade: thumbnails.clear failed', err);
                 }
             });
+
+        // v5: add standalone `AlbumId` index to songs so `where('AlbumId').equals()`
+        // works without Dexie throwing "Index not found". Previously AlbumId only
+        // appeared in compound indexes ([AlbumId+ParentIndexNumber+IndexNumber] and
+        // [AlbumId+IndexNumber]), which are not addressable via a single-field where().
+        // No row-copy work — this is a purely additive index.
+        this.version(5).stores({
+            albums: 'Id, [AlbumArtistId+SortName], DateLastSaved, SortName, ProductionYear, __cachedAt',
+            artists: 'Id, SortName, Name, DateLastSaved, Kind, __cachedAt',
+            favorites:
+                '[ItemId+ItemType], IsFavorite, Rating, LastPlayedDate, PlayCount, __cachedAt',
+            genres: 'Id, SortName, Name, __cachedAt',
+            lyrics: 'SongId, __cachedAt',
+            mutationQueue: 'id, status, createdAt, idempotencyKey',
+            playlists: 'Id, SortName, DateLastSaved, __cachedAt',
+            playlistSongs: '[PlaylistId+ListOrder], PlaylistId, SongId, __cachedAt',
+            songs: 'Id, AlbumId, [AlbumId+ParentIndexNumber+IndexNumber], AlbumArtistId, DateLastSaved, [AlbumId+IndexNumber], __cachedAt',
+            syncMeta: 'EntityType',
+            thumbnails: 'ItemId, LastUsed, ByteSize, MissAt, __cachedAt',
+        });
     }
 }
 const handles = new Map<Key, LibraryCacheDb>();
