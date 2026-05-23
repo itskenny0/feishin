@@ -48,7 +48,7 @@ interface UseItemListPaginatedLoaderProps {
         limit: number;
         query: Record<string, any>;
         startIndex: number;
-    }) => Promise<{ items: unknown[] } | undefined>;
+    }) => Promise<undefined | { items: unknown[] }>;
     query: Record<string, any>;
     serverId: string;
 }
