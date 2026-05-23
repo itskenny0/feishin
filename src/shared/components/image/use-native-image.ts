@@ -12,7 +12,7 @@ type ThumbnailResolver = (itemId: string, size: number, url: string) => Promise<
 
 let resolveThumbnailRef: null | ThumbnailResolver = null;
 
-export const registerThumbnailResolver = (fn: ThumbnailResolver | null): void => {
+export const registerThumbnailResolver = (fn: null | ThumbnailResolver): void => {
     resolveThumbnailRef = fn;
 };
 

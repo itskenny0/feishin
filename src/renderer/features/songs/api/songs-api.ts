@@ -54,16 +54,6 @@ export const songsQueries = {
             ...args.options,
         });
     },
-    getQueue: (args: QueryHookArgs<GetQueueQuery>) => {
-        return queryOptions({
-            queryFn: ({ signal }) => {
-                return api.controller.getPlayQueue({
-                    apiClientProps: { serverId: args.serverId, signal },
-                });
-            },
-            queryKey: queryKeys.player.fetch({ type: 'queue' }),
-        });
-    },
     detail: (args: QueryHookArgs<SongDetailQuery>) => {
         const key = queryKeys.songs.detail(args.serverId, args.query);
         return queryOptions({
@@ -96,6 +86,16 @@ export const songsQueries = {
             },
             queryKey: key,
             ...args.options,
+        });
+    },
+    getQueue: (args: QueryHookArgs<GetQueueQuery>) => {
+        return queryOptions({
+            queryFn: ({ signal }) => {
+                return api.controller.getPlayQueue({
+                    apiClientProps: { serverId: args.serverId, signal },
+                });
+            },
+            queryKey: queryKeys.player.fetch({ type: 'queue' }),
         });
     },
     list: (args: QueryHookArgs<SongListQuery>, imageSize?: number) => {
