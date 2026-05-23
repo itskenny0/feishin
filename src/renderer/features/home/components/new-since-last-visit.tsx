@@ -6,7 +6,13 @@ import { Link } from 'react-router';
 import styles from './new-since-last-visit.module.css';
 
 import { api } from '/@/renderer/api';
-import { readSnapshot, writeSnapshot } from '/@/renderer/cache';
+import {
+    getActiveCacheDb,
+    isCacheAvailableSync,
+    readSnapshot,
+    toCachedAlbumRow,
+    writeSnapshot,
+} from '/@/renderer/cache';
 import { AppRoute } from '/@/renderer/router/routes';
 import { useCurrentServer } from '/@/renderer/store';
 import { Icon } from '/@/shared/components/icon/icon';
@@ -116,6 +122,17 @@ export const NewSinceLastVisit = () => {
                 },
             });
             const result = (res?.items ?? []) as Album[];
+            // Write-through into Dexie albums so subsequent grid/list mounts
+            // hit cache even if the recently-added probe was the first
+            // contact with these rows.
+            if (isCacheAvailableSync() && result.length > 0) {
+                try {
+                    const db = getActiveCacheDb();
+                    if (db) await db.albums.bulkPut(result.map(toCachedAlbumRow));
+                } catch {
+                    /* swallow */
+                }
+            }
             writeSnapshot(key, result);
             return result;
         },
