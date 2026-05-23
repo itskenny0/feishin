@@ -4,6 +4,12 @@ import { useCallback } from 'react';
 
 import { api } from '/@/renderer/api';
 import { queryKeys } from '/@/renderer/api/query-keys';
+import {
+    getActiveCacheDb,
+    isCacheAvailableSync,
+    toCachedSongRow,
+    writeSnapshot,
+} from '/@/renderer/cache';
 import { usePlayerEvents } from '/@/renderer/features/player/audio-player/hooks/use-player-events';
 import { updateQueueSong } from '/@/renderer/store/player.store';
 import { LogCategory, logFn } from '/@/renderer/utils/logger';
@@ -25,14 +31,28 @@ export const useUpdateCurrentSong = () => {
                 const queryKey = queryKeys.songs.detail(currentSong._serverId, queryFilter);
 
                 const updatedSong = await queryClient.fetchQuery({
-                    queryFn: async ({ signal }) =>
-                        api.controller.getSongDetail({
+                    queryFn: async ({ signal }) => {
+                        const fresh = await api.controller.getSongDetail({
                             apiClientProps: {
                                 serverId: currentSong._serverId,
                                 signal,
                             },
                             query: queryFilter,
-                        }),
+                        });
+                        // Write-through to Dexie + snapshot so the next time
+                        // anyone reads this song detail (queue restore, song
+                        // detail route, etc.) the cache wins on first frame.
+                        if (isCacheAvailableSync() && fresh) {
+                            try {
+                                const db = getActiveCacheDb();
+                                if (db) await db.songs.put(toCachedSongRow(fresh));
+                            } catch {
+                                /* swallow */
+                            }
+                            writeSnapshot(queryKey, fresh);
+                        }
+                        return fresh;
+                    },
                     queryKey,
                 });
 
