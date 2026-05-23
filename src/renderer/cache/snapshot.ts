@@ -133,14 +133,26 @@ export const dropSnapshot = (key: QueryKey): void => {
 
 /**
  * Drop everything keyed under a specific serverId. Used on server switch.
- * The convention in this repo is that the first element of a queryKey is
- * the serverId — see `src/renderer/api/query-keys.ts`.
+ *
+ * Earlier versions of this function assumed the serverId was always the
+ * FIRST element of every queryKey (the convention in `query-keys.ts`).
+ * That assumption holds for the entity factories but is violated by the
+ * snapshot keys used by feature-card data hooks, library-stats,
+ * server-info, new-since-last-visit, and featured-genres, where the
+ * label string lives at index [0] and the serverId at [1] or [2].
+ *
+ * To catch all of them we scan the stringified queryKey for the
+ * JSON-quoted form of the serverId. The quotes act as a word boundary
+ * — a key whose entries are `"srv-abc"` matches the needle `"srv-abc"`
+ * but a key with `"srv-abc-detail"` does not, because the closing
+ * quote of the needle isn't present at that position.
  */
 export const dropSnapshotsForServer = (serverId: string): void => {
-    const prefix = JSON.stringify([serverId]).slice(0, -1);
+    if (!serverId) return;
+    const needle = JSON.stringify(serverId);
     let dropped = 0;
     for (const k of snapshots.keys()) {
-        if (k.startsWith(prefix)) {
+        if (k.includes(needle)) {
             snapshots.delete(k);
             dropped += 1;
         }

@@ -107,10 +107,13 @@ export const useItemListPaginatedLoader = ({
             return cached ?? { items: getInitialData(itemsPerPage) };
         }) as never,
         queryFn: async ({ signal }) => {
-            // Cache-first read-through (same contract as the infinite
-            // loader). The cached items are dropped into the snapshot map
-            // so the next mount paints with them; the network call always
-            // runs to revalidate.
+            // Cache-first read-through. We push the cached page into both
+            // the snapshot map AND react-query's cache via setQueryData
+            // BEFORE awaiting the network. setQueryData fires a re-render
+            // for the current mount with the cached items, so the user
+            // sees real data on the first frame instead of the skeleton
+            // placeholder. The network result still wins when queryFn
+            // resolves a moment later.
             if (localFetchPage) {
                 try {
                     const cached = await localFetchPage({
@@ -120,6 +123,7 @@ export const useItemListPaginatedLoader = ({
                     });
                     if (cached && cached.items.length > 0) {
                         writeSnapshot(queryKey, cached);
+                        queryClient.setQueryData(queryKey, cached);
                     }
                 } catch (err) {
                     console.warn('[cache] paginated localFetchPage failed', itemType, err);

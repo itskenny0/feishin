@@ -26,6 +26,12 @@ const emitWritten = (): void => {
     }
 };
 
+export interface ResolveThumbnailOptions {
+    // When set, the fetch is aborted when the signal fires. The cache
+    // pipeline returns `undefined` (caller falls back to the raw URL).
+    signal?: AbortSignal;
+}
+
 /**
  * Resolve a thumbnail to a `blob:` URL backed by the local cache. Falls
  * back to the original `url` when the cache is disabled or any step fails.
@@ -34,9 +40,13 @@ export const resolveThumbnail = async (
     itemId: string,
     size: number,
     url: string,
+    options?: ResolveThumbnailOptions,
 ): Promise<string> => {
     const db = getActiveCacheDb();
     if (!db) return url;
+
+    const signal = options?.signal;
+    if (signal?.aborted) return url;
 
     const key = keyFor(itemId, size);
     const existing = inFlight.get(key);
@@ -47,6 +57,7 @@ export const resolveThumbnail = async (
 
     const task = (async (): Promise<string | undefined> => {
         try {
+            if (signal?.aborted) return undefined;
             const row = await db.thumbnails.get([itemId, size]);
             if (row) {
                 await db.thumbnails.update([itemId, size], { LastUsed: Date.now() });
@@ -57,7 +68,7 @@ export const resolveThumbnail = async (
                 return URL.createObjectURL(row.Blob);
             }
 
-            const res = await fetch(url, { credentials: 'include' });
+            const res = await fetch(url, { credentials: 'include', signal });
             if (!res.ok) {
                 console.warn('[cache] thumbnail fetch failed', {
                     itemId,
@@ -68,6 +79,14 @@ export const resolveThumbnail = async (
             }
 
             const blob = await res.blob();
+            if (signal?.aborted) return undefined;
+
+            // The lifecycle Job 2 closes the active DB when the user
+            // disables the cache. The handle we captured at task entry
+            // may already be closed if disable happened mid-fetch; bail
+            // out before the put() throws.
+            if (db !== getActiveCacheDb()) return undefined;
+
             await db.thumbnails.put({
                 __cachedAt: Date.now(),
                 Blob: blob,
@@ -87,6 +106,7 @@ export const resolveThumbnail = async (
             });
             return URL.createObjectURL(blob);
         } catch (err) {
+            if ((err as Error)?.name === 'AbortError') return undefined;
             console.warn('[cache] thumbnail fetch failed', { err, itemId, size });
             return undefined;
         } finally {
@@ -97,6 +117,29 @@ export const resolveThumbnail = async (
     inFlight.set(key, task);
     const result = await task;
     return result ?? url;
+};
+
+/**
+ * Resolve a thumbnail AND report the byte size that landed in Dexie.
+ * Used by the thumbnail sweep to populate the progress chip's
+ * downloaded-bytes counter. Returns `{ bytes: 0 }` on cache hit / abort /
+ * fetch failure so the sweep can still increment its done counter
+ * uniformly.
+ */
+export const resolveThumbnailWithBytes = async (
+    itemId: string,
+    size: number,
+    url: string,
+    options?: ResolveThumbnailOptions,
+): Promise<{ bytes: number; url: string }> => {
+    const db = getActiveCacheDb();
+    if (!db) return { bytes: 0, url };
+
+    const before = await db.thumbnails.get([itemId, size]);
+    const resolved = await resolveThumbnail(itemId, size, url, options);
+    if (before) return { bytes: 0, url: resolved };
+    const after = await db.thumbnails.get([itemId, size]);
+    return { bytes: after?.ByteSize ?? 0, url: resolved };
 };
 
 /**

@@ -53,7 +53,11 @@ export const toCachedSongRow = (song: Song): CachedSong => ({
 
 export const toCachedPlaylistRow = (playlist: Playlist): CachedPlaylist => ({
     __cachedAt: nowMs(),
-    DateLastSaved: '',
+    // Navidrome/Subsonic surface an `updatedAt` field on Playlist that
+    // isn't in the canonical type; pull it through anyway so the cache
+    // can answer sort-by-updatedAt queries without having to fall back
+    // to the network.
+    DateLastSaved: (playlist as { updatedAt?: string }).updatedAt ?? '',
     Id: playlist.id,
     Payload: playlist,
     SortName: (playlist.name ?? '').toLowerCase(),

@@ -13,7 +13,7 @@ import type { ServerListItem } from '/@/shared/types/domain-types';
 
 import { api } from '/@/renderer/api';
 import { getActiveCacheDb } from '/@/renderer/cache/db';
-import { resolveThumbnail } from '/@/renderer/cache/images';
+import { resolveThumbnailWithBytes } from '/@/renderer/cache/images';
 import { useCacheStore } from '/@/renderer/cache/store';
 import { useSettingsStore } from '/@/renderer/store';
 import { LibraryItem } from '/@/shared/types/domain-types';
@@ -94,23 +94,29 @@ const collectPending = async (
 const fetchOne = async (
     pending: PendingThumbnail,
     serverId: string,
-): Promise<number> => {
+    signal: AbortSignal,
+): Promise<{ bytes: number }> => {
+    if (signal.aborted) return { bytes: 0 };
     const url = api.controller.getImageUrl({
         apiClientProps: { serverId },
         query: { id: pending.itemId, itemType: pending.itemType, size: pending.size },
     });
-    if (!url) return 0;
+    if (!url) return { bytes: 0 };
     const db = getActiveCacheDb();
-    if (!db) return 0;
+    if (!db) return { bytes: 0 };
 
     // Skip if the row already exists — saves a redundant network call
     // when the user has been browsing while the sweep is in flight.
     const existing = await db.thumbnails.get([pending.itemId, pending.size]);
-    if (existing) return 0;
+    if (existing) return { bytes: 0 };
 
-    const before = Date.now();
-    await resolveThumbnail(pending.itemId, pending.size, url);
-    return Math.max(0, Date.now() - before);
+    const { bytes } = await resolveThumbnailWithBytes(
+        pending.itemId,
+        pending.size,
+        url,
+        { signal },
+    );
+    return { bytes };
 };
 
 /**
@@ -154,6 +160,7 @@ export const runThumbnailsSweep = async (
     const actions = useCacheStore.getState().actions;
     const startedAt = Date.now();
     let done = 0;
+    let bytesDownloaded = 0;
 
     actions.setSweep({
         entity: 'thumbnails',
@@ -178,7 +185,8 @@ export const runThumbnailsSweep = async (
             const next = queue.shift();
             if (!next) return;
             try {
-                await fetchOne(next, server.id);
+                const { bytes } = await fetchOne(next, server.id, signal);
+                bytesDownloaded += bytes;
             } catch (err) {
                 console.warn('[cache] thumbnails sweep: fetch failed', {
                     err: (err as Error).message,
@@ -187,13 +195,19 @@ export const runThumbnailsSweep = async (
             }
             done += 1;
             const elapsed = Math.max(1, (Date.now() - startedAt) / 1000);
+            // Extrapolate the final payload size like the entity sweeps:
+            // bytesDownloaded * (total / done). The estimate only becomes
+                // accurate as `done / total` rises but it's the best we can
+                // do without a server-side total.
+            const estimatedTotalBytes =
+                done > 0 ? Math.round(bytesDownloaded * (total / done)) : undefined;
             actions.setSweep({
                 entity: 'thumbnails',
                 progress: {
-                    bytesDownloaded: 0,
-                    bytesPerSec: 0,
+                    bytesDownloaded,
+                    bytesPerSec: bytesDownloaded / elapsed,
                     done,
-                    estimatedTotalBytes: undefined,
+                    estimatedTotalBytes,
                     itemsPerSec: done / elapsed,
                     startedAt,
                     total,
