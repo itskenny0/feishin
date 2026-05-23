@@ -35,6 +35,7 @@ import {
     PlaylistListQuery,
     PlaylistListSort,
     SongListQuery,
+    SongListSort,
 } from '/@/shared/types/domain-types';
 
 interface BaseArgs<TQuery> {
@@ -179,10 +180,11 @@ export const resolveSongPage = async (
     }
     if (rows.length === 0) return undefined;
 
-    let favoriteSongIds: Set<string> | undefined;
-    if (query.favorite !== undefined) {
-        favoriteSongIds = await readFavoriteIds(db, 'Song');
-    }
+    const needsSongFavorites =
+        query.favorite !== undefined || query.sortBy === SongListSort.FAVORITED;
+    const favoriteSongIds = needsSongFavorites
+        ? await readFavoriteIds(db, 'Song')
+        : undefined;
 
     const out = filterSongsLocal({
         favoriteSongIds,

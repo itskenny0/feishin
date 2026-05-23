@@ -546,7 +546,16 @@ export const filterSongsLocal = (args: FilterSongsArgs): SongListResponse | unde
         );
     }
 
-    out = sortSongs(out.slice(), query.sortBy);
+    if (query.sortBy === SongListSort.FAVORITED) {
+        if (!favoriteSongIds) return undefined;
+        out = out.slice().sort((a, b) => {
+            const af = favoriteSongIds.has(a.Id) ? 1 : 0;
+            const bf = favoriteSongIds.has(b.Id) ? 1 : 0;
+            return bf - af;
+        });
+    } else {
+        out = sortSongs(out.slice(), query.sortBy);
+    }
     out = applyDirection(out, query.sortOrder);
 
     const totalRecordCount = out.length;
