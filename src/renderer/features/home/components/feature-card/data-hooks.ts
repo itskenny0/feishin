@@ -4,7 +4,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { generatePath } from 'react-router';
 
 import { api } from '/@/renderer/api';
-import { readSnapshot, writeSnapshot } from '/@/renderer/cache';
+import {
+    getActiveCacheDb,
+    isCacheAvailableSync,
+    readSnapshot,
+    toCachedArtistRow,
+    toCachedGenreRow,
+    toCachedSongRow,
+    writeSnapshot,
+} from '/@/renderer/cache';
 import {
     FeatureCardData,
     SONGS_PER_CARD,
@@ -72,6 +80,42 @@ const dedupeSongsByTitle = (songs: Song[]): Song[] => {
 const CANDIDATE_FETCH_LIMIT = 200;
 const YEAR_POOL_RANGE: [number, number] = [1960, new Date().getFullYear()];
 
+// Best-effort Dexie write-through for feature-card fetches. The home page
+// rotates random song/album/artist pools every 30s; each pool refresh is a
+// chance to populate the cache for whatever the user clicks into next.
+const writeSongsToCache = async (songs: Song[]): Promise<void> => {
+    if (!isCacheAvailableSync() || songs.length === 0) return;
+    try {
+        const db = getActiveCacheDb();
+        if (db) await db.songs.bulkPut(songs.map(toCachedSongRow));
+    } catch {
+        /* swallow */
+    }
+};
+
+const writeArtistsToCache = async (
+    artists: AlbumArtist[],
+    kind: 'AlbumArtist' | 'Artist' = 'AlbumArtist',
+): Promise<void> => {
+    if (!isCacheAvailableSync() || artists.length === 0) return;
+    try {
+        const db = getActiveCacheDb();
+        if (db) await db.artists.bulkPut(artists.map((a) => toCachedArtistRow(a, kind)));
+    } catch {
+        /* swallow */
+    }
+};
+
+const writeGenresToCache = async (genres: Genre[]): Promise<void> => {
+    if (!isCacheAvailableSync() || genres.length === 0) return;
+    try {
+        const db = getActiveCacheDb();
+        if (db) await db.genres.bulkPut(genres.map(toCachedGenreRow));
+    } catch {
+        /* swallow */
+    }
+};
+
 // ============================================================================
 // Featured Artist
 // ============================================================================
@@ -100,6 +144,7 @@ const useArtistCandidates = (serverId: string | undefined) =>
                     startIndex: 0,
                 },
             });
+            await writeArtistsToCache(res?.items ?? [], 'AlbumArtist');
             const all: ArtistCandidate[] = (res?.items ?? []).map((a: AlbumArtist) => ({
                 id: a.id,
                 name: a.name,
@@ -163,6 +208,8 @@ const useArtistSongs = (artistId: null | string, serverId: string | undefined) =
                     startIndex: 0,
                 },
             });
+            await writeSongsToCache((res?.items ?? []) as Song[]);
+            await writeSongsToCache((res?.items ?? []) as Song[]);
             const processed = dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(
                 0,
                 SONGS_PER_CARD,
@@ -315,6 +362,7 @@ const useGenreCandidates = (serverId: string | undefined) =>
                     startIndex: 0,
                 },
             });
+            await writeGenresToCache(res?.items ?? []);
             const processed: GenreCandidate[] = (res?.items ?? []).map((g: Genre) => ({
                 albumCount: g.albumCount ?? null,
                 id: g.id,
@@ -357,6 +405,7 @@ const useGenreSongs = (
                 apiClientProps: { serverId, signal },
                 query: { genre: genreParam, limit: SONGS_PER_CARD * 3, played: Played.All },
             });
+            await writeSongsToCache((res?.items ?? []) as Song[]);
             const processed = dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(
                 0,
                 SONGS_PER_CARD,
@@ -436,6 +485,7 @@ const useRecentlyPlayedSongs = (serverId: string | undefined) =>
                     startIndex: 0,
                 },
             });
+            await writeSongsToCache((res?.items ?? []) as Song[]);
             const processed = dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(
                 0,
                 SONGS_PER_CARD,
@@ -483,6 +533,7 @@ const useTopPlayedSongs = (serverId: string | undefined) =>
                     startIndex: 0,
                 },
             });
+            await writeSongsToCache((res?.items ?? []) as Song[]);
             const processed = dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(
                 0,
                 SONGS_PER_CARD,
@@ -531,6 +582,7 @@ const useFavoritesSongs = (serverId: string | undefined) =>
                     startIndex: 0,
                 },
             });
+            await writeSongsToCache((res?.items ?? []) as Song[]);
             const processed = dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(
                 0,
                 SONGS_PER_CARD,
@@ -639,6 +691,7 @@ const useForgottenFavoritesSongs = (serverId: string | undefined) =>
                     startIndex: 0,
                 },
             });
+            await writeSongsToCache((res?.items ?? []) as Song[]);
             const processed = dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(
                 0,
                 SONGS_PER_CARD,
@@ -694,6 +747,7 @@ const useTimeMachineSongs = (year: null | number, serverId: string | undefined) 
                     played: Played.All,
                 },
             });
+            await writeSongsToCache((res?.items ?? []) as Song[]);
             const processed = dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(
                 0,
                 SONGS_PER_CARD,
@@ -824,6 +878,7 @@ const useDecadeSongs = (decadeStart: null | number, serverId: string | undefined
                     played: Played.All,
                 },
             });
+            await writeSongsToCache((res?.items ?? []) as Song[]);
             const processed = dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(
                 0,
                 SONGS_PER_CARD,
