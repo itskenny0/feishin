@@ -195,16 +195,39 @@ export const runThumbnailsSweep = async (
     // worker pool can skip them without a Dexie round-trip per item. On a
     // re-sync where the cache is mostly warm this turns a 2.6 items/sec
     // crawl into a near-instant scan.
+    //
+    // Negative-cache markers (Blob === undefined) are included as long
+    // as they're still fresh — the server already told us 404, no point
+    // re-asking on every sweep. Once a marker is older than MISS_TTL_MS
+    // we let it through so the sweep retries (newly-added artwork on
+    // the server should eventually populate). The TTL matches the
+    // window used by `resolveThumbnail` in images.ts.
+    const MISS_TTL_MS = 7 * 24 * 60 * 60 * 1000;
     const db = getActiveCacheDb();
     const existingKeys = new Set<string>();
+    let staleMissCount = 0;
+    let freshMissCount = 0;
     if (db) {
         try {
             const rows = await db.thumbnails.toArray();
+            const now = Date.now();
             for (const row of rows) {
-                existingKeys.add(`${row.ItemId}:${row.Size}`);
+                if (row.Blob) {
+                    existingKeys.add(`${row.ItemId}:${row.Size}`);
+                } else {
+                    const missAt = row.MissAt ?? 0;
+                    if (now - missAt < MISS_TTL_MS) {
+                        existingKeys.add(`${row.ItemId}:${row.Size}`);
+                        freshMissCount += 1;
+                    } else {
+                        staleMissCount += 1;
+                    }
+                }
             }
             console.info('[cache] thumbnails sweep: prefetched existing keys', {
                 count: existingKeys.size,
+                freshMissCount,
+                staleMissCount,
             });
         } catch (err) {
             console.warn('[cache] thumbnails sweep: prefetch failed', err);

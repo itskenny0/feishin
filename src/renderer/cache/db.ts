@@ -71,6 +71,27 @@ export class LibraryCacheDb extends Dexie {
             syncMeta: 'EntityType',
             thumbnails: '[ItemId+Size], LastUsed, ByteSize, __cachedAt',
         });
+
+        // v3: additive — indexes `MissAt` on the thumbnails table so we
+        // can age negative-cache rows out of the table without a full
+        // scan. Every existing v2 store is re-declared identically;
+        // rows persisted in v2 carry through untouched. No row-copy
+        // work runs because `MissAt` is a new optional field that
+        // simply doesn't exist on the prior rows.
+        this.version(3).stores({
+            albums: 'Id, [AlbumArtistId+SortName], DateLastSaved, SortName, ProductionYear, __cachedAt',
+            artists: 'Id, SortName, Name, DateLastSaved, Kind, __cachedAt',
+            favorites:
+                '[ItemId+ItemType], IsFavorite, Rating, LastPlayedDate, PlayCount, __cachedAt',
+            genres: 'Id, SortName, Name, __cachedAt',
+            lyrics: 'SongId, __cachedAt',
+            mutationQueue: 'id, status, createdAt, idempotencyKey',
+            playlists: 'Id, SortName, DateLastSaved, __cachedAt',
+            playlistSongs: '[PlaylistId+ListOrder], PlaylistId, SongId, __cachedAt',
+            songs: 'Id, [AlbumId+ParentIndexNumber+IndexNumber], AlbumArtistId, DateLastSaved, [AlbumId+IndexNumber], __cachedAt',
+            syncMeta: 'EntityType',
+            thumbnails: '[ItemId+Size], LastUsed, ByteSize, MissAt, __cachedAt',
+        });
     }
 }
 const handles = new Map<Key, LibraryCacheDb>();

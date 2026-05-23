@@ -45,6 +45,12 @@ let missCount = 0;
 
 const HIT_LOG_SAMPLE = 50;
 
+// Negative-cache TTL: how long a 404 marker is honored before we let
+// the resolver try again. Most Jellyfin libraries don't grow artwork
+// out of thin air, so a week between retries keeps the table small
+// without making the user manually clear it if they re-tag an album.
+const MISS_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
 const keyFor = (itemId: string, size: number): string => `${itemId}:${size}`;
 
 const emitWritten = (): void => {
@@ -92,12 +98,27 @@ export const resolveThumbnail = async (
             if (signal?.aborted) return undefined;
             const row = await db.thumbnails.get([itemId, size]);
             if (row) {
-                await db.thumbnails.update([itemId, size], { LastUsed: Date.now() });
-                hitCount += 1;
-                if (hitCount % HIT_LOG_SAMPLE === 0) {
-                    console.info('[cache] thumbnail hits', { total: hitCount });
+                // Real blob row: serve it.
+                if (row.Blob) {
+                    await db.thumbnails.update([itemId, size], { LastUsed: Date.now() });
+                    hitCount += 1;
+                    if (hitCount % HIT_LOG_SAMPLE === 0) {
+                        console.info('[cache] thumbnail hits', { total: hitCount });
+                    }
+                    return URL.createObjectURL(row.Blob);
                 }
-                return URL.createObjectURL(row.Blob);
+                // Negative-cache marker. If it's still fresh, skip the
+                // network entirely and let the caller fall back to its
+                // inherited URL — the server already told us this size
+                // doesn't exist. Update LastUsed so the LRU eviction
+                // doesn't drop popular-but-art-less items prematurely.
+                const missAt = row.MissAt ?? 0;
+                if (Date.now() - missAt < MISS_TTL_MS) {
+                    await db.thumbnails.update([itemId, size], { LastUsed: Date.now() });
+                    return undefined;
+                }
+                // Stale miss: fall through to refetch. The TTL is there
+                // so newly-added artwork on the server eventually wins.
             }
 
             let res: Response;
@@ -123,10 +144,33 @@ export const resolveThumbnail = async (
             }
             if (!res.ok) {
                 // 404 = item has no artwork at this size, which is the
-                // norm for many items on most Jellyfin libraries.
-                // Silence so the console log viewer doesn't fill with
-                // unactionable warnings. Other statuses still warn.
-                if (res.status !== 404) {
+                // norm for many items on most Jellyfin libraries. Write
+                // a negative-cache row so the next call (resolver,
+                // sweep, or list mount) skips the network instead of
+                // re-issuing the same 404. The MISS_TTL_MS window above
+                // bounds how long that marker is honored.
+                if (res.status === 404) {
+                    if (db === getActiveCacheDb()) {
+                        try {
+                            await db.thumbnails.put({
+                                __cachedAt: Date.now(),
+                                Blob: undefined,
+                                ByteSize: 0,
+                                Etag: undefined,
+                                ItemId: itemId,
+                                LastUsed: Date.now(),
+                                MissAt: Date.now(),
+                                Size: size,
+                            });
+                        } catch (err) {
+                            console.warn('[cache] thumbnail miss-write failed', {
+                                error: (err as Error)?.message,
+                                itemId,
+                                size,
+                            });
+                        }
+                    }
+                } else {
                     console.warn('[cache] thumbnail HTTP error', {
                         hasAuthHeader: Boolean(headers?.Authorization),
                         itemId,
@@ -153,6 +197,7 @@ export const resolveThumbnail = async (
                 Etag: res.headers.get('etag') ?? undefined,
                 ItemId: itemId,
                 LastUsed: Date.now(),
+                MissAt: undefined,
                 Size: size,
             });
             emitWritten();
@@ -202,7 +247,19 @@ export const resolveThumbnailWithBytes = async (
 
     const before = await db.thumbnails.get([itemId, size]);
     const resolved = await resolveThumbnail(itemId, size, request, options);
-    if (before) return { bytes: 0, url: resolved };
+    // A row with a Blob counts as a real cache hit (no new bytes). A
+    // FRESH negative-cache marker also counts as "no new bytes" — the
+    // resolver returned without touching the network. A STALE marker
+    // is treated like an absent row because the resolver may have just
+    // refetched and replaced it with a real blob; check the after-row
+    // byte count to find out.
+    if (before?.Blob) return { bytes: 0, url: resolved };
+    if (before && !before.Blob) {
+        const missAt = before.MissAt ?? 0;
+        if (Date.now() - missAt < MISS_TTL_MS) {
+            return { bytes: 0, url: resolved };
+        }
+    }
     const after = await db.thumbnails.get([itemId, size]);
     return { bytes: after?.ByteSize ?? 0, url: resolved };
 };

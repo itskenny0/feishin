@@ -153,7 +153,12 @@ export const useCacheLifecycle = (): void => {
                                 db.playlists.count(),
                                 db.favorites.count(),
                                 db.genres.count(),
-                                db.thumbnails.count(),
+                                // Count only real blob rows; negative-
+                                // cache markers (Blob === undefined)
+                                // would otherwise inflate the displayed
+                                // thumbnail count past what the user
+                                // actually has on disk.
+                                db.thumbnails.filter((r) => r.Blob !== undefined).count(),
                             ]);
                         actions.setEntityCount('albums', albums);
                         actions.setEntityCount('artists', artists);

@@ -88,11 +88,18 @@ export interface CachedSong extends CachedBase {
 }
 
 export interface CachedThumbnail extends CachedBase {
-    Blob: Blob;
+    // Optional: a row without a Blob is a negative-cache marker meaning
+    // "we tried, the server returned 404 / no artwork at this size at
+    // time MissAt". The thumbnail resolver and sweep both treat such
+    // rows as known-miss until MissAt ages out and a refetch is allowed.
+    Blob: Blob | undefined;
     ByteSize: number;
     Etag: string | undefined;
     ItemId: string;
     LastUsed: number;
+    // Set when the row was written as a negative-cache marker (a 404
+    // from the server). Undefined on real blob rows.
+    MissAt: number | undefined;
     Size: number;
 }
 
