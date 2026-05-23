@@ -22,8 +22,14 @@ import type { QueryKey } from '@tanstack/react-query';
 // never exceeds a few MB and we evict the least-recently-written entries
 // first.
 const STORAGE_KEY = 'feishin:cache:snapshots:v1';
-const MAX_ENTRIES = 200;
-const MAX_BYTES = 3 * 1024 * 1024; // 3MB
+// Lifted from the original 200/3MB cap after the cache audit doubled the
+// number of factories that write snapshots (every queryOptions factory
+// now mirrors its response). Modern browsers grant origins multi-GB
+// localStorage quotas; 6MB / 600 entries leaves comfortable headroom for
+// every list / detail / count / sidecar surface across both servers
+// without trimming surfaces the user is likely to revisit.
+const MAX_ENTRIES = 600;
+const MAX_BYTES = 6 * 1024 * 1024;
 const PERSIST_DEBOUNCE_MS = 500;
 
 // LRU-ish: we track insertion order via Map iteration. Map preserves
