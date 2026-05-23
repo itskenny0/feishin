@@ -2,7 +2,7 @@ import { QueryClient } from '@tanstack/react-query';
 
 import { api } from '/@/renderer/api';
 import { queryKeys } from '/@/renderer/api/query-keys';
-import { writeSnapshot } from '/@/renderer/cache';
+import { getActiveCacheDb, writeSnapshot } from '/@/renderer/cache';
 import { albumQueries } from '/@/renderer/features/albums/api/album-api';
 import { folderQueries } from '/@/renderer/features/folders/api/folder-api';
 import { playlistsQueries } from '/@/renderer/features/playlists/api/playlists-api';
@@ -82,6 +82,45 @@ export const fetchPlaylistSongsBatch = async (args: {
     const res = await queryClient.fetchQuery({
         gcTime: 1000 * 60,
         queryFn: async ({ signal }) => {
+            // Cache-aware fast path: if db.playlistSongs has this
+            // playlist's tracks, slice the requested batch out of
+            // them and return without touching the network. Offline
+            // "Play playlist" used to throw at the first batch when
+            // the user had a populated cache.
+            try {
+                const db = getActiveCacheDb();
+                if (db) {
+                    const rows = await db.playlistSongs
+                        .where('PlaylistId')
+                        .equals(playlistId)
+                        .sortBy('ListOrder');
+                    if (rows.length > 0) {
+                        const slice = rows.slice(startIndex, startIndex + limit);
+                        const cached = {
+                            items: slice.map((r) => r.SongPayload),
+                            startIndex,
+                            totalRecordCount: rows.length,
+                        };
+                        writeSnapshot(queryKey, cached);
+                        // Best-effort network revalidate so the
+                        // next batch sees fresh data when online.
+                        api.controller
+                            .getPlaylistSongList({
+                                apiClientProps: { serverId, signal },
+                                query: { id: playlistId, limit, startIndex },
+                            })
+                            .then((fresh) => {
+                                if (fresh) writeSnapshot(queryKey, fresh);
+                            })
+                            .catch(() => {
+                                /* offline */
+                            });
+                        return cached;
+                    }
+                }
+            } catch {
+                /* fall through to network */
+            }
             const fresh = await api.controller.getPlaylistSongList({
                 apiClientProps: { serverId, signal },
                 query: { id: playlistId, limit, startIndex },

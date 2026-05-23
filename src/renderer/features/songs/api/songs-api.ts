@@ -27,32 +27,46 @@ import {
 
 export const songsQueries = {
     albumRadio: (args: QueryHookArgs<AlbumRadioQuery>) => {
+        const key = queryKeys.songs.albumRadio(args.serverId, args.query);
         return queryOptions({
-            queryFn: ({ signal }) => {
-                return api.controller.getAlbumRadio({
-                    apiClientProps: { serverId: args.serverId, signal },
-                    query: {
-                        albumId: args.query.albumId,
-                        count: args.query.count ?? 20,
-                    },
-                });
-            },
-            queryKey: queryKeys.songs.albumRadio(args.serverId, args.query),
+            initialData: (() => readSnapshot(key)) as never,
+            initialDataUpdatedAt: 0,
+            queryFn: (ctx) =>
+                snapshotSwr<Song[]>({
+                    ctx,
+                    queryKey: key,
+                    remote: ({ signal }) =>
+                        api.controller.getAlbumRadio({
+                            apiClientProps: { serverId: args.serverId, signal },
+                            query: {
+                                albumId: args.query.albumId,
+                                count: args.query.count ?? 20,
+                            },
+                        }) as Promise<Song[]>,
+                }),
+            queryKey: key,
             ...args.options,
         });
     },
     artistRadio: (args: QueryHookArgs<ArtistRadioQuery>) => {
+        const key = queryKeys.songs.artistRadio(args.serverId, args.query);
         return queryOptions({
-            queryFn: ({ signal }) => {
-                return api.controller.getArtistRadio({
-                    apiClientProps: { serverId: args.serverId, signal },
-                    query: {
-                        artistId: args.query.artistId,
-                        count: args.query.count ?? 20,
-                    },
-                });
-            },
-            queryKey: queryKeys.songs.artistRadio(args.serverId, args.query),
+            initialData: (() => readSnapshot(key)) as never,
+            initialDataUpdatedAt: 0,
+            queryFn: (ctx) =>
+                snapshotSwr<Song[]>({
+                    ctx,
+                    queryKey: key,
+                    remote: ({ signal }) =>
+                        api.controller.getArtistRadio({
+                            apiClientProps: { serverId: args.serverId, signal },
+                            query: {
+                                artistId: args.query.artistId,
+                                count: args.query.count ?? 20,
+                            },
+                        }) as Promise<Song[]>,
+                }),
+            queryKey: key,
             ...args.options,
         });
     },
@@ -85,13 +99,20 @@ export const songsQueries = {
         });
     },
     getQueue: (args: QueryHookArgs<GetQueueQuery>) => {
+        const key = queryKeys.player.fetch({ type: 'queue' });
         return queryOptions({
-            queryFn: ({ signal }) => {
-                return api.controller.getPlayQueue({
-                    apiClientProps: { serverId: args.serverId, signal },
-                });
-            },
-            queryKey: queryKeys.player.fetch({ type: 'queue' }),
+            initialData: (() => readSnapshot(key)) as never,
+            initialDataUpdatedAt: 0,
+            queryFn: (ctx) =>
+                snapshotSwr({
+                    ctx,
+                    queryKey: key,
+                    remote: ({ signal }) =>
+                        api.controller.getPlayQueue({
+                            apiClientProps: { serverId: args.serverId, signal },
+                        }),
+                }),
+            queryKey: key,
         });
     },
     list: (args: QueryHookArgs<SongListQuery>, imageSize?: number) => {

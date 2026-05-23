@@ -281,9 +281,29 @@ export const useArtistTopSongsQuery = (args: ArtistsQueryArgs<TopSongListQuery>)
             markSearchDirty('songs');
         },
         enabled: options?.enabled ?? Boolean(serverId && query?.artistId),
-        // Top-songs ordering is server-defined (popularity, listener count,
-        // etc.) so reading by AlbumArtistId would lose that signal — skip
-        // the cache read and let the network call answer authoritatively.
+        // Server ranks by popularity which we can't reproduce — but on
+        // cold-offline an approximation (playCount desc, then any
+        // order) is far better than an infinite spinner. The artist
+        // page header is one of the most-hit surfaces; previously it
+        // hung forever without network.
+        fromCache: async (db) => {
+            if (!query?.artistId) return undefined;
+            const rows = await db.songs.where('AlbumArtistId').equals(query.artistId).toArray();
+            if (rows.length === 0) return undefined;
+            const items = rows
+                .map((r) => r.Payload)
+                .sort(
+                    (a, b) =>
+                        ((b as { playCount?: number }).playCount ?? 0) -
+                        ((a as { playCount?: number }).playCount ?? 0),
+                )
+                .slice(0, query.limit ?? 20);
+            return {
+                items,
+                startIndex: 0,
+                totalRecordCount: items.length,
+            } as TopSongListResponse;
+        },
         queryKey: queryKeys.albumArtists.topSongs(serverId ?? '', query),
         remote: (ctx) =>
             controller.getTopSongs({
@@ -315,9 +335,25 @@ export const useArtistFavoriteSongsQuery = (args: FavoriteSongsArgs) => {
             markSearchDirty('songs');
         },
         enabled: options?.enabled ?? Boolean(serverId && query?.artistId),
-        // Favorite state is owned by the favorites table and the server
-        // is the source of truth — skip cache reads, just warm from the
-        // snapshot map.
+        // Intersect cached songs by this artist with the favorites
+        // table so the artist page's "Favorite songs" section paints
+        // offline instead of spinning. Network revalidate still wins
+        // for the canonical ordering when it lands.
+        fromCache: async (db) => {
+            if (!query?.artistId) return undefined;
+            const songRows = await db.songs.where('AlbumArtistId').equals(query.artistId).toArray();
+            if (songRows.length === 0) return undefined;
+            const favs = await db.favorites
+                .filter((f) => f.ItemType === 'Song' && f.IsFavorite)
+                .toArray();
+            const favSet = new Set(favs.map((f) => f.ItemId));
+            const items = songRows.filter((r) => favSet.has(r.Id)).map((r) => r.Payload);
+            return {
+                items,
+                startIndex: 0,
+                totalRecordCount: items.length,
+            } as SongListResponse;
+        },
         queryKey: queryKeys.albumArtists.favoriteSongs(serverId ?? '', query.artistId),
         remote: (ctx) =>
             controller.getSongList({
