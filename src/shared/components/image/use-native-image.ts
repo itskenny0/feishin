@@ -130,7 +130,16 @@ export function useNativeImage({
                         request.cacheSize,
                         request.url,
                     );
-                    if (abortController.signal.aborted) return;
+                    if (abortController.signal.aborted) {
+                        // The resolver creates a fresh blob: URL even on a
+                        // cache hit. If the consumer unmounted while the
+                        // resolver was in flight, revoke it before bailing
+                        // so we don't leak the object URL.
+                        if (cached && cached.startsWith('blob:')) {
+                            URL.revokeObjectURL(cached);
+                        }
+                        return;
+                    }
                     if (cached) {
                         objectUrlRef.current = cached;
                         loadedRequestSignatureRef.current = requestSignature;
