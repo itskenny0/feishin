@@ -36,6 +36,11 @@ export interface SweepProgress {
     // Undefined if `total` is unknown (server returned no total).
     estimatedTotalBytes: number | undefined;
     itemsPerSec: number;
+    // 1-indexed page counter for sequential sweeps. Surfaced in the
+    // dashboard label so the user sees "page 9/16" advancing even when
+    // a slow Jellyfin page makes the items/sec rate look frozen.
+    pageIndex?: number;
+    pageTotal?: number;
     // Coarse sub-phase the sweep is in right now. `fetching` means a
     // network request is in flight for the next batch and no items are
     // landing in Dexie; `processing` means items just landed and the

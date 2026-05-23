@@ -7,8 +7,10 @@ import { runSweep } from './sweep';
 import { controller } from '/@/renderer/api/controller';
 import { AlbumListSort, ServerListItem, SortOrder } from '/@/shared/types/domain-types';
 
+const DELTA_SAFETY_MS = 60_000;
+
 const fetchAlbumsPage =
-    (server: ServerListItem) =>
+    (server: ServerListItem, deltaMode: boolean) =>
     async (
         startIndex: number,
         limit: number,
@@ -18,8 +20,8 @@ const fetchAlbumsPage =
             apiClientProps: { serverId: server.id, signal },
             query: {
                 limit,
-                sortBy: AlbumListSort.NAME,
-                sortOrder: SortOrder.ASC,
+                sortBy: deltaMode ? AlbumListSort.RECENTLY_ADDED : AlbumListSort.NAME,
+                sortOrder: deltaMode ? SortOrder.DESC : SortOrder.ASC,
                 startIndex,
             },
         });
@@ -45,14 +47,29 @@ const writeAlbumsPage = async (db: LibraryCacheDb, items: CachedAlbum[]): Promis
     await db.albums.bulkPut(items);
 };
 
-export const runAlbumsSweep = (ctx: SweepContext, server: ServerListItem): Promise<void> => {
+const albumCreatedAtMs = (album: CachedAlbum): number | undefined => {
+    const created = (album.Payload as { createdAt?: string }).createdAt;
+    if (!created) return undefined;
+    const ms = Date.parse(created);
+    return Number.isFinite(ms) ? ms : undefined;
+};
+
+export const runAlbumsSweep = async (ctx: SweepContext, server: ServerListItem): Promise<void> => {
+    const meta = await ctx.db.syncMeta.get('albums');
+    const deltaCutoffMs =
+        meta?.lastFullSyncAt && meta.hydrationState === 'full'
+            ? meta.lastFullSyncAt - DELTA_SAFETY_MS
+            : undefined;
     console.info('[cache] sweep:albums dispatching with server', {
         baseUrl: server.url,
+        delta: deltaCutoffMs !== undefined,
         serverId: server.id,
     });
     return runSweep<CachedAlbum>({
         ctx,
-        fetchPage: fetchAlbumsPage(server),
+        deltaCutoffMs,
+        fetchPage: fetchAlbumsPage(server, deltaCutoffMs !== undefined),
+        itemDateMs: albumCreatedAtMs,
         writePage: writeAlbumsPage,
     });
 };

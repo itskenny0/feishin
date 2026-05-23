@@ -7,8 +7,14 @@ import { runSweep } from './sweep';
 import { controller } from '/@/renderer/api/controller';
 import { ServerListItem, SongListSort, SortOrder } from '/@/shared/types/domain-types';
 
+// Safety margin shaved off `lastFullSyncAt` before using it as a delta
+// cutoff. Server clocks and our local clock can drift by a few seconds,
+// and an item created at the exact instant of the previous sync might
+// otherwise be skipped on this one.
+const DELTA_SAFETY_MS = 60_000;
+
 const fetchSongsPage =
-    (server: ServerListItem) =>
+    (server: ServerListItem, deltaMode: boolean) =>
     async (
         startIndex: number,
         limit: number,
@@ -18,8 +24,8 @@ const fetchSongsPage =
             apiClientProps: { serverId: server.id, signal },
             query: {
                 limit,
-                sortBy: SongListSort.NAME,
-                sortOrder: SortOrder.ASC,
+                sortBy: deltaMode ? SongListSort.RECENTLY_ADDED : SongListSort.NAME,
+                sortOrder: deltaMode ? SortOrder.DESC : SortOrder.ASC,
                 startIndex,
             },
         });
@@ -46,14 +52,33 @@ const writeSongsPage = async (db: LibraryCacheDb, items: CachedSong[]): Promise<
     await db.songs.bulkPut(items);
 };
 
-export const runSongsSweep = (ctx: SweepContext, server: ServerListItem): Promise<void> => {
+const songCreatedAtMs = (song: CachedSong): number | undefined => {
+    // Jellyfin's `createdAt` is the original ingest timestamp; sort by
+    // RECENTLY_ADDED orders by it. We compare against the user's
+    // `lastFullSyncAt` to short-circuit pagination once we've walked
+    // past the items added since then.
+    const created = (song.Payload as { createdAt?: string }).createdAt;
+    if (!created) return undefined;
+    const ms = Date.parse(created);
+    return Number.isFinite(ms) ? ms : undefined;
+};
+
+export const runSongsSweep = async (ctx: SweepContext, server: ServerListItem): Promise<void> => {
+    const meta = await ctx.db.syncMeta.get('songs');
+    const deltaCutoffMs =
+        meta?.lastFullSyncAt && meta.hydrationState === 'full'
+            ? meta.lastFullSyncAt - DELTA_SAFETY_MS
+            : undefined;
     console.info('[cache] sweep:songs dispatching with server', {
         baseUrl: server.url,
+        delta: deltaCutoffMs !== undefined,
         serverId: server.id,
     });
     return runSweep<CachedSong>({
         ctx,
-        fetchPage: fetchSongsPage(server),
+        deltaCutoffMs,
+        fetchPage: fetchSongsPage(server, deltaCutoffMs !== undefined),
+        itemDateMs: songCreatedAtMs,
         writePage: writeSongsPage,
     });
 };

@@ -5,11 +5,18 @@ import { useCacheStore } from '../store';
 
 export interface RunSweepArgs<TItem> {
     ctx: SweepContext;
+    // Optional delta-sync params. When `deltaCutoffMs` is set, the
+    // fetchPage callback MUST sort newest-first (RECENTLY_ADDED desc);
+    // the loop short-circuits once a page's oldest item is older than
+    // the cutoff, and items older than the cutoff are filtered out of
+    // the page before writePage runs.
+    deltaCutoffMs?: number;
     fetchPage: (
         startIndex: number,
         limit: number,
         signal: AbortSignal,
     ) => Promise<{ items: TItem[]; total: number }>;
+    itemDateMs?: (item: TItem) => number | undefined;
     pageSize?: number;
     writePage: (db: LibraryCacheDb, items: TItem[]) => Promise<void>;
 }
@@ -23,18 +30,29 @@ export interface SweepContext {
 const DEFAULT_PAGE_SIZE = 500;
 
 export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> => {
-    const { ctx, fetchPage, pageSize = DEFAULT_PAGE_SIZE, writePage } = args;
+    const {
+        ctx,
+        deltaCutoffMs,
+        fetchPage,
+        itemDateMs,
+        pageSize = DEFAULT_PAGE_SIZE,
+        writePage,
+    } = args;
     const { db, entity, signal } = ctx;
 
     const actions = useCacheStore.getState().actions;
 
-    // Resume from where a previous sweep left off.
+    // Resume from where a previous sweep left off. Delta sync ignores
+    // the resume marker because it walks the newest-first ordering
+    // from page 0 — the previous resume marker was based on a
+    // different sort.
     const existingMeta = await db.syncMeta.get(entity);
-    let startIndex = existingMeta?.nextStartIndex ?? 0;
+    const isDelta = deltaCutoffMs !== undefined && itemDateMs !== undefined;
+    let startIndex = isDelta ? 0 : (existingMeta?.nextStartIndex ?? 0);
     let total: number | undefined = existingMeta?.totalCount;
 
     const sweepStartedAt = Date.now();
-    let itemsDone = startIndex; // items already persisted before this run
+    let itemsDone = isDelta ? 0 : startIndex;
     let bytesDownloaded = 0;
     const initialTotal = total;
     // Per-page rate is used to detect throughput drops; the page log
@@ -43,11 +61,16 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
     let lastPageRate = 0;
 
     console.info(`[cache] sweep:${entity} start`, {
+        delta: isDelta,
+        deltaCutoffMs,
         knownTotal: total,
         resumeFromIndex: startIndex,
     });
 
+    let pageIndex = 0;
     while (!signal.aborted) {
+        pageIndex += 1;
+        const pageTotal = total !== undefined ? Math.ceil(total / pageSize) : undefined;
         const pageStartedAt = Date.now();
         // Flip the sweep into the 'fetching' sub-phase BEFORE we
         // await the network so the dashboard can label this period
@@ -69,6 +92,8 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
                             ? bytesDownloaded * (total / itemsDone)
                             : undefined,
                     itemsPerSec: itemsDone / elapsedSec,
+                    pageIndex,
+                    pageTotal,
                     phase: 'fetching',
                     startedAt: sweepStartedAt,
                     total,
@@ -90,7 +115,28 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
         if (signal.aborted) break;
 
         total = result.total;
-        const pageItems = result.items;
+        let pageItems = result.items;
+
+        // Delta-sync short-circuit. The page is in newest-first order;
+        // walk it and find the first item older than the cutoff. Drop
+        // that item and everything after it (already cached on a prior
+        // sweep), and stop fetching more pages once we've passed the
+        // cutoff frontier.
+        let deltaCutoffReached = false;
+        if (isDelta && itemDateMs && deltaCutoffMs !== undefined) {
+            let firstOldIdx = -1;
+            for (let i = 0; i < pageItems.length; i += 1) {
+                const d = itemDateMs(pageItems[i]);
+                if (d !== undefined && d < deltaCutoffMs) {
+                    firstOldIdx = i;
+                    break;
+                }
+            }
+            if (firstOldIdx >= 0) {
+                pageItems = pageItems.slice(0, firstOldIdx);
+                deltaCutoffReached = true;
+            }
+        }
 
         itemsDone += pageItems.length;
         const elapsed = (Date.now() - sweepStartedAt) / 1000;
@@ -177,10 +223,14 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
 
         // Live entity-count + hydration-state update so the dashboard
         // shows real numbers as the sweep progresses, not "0 none"
-        // until the very last page lands. The end-of-sweep
-        // `setEntityCount` below still fires to lock in the final
-        // total once we mark the entity 'full'.
-        actions.setEntityCount(entity, itemsDone);
+        // until the very last page lands. In delta mode we DON'T
+        // overwrite the count with `itemsDone` (which is only the
+        // newly-fetched delta) — the entity already has rows from
+        // previous full syncs, and clobbering the count to the small
+        // delta number would make the dashboard appear to lose data.
+        if (!isDelta) {
+            actions.setEntityCount(entity, itemsDone);
+        }
         actions.setHydrationState(entity, 'partial');
 
         // Persist progress so we can resume on next launch.
@@ -195,6 +245,7 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
             totalCount: total,
         });
 
+        const updatedPageTotal = total !== undefined ? Math.ceil(total / pageSize) : undefined;
         actions.setSweep({
             entity,
             progress: {
@@ -203,14 +254,23 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
                 done: itemsDone,
                 estimatedTotalBytes,
                 itemsPerSec,
+                pageIndex,
+                pageTotal: updatedPageTotal,
                 phase: 'processing',
                 startedAt: sweepStartedAt,
                 total,
             },
         });
 
-        // Exit conditions: either the page came back short (last page), or we
-        // have now fetched everything.
+        // Exit conditions: delta cutoff reached, page came back short
+        // (last page), or we have fetched everything.
+        if (deltaCutoffReached) {
+            console.info(`[cache] sweep:${entity} delta cutoff reached`, {
+                itemsWritten: itemsDone,
+                pageStartIndex: startIndex,
+            });
+            break;
+        }
         if (pageItems.length < pageSize || itemsDone >= total) {
             break;
         }
@@ -226,6 +286,7 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
     // Mark as fully hydrated.
     const now = Date.now();
     console.info(`[cache] sweep:${entity} done`, {
+        delta: isDelta,
         durationMs: now - sweepStartedAt,
         itemsDone,
     });
@@ -239,7 +300,18 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
         totalCount: total,
     });
 
-    actions.setEntityCount(entity, itemsDone);
+    // In delta mode, recount from Dexie so the dashboard shows the
+    // TRUE row count (existing + delta), not just the delta size.
+    if (isDelta) {
+        try {
+            const realCount = await db.table(entity).count();
+            actions.setEntityCount(entity, realCount);
+        } catch (err) {
+            console.warn(`[cache] sweep:${entity} post-count failed`, err);
+        }
+    } else {
+        actions.setEntityCount(entity, itemsDone);
+    }
     actions.setHydrationState(entity, 'full');
     actions.setSweep(undefined);
 };

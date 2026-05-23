@@ -7,8 +7,10 @@ import { runSweep } from './sweep';
 import { controller } from '/@/renderer/api/controller';
 import { AlbumArtistListSort, ServerListItem, SortOrder } from '/@/shared/types/domain-types';
 
+const DELTA_SAFETY_MS = 60_000;
+
 const fetchArtistsPage =
-    (server: ServerListItem) =>
+    (server: ServerListItem, deltaMode: boolean) =>
     async (
         startIndex: number,
         limit: number,
@@ -18,8 +20,8 @@ const fetchArtistsPage =
             apiClientProps: { serverId: server.id, signal },
             query: {
                 limit,
-                sortBy: AlbumArtistListSort.NAME,
-                sortOrder: SortOrder.ASC,
+                sortBy: deltaMode ? AlbumArtistListSort.RECENTLY_ADDED : AlbumArtistListSort.NAME,
+                sortOrder: deltaMode ? SortOrder.DESC : SortOrder.ASC,
                 startIndex,
             },
         });
@@ -46,14 +48,29 @@ const writeArtistsPage = async (db: LibraryCacheDb, items: CachedArtist[]): Prom
     await db.artists.bulkPut(items);
 };
 
-export const runArtistsSweep = (ctx: SweepContext, server: ServerListItem): Promise<void> => {
+const artistCreatedAtMs = (artist: CachedArtist): number | undefined => {
+    const created = (artist.Payload as { createdAt?: string }).createdAt;
+    if (!created) return undefined;
+    const ms = Date.parse(created);
+    return Number.isFinite(ms) ? ms : undefined;
+};
+
+export const runArtistsSweep = async (ctx: SweepContext, server: ServerListItem): Promise<void> => {
+    const meta = await ctx.db.syncMeta.get('artists');
+    const deltaCutoffMs =
+        meta?.lastFullSyncAt && meta.hydrationState === 'full'
+            ? meta.lastFullSyncAt - DELTA_SAFETY_MS
+            : undefined;
     console.info('[cache] sweep:artists dispatching with server', {
         baseUrl: server.url,
+        delta: deltaCutoffMs !== undefined,
         serverId: server.id,
     });
     return runSweep<CachedArtist>({
         ctx,
-        fetchPage: fetchArtistsPage(server),
+        deltaCutoffMs,
+        fetchPage: fetchArtistsPage(server, deltaCutoffMs !== undefined),
+        itemDateMs: artistCreatedAtMs,
         writePage: writeArtistsPage,
     });
 };

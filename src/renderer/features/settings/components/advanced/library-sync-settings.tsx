@@ -295,11 +295,41 @@ export const LibrarySyncSettings = () => {
         cacheActions.setBytesUsed(0);
     }, [cacheActions]);
 
+    // Default Re-sync — keeps existing rows and uses delta-sync mode
+    // (sort by RECENTLY_ADDED desc, stop once item dates fall below
+    // `lastFullSyncAt`). Fast on subsequent runs because we only fetch
+    // items added since the previous sync.
     const handleResync = useCallback(
         async (server: ServerListItem) => {
             if (!safeConfirm(t('page.setting.librarySyncDashboard.confirmResync'))) return;
             try {
-                console.info('[cache] dashboard: re-sync confirmed');
+                console.info('[cache] dashboard: re-sync confirmed (delta-eligible)');
+                void hydrate(server, 'full');
+                await refreshBytesUsed();
+            } catch (err) {
+                console.warn('[cache] dashboard: re-sync failed', { err });
+                toast.error({ message: (err as Error).message ?? String(err) });
+            }
+        },
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [refreshBytesUsed],
+    );
+
+    // Force full re-sync — clears the local cache first so the next
+    // hydration walks every page from start. Use when the user
+    // suspects local rot (metadata edited on server, items deleted,
+    // etc.) — delta-mode misses those changes by design.
+    const handleForceFullResync = useCallback(
+        async (server: ServerListItem) => {
+            if (
+                !safeConfirm(
+                    'Force a full re-sync? This wipes the local cache and re-downloads everything (slow). Use the regular Re-sync button for new items only.',
+                )
+            ) {
+                return;
+            }
+            try {
+                console.info('[cache] dashboard: force-full re-sync confirmed');
                 await clearAllCacheData();
                 resetEntityCountsForClear();
                 setThumbnailCount(0);
@@ -308,11 +338,11 @@ export const LibrarySyncSettings = () => {
                 void hydrate(server, 'full');
                 await refreshBytesUsed();
             } catch (err) {
-                console.warn('[cache] dashboard: re-sync failed', { err });
+                console.warn('[cache] dashboard: force-full re-sync failed', { err });
                 toast.error({ message: (err as Error).message ?? String(err) });
             }
         },
-        [refreshBytesUsed, resetEntityCountsForClear, t],
+        [refreshBytesUsed, resetEntityCountsForClear],
     );
 
     const handleClearThumbnails = useCallback(async () => {
@@ -609,6 +639,10 @@ export const LibrarySyncSettings = () => {
                             {t('page.setting.librarySyncDashboard.statusSweeping', {
                                 entity: t(ENTITY_LABEL_KEYS[sweep.entity]),
                             })}
+                            {smoothSweep.pageIndex !== undefined &&
+                            smoothSweep.pageTotal !== undefined
+                                ? ` · page ${smoothSweep.pageIndex}/${smoothSweep.pageTotal}`
+                                : ''}
                             {smoothSweep.phase === 'fetching'
                                 ? ' · ' +
                                   t('page.setting.librarySyncDashboard.statusFetchingPage', {
@@ -793,6 +827,15 @@ export const LibrarySyncSettings = () => {
                     variant="default"
                 >
                     {t('page.setting.librarySyncDashboard.actionResync')}
+                </Button>
+                <Button
+                    disabled={!cacheEnabled || !currentServer}
+                    onClick={() => currentServer && void handleForceFullResync(currentServer)}
+                    variant="default"
+                >
+                    {t('page.setting.librarySyncDashboard.actionForceFullResync', {
+                        defaultValue: 'Force full re-sync',
+                    })}
                 </Button>
                 <Button
                     disabled={!cacheEnabled}
