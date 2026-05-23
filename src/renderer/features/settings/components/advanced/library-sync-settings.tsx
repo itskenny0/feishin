@@ -165,14 +165,21 @@ export const LibrarySyncSettings = () => {
         }
         const refresh = async (): Promise<void> => {
             try {
-                const [count, bytes, metaRows] = await Promise.all([
+                const [count, bytes, metaRows, totalUsed] = await Promise.all([
                     db.thumbnails.count(),
                     cachedBytes(),
                     db.syncMeta.toArray(),
+                    estimateBytes(),
                 ]);
                 if (cancelled) return;
                 setThumbnailCount(count);
                 setThumbnailBytes(bytes);
+                // Bypass the lifecycle tick's throttle so the
+                // "Storage used" line moves at the same cadence as
+                // the per-entity counts above it. Without this the
+                // user saw "Storage used: 0 MiB" while the sweep had
+                // already landed hundreds of MB in Dexie.
+                useCacheStore.getState().actions.setBytesUsed(totalUsed);
                 const meta: typeof syncMeta = {};
                 for (const r of metaRows) {
                     meta[r.EntityType] = {
