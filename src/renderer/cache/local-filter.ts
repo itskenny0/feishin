@@ -128,10 +128,17 @@ const hasUnsupportedArtistFilter = (query: ArtistListQuery | undefined): boolean
 
 const sortAlbums = (rows: CachedAlbum[], sortBy: AlbumListSort | undefined): CachedAlbum[] => {
     switch (sortBy) {
+        case AlbumListSort.ALBUM_ARTIST:
+        case AlbumListSort.ARTIST:
+            rows.sort((a, b) => cmpStr(a.Payload.albumArtistName, b.Payload.albumArtistName));
+            break;
         case AlbumListSort.COMMUNITY_RATING:
         case AlbumListSort.CRITIC_RATING:
         case AlbumListSort.RATING:
             rows.sort((a, b) => cmpNum(a.Payload.userRating, b.Payload.userRating));
+            break;
+        case AlbumListSort.DURATION:
+            rows.sort((a, b) => cmpNum(a.Payload.duration, b.Payload.duration));
             break;
         case AlbumListSort.PLAY_COUNT:
             rows.sort((a, b) => cmpNum(a.Payload.playCount, b.Payload.playCount));
@@ -148,6 +155,9 @@ const sortAlbums = (rows: CachedAlbum[], sortBy: AlbumListSort | undefined): Cac
         case AlbumListSort.RELEASE_DATE:
         case AlbumListSort.YEAR:
             rows.sort((a, b) => cmpNum(a.ProductionYear, b.ProductionYear));
+            break;
+        case AlbumListSort.SONG_COUNT:
+            rows.sort((a, b) => cmpNum(a.Payload.songCount, b.Payload.songCount));
             break;
         case AlbumListSort.NAME:
         case AlbumListSort.SORT_NAME:
