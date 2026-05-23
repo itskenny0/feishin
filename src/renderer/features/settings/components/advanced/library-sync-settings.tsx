@@ -102,6 +102,9 @@ export const LibrarySyncSettings = () => {
     const setLocalCache = useSettingsStore((s) => s.actions.setLocalCache);
     const entities = useSettingsStore((s) => s.localCache?.entities);
     const thumbnailSizes = useSettingsStore((s) => s.localCache?.thumbnailSizes);
+    const thumbnailConcurrency = useSettingsStore(
+        (s) => s.localCache?.thumbnailConcurrency,
+    );
 
     const [thumbnailCount, setThumbnailCount] = useState<number | undefined>(undefined);
     const [thumbnailBytes, setThumbnailBytes] = useState<number | undefined>(undefined);
@@ -447,6 +450,42 @@ export const LibrarySyncSettings = () => {
                                 );
                             },
                         )}
+                    </Stack>
+
+                    {/* Concurrency slider — how many thumbnail fetches to
+                        run in parallel during the sweep. Higher saturates the
+                        link faster but spams the server / WebView. */}
+                    <Stack gap={4} mt="sm">
+                        <Group justify="space-between">
+                            <Text size="sm">
+                                {t(
+                                    'page.setting.librarySyncDashboard.thumbnailConcurrency',
+                                    { defaultValue: 'Parallel downloads' },
+                                )}
+                            </Text>
+                            <Text c="dimmed" size="sm">
+                                {thumbnailConcurrency ?? 24}
+                            </Text>
+                        </Group>
+                        <Slider
+                            label={(value) => `${value}`}
+                            max={64}
+                            min={1}
+                            onChangeEnd={(value) =>
+                                setLocalCache({ thumbnailConcurrency: value })
+                            }
+                            step={1}
+                            value={thumbnailConcurrency ?? 24}
+                        />
+                        <Text c="dimmed" size="xs">
+                            {t(
+                                'page.setting.librarySyncDashboard.thumbnailConcurrencyHelp',
+                                {
+                                    defaultValue:
+                                        'Number of cover-art fetches the sweep runs in parallel. Raise it to saturate a fast LAN; lower it if the server gets unhappy.',
+                                },
+                            )}
+                        </Text>
                     </Stack>
                 </Stack>
             )}

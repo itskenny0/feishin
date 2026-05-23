@@ -18,9 +18,14 @@ import { useCacheStore } from '/@/renderer/cache/store';
 import { useSettingsStore } from '/@/renderer/store';
 import { LibraryItem } from '/@/shared/types/domain-types';
 
-// Concurrency cap on the parallel thumbnail fetches. Higher numbers
-// finish faster but flood the network and the worker thread.
-const CONCURRENCY = 6;
+// Concurrency cap on the parallel thumbnail fetches. The user-tunable
+// `localCache.thumbnailConcurrency` setting overrides this default at
+// sweep start. 24 is a sensible default on modern HTTP/2 servers — the
+// 6 we used initially was a relic from when fetches were failing fast
+// against the CORS preflight bug.
+const DEFAULT_CONCURRENCY = 24;
+const MIN_CONCURRENCY = 1;
+const MAX_CONCURRENCY = 64;
 
 type EntityKind = 'album' | 'artist' | 'playlist';
 
@@ -158,7 +163,17 @@ export const runThumbnailsSweep = async (
         return;
     }
 
+    // Honour the user-tunable concurrency setting. Clamped to the
+    // [MIN_CONCURRENCY, MAX_CONCURRENCY] range to keep typos / hostile
+    // values from saturating the network or starving the worker.
+    const configured = useSettingsStore.getState().localCache?.thumbnailConcurrency;
+    const concurrency = Math.min(
+        MAX_CONCURRENCY,
+        Math.max(MIN_CONCURRENCY, configured ?? DEFAULT_CONCURRENCY),
+    );
+
     console.info('[cache] thumbnails sweep: starting', {
+        concurrency,
         items: total,
         serverId: server.id,
         sizes,
@@ -223,7 +238,7 @@ export const runThumbnailsSweep = async (
         }
     };
 
-    for (let i = 0; i < CONCURRENCY; i += 1) {
+    for (let i = 0; i < concurrency; i += 1) {
         workers.push(work());
     }
 
