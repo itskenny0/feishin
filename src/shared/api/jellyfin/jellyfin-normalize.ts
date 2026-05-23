@@ -377,6 +377,7 @@ const normalizeAlbumArtist = (
         _serverType: ServerType.JELLYFIN,
         albumCount: item.AlbumCount ?? null,
         biography: item.Overview || null,
+        createdAt: item.DateCreated ?? null,
         duration: item.RunTimeTicks / TICKS_PER_MS,
         genres: item.GenreItems?.map((entry) => ({
             _itemType: LibraryItem.GENRE,

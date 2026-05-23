@@ -447,6 +447,7 @@ const normalizeAlbumArtist = (
             name: genre.name,
             songCount: null,
         })),
+        createdAt: item.createdAt ?? null,
         id: item.id,
         imageId,
         imageUrl: null,

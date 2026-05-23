@@ -215,6 +215,7 @@ export type AlbumArtist = {
     _serverType: ServerType;
     albumCount: null | number;
     biography: null | string;
+    createdAt: null | string;
     duration: null | number;
     genres: Genre[];
     id: string;

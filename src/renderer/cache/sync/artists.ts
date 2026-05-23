@@ -49,7 +49,7 @@ const writeArtistsPage = async (db: LibraryCacheDb, items: CachedArtist[]): Prom
 };
 
 const artistCreatedAtMs = (artist: CachedArtist): number | undefined => {
-    const created = (artist.Payload as { createdAt?: string }).createdAt;
+    const created = artist.Payload.createdAt;
     if (!created) return undefined;
     const ms = Date.parse(created);
     return Number.isFinite(ms) ? ms : undefined;
