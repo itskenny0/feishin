@@ -37,6 +37,7 @@ const ENTITY_LABEL_KEYS: Record<EntityType, string> = {
     genres: 'page.setting.librarySyncDashboard.entityGenres',
     playlists: 'page.setting.librarySyncDashboard.entityPlaylists',
     songs: 'page.setting.librarySyncDashboard.entitySongs',
+    thumbnails: 'page.setting.librarySyncDashboard.entityThumbnails',
 };
 
 const ENTITY_DISPLAY_ORDER: EntityType[] = [

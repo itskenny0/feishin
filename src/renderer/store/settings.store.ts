@@ -803,9 +803,34 @@ const AutoDJSettingsSchema = z.object({
  *  - `capacityBytes` — user-configurable storage cap on web / Android.
  *    `undefined` falls back to the platform default (see `eviction.ts`).
  */
+// Per-entity sync toggles. Default ON for everything except thumbnails
+// (controlled separately via `thumbnailSizes` below — empty = no thumbnail
+// pre-cache, opt-in due to the size of the thumbnail blobs on disk).
+const LocalCacheEntitiesSchema = z.object({
+    albums: z.boolean().default(true),
+    artists: z.boolean().default(true),
+    favorites: z.boolean().default(true),
+    genres: z.boolean().default(true),
+    playlists: z.boolean().default(true),
+    songs: z.boolean().default(true),
+});
+
+// Which `general.imageRes` buckets the thumbnail sweep pre-fetches. Empty
+// = no pre-cache (lazy fetch via <BaseImage> remains in place; thumbnails
+// still land in Dexie incidentally as the user browses).
+const LocalCacheThumbnailSizeSchema = z.enum([
+    'fullScreenPlayer',
+    'header',
+    'itemCard',
+    'sidebar',
+    'table',
+]);
+
 const LocalCacheSettingsSchema = z.object({
     capacityBytes: z.number().optional(),
     enabled: z.boolean().optional(),
+    entities: LocalCacheEntitiesSchema.optional(),
+    thumbnailSizes: z.array(LocalCacheThumbnailSizeSchema).optional(),
 });
 
 /**
@@ -2011,6 +2036,15 @@ const initialState: SettingsState = {
     localCache: {
         capacityBytes: undefined,
         enabled: undefined,
+        entities: {
+            albums: true,
+            artists: true,
+            favorites: true,
+            genres: true,
+            playlists: true,
+            songs: true,
+        },
+        thumbnailSizes: [],
     },
     lyrics: {
         alignment: 'center',
@@ -2918,10 +2952,34 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
+                if (version <= 45) {
+                    // Backfill per-entity toggles and thumbnail-size picker
+                    // for users upgrading from the first cache release. All
+                    // entities default ON so existing cache contents stay
+                    // populated. `thumbnailSizes` left empty so the user
+                    // explicitly opts in to thumbnail pre-cache (large blob
+                    // store).
+                    if (state.localCache) {
+                        if (!state.localCache.entities) {
+                            state.localCache.entities = {
+                                albums: true,
+                                artists: true,
+                                favorites: true,
+                                genres: true,
+                                playlists: true,
+                                songs: true,
+                            };
+                        }
+                        if (!Array.isArray(state.localCache.thumbnailSizes)) {
+                            state.localCache.thumbnailSizes = [];
+                        }
+                    }
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 45,
+            version: 46,
         },
     ),
 );

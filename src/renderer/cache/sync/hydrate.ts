@@ -10,6 +10,18 @@ import { runFavoritesSweep } from './favorites';
 import { runGenresSweep } from './genres';
 import { runPlaylistsSweep } from './playlists';
 import { runSongsSweep } from './songs';
+import { runThumbnailsSweep } from './thumbnails';
+
+import { useSettingsStore } from '/@/renderer/store';
+
+// Per-entity opt-out flags. Default to ON when the settings slice predates
+// the toggle UI so existing installs behave identically.
+type EntityKey = 'albums' | 'artists' | 'favorites' | 'genres' | 'playlists' | 'songs';
+const entityEnabled = (kind: EntityKey): boolean => {
+    const e = useSettingsStore.getState().localCache?.entities;
+    if (!e) return true;
+    return e[kind] !== false;
+};
 
 // Module-level controller so a second hydrate() call can cancel the
 // previous in-flight run before starting fresh.
@@ -66,42 +78,76 @@ export const hydrate = async (server: ServerListItem, kind: 'full' | 'lazy'): Pr
     });
 
     try {
-        await runArtistsSweep({ db, entity: 'artists', signal }, server);
-        if (signal.aborted) {
-            console.warn('[cache] hydrate: aborted between steps', { after: 'artists' });
-            return;
+        if (entityEnabled('artists')) {
+            await runArtistsSweep({ db, entity: 'artists', signal }, server);
+            if (signal.aborted) {
+                console.warn('[cache] hydrate: aborted between steps', { after: 'artists' });
+                return;
+            }
+        } else {
+            console.info('[cache] hydrate: skipping artists (disabled in settings)');
         }
 
         // Genres are tiny and live between artists and albums so the filter
         // panels (which depend on them) are warm before the heavier sweeps
         // dominate the network.
-        await runGenresSweep({ db, entity: 'genres', signal }, server);
-        if (signal.aborted) {
-            console.warn('[cache] hydrate: aborted between steps', { after: 'genres' });
-            return;
+        if (entityEnabled('genres')) {
+            await runGenresSweep({ db, entity: 'genres', signal }, server);
+            if (signal.aborted) {
+                console.warn('[cache] hydrate: aborted between steps', { after: 'genres' });
+                return;
+            }
+        } else {
+            console.info('[cache] hydrate: skipping genres (disabled in settings)');
         }
 
-        await runAlbumsSweep({ db, entity: 'albums', signal }, server);
-        if (signal.aborted) {
-            console.warn('[cache] hydrate: aborted between steps', { after: 'albums' });
-            return;
+        if (entityEnabled('albums')) {
+            await runAlbumsSweep({ db, entity: 'albums', signal }, server);
+            if (signal.aborted) {
+                console.warn('[cache] hydrate: aborted between steps', { after: 'albums' });
+                return;
+            }
+        } else {
+            console.info('[cache] hydrate: skipping albums (disabled in settings)');
         }
 
-        await runPlaylistsSweep({ db, entity: 'playlists', signal }, server);
-        if (signal.aborted) {
-            console.warn('[cache] hydrate: aborted between steps', { after: 'playlists' });
-            return;
+        if (entityEnabled('playlists')) {
+            await runPlaylistsSweep({ db, entity: 'playlists', signal }, server);
+            if (signal.aborted) {
+                console.warn('[cache] hydrate: aborted between steps', { after: 'playlists' });
+                return;
+            }
+        } else {
+            console.info('[cache] hydrate: skipping playlists (disabled in settings)');
         }
 
-        await runFavoritesSweep({ db, entity: 'favorites', signal }, server);
-        if (signal.aborted) {
-            console.warn('[cache] hydrate: aborted between steps', { after: 'favorites' });
-            return;
+        if (entityEnabled('favorites')) {
+            await runFavoritesSweep({ db, entity: 'favorites', signal }, server);
+            if (signal.aborted) {
+                console.warn('[cache] hydrate: aborted between steps', { after: 'favorites' });
+                return;
+            }
+        } else {
+            console.info('[cache] hydrate: skipping favorites (disabled in settings)');
         }
 
-        await runSongsSweep({ db, entity: 'songs', signal }, server);
+        if (entityEnabled('songs')) {
+            await runSongsSweep({ db, entity: 'songs', signal }, server);
+            if (signal.aborted) {
+                console.warn('[cache] hydrate: aborted between steps', { after: 'songs' });
+                return;
+            }
+        } else {
+            console.info('[cache] hydrate: skipping songs (disabled in settings)');
+        }
+
+        // Thumbnail pre-cache always runs last, after every entity has
+        // been written to Dexie — the sweep walks the same tables. The
+        // sweep is itself opt-in via `localCache.thumbnailSizes`; with no
+        // sizes selected it's a near-zero-cost no-op.
+        await runThumbnailsSweep({ signal }, server);
         if (signal.aborted) {
-            console.warn('[cache] hydrate: aborted between steps', { after: 'songs' });
+            console.warn('[cache] hydrate: aborted between steps', { after: 'thumbnails' });
             return;
         }
     } catch (err) {

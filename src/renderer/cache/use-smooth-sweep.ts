@@ -6,7 +6,15 @@ export interface SmoothSweepView {
     bytesDownloaded: number;
     bytesPerSec: number;
     done: number;
-    entity: 'albums' | 'artists' | 'favorites' | 'genres' | 'playlists' | 'songs' | undefined;
+    entity:
+        | 'albums'
+        | 'artists'
+        | 'favorites'
+        | 'genres'
+        | 'playlists'
+        | 'songs'
+        | 'thumbnails'
+        | undefined;
     estimatedTotalBytes: number | undefined;
     itemsPerSec: number;
     startedAt: number | undefined;

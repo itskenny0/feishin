@@ -96,7 +96,14 @@ export interface CachedThumbnail extends CachedBase {
     Size: number;
 }
 
-export type EntityType = 'albums' | 'artists' | 'favorites' | 'genres' | 'playlists' | 'songs';
+export type EntityType =
+    | 'albums'
+    | 'artists'
+    | 'favorites'
+    | 'genres'
+    | 'playlists'
+    | 'songs'
+    | 'thumbnails';
 
 export type HydrationState = 'full' | 'lazy' | 'none' | 'partial';
 

@@ -5,3 +5,4 @@ export { runGenresSweep } from './genres';
 export { cancelHydration, hydrate } from './hydrate';
 export { runPlaylistsSweep } from './playlists';
 export { runSongsSweep } from './songs';
+export { runThumbnailsSweep } from './thumbnails';
