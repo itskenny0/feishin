@@ -130,9 +130,18 @@ export const useItemImageRequest = (args: UseItemImageUrlProps) => {
     const sizeByType: number | undefined = type ? imageRes[type] : undefined;
 
     return useMemo(() => {
+        const effectiveSize = size ?? sizeByType;
         if (imageUrl) {
             return {
+                // Tag the request with cacheItemId/cacheSize when we know
+                // the entity id so the Dexie thumbnail table can intercept
+                // the fetch. The `imageUrl` branch is used by callers that
+                // already have a resolved URL (e.g. a remote provider) so
+                // we still want the same blob to land in Dexie keyed by
+                // the same id.
+                cacheItemId: id ?? undefined,
                 cacheKey: imageUrl,
+                cacheSize: effectiveSize,
                 url: imageUrl,
             } satisfies ImageRequest;
         }
@@ -149,13 +158,17 @@ export const useItemImageRequest = (args: UseItemImageUrlProps) => {
             baseUrl = server?.remoteUrl || server?.url;
         }
 
-        return (
-            api.controller.getImageRequest({
-                apiClientProps: { serverId: targetServerId },
-                baseUrl,
-                query: { id, itemType, size: size ?? sizeByType },
-            }) || undefined
-        );
+        const remote = api.controller.getImageRequest({
+            apiClientProps: { serverId: targetServerId },
+            baseUrl,
+            query: { id, itemType, size: effectiveSize },
+        });
+        if (!remote) return undefined;
+        return {
+            ...remote,
+            cacheItemId: id,
+            cacheSize: effectiveSize,
+        } satisfies ImageRequest;
     }, [args.serverId, id, imageUrl, itemType, serverId, size, sizeByType, useRemoteUrl]);
 };
 

@@ -2,6 +2,34 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { ImageRequest } from '/@/shared/types/domain-types';
 
+// The renderer registers a thumbnail resolver at startup. Shared code
+// (this hook) lives in a bundle that doesn't have direct access to
+// renderer-only modules, so we expose a tiny registration point and call
+// through it. When the resolver isn't registered (test contexts, the
+// shared bundle being imported elsewhere), the hook falls back to a plain
+// network fetch.
+type ThumbnailResolver = (itemId: string, size: number, url: string) => Promise<string>;
+
+let resolveThumbnailRef: null | ThumbnailResolver = null;
+
+export const registerThumbnailResolver = (fn: ThumbnailResolver | null): void => {
+    resolveThumbnailRef = fn;
+};
+
+const tryResolveThumbnail = async (
+    itemId: string,
+    size: number,
+    url: string,
+): Promise<string | undefined> => {
+    if (!resolveThumbnailRef) return undefined;
+    try {
+        const resolved = await resolveThumbnailRef(itemId, size, url);
+        return resolved === url ? undefined : resolved;
+    } catch {
+        return undefined;
+    }
+};
+
 type FetchPriority = 'auto' | 'high' | 'low';
 
 interface NativeImageState {
@@ -90,6 +118,27 @@ export function useNativeImage({
 
         void (async () => {
             try {
+                // Dexie thumbnail cache first when the request carries an
+                // explicit `cacheItemId`. resolveThumbnail returns a blob:
+                // URL backed by the persistent table; on a cache miss it
+                // fetches, writes Dexie, and returns the blob URL anyway,
+                // so the subsequent network branch is a fall-back for
+                // bundles where the cache module isn't available.
+                if (request.cacheItemId && request.cacheSize) {
+                    const cached = await tryResolveThumbnail(
+                        request.cacheItemId,
+                        request.cacheSize,
+                        request.url,
+                    );
+                    if (abortController.signal.aborted) return;
+                    if (cached) {
+                        objectUrlRef.current = cached;
+                        loadedRequestSignatureRef.current = requestSignature;
+                        setState({ displaySrc: cached, status: 'loaded' });
+                        return;
+                    }
+                }
+
                 const init = {
                     credentials: request.credentials,
                     headers: request.headers,

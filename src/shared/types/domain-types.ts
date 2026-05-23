@@ -1598,7 +1598,13 @@ export type ImageQuery = {
 };
 
 export type ImageRequest = {
+    // Optional explicit Dexie thumbnail-cache key. When set, the image
+    // pipeline will check / write the local IndexedDB thumbnails table
+    // before going to the network. Falls back to the unindexed `cacheKey`
+    // session map when undefined.
+    cacheItemId?: string;
     cacheKey: string;
+    cacheSize?: number;
     credentials?: RequestCredentials;
     headers?: Record<string, string>;
     url: string;

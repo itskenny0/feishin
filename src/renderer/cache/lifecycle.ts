@@ -3,13 +3,20 @@ import { useEffect } from 'react';
 import { isCacheAvailable } from './capability';
 import { closeCacheDb, deleteCacheDb, getActiveCacheDb, setActiveCacheDb } from './db';
 import { estimateBytes, evict } from './eviction';
+import { resolveThumbnail } from './images';
 import { startWorker } from './mutations';
 import { resetSearchIndexes } from './search';
 import { clearAllSnapshots, dropSnapshotsForServer } from './snapshot';
 import { useCacheActions, useCacheStore } from './store';
 import { cancelHydration, hydrate } from './sync';
 
+import { registerThumbnailResolver } from '/@/shared/components/image/use-native-image';
 import { useAuthStore, useSettingsStore } from '/@/renderer/store';
+
+// Bridge the renderer-only thumbnail cache into the shared `useNativeImage`
+// hook. Registered eagerly at module load so even the first `<ItemImage>`
+// mount during boot has a chance to hit Dexie.
+registerThumbnailResolver(resolveThumbnail);
 
 /**
  * Mount-once renderer hook that wires the Dexie-backed cache to the
