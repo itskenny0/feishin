@@ -36,6 +36,11 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
     const sweepStartedAt = Date.now();
     let itemsDone = startIndex; // items already persisted before this run
     let bytesDownloaded = 0;
+    const initialTotal = total;
+    // Per-page rate is used to detect throughput drops; the page log
+    // below otherwise reports the running average, which can't see a
+    // sudden stall.
+    let lastPageRate = 0;
 
     console.info(`[cache] sweep:${entity} start`, {
         knownTotal: total,
@@ -76,6 +81,9 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
                 ? bytesDownloaded * (total / itemsDone)
                 : undefined;
 
+        const pageElapsedMs = Date.now() - pageStartedAt;
+        const pageRate = pageElapsedMs > 0 ? (pageItems.length * 1000) / pageElapsedMs : 0;
+
         console.info(`[cache] sweep:${entity} page`, {
             bytesDownloaded,
             bytesPerSec: Math.round(bytesPerSec),
@@ -83,9 +91,59 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
             fetched: pageItems.length,
             itemsPerSec: Math.round(itemsPerSec),
             pageBytes,
+            pageElapsedMs,
+            pageRate: Math.round(pageRate),
             startIndex,
             totalServer: result.total,
         });
+
+        // Anomaly: server total changed between calls. Jellyfin shouldn't
+        // do this for stable libraries; if it does, our totalCount/done
+        // accounting goes off and the progress UI lies. Worth flagging.
+        if (initialTotal !== undefined && result.total !== initialTotal) {
+            console.warn(`[cache] sweep:${entity} ANOMALY: server total changed`, {
+                from: initialTotal,
+                startIndex,
+                to: result.total,
+            });
+        }
+
+        // Anomaly: page returned zero items but we haven't reached the
+        // claimed total. Usually means the server paginated weird or hit
+        // a transient cache, but it can also mean the sweep is stuck —
+        // we'd otherwise exit the loop below and silently mark this
+        // entity "full" with a partial dataset.
+        if (pageItems.length === 0 && itemsDone < result.total) {
+            console.warn(`[cache] sweep:${entity} ANOMALY: empty page below total`, {
+                claimedTotal: result.total,
+                itemsDone,
+                startIndex,
+            });
+        }
+
+        // Anomaly: a single page took >30s. Usually a network hiccup or
+        // an overloaded server. Log so we can correlate with user reports
+        // of "sync stalled".
+        if (pageElapsedMs > 30_000) {
+            console.warn(`[cache] sweep:${entity} ANOMALY: slow page`, {
+                pageElapsedMs,
+                pageItems: pageItems.length,
+                startIndex,
+            });
+        }
+
+        // Anomaly: this page's throughput collapsed compared to the
+        // previous one (current rate < 25% of the prior page). Catches
+        // a server going from healthy → degraded mid-sweep before the
+        // running average smears over it.
+        if (lastPageRate > 5 && pageRate < lastPageRate * 0.25) {
+            console.warn(`[cache] sweep:${entity} ANOMALY: throughput drop`, {
+                currentRate: Math.round(pageRate),
+                previousRate: Math.round(lastPageRate),
+                startIndex,
+            });
+        }
+        lastPageRate = pageRate;
 
         if (pageItems.length > 0) {
             await writePage(db, pageItems);

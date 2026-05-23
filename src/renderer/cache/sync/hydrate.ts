@@ -8,6 +8,7 @@ import { runAlbumsSweep } from './albums';
 import { runArtistsSweep } from './artists';
 import { runFavoritesSweep } from './favorites';
 import { runGenresSweep } from './genres';
+import { startSyncHeartbeat, stopSyncHeartbeat } from './heartbeat';
 import { runPlaylistsSweep } from './playlists';
 import { runSongsSweep } from './songs';
 import { runThumbnailsSweep } from './thumbnails';
@@ -76,6 +77,9 @@ export const hydrate = async (server: ServerListItem, kind: 'full' | 'lazy'): Pr
         kind,
         serverId: server.id,
     });
+
+    const hydrateStartedAt = Date.now();
+    startSyncHeartbeat(`full/${server.id}`);
 
     try {
         if (entityEnabled('artists')) {
@@ -157,9 +161,15 @@ export const hydrate = async (server: ServerListItem, kind: 'full' | 'lazy'): Pr
         }
         console.warn('[cache] hydrate: failed', { error: err, serverId: server.id });
         throw err;
+    } finally {
+        stopSyncHeartbeat(`full/${server.id}`);
     }
 
-    console.info('[cache] hydrate: full hydration complete', { serverId: server.id });
+    console.info('[cache] hydrate: full hydration complete', {
+        durationMs: Date.now() - hydrateStartedAt,
+        entityCounts: useCacheStore.getState().entityCounts,
+        serverId: server.id,
+    });
 };
 
 export const cancelHydration = (): void => {

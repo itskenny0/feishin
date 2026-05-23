@@ -183,6 +183,13 @@ export const runThumbnailsSweep = async (
     const startedAt = Date.now();
     let done = 0;
     let bytesDownloaded = 0;
+    // Verbose-mode counters. Split between "fetched fresh" / "skipped
+    // already cached" / "failed" so the final summary tells the user
+    // which bucket actually consumed network time.
+    let fetched = 0;
+    let skipped = 0;
+    let failed = 0;
+    let lastAnomalyWarnAt = 0;
 
     // Pre-fetch every existing thumbnail row's [itemId, size] pair so the
     // worker pool can skip them without a Dexie round-trip per item. On a
@@ -241,10 +248,21 @@ export const runThumbnailsSweep = async (
             if (signal.aborted) return;
             const next = queue.shift();
             if (!next) return;
+            const wasCached = existingKeys.has(`${next.itemId}:${next.size}`);
             try {
                 const { bytes } = await fetchOne(next, server.id, signal, existingKeys);
                 bytesDownloaded += bytes;
+                if (wasCached) {
+                    skipped += 1;
+                } else if (bytes > 0) {
+                    fetched += 1;
+                } else {
+                    // Resolver returned 0 bytes for an uncached item — most
+                    // likely a 404 (server has no artwork for this id).
+                    skipped += 1;
+                }
             } catch (err) {
+                failed += 1;
                 console.warn('[cache] thumbnails sweep: fetch failed', {
                     err: (err as Error).message,
                     item: next.itemId,
@@ -252,6 +270,19 @@ export const runThumbnailsSweep = async (
             }
             done += 1;
             flushProgress();
+
+            // Anomaly: failure ratio crossed 25% over a meaningful sample
+            // size. Throttled to one warn per 10s so a flapping server
+            // doesn't spam the log buffer.
+            const now = Date.now();
+            if (done >= 50 && failed / done > 0.25 && now - lastAnomalyWarnAt > 10_000) {
+                lastAnomalyWarnAt = now;
+                console.warn('[cache] thumbnails sweep: ANOMALY: failure rate high', {
+                    done,
+                    failed,
+                    failureRatio: failed / done,
+                });
+            }
         }
     };
 
@@ -273,7 +304,9 @@ export const runThumbnailsSweep = async (
     console.info('[cache] thumbnails sweep: complete', {
         bytes: bytesDownloaded,
         durationMs: Date.now() - startedAt,
+        failed,
+        fetched,
         items: total,
-        skipped: existingKeys.size,
+        skipped,
     });
 };
