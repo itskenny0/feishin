@@ -4,6 +4,12 @@ import { api } from '/@/renderer/api';
 import { controller } from '/@/renderer/api/controller';
 import { queryKeys } from '/@/renderer/api/query-keys';
 import { getOptimizedListCount } from '/@/renderer/api/utils-list-count';
+import {
+    getActiveCacheDb,
+    isCacheAvailableSync,
+    readSnapshot,
+    writeSnapshot,
+} from '/@/renderer/cache';
 import { QueryHookArgs } from '/@/renderer/lib/react-query';
 import { AlbumDetailQuery, AlbumListQuery, ListCountQuery } from '/@/shared/types/domain-types';
 
@@ -17,14 +23,28 @@ import { AlbumDetailQuery, AlbumListQuery, ListCountQuery } from '/@/shared/type
 // same time the in-feature components move onto cached hooks.
 export const albumQueries = {
     detail: (args: QueryHookArgs<AlbumDetailQuery>) => {
+        const key = queryKeys.albums.detail(args.serverId, args.query);
         return queryOptions({
-            queryFn: ({ signal }) => {
-                return api.controller.getAlbumDetail({
+            initialData: (() => readSnapshot(key)) as never,
+            initialDataUpdatedAt: 0,
+            queryFn: async ({ signal }) => {
+                if (isCacheAvailableSync() && args.query?.id) {
+                    try {
+                        const db = getActiveCacheDb();
+                        const row = await db?.albums.get(args.query.id);
+                        if (row?.Payload) writeSnapshot(key, row.Payload);
+                    } catch {
+                        /* swallow */
+                    }
+                }
+                const fresh = await api.controller.getAlbumDetail({
                     apiClientProps: { serverId: args.serverId, signal },
                     query: args.query,
                 });
+                writeSnapshot(key, fresh);
+                return fresh;
             },
-            queryKey: queryKeys.albums.detail(args.serverId, args.query),
+            queryKey: key,
             ...args.options,
         });
     },

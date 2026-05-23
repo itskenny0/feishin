@@ -4,6 +4,12 @@ import { api } from '/@/renderer/api';
 import { controller } from '/@/renderer/api/controller';
 import { queryKeys } from '/@/renderer/api/query-keys';
 import { getOptimizedListCount } from '/@/renderer/api/utils-list-count';
+import {
+    getActiveCacheDb,
+    isCacheAvailableSync,
+    readSnapshot,
+    writeSnapshot,
+} from '/@/renderer/cache';
 import { QueryHookArgs } from '/@/renderer/lib/react-query';
 import {
     AlbumArtistDetailQuery,
@@ -18,14 +24,32 @@ import {
 
 export const artistsQueries = {
     albumArtistDetail: (args: QueryHookArgs<AlbumArtistDetailQuery>) => {
+        const key = queryKeys.albumArtists.detail(args.serverId, args.query);
         return queryOptions({
-            queryFn: ({ signal }) => {
-                return api.controller.getAlbumArtistDetail({
+            initialData: (() => readSnapshot(key)) as never,
+            initialDataUpdatedAt: 0,
+            queryFn: async ({ signal }) => {
+                // Dexie read-through: paint the cached artist payload while
+                // the network call is in flight. Works for both the
+                // suspense and non-suspense callers because we seed the
+                // snapshot map before the controller resolves.
+                if (isCacheAvailableSync() && args.query?.id) {
+                    try {
+                        const db = getActiveCacheDb();
+                        const row = await db?.artists.get(args.query.id);
+                        if (row?.Payload) writeSnapshot(key, row.Payload);
+                    } catch {
+                        /* cache reads must never break the query */
+                    }
+                }
+                const fresh = await api.controller.getAlbumArtistDetail({
                     apiClientProps: { serverId: args.serverId, signal },
                     query: args.query,
                 });
+                writeSnapshot(key, fresh);
+                return fresh;
             },
-            queryKey: queryKeys.albumArtists.detail(args.serverId, args.query),
+            queryKey: key,
             ...args.options,
         });
     },
@@ -156,14 +180,19 @@ export const artistsQueries = {
         });
     },
     topSongs: (args: QueryHookArgs<TopSongListQuery>) => {
+        const key = queryKeys.albumArtists.topSongs(args.serverId, args.query);
         return queryOptions({
-            queryFn: ({ signal }) => {
-                return api.controller.getTopSongs({
+            initialData: (() => readSnapshot(key)) as never,
+            initialDataUpdatedAt: 0,
+            queryFn: async ({ signal }) => {
+                const fresh = await api.controller.getTopSongs({
                     apiClientProps: { serverId: args.serverId, signal },
                     query: args.query,
                 });
+                writeSnapshot(key, fresh);
+                return fresh;
             },
-            queryKey: queryKeys.albumArtists.topSongs(args.serverId, args.query),
+            queryKey: key,
             ...args.options,
         });
     },

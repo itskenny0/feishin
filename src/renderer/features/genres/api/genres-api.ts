@@ -3,6 +3,12 @@ import { useMemo } from 'react';
 
 import { api } from '/@/renderer/api';
 import { queryKeys } from '/@/renderer/api/query-keys';
+import {
+    getActiveCacheDb,
+    isCacheAvailableSync,
+    readSnapshot,
+    writeSnapshot,
+} from '/@/renderer/cache';
 import { QueryHookArgs } from '/@/renderer/lib/react-query';
 import { useCurrentServerId } from '/@/renderer/store';
 import {
@@ -14,15 +20,48 @@ import {
 
 export const genresQueries = {
     list: (args: QueryHookArgs<GenreListQuery>) => {
+        const key = queryKeys.genres.list(args.serverId, args.query);
         return queryOptions({
             gcTime: 1000 * 60 * 60,
-            queryFn: ({ signal }) => {
-                return api.controller.getGenreList({
+            initialData: (() => readSnapshot(key)) as never,
+            initialDataUpdatedAt: 0,
+            queryFn: async ({ signal }) => {
+                // Cache-first: if the Dexie genres table has rows, populate
+                // the snapshot map with a synthetic GenreListResponse so
+                // any concurrent mounts during the network round-trip see
+                // a primed value. Filters that the cache can't answer fall
+                // through to the network unchanged.
+                if (isCacheAvailableSync()) {
+                    try {
+                        const db = getActiveCacheDb();
+                        if (db) {
+                            const rows = await db.genres.toArray();
+                            if (rows.length > 0) {
+                                const sorted = rows
+                                    .slice()
+                                    .sort((a, b) =>
+                                        (a.SortName ?? '').localeCompare(b.SortName ?? ''),
+                                    );
+                                const items = sorted.map((r) => r.Payload);
+                                writeSnapshot(key, {
+                                    items,
+                                    startIndex: 0,
+                                    totalRecordCount: items.length,
+                                });
+                            }
+                        }
+                    } catch {
+                        /* swallow */
+                    }
+                }
+                const fresh = await api.controller.getGenreList({
                     apiClientProps: { serverId: args.serverId, signal },
                     query: args.query,
                 });
+                writeSnapshot(key, fresh);
+                return fresh;
             },
-            queryKey: queryKeys.genres.list(args.serverId, args.query),
+            queryKey: key,
             staleTime: 1000 * 60 * 60,
             ...args.options,
         });
