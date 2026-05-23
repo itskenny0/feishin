@@ -369,6 +369,9 @@ export const runThumbnailsSweep = async (
 
     if (signal.aborted) {
         console.warn('[cache] thumbnails sweep: aborted', { done, total });
+        // Even on abort, clear the sweep state so the dashboard
+        // doesn't show a frozen progress bar after the user pauses.
+        actions.setSweep(undefined);
         return;
     }
 
@@ -380,4 +383,27 @@ export const runThumbnailsSweep = async (
         items: total,
         skipped,
     });
+
+    // Update the user-visible thumbnail count to reflect what we just
+    // wrote (only blob rows; miss markers are excluded). Without this
+    // the dashboard stays at the last lifecycle-restored count even
+    // after a fresh sweep filled the table.
+    if (db) {
+        try {
+            const [totalThumbs, missThumbs] = await Promise.all([
+                db.thumbnails.count(),
+                db.thumbnails.where('MissAt').above(0).count(),
+            ]);
+            actions.setEntityCount('thumbnails', totalThumbs - missThumbs);
+        } catch (err) {
+            console.warn('[cache] thumbnails sweep: post-count failed', err);
+        }
+    }
+
+    // CRITICAL: clear the in-store sweep state so the dashboard moves
+    // from "Syncing Thumbnails…" back to idle. Without this the
+    // useSmoothSweep hook keeps interpolating the last progress
+    // object indefinitely (and the `Math.min(total - 1, …)` clamp
+    // pins the displayed counter at total-1 forever).
+    actions.setSweep(undefined);
 };

@@ -81,12 +81,19 @@ export const useSmoothSweep = (): SmoothSweepView => {
         const tick = () => {
             const rawElapsed = (performance.now() - baselineNow) / 1000;
             const elapsedSec = Math.min(EXTRAPOLATION_CAP_SEC, rawElapsed);
-            // Clamp `done` to never overshoot `total - 1` when total is
-            // known — we don't want the chip to claim "done" before the
-            // real signal lands.
-            const interpolatedDone = total
-                ? Math.min(total - 1, baselineDone + elapsedSec * itemsPerSec)
-                : baselineDone + elapsedSec * itemsPerSec;
+            // Clamp extrapolation to `total - 1` so the UI doesn't
+            // claim done before the real signal lands — UNLESS the
+            // baseline itself already reached `total`, in which case
+            // showing `total` is correct (the sweep is finishing).
+            // Previously this pinned the displayed counter at
+            // total-1 forever when the sweep ended cleanly.
+            let interpolatedDone: number;
+            if (total !== undefined) {
+                const cap = baselineDone >= total ? total : total - 1;
+                interpolatedDone = Math.min(cap, baselineDone + elapsedSec * itemsPerSec);
+            } else {
+                interpolatedDone = baselineDone + elapsedSec * itemsPerSec;
+            }
             const interpolatedBytes = estimatedTotalBytes
                 ? Math.min(estimatedTotalBytes, baselineBytes + elapsedSec * bytesPerSec)
                 : baselineBytes + elapsedSec * bytesPerSec;
