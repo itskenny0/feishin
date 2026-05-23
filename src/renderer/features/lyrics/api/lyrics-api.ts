@@ -264,15 +264,19 @@ const emptyResult = (): LyricsQueryResult => ({
 
 export const lyricsQueries = {
     search: (args: Omit<QueryHookArgs<LyricSearchQuery>, 'serverId'>) => {
+        const key = queryKeys.songs.lyricsSearch(args.query);
         return queryOptions({
             gcTime: 1000 * 60 * 1,
-            queryFn: () => {
-                if (lyricsIpc) {
-                    return lyricsIpc.searchRemoteLyrics(args.query);
-                }
-                return {} as Record<LyricSource, InternetProviderLyricSearchResponse[]>;
+            initialData: (() => readSnapshot(key)) as never,
+            initialDataUpdatedAt: 0,
+            queryFn: async () => {
+                const fresh = lyricsIpc
+                    ? await lyricsIpc.searchRemoteLyrics(args.query)
+                    : ({} as Record<LyricSource, InternetProviderLyricSearchResponse[]>);
+                writeSnapshot(key, fresh);
+                return fresh;
             },
-            queryKey: queryKeys.songs.lyricsSearch(args.query),
+            queryKey: key,
             staleTime: 1000 * 60 * 1,
             ...args.options,
         });
@@ -418,18 +422,23 @@ export const lyricsQueries = {
         });
     },
     songLyricsByRemoteId: (args: QueryHookArgs<Partial<LyricGetQuery>>) => {
+        const key = queryKeys.songs.lyricsByRemoteId(args.query);
         return queryOptions({
             gcTime: Infinity,
+            initialData: (() => readSnapshot(key)) as never,
+            initialDataUpdatedAt: 0,
             queryFn: async () => {
                 const q = args.query;
                 if (!q?.remoteSongId || !q?.remoteSource) return null;
-                return fetchRemoteLyricsById({
+                const fresh = await fetchRemoteLyricsById({
                     remoteSongId: q.remoteSongId,
                     remoteSource: q.remoteSource as LyricSource,
                     song: q.song as QueueSong | Song | undefined,
                 });
+                writeSnapshot(key, fresh);
+                return fresh;
             },
-            queryKey: queryKeys.songs.lyricsByRemoteId(args.query),
+            queryKey: key,
             staleTime: Infinity,
             ...args.options,
         });
