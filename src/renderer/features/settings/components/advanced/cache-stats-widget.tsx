@@ -139,6 +139,16 @@ export const CacheStatsWidget = () => {
                 </Text>
             </Group>
             <Group justify="space-between">
+                <Text size="sm">
+                    {t('page.setting.librarySyncDashboard.statsAvgFetchSize', {
+                        defaultValue: 'Avg fresh-fetch size',
+                    })}
+                </Text>
+                <Text c="dimmed" size="sm">
+                    {stats.fetched > 0 ? formatBytesSI(stats.bytesFetched / stats.fetched) : '—'}
+                </Text>
+            </Group>
+            <Group justify="space-between">
                 <Text fw={600} size="sm">
                     {t('page.setting.librarySyncDashboard.statsHitRatio', {
                         defaultValue: 'Hit ratio',

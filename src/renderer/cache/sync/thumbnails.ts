@@ -341,12 +341,66 @@ export const runThumbnailsSweep = async (
         return avg > BACKOFF_THRESHOLD_MS;
     };
 
+    // Per-worker state for diagnostics. Tracks what each worker is
+    // currently doing so the periodic snapshot can show the entire
+    // worker pool's state at once — useful when "the sweep is stuck"
+    // because we can see which workers are blocked on which items.
+    type WorkerState = { itemId?: string; startedAt: number; status: string };
+    const workerStates: WorkerState[] = Array.from({ length: concurrency }, () => ({
+        startedAt: Date.now(),
+        status: 'idle',
+    }));
+
+    // Periodic worker-pool snapshot. Every 15s, log what every worker
+    // is currently doing — `status` field shows whether the worker is
+    // idle, fetching, or post-processing (writing to Dexie). Catches
+    // the case where N workers are wedged on identical items (server
+    // returning a single item slowly) vs distributed work.
+    const POOL_SNAPSHOT_MS = 15_000;
+    let lastPoolSnapshotAt = Date.now();
+    const maybeSnapshotPool = (): void => {
+        const now = Date.now();
+        if (now - lastPoolSnapshotAt < POOL_SNAPSHOT_MS) return;
+        lastPoolSnapshotAt = now;
+        const summary = workerStates.map((w, i) => ({
+            elapsedMs: now - w.startedAt,
+            itemId: w.itemId,
+            status: w.status,
+            worker: i,
+        }));
+        const activeFetches = summary.filter((s) => s.status === 'fetching').length;
+        const longRunning = summary.filter(
+            (s) => s.status === 'fetching' && s.elapsedMs > 10_000,
+        ).length;
+        const latencyAvg =
+            latencyWindow.length > 0
+                ? Math.round(latencyWindow.reduce((a, b) => a + b, 0) / latencyWindow.length)
+                : 0;
+        console.info('[cache] thumbnails sweep: pool snapshot', {
+            activeFetches,
+            cappedConcurrency,
+            cursor,
+            done,
+            fetched,
+            longRunning,
+            queueRemaining: pending.length - cursor,
+            recentLatencyAvgMs: latencyAvg,
+            workers: summary,
+        });
+    };
+
     const workers: Promise<void>[] = [];
 
     const work = async (workerId: number): Promise<void> => {
         while (cursor < pending.length) {
             if (signal.aborted) return;
+            maybeSnapshotPool();
             if (workerId >= cappedConcurrency) {
+                workerStates[workerId] = {
+                    itemId: undefined,
+                    startedAt: Date.now(),
+                    status: 'paused (backoff cap)',
+                };
                 // Adaptive cap: this worker is over the current cap;
                 // sleep briefly and re-check. If latency recovers we
                 // come back online.
@@ -365,6 +419,11 @@ export const runThumbnailsSweep = async (
             }
             const wasCached = existingKeys.has(next.itemId);
             const itemStart = Date.now();
+            workerStates[workerId] = {
+                itemId: next.itemId,
+                startedAt: itemStart,
+                status: wasCached ? 'cache-skip' : 'fetching',
+            };
             const stuckTimer = setTimeout(() => {
                 console.warn('[cache] thumbnails sweep: worker stuck >5s on item', {
                     itemId: next.itemId,
@@ -386,6 +445,7 @@ export const runThumbnailsSweep = async (
                 recordLatency(elapsedMs);
                 if (elapsedMs > 5_000) {
                     console.info('[cache] thumbnails sweep: slow item recovered', {
+                        bytes,
                         elapsedMs,
                         itemId: next.itemId,
                         workerId,
@@ -400,6 +460,11 @@ export const runThumbnailsSweep = async (
                 });
             } finally {
                 clearTimeout(stuckTimer);
+                workerStates[workerId] = {
+                    itemId: undefined,
+                    startedAt: Date.now(),
+                    status: 'between-items',
+                };
             }
             done += 1;
             flushProgress();

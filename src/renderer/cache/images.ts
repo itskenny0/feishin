@@ -96,6 +96,14 @@ let missCount = 0;
 
 const HIT_LOG_SAMPLE = 50;
 
+// Lookup-attempt diagnostic counter. Logs the first N resolver calls
+// from anywhere (sweep + BaseImage) with hit / miss / no-id outcome
+// so the user can verify the tracklist is actually hitting the cache
+// for songs whose albums are cached. After this many attempts we stop
+// logging to avoid spam.
+let lookupAttempts = 0;
+const LOOKUP_LOG_LIMIT = 25;
+
 // Negative-cache TTL: how long a 404 marker is honored before we let
 // the resolver try again. Most Jellyfin libraries don't grow artwork
 // out of thin air, so a week between retries keeps the table small
@@ -150,6 +158,26 @@ export const resolveThumbnail = async (
         try {
             if (signal?.aborted) return { blob: undefined, bytes: 0 };
             const row = await db.thumbnails.get(itemId);
+            // Early-attempt diagnostic — logs what the resolver is
+            // being asked to look up and whether the cache hit.
+            // Bounded so it doesn't spam.
+            if (lookupAttempts < LOOKUP_LOG_LIMIT) {
+                lookupAttempts += 1;
+                console.info('[cache] resolver lookup', {
+                    attempt: lookupAttempts,
+                    found: Boolean(row),
+                    hasBlob: Boolean(row?.Blob),
+                    isMissMarker: Boolean(row && !row.Blob && row.MissAt),
+                    itemId,
+                    urlPath: (() => {
+                        try {
+                            return new URL(url).pathname;
+                        } catch {
+                            return '<unparseable>';
+                        }
+                    })(),
+                });
+            }
             if (row) {
                 if (row.Blob) {
                     // Throttle LastUsed writes to once per hour per
@@ -267,9 +295,42 @@ export const resolveThumbnail = async (
                 return { blob: undefined, bytes: 0 };
             }
 
+            const contentType = res.headers.get('content-type') ?? '';
+            const contentLengthHeader = res.headers.get('content-length');
             const blob = await res.blob();
             if (signal?.aborted) return { blob: undefined, bytes: 0 };
             if (db !== getActiveCacheDb()) return { blob: undefined, bytes: 0 };
+
+            // Diagnostic: log content-type + size + URL host for every
+            // fresh fetch where the result looks suspiciously small.
+            // Real 1024px JPEG album art is usually 50-200 KB; anything
+            // under 4 KB is almost certainly either a placeholder, an
+            // error page being read as a blob, or the server ignoring
+            // the requested size and returning a tiny default.
+            if (blob.size < 4096) {
+                console.warn('[cache] suspiciously small thumbnail', {
+                    blobBytes: blob.size,
+                    contentLengthHeader,
+                    contentType,
+                    itemId,
+                    requestedSize: MAX_CACHE_SIZE,
+                    urlHost: (() => {
+                        try {
+                            return new URL(fetchUrl).host;
+                        } catch {
+                            return 'unparseable';
+                        }
+                    })(),
+                    urlPath: (() => {
+                        try {
+                            const u = new URL(fetchUrl);
+                            return u.pathname + u.search;
+                        } catch {
+                            return '<unparseable>';
+                        }
+                    })(),
+                });
+            }
 
             await db.thumbnails.put({
                 __cachedAt: Date.now(),
