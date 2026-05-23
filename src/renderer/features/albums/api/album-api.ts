@@ -17,6 +17,7 @@ import {
     AlbumDetailResponse,
     AlbumListQuery,
     AlbumListResponse,
+    AlbumListSort,
     ListCountQuery,
 } from '/@/shared/types/domain-types';
 
@@ -125,7 +126,10 @@ export const albumQueries = {
                         }
                         if (rows.length === 0) return undefined;
                         let favoriteAlbumIds: Set<string> | undefined;
-                        if (args.query?.favorite !== undefined) {
+                        const needsFavorites =
+                            args.query?.favorite !== undefined ||
+                            args.query?.sortBy === AlbumListSort.FAVORITED;
+                        if (needsFavorites) {
                             const favs = await db.favorites
                                 .filter((r) => r.ItemType === 'Album')
                                 .toArray();

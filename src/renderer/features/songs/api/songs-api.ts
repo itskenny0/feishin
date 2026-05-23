@@ -23,6 +23,7 @@ import {
     SongDetailQuery,
     SongListQuery,
     SongListResponse,
+    SongListSort,
 } from '/@/shared/types/domain-types';
 
 export const songsQueries = {
@@ -153,7 +154,10 @@ export const songsQueries = {
                         }
                         if (rows.length === 0) return undefined;
                         let favoriteSongIds: Set<string> | undefined;
-                        if (args.query?.favorite !== undefined) {
+                        const needsFavorites =
+                            args.query?.favorite !== undefined ||
+                            args.query?.sortBy === SongListSort.FAVORITED;
+                        if (needsFavorites) {
                             const favs = await db.favorites
                                 .filter((r) => r.ItemType === 'Song')
                                 .toArray();
