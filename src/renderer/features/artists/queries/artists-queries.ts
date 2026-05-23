@@ -70,11 +70,23 @@ const canServeArtistFromCache = (query: ArtistListQuery | undefined): boolean =>
     return true;
 };
 
-// Build a Set of favorited AlbumArtist IDs from the favorites table — used
-// only when the query opts into favorite-filtering. Caller decides whether
-// to spend the read.
-const readFavoriteArtistIds = async (db: LibraryCacheDb): Promise<Set<string>> => {
-    const rows = await db.favorites.where('ItemType').equals('AlbumArtist').toArray();
+// Build a Set of favorited (Album)Artist IDs from the favorites table —
+// used only when the query opts into favorite-filtering. Caller decides
+// whether to spend the read.
+//
+// Bug fix (cache plumbing): `ItemType` is part of the favorites table's
+// compound primary key `[ItemId+ItemType]` but is NOT a standalone Dexie
+// index, so the previous `db.favorites.where('ItemType').equals(...)` form
+// throws a SchemaError at runtime. The error was swallowed by the
+// useCachedQuery try/catch and silently disabled local favourite filtering
+// for artists. We now scan with `.filter()` (which Dexie executes as a
+// table walk in JS, fine for favourites which is a small table by design)
+// so the query actually succeeds.
+const readFavoriteArtistIds = async (
+    db: LibraryCacheDb,
+    kind: 'AlbumArtist' | 'Artist',
+): Promise<Set<string>> => {
+    const rows = await db.favorites.filter((r) => r.ItemType === kind).toArray();
     return new Set(rows.filter((r) => r.IsFavorite).map((r) => r.ItemId));
 };
 
@@ -120,7 +132,9 @@ export const useAlbumArtistListQuery = (args: ArtistsQueryArgs<AlbumArtistListQu
             const rows = await db.artists.where('Kind').equals('AlbumArtist').toArray();
             if (rows.length === 0) return undefined;
             const favoriteArtistIds =
-                query?.favorite !== undefined ? await readFavoriteArtistIds(db) : undefined;
+                query?.favorite !== undefined
+                    ? await readFavoriteArtistIds(db, 'AlbumArtist')
+                    : undefined;
             return filterAlbumArtistsLocal({
                 favoriteArtistIds,
                 query: query ?? ({} as AlbumArtistListQuery),
@@ -165,7 +179,9 @@ export const useAlbumArtistInfiniteListQuery = (args: AlbumArtistInfiniteListArg
             const rows = await db.artists.where('Kind').equals('AlbumArtist').toArray();
             if (rows.length === 0) return undefined;
             const favoriteArtistIds =
-                fullQuery?.favorite !== undefined ? await readFavoriteArtistIds(db) : undefined;
+                fullQuery?.favorite !== undefined
+                    ? await readFavoriteArtistIds(db, 'AlbumArtist')
+                    : undefined;
             return filterAlbumArtistsLocal({
                 favoriteArtistIds,
                 query: {
@@ -339,7 +355,9 @@ export const useArtistListQuery = (args: ArtistsQueryArgs<ArtistListQuery>) => {
             const rows = await db.artists.where('Kind').equals('Artist').toArray();
             if (rows.length === 0) return undefined;
             const favoriteArtistIds =
-                query?.favorite !== undefined ? await readFavoriteArtistIds(db) : undefined;
+                query?.favorite !== undefined
+                    ? await readFavoriteArtistIds(db, 'Artist')
+                    : undefined;
             return filterArtistsLocal({
                 favoriteArtistIds,
                 query: query ?? ({} as ArtistListQuery),
@@ -384,7 +402,9 @@ export const useArtistInfiniteListQuery = (args: ArtistInfiniteListArgs) => {
             const rows = await db.artists.where('Kind').equals('Artist').toArray();
             if (rows.length === 0) return undefined;
             const favoriteArtistIds =
-                fullQuery?.favorite !== undefined ? await readFavoriteArtistIds(db) : undefined;
+                fullQuery?.favorite !== undefined
+                    ? await readFavoriteArtistIds(db, 'Artist')
+                    : undefined;
             return filterArtistsLocal({
                 favoriteArtistIds,
                 query: {

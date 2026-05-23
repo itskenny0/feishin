@@ -230,4 +230,86 @@ export const useCacheLifecycle = (): void => {
         }
         return undefined;
     }, [enabled]);
+
+    // Job 6 — keep `bytesUsed` fresh. The dashboard reads
+    // `useCacheStore.bytesUsed`, which is sourced from
+    // `navigator.storage.estimate().usage` (i.e. total origin bytes). Before
+    // this effect existed, that value was only refreshed on activation and
+    // on eviction, so the user perceived the cache as "not filling up" even
+    // while sweep was writing rows to IndexedDB. We now refresh on three
+    // triggers:
+    //  - any thumbnail write (the `feishin:thumbnail-written` event)
+    //  - a periodic 15s tick while the cache is active
+    //  - whenever the sweep state transitions (entity progressed / done)
+    // All three coalesce through a single throttled writer so the cache
+    // store doesn't tear under burst-write conditions.
+    const activeServer = useCacheStore((s) => s.activeServer);
+    useEffect(() => {
+        if (!enabled) return;
+        if (!activeServer) return;
+
+        let cancelled = false;
+        let pending = false;
+        let lastAt = 0;
+        const MIN_INTERVAL_MS = 2_000;
+
+        const tick = async () => {
+            if (cancelled) return;
+            const now = Date.now();
+            if (now - lastAt < MIN_INTERVAL_MS) {
+                if (!pending) {
+                    pending = true;
+                    setTimeout(
+                        () => {
+                            pending = false;
+                            void tick();
+                        },
+                        MIN_INTERVAL_MS - (now - lastAt),
+                    );
+                }
+                return;
+            }
+            lastAt = now;
+            try {
+                const n = await estimateBytes();
+                if (!cancelled) actions.setBytesUsed(n);
+            } catch (err) {
+                console.warn('[cache] lifecycle: estimateBytes failed', err);
+            }
+        };
+
+        const onThumb = () => void tick();
+        const onSweep = () => void tick();
+        const interval = setInterval(() => void tick(), 15_000);
+
+        if (typeof window !== 'undefined') {
+            window.addEventListener('feishin:thumbnail-written', onThumb);
+            window.addEventListener('feishin:sweep-progress', onSweep);
+        }
+
+        // Also subscribe to the cache store's `sweep` field so progress
+        // ticks update the readout even when the sweep itself doesn't
+        // dispatch a window event.
+        let lastSweep = useCacheStore.getState().sweep;
+        const unsubscribe = useCacheStore.subscribe((state) => {
+            if (state.sweep !== lastSweep) {
+                lastSweep = state.sweep;
+                void tick();
+            }
+        });
+
+        // Kick a refresh now so the dashboard reflects whatever rows the
+        // hydration sweep has already written by the time this effect runs.
+        void tick();
+
+        return () => {
+            cancelled = true;
+            clearInterval(interval);
+            if (typeof window !== 'undefined') {
+                window.removeEventListener('feishin:thumbnail-written', onThumb);
+                window.removeEventListener('feishin:sweep-progress', onSweep);
+            }
+            unsubscribe();
+        };
+    }, [actions, activeServer, enabled]);
 };

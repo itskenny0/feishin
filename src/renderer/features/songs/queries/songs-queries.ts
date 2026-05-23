@@ -111,7 +111,12 @@ export const useSongListQuery = (args: SongListHookArgs) => {
 
             let favoriteSongIds: Set<string> | undefined;
             if (query.favorite !== undefined) {
-                const favs = await db.favorites.where('ItemType').equals('Song').toArray();
+                // `ItemType` is part of the compound primary key but not a
+                // standalone index, so the previous .where('ItemType') form
+                // threw a SchemaError that the outer try/catch swallowed.
+                // .filter() does a table walk in JS — fine, the favorites
+                // table is small by design.
+                const favs = await db.favorites.filter((r) => r.ItemType === 'Song').toArray();
                 favoriteSongIds = new Set(favs.filter((f) => f.IsFavorite).map((f) => f.ItemId));
             }
 

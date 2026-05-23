@@ -141,6 +141,20 @@ const logApplied = (count: number): void => {
 // List — non-suspense
 // ---------------------------------------------------------------------------
 
+// Bug fix (cache plumbing): the previous implementation never read the
+// favorites table, so `filterAlbumsLocal` always saw `favoriteAlbumIds ===
+// undefined` and silently returned undefined whenever the user enabled
+// the favourites filter — falling back to a network round-trip that the
+// user perceives as a spinner. We now read favourites whenever the query
+// opts into them, off the same `.filter()` walk used in artists-queries
+// (the favorites table is small by design).
+const readFavoriteAlbumIds = async (
+    db: NonNullable<ReturnType<typeof getActiveCacheDb>>,
+): Promise<Set<string>> => {
+    const rows = await db.favorites.filter((r) => r.ItemType === 'Album').toArray();
+    return new Set(rows.filter((r) => r.IsFavorite).map((r) => r.ItemId));
+};
+
 const readAlbumsFromCache = async (
     db: ReturnType<typeof getActiveCacheDb>,
     query: AlbumListQuery,
@@ -158,7 +172,9 @@ const readAlbumsFromCache = async (
     } else {
         rows = await db.albums.toArray();
     }
-    return filterAlbumsLocal({ query, rows });
+    const favoriteAlbumIds =
+        query.favorite !== undefined ? await readFavoriteAlbumIds(db) : undefined;
+    return filterAlbumsLocal({ favoriteAlbumIds, query, rows });
 };
 
 export const useAlbumListQuery = (args: AlbumListQueryArgs) => {

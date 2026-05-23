@@ -25,6 +25,7 @@ import {
     useCachedQuery,
     writeSnapshot,
 } from '/@/renderer/cache';
+import { queryClient } from '/@/renderer/lib/react-query';
 import {
     Playlist,
     PlaylistDetailQuery,
@@ -363,6 +364,11 @@ export const usePlaylistSongListQuery = (args: PlaylistSongListQueryArgs) => {
 // Song list — suspense
 // ---------------------------------------------------------------------------
 
+// Tracks per-queryKey background refetches so a cache-fast-path return
+// doesn't fire multiple parallel network calls when the user navigates
+// in/out of a playlist quickly.
+const inFlightSongListRefetch = new Set<string>();
+
 export const usePlaylistSongListSuspenseQuery = (args: PlaylistSongListSuspenseQueryArgs) => {
     const { options, playlistId, query, queryKey: queryKeyOverride, serverId } = args;
 
@@ -375,6 +381,13 @@ export const usePlaylistSongListSuspenseQuery = (args: PlaylistSongListSuspenseQ
         queryFn: async (ctx) => {
             const db = isCacheAvailableSync() ? getActiveCacheDb() : undefined;
 
+            // Cache-fast-path: if Dexie has the songs, return them
+            // immediately so the suspense boundary resolves on the first
+            // frame. The fresh network call runs in the background and
+            // updates the query cache + Dexie + snapshot map when it
+            // lands — but the user sees the tracklist instantly. This is
+            // the fix for the "playlist page renders but the song list
+            // takes forever / never lands" symptom on large playlists.
             if (db) {
                 try {
                     const rows = await db.playlistSongs
@@ -382,11 +395,44 @@ export const usePlaylistSongListSuspenseQuery = (args: PlaylistSongListSuspenseQ
                         .equals(playlistId)
                         .sortBy('ListOrder');
                     if (rows.length > 0) {
-                        writeSnapshot(queryKey, {
+                        const cached: PlaylistSongListResponse = {
                             items: rows.map((r) => r.SongPayload),
                             startIndex: 0,
                             totalRecordCount: rows.length,
-                        });
+                        };
+                        writeSnapshot(queryKey, cached);
+                        const flightKey = JSON.stringify(queryKey);
+                        if (!inFlightSongListRefetch.has(flightKey)) {
+                            inFlightSongListRefetch.add(flightKey);
+                            void (async () => {
+                                try {
+                                    const fresh = (await controller.getPlaylistSongList({
+                                        apiClientProps: { serverId: serverId ?? '' },
+                                        query: fullQuery,
+                                    })) as PlaylistSongListResponse;
+                                    try {
+                                        await replacePlaylistSongs(db, playlistId, fresh);
+                                    } catch (err) {
+                                        console.warn(
+                                            '[cache] playlist songs apply (bg) failed',
+                                            queryKey,
+                                            err,
+                                        );
+                                    }
+                                    writeSnapshot(queryKey, fresh);
+                                    queryClient.setQueryData(queryKey, fresh);
+                                } catch (err) {
+                                    console.warn(
+                                        '[cache] playlist songs revalidate (bg) failed',
+                                        queryKey,
+                                        err,
+                                    );
+                                } finally {
+                                    inFlightSongListRefetch.delete(flightKey);
+                                }
+                            })();
+                        }
+                        return cached;
                     }
                 } catch (err) {
                     console.warn('[cache] playlist songs fromCache failed', queryKey, err);
