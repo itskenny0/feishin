@@ -75,12 +75,17 @@ const rewriteUrlToCacheSize = (url: string): string => {
 
 // Module-level dedup map. Keyed by `itemId` — any concurrent calls for
 // the same item, regardless of caller-supplied display size, share the
-// single upstream fetch. The promise resolves to {url, bytes} so the
-// sweep's `resolveThumbnailWithBytes` wrapper can report download size
-// without an extra Dexie round-trip.
+// single upstream fetch. The promise resolves to {blob, bytes} so each
+// caller creates its OWN `URL.createObjectURL` (and is responsible for
+// revoking it). Sharing the URL string across callers would cause the
+// sweep's no-render path (which has nowhere to revoke) to leak — or
+// worse, to revoke a URL still in use by a concurrent <BaseImage>.
 export interface ResolverResult {
+    // The raw blob (cache hit or fresh fetch). Undefined on negative-
+    // cache hit, abort, or fetch failure — caller falls back to the
+    // original URL.
+    blob: Blob | undefined;
     bytes: number;
-    url: string | undefined;
 }
 const inFlight = new Map<string, Promise<ResolverResult>>();
 
@@ -138,12 +143,12 @@ export const resolveThumbnail = async (
     const existing = inFlight.get(itemId);
     if (existing) {
         const result = await existing;
-        return result.url ?? url;
+        return result.blob ? URL.createObjectURL(result.blob) : url;
     }
 
     const task = (async (): Promise<ResolverResult> => {
         try {
-            if (signal?.aborted) return { bytes: 0, url: undefined };
+            if (signal?.aborted) return { blob: undefined, bytes: 0 };
             const row = await db.thumbnails.get(itemId);
             if (row) {
                 if (row.Blob) {
@@ -164,7 +169,7 @@ export const resolveThumbnail = async (
                     if (hitCount % HIT_LOG_SAMPLE === 0) {
                         console.info('[cache] thumbnail hits', { total: hitCount });
                     }
-                    return { bytes: 0, url: URL.createObjectURL(row.Blob) };
+                    return { blob: row.Blob, bytes: 0 };
                 }
                 const missAt = row.MissAt ?? 0;
                 const nowMs = Date.now();
@@ -173,7 +178,7 @@ export const resolveThumbnail = async (
                         void db.thumbnails.update(itemId, { LastUsed: nowMs });
                     }
                     recordStat('missMarkerHit');
-                    return { bytes: 0, url: undefined };
+                    return { blob: undefined, bytes: 0 };
                 }
                 // Stale miss: fall through to refetch.
             }
@@ -186,12 +191,12 @@ export const resolveThumbnail = async (
                 res = await fetch(fetchUrl, { credentials, headers, signal: combinedSignal });
             } catch (err) {
                 if ((err as Error)?.name === 'AbortError') {
-                    return { bytes: 0, url: undefined };
+                    return { blob: undefined, bytes: 0 };
                 }
                 if ((err as Error)?.name === 'TimeoutError') {
                     console.warn('[cache] thumbnail fetch timed out', { itemId });
                     recordStat('failed');
-                    return { bytes: 0, url: undefined };
+                    return { blob: undefined, bytes: 0 };
                 }
                 console.warn('[cache] thumbnail fetch threw', {
                     error: (err as Error)?.message ?? String(err),
@@ -200,7 +205,7 @@ export const resolveThumbnail = async (
                     itemId,
                 });
                 recordStat('failed');
-                return { bytes: 0, url: undefined };
+                return { blob: undefined, bytes: 0 };
             }
             if (!res.ok) {
                 if (res.status === 404) {
@@ -232,12 +237,12 @@ export const resolveThumbnail = async (
                     });
                     recordStat('failed');
                 }
-                return { bytes: 0, url: undefined };
+                return { blob: undefined, bytes: 0 };
             }
 
             const blob = await res.blob();
-            if (signal?.aborted) return { bytes: 0, url: undefined };
-            if (db !== getActiveCacheDb()) return { bytes: 0, url: undefined };
+            if (signal?.aborted) return { blob: undefined, bytes: 0 };
+            if (db !== getActiveCacheDb()) return { blob: undefined, bytes: 0 };
 
             await db.thumbnails.put({
                 __cachedAt: Date.now(),
@@ -257,33 +262,33 @@ export const resolveThumbnail = async (
                 itemId,
                 missesSoFar: missCount,
             });
-            return { bytes: blob.size, url: URL.createObjectURL(blob) };
+            return { blob, bytes: blob.size };
         } catch (err) {
-            if ((err as Error)?.name === 'AbortError') return { bytes: 0, url: undefined };
+            if ((err as Error)?.name === 'AbortError') return { blob: undefined, bytes: 0 };
             console.warn('[cache] thumbnail fetch failed', {
                 error: (err as Error)?.message ?? String(err),
                 errorName: (err as Error)?.name,
                 itemId,
             });
             recordStat('failed');
-            return { bytes: 0, url: undefined };
+            return { blob: undefined, bytes: 0 };
         } finally {
             inFlight.delete(itemId);
         }
     })();
 
     inFlight.set(itemId, task);
-    const result = (await task).url;
-    return result ?? url;
+    const result = await task;
+    return result.blob ? URL.createObjectURL(result.blob) : url;
 };
 
 /**
  * Resolve a thumbnail AND report the byte size that landed in Dexie.
- * Used by the thumbnail sweep to populate the progress chip's
- * downloaded-bytes counter. The inner resolver task now returns
- * `{url, bytes}` directly, so we don't need the before/after Dexie
- * round-trip the previous implementation paid per fetch — eliminating
- * 2 IndexedDB reads per sweep item.
+ * Used by the thumbnail sweep — does NOT create a `blob:` URL because
+ * the sweep doesn't render anything; the inner task returns the raw
+ * Blob and we just throw it away. (Each `BaseImage` consumer creates
+ * its own URL via `resolveThumbnail`, with independent revoke
+ * lifecycles, so the sweep can't break a concurrent render.)
  */
 export const resolveThumbnailWithBytes = async (
     itemId: string,
@@ -298,22 +303,18 @@ export const resolveThumbnailWithBytes = async (
     const signal = options?.signal;
     if (signal?.aborted) return { bytes: 0, url };
 
-    // Share the in-flight task with `resolveThumbnail` — both APIs do
-    // the same work; only the return shape differs. If the task hasn't
-    // started yet (rare in the sweep, since the sweep is the only
-    // caller, but possible if BaseImage raced ahead), kick it off via
-    // resolveThumbnail and then await the same map entry. The shared
-    // task is the same one resolveThumbnail uses.
+    // Share the in-flight task with `resolveThumbnail`. If the task
+    // hasn't started yet, kick it off; both APIs end up awaiting the
+    // same inFlight entry. Reading only `result.bytes` means we
+    // never createObjectURL on this path, so the sweep can no longer
+    // leak per-item blob URLs.
     if (!inFlight.has(itemId)) {
-        // Pre-seed by calling resolveThumbnail; it sets inFlight before
-        // awaiting. Swallow its return — we want the {url, bytes} shape
-        // from the map entry below.
         void resolveThumbnail(itemId, _size, { cacheKey: url, credentials, headers, url }, options);
     }
     const task = inFlight.get(itemId);
     if (!task) return { bytes: 0, url };
     const result = await task;
-    return { bytes: result.bytes, url: result.url ?? url };
+    return { bytes: result.bytes, url };
 };
 
 /**

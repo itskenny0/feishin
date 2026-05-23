@@ -153,11 +153,11 @@ const fetchOne = async (
         url,
     };
 
-    const { bytes } = await resolveThumbnailWithBytes(pending.itemId, MAX_CACHE_SIZE, request, {
+    const result = await resolveThumbnailWithBytes(pending.itemId, MAX_CACHE_SIZE, request, {
         signal,
     });
-    if (bytes > 0) existingKeys.add(pending.itemId);
-    return { bytes };
+    if (result.bytes > 0) existingKeys.add(pending.itemId);
+    return { bytes: result.bytes };
 };
 
 /**
