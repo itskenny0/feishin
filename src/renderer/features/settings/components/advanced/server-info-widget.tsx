@@ -3,6 +3,7 @@ import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { api } from '/@/renderer/api';
+import { readSnapshot, writeSnapshot } from '/@/renderer/cache';
 import {
     SettingOption,
     SettingsSection,
@@ -14,12 +15,17 @@ import { ServerType } from '/@/shared/types/domain-types';
 const useServerInfo = (serverId: string | undefined) =>
     useQuery({
         enabled: Boolean(serverId),
+        placeholderData: (() =>
+            readSnapshot(['server-info', serverId ?? ''])) as never,
         queryFn: async ({ signal }) => {
+            const key = ['server-info', serverId ?? ''] as const;
             if (!serverId) return null;
             try {
-                return await api.controller.getServerInfo({
+                const fresh = await api.controller.getServerInfo({
                     apiClientProps: { serverId, signal },
                 });
+                writeSnapshot(key, fresh);
+                return fresh;
             } catch (err) {
                 console.warn('[server-info] failed', err);
                 return null;
