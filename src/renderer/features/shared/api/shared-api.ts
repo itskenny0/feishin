@@ -2,56 +2,83 @@ import { queryOptions } from '@tanstack/react-query';
 
 import { api } from '/@/renderer/api';
 import { queryKeys } from '/@/renderer/api/query-keys';
+import { readSnapshot, writeSnapshot } from '/@/renderer/cache';
 import { QueryHookArgs } from '/@/renderer/lib/react-query';
 import { MusicFolderListQuery, TagListQuery, UserListQuery } from '/@/shared/types/domain-types';
 
+// Lightweight sidecar lists (music folders, roles, tag enums, user list)
+// don't have their own Dexie tables — they're small, mostly-static, and
+// fetched once per session per server. Snapshot-map persistence is enough
+// to make every UI surface that opens a filter dropdown paint from cache
+// before the network round-trip lands.
+
 export const sharedQueries = {
     musicFolders: (args: QueryHookArgs<MusicFolderListQuery>) => {
+        const key = queryKeys.musicFolders.list(args.serverId);
         return queryOptions({
-            queryFn: ({ signal }) => {
-                return api.controller.getMusicFolderList({
+            initialData: (() => readSnapshot(key)) as never,
+            initialDataUpdatedAt: 0,
+            queryFn: async ({ signal }) => {
+                const fresh = await api.controller.getMusicFolderList({
                     apiClientProps: { serverId: args.serverId, signal },
                 });
+                writeSnapshot(key, fresh);
+                return fresh;
             },
-            queryKey: queryKeys.musicFolders.list(args.serverId),
+            queryKey: key,
             ...args.options,
         });
     },
     roles: (args: QueryHookArgs<object>) => {
+        const key = queryKeys.roles.list(args.serverId || '');
         return queryOptions({
-            queryFn: ({ signal }) => {
-                return api.controller.getRoles({
+            initialData: (() => readSnapshot(key)) as never,
+            initialDataUpdatedAt: 0,
+            queryFn: async ({ signal }) => {
+                const fresh = await api.controller.getRoles({
                     apiClientProps: { serverId: args.serverId, signal },
                 });
+                writeSnapshot(key, fresh);
+                return fresh;
             },
-            queryKey: queryKeys.roles.list(args.serverId || ''),
+            queryKey: key,
             ...args.options,
         });
     },
     tagList: (args: QueryHookArgs<TagListQuery>) => {
+        const key = queryKeys.tags.list(args.serverId || '', args.query.type);
         return queryOptions({
             gcTime: 1000 * 60 * 24,
-            queryFn: ({ signal }) => {
-                return api.controller.getTagList({
+            initialData: (() => readSnapshot(key)) as never,
+            initialDataUpdatedAt: 0,
+            queryFn: async ({ signal }) => {
+                const fresh = await api.controller.getTagList({
                     apiClientProps: { serverId: args.serverId, signal },
                     query: args.query,
                 });
+                writeSnapshot(key, fresh);
+                return fresh;
             },
-            queryKey: queryKeys.tags.list(args.serverId || '', args.query.type),
+            queryKey: key,
             staleTime: 1000 * 60 * 24,
             structuralSharing: false,
             ...args.options,
         });
     },
     users: (args: QueryHookArgs<UserListQuery>) => {
+        const key = queryKeys.users.list(args.serverId || '', args.query);
         return queryOptions({
-            queryFn: ({ signal }) => {
-                return api.controller.getUserList({
+            initialData: (() => readSnapshot(key)) as never,
+            initialDataUpdatedAt: 0,
+            queryFn: async ({ signal }) => {
+                const fresh = await api.controller.getUserList({
                     apiClientProps: { serverId: args.serverId, signal },
                     query: args.query,
                 });
+                writeSnapshot(key, fresh);
+                return fresh;
             },
-            queryKey: queryKeys.users.list(args.serverId || '', args.query),
+            queryKey: key,
             ...args.options,
         });
     },
