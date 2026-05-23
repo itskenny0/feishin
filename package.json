@@ -110,6 +110,7 @@
         "clsx": "^2.1.1",
         "cmdk": "^1.1.1",
         "dayjs": "^1.11.20",
+        "dexie": "^4.4.2",
         "dompurify": "^3.3.3",
         "electron-debug": "^3.2.0",
         "electron-localshortcut": "^3.2.1",
