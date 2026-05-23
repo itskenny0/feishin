@@ -1,6 +1,7 @@
 import { UseSuspenseQueryOptions } from '@tanstack/react-query';
 
 import { api } from '/@/renderer/api';
+import { resolveSongPage } from '/@/renderer/cache';
 import { useItemListInfiniteLoader } from '/@/renderer/components/item-list/helpers/item-list-infinite-loader';
 import { useGridRows } from '/@/renderer/components/item-list/helpers/use-grid-rows';
 import { useItemListScrollPersist } from '/@/renderer/components/item-list/helpers/use-item-list-scroll-persist';
@@ -41,6 +42,12 @@ export const SongListInfiniteGrid = ({
             itemType: LibraryItem.SONG,
             listCountQuery,
             listQueryFn,
+            localFetchPage: (args) =>
+                resolveSongPage({
+                    limit: args.limit,
+                    query: args.query as SongListQuery,
+                    startIndex: args.startIndex,
+                }),
             query,
             serverId,
         });

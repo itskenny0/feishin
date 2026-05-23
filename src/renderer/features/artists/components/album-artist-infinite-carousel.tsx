@@ -1,8 +1,11 @@
+import type { InfiniteData } from '@tanstack/react-query';
+
 import { QueryFunctionContext, useSuspenseInfiniteQuery } from '@tanstack/react-query';
 import { Suspense, useCallback, useMemo } from 'react';
 
 import { api } from '/@/renderer/api';
 import { queryKeys } from '/@/renderer/api/query-keys';
+import { mergePage, readSnapshot, writeSnapshot } from '/@/renderer/cache';
 import {
     GridCarousel,
     GridCarouselSkeletonFallback,
@@ -150,6 +153,8 @@ function useAlbumArtistListInfinite(
         ...additionalQuery,
     });
 
+    const effectiveQueryKey = overrideQueryKey || defaultQueryKey;
+
     const query = useSuspenseInfiniteQuery<AlbumArtistListResponse>({
         getNextPageParam: (lastPage, _allPages, lastPageParam) => {
             if (lastPage.items.length < itemLimit) {
@@ -160,20 +165,30 @@ function useAlbumArtistListInfinite(
 
             return String(nextPageParam);
         },
+        initialData: (() =>
+            readSnapshot<InfiniteData<AlbumArtistListResponse, string>>(
+                effectiveQueryKey,
+            )) as never,
+        initialDataUpdatedAt: 0,
         initialPageParam: '0',
-        queryFn: ({ pageParam, signal }) => {
-            return api.controller.getAlbumArtistList({
+        queryFn: async ({ pageParam, signal }) => {
+            const startIndex = Number(pageParam);
+            const fresh = await api.controller.getAlbumArtistList({
                 apiClientProps: { serverId, signal },
                 query: {
                     limit: itemLimit,
                     sortBy,
                     sortOrder,
-                    startIndex: Number(pageParam),
+                    startIndex,
                     ...additionalQuery,
                 },
             });
+            const existing =
+                readSnapshot<InfiniteData<AlbumArtistListResponse, string>>(effectiveQueryKey);
+            writeSnapshot(effectiveQueryKey, mergePage(existing, String(startIndex), fresh));
+            return fresh;
         },
-        queryKey: overrideQueryKey || defaultQueryKey,
+        queryKey: effectiveQueryKey,
     });
 
     return query;

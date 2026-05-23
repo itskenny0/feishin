@@ -11,6 +11,14 @@ export {
 } from './db';
 export { EnableCacheModal } from './enable-cache-modal';
 export { formatBytes, formatCount } from './format';
+export {
+    resolveAlbumArtistPage,
+    resolveAlbumPage,
+    resolveArtistPage,
+    resolveGenrePage,
+    resolvePlaylistPage,
+    resolveSongPage,
+} from './grid-resolver';
 export { mergePage, useCachedInfiniteQuery, useCachedQuery } from './hooks';
 export { HydrationBanner } from './hydration-banner';
 export { resolveThumbnail } from './images';

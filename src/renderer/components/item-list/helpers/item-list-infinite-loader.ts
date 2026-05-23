@@ -48,6 +48,16 @@ interface UseItemListInfiniteLoaderProps {
     itemType: LibraryItem;
     listCountQuery: UseSuspenseQueryOptions<number, Error, number, readonly unknown[]>;
     listQueryFn: (args: { apiClientProps: any; query: any }) => Promise<{ items: unknown[] }>;
+    // Optional cache-first page resolver. When provided, the loader calls it
+    // before kicking off the network request and paints the cached items
+    // immediately while the revalidation happens in the background. Return
+    // `undefined` to fall straight through to the network. See
+    // `src/renderer/cache/grid-resolver.ts` for entity-typed resolvers.
+    localFetchPage?: (args: {
+        limit: number;
+        query: Record<string, any>;
+        startIndex: number;
+    }) => Promise<{ items: unknown[] } | undefined>;
     query: Record<string, any>;
     serverId: string;
 }
@@ -80,6 +90,7 @@ export const useItemListInfiniteLoader = ({
     itemType,
     listCountQuery,
     listQueryFn,
+    localFetchPage,
     query = {},
     serverId,
 }: UseItemListInfiniteLoaderProps) => {
@@ -108,6 +119,39 @@ export const useItemListInfiniteLoader = ({
         [serverId, itemType, query],
     );
 
+    // Push items into the loader's dataMap. Shared by the cache-prime and
+    // network paths. When `markLoaded` is false (cache prime) we leave the
+    // page-loaded flag unset so the network revalidation still runs and the
+    // freshly-fetched items overwrite the cached ones.
+    const writePageIntoDataMap = useCallback(
+        (pageNumber: number, startIndex: number, items: unknown[], markLoaded: boolean) => {
+            queryClient.setQueryData(dataQueryKey, (oldData: InfiniteLoaderCacheData) => {
+                const base = oldData ?? getInitialData();
+                const nextDataMap = new Map(base.dataMap);
+                const nextIdToIndexMap = new Map(base.idToIndexMap);
+
+                items.forEach((item, offset) => {
+                    const index = startIndex + offset;
+                    nextDataMap.set(index, item);
+                    if (item && typeof item === 'object' && 'id' in (item as any)) {
+                        const id = String((item as any).id);
+                        nextIdToIndexMap.set(id, index);
+                    }
+                });
+
+                return {
+                    dataMap: nextDataMap,
+                    idToIndexMap: nextIdToIndexMap,
+                    pagesLoaded: markLoaded
+                        ? { ...base.pagesLoaded, [pageNumber]: true }
+                        : { ...base.pagesLoaded },
+                    version: base.version + 1,
+                };
+            });
+        },
+        [queryClient, dataQueryKey],
+    );
+
     const fetchPage = useCallback(
         async (pageNumber: number) => {
             const startIndex = pageNumber * itemsPerPage;
@@ -116,6 +160,27 @@ export const useItemListInfiniteLoader = ({
                 startIndex,
                 ...query,
             };
+
+            // Cache-first: paint cached items immediately so the grid never
+            // shows a skeleton while the network call is in flight. The
+            // network call always runs after — if it returns different items
+            // the dataMap is overwritten when it lands, and the page-loaded
+            // flag is only set then. If the resolver returns `undefined`
+            // (cache cold / unsupported query) we just go to the network.
+            if (localFetchPage) {
+                try {
+                    const cached = await localFetchPage({
+                        limit: itemsPerPage,
+                        query,
+                        startIndex,
+                    });
+                    if (cached && cached.items.length > 0) {
+                        writePageIntoDataMap(pageNumber, startIndex, cached.items, false);
+                    }
+                } catch (err) {
+                    console.warn('[cache] grid localFetchPage failed', itemType, err);
+                }
+            }
 
             const result = await queryClient.fetchQuery({
                 queryFn: async ({ signal }) => {
@@ -129,32 +194,21 @@ export const useItemListInfiniteLoader = ({
                 queryKey: queryKeys[getListQueryKeyName(itemType)].list(serverId, queryParams),
             });
 
-            // Update the query data with the fetched page
-            queryClient.setQueryData(dataQueryKey, (oldData: InfiniteLoaderCacheData) => {
-                const nextDataMap = new Map(oldData.dataMap);
-                const nextIdToIndexMap = new Map(oldData.idToIndexMap);
-
-                result.items.forEach((item, offset) => {
-                    const index = startIndex + offset;
-                    nextDataMap.set(index, item);
-                    if (item && typeof item === 'object' && 'id' in (item as any)) {
-                        const id = String((item as any).id);
-                        nextIdToIndexMap.set(id, index);
-                    }
-                });
-
-                return {
-                    dataMap: nextDataMap,
-                    idToIndexMap: nextIdToIndexMap,
-                    pagesLoaded: { ...oldData.pagesLoaded, [pageNumber]: true },
-                    version: oldData.version + 1,
-                };
-            });
+            writePageIntoDataMap(pageNumber, startIndex, result.items, true);
 
             // Track the last fetched page
             lastFetchedPageRef.current = Math.max(lastFetchedPageRef.current, pageNumber);
         },
-        [itemsPerPage, query, queryClient, serverId, dataQueryKey, listQueryFn, itemType],
+        [
+            itemsPerPage,
+            query,
+            queryClient,
+            serverId,
+            listQueryFn,
+            itemType,
+            localFetchPage,
+            writePageIntoDataMap,
+        ],
     );
 
     // Reset the loaded pages and refetch current page when the query changes

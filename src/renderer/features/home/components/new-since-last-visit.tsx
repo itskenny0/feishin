@@ -6,6 +6,7 @@ import { Link } from 'react-router';
 import styles from './new-since-last-visit.module.css';
 
 import { api } from '/@/renderer/api';
+import { readSnapshot, writeSnapshot } from '/@/renderer/cache';
 import { AppRoute } from '/@/renderer/router/routes';
 import { useCurrentServer } from '/@/renderer/store';
 import { Icon } from '/@/shared/components/icon/icon';
@@ -96,8 +97,15 @@ export const NewSinceLastVisit = () => {
 
     const { data: probe } = useQuery({
         enabled: Boolean(serverId),
+        placeholderData: (() =>
+            readSnapshot<Album[]>(['home-new-since-last-visit', serverId])) as never,
         queryFn: async ({ signal }) => {
-            if (!serverId) return [] as Album[];
+            const key = ['home-new-since-last-visit', serverId] as const;
+            if (!serverId) {
+                const empty = [] as Album[];
+                writeSnapshot(key, empty);
+                return empty;
+            }
             const res = await api.controller.getAlbumList({
                 apiClientProps: { serverId, signal },
                 query: {
@@ -107,7 +115,9 @@ export const NewSinceLastVisit = () => {
                     startIndex: 0,
                 },
             });
-            return (res?.items ?? []) as Album[];
+            const result = (res?.items ?? []) as Album[];
+            writeSnapshot(key, result);
+            return result;
         },
         queryKey: ['home-new-since-last-visit', serverId] as const,
         staleTime: 1000 * 60 * 5,

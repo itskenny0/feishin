@@ -6,6 +6,7 @@ import { generatePath, Link } from 'react-router';
 import styles from './album-of-the-day-card.module.css';
 
 import { api } from '/@/renderer/api';
+import { readSnapshot, writeSnapshot } from '/@/renderer/cache';
 import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { albumQueries } from '/@/renderer/features/albums/api/album-api';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
@@ -51,8 +52,23 @@ const useAlbumOfTheDayCandidates = (serverId: string | undefined, dateKey: strin
     useQuery({
         enabled: Boolean(serverId),
         gcTime: 1000 * 60 * 60 * 24,
+        placeholderData: (() =>
+            readSnapshot<Album[]>([
+                'feature-card-album-of-the-day-pool',
+                serverId ?? '',
+                dateKey,
+            ])) as never,
         queryFn: async ({ signal }) => {
-            if (!serverId) return [] as Album[];
+            const key = [
+                'feature-card-album-of-the-day-pool',
+                serverId ?? '',
+                dateKey,
+            ] as const;
+            if (!serverId) {
+                const empty = [] as Album[];
+                writeSnapshot(key, empty);
+                return empty;
+            }
             const res = await api.controller.getAlbumList({
                 apiClientProps: { serverId, signal },
                 query: {
@@ -68,7 +84,9 @@ const useAlbumOfTheDayCandidates = (serverId: string | undefined, dateKey: strin
             // have any cover art — otherwise the card would stay stuck on
             // skeleton forever for libraries without images.
             const withImage = items.filter((a) => Boolean(a.imageId));
-            return withImage.length > 0 ? withImage : items;
+            const result = withImage.length > 0 ? withImage : items;
+            writeSnapshot(key, result);
+            return result;
         },
         // staleTime 24h so we don't re-roll mid-day; the candidate pool is
         // refreshed on the next calendar day either way (via the queryKey

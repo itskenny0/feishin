@@ -1,6 +1,7 @@
 import { UseSuspenseQueryOptions } from '@tanstack/react-query';
 
 import { api } from '/@/renderer/api';
+import { resolveAlbumArtistPage } from '/@/renderer/cache';
 import { useItemListInfiniteLoader } from '/@/renderer/components/item-list/helpers/item-list-infinite-loader';
 import { useGridRows } from '/@/renderer/components/item-list/helpers/use-grid-rows';
 import { useItemListScrollPersist } from '/@/renderer/components/item-list/helpers/use-item-list-scroll-persist';
@@ -44,6 +45,12 @@ export const AlbumArtistListInfiniteGrid = ({
             itemType: LibraryItem.ALBUM_ARTIST,
             listCountQuery,
             listQueryFn,
+            localFetchPage: (args) =>
+                resolveAlbumArtistPage({
+                    limit: args.limit,
+                    query: args.query as AlbumArtistListQuery,
+                    startIndex: args.startIndex,
+                }),
             query,
             serverId,
         });

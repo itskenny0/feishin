@@ -6,6 +6,7 @@ import { Link } from 'react-router';
 import styles from './library-stats.module.css';
 
 import { api } from '/@/renderer/api';
+import { getActiveCacheDb, isCacheAvailableSync, readSnapshot, writeSnapshot } from '/@/renderer/cache';
 import { AppRoute } from '/@/renderer/router/routes';
 import { useCurrentServer } from '/@/renderer/store';
 import {
@@ -40,56 +41,103 @@ const formatCount = (n: null | number | undefined, locale: string): string => {
     }
 };
 
+// Cache-first counts. When the active Dexie cache holds rows of an entity
+// type, return the Dexie count immediately (the unfiltered count is just
+// `.count()` against the table), then revalidate against the server. The
+// snapshot map persists the last fetched count across reloads so the tile
+// paints with a number before the network round-trip lands.
+const cachedCount = async (entity: 'albums' | 'artists' | 'genres' | 'songs'): Promise<number | undefined> => {
+    if (!isCacheAvailableSync()) return undefined;
+    const db = getActiveCacheDb();
+    if (!db) return undefined;
+    try {
+        if (entity === 'songs') return await db.songs.count();
+        if (entity === 'albums') return await db.albums.count();
+        if (entity === 'artists') {
+            return await db.artists.where('Kind').equals('AlbumArtist').count();
+        }
+        return await db.genres.count();
+    } catch {
+        return undefined;
+    }
+};
+
 const useCounts = (serverId: string | undefined) => {
     const tracks = useQuery({
         enabled: Boolean(serverId),
+        placeholderData: (() =>
+            readSnapshot<number>(['library-stats', 'tracks', serverId ?? ''])) as never,
         queryFn: async ({ signal }) => {
+            const key = ['library-stats', 'tracks', serverId ?? ''] as const;
             if (!serverId) return 0;
-            return api.controller.getSongListCount({
+            const cached = await cachedCount('songs');
+            if (cached !== undefined && cached > 0) writeSnapshot(key, cached);
+            const fresh = await api.controller.getSongListCount({
                 apiClientProps: { serverId, signal },
                 query: {
                     sortBy: SongListSort.NAME,
                     sortOrder: SortOrder.ASC,
                 },
             });
+            writeSnapshot(key, fresh);
+            return fresh;
         },
         queryKey: ['library-stats', 'tracks', serverId ?? ''] as const,
         staleTime: 1000 * 60 * 30,
     });
     const albums = useQuery({
         enabled: Boolean(serverId),
+        placeholderData: (() =>
+            readSnapshot<number>(['library-stats', 'albums', serverId ?? ''])) as never,
         queryFn: async ({ signal }) => {
+            const key = ['library-stats', 'albums', serverId ?? ''] as const;
             if (!serverId) return 0;
-            return api.controller.getAlbumListCount({
+            const cached = await cachedCount('albums');
+            if (cached !== undefined && cached > 0) writeSnapshot(key, cached);
+            const fresh = await api.controller.getAlbumListCount({
                 apiClientProps: { serverId, signal },
                 query: {
                     sortBy: AlbumListSort.NAME,
                     sortOrder: SortOrder.ASC,
                 },
             });
+            writeSnapshot(key, fresh);
+            return fresh;
         },
         queryKey: ['library-stats', 'albums', serverId ?? ''] as const,
         staleTime: 1000 * 60 * 30,
     });
     const artists = useQuery({
         enabled: Boolean(serverId),
+        placeholderData: (() =>
+            readSnapshot<number>(['library-stats', 'artists', serverId ?? ''])) as never,
         queryFn: async ({ signal }) => {
+            const key = ['library-stats', 'artists', serverId ?? ''] as const;
             if (!serverId) return 0;
-            return api.controller.getAlbumArtistListCount({
+            const cached = await cachedCount('artists');
+            if (cached !== undefined && cached > 0) writeSnapshot(key, cached);
+            const fresh = await api.controller.getAlbumArtistListCount({
                 apiClientProps: { serverId, signal },
                 query: {
                     sortBy: AlbumArtistListSort.NAME,
                     sortOrder: SortOrder.ASC,
                 },
             });
+            writeSnapshot(key, fresh);
+            return fresh;
         },
         queryKey: ['library-stats', 'artists', serverId ?? ''] as const,
         staleTime: 1000 * 60 * 30,
     });
     const genres = useQuery({
         enabled: Boolean(serverId),
+        placeholderData: (() =>
+            readSnapshot<number>(['library-stats', 'genres', serverId ?? ''])) as never,
         queryFn: async ({ signal }) => {
+            const key = ['library-stats', 'genres', serverId ?? ''] as const;
             if (!serverId) return 0;
+            const cached = await cachedCount('genres');
+            if (cached !== undefined && cached > 0) writeSnapshot(key, cached);
             // The genre list endpoint returns TotalRecordCount on the page
             // itself, so we ask for one record and read totalRecordCount off
             // the response.
@@ -102,7 +150,9 @@ const useCounts = (serverId: string | undefined) => {
                     startIndex: 0,
                 },
             });
-            return res?.totalRecordCount ?? 0;
+            const fresh = res?.totalRecordCount ?? 0;
+            writeSnapshot(key, fresh);
+            return fresh;
         },
         queryKey: ['library-stats', 'genres', serverId ?? ''] as const,
         staleTime: 1000 * 60 * 30,

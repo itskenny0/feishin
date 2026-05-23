@@ -1,8 +1,11 @@
+import type { InfiniteData } from '@tanstack/react-query';
+
 import { QueryFunctionContext, useSuspenseInfiniteQuery } from '@tanstack/react-query';
 import { Suspense, useCallback, useMemo } from 'react';
 
 import { api } from '/@/renderer/api';
 import { queryKeys } from '/@/renderer/api/query-keys';
+import { mergePage, readSnapshot, writeSnapshot } from '/@/renderer/cache';
 import {
     GridCarousel,
     GridCarouselSkeletonFallback,
@@ -166,6 +169,8 @@ function useSongListInfinite(
         ...additionalQuery,
     });
 
+    const effectiveQueryKey = overrideQueryKey || defaultQueryKey;
+
     const query = useSuspenseInfiniteQuery<SongListResponse>({
         getNextPageParam: (lastPage, _allPages, lastPageParam) => {
             if (lastPage.items.length < itemLimit) {
@@ -176,20 +181,28 @@ function useSongListInfinite(
 
             return String(nextPageParam);
         },
+        initialData: (() =>
+            readSnapshot<InfiniteData<SongListResponse, string>>(effectiveQueryKey)) as never,
+        initialDataUpdatedAt: 0,
         initialPageParam: '0',
-        queryFn: ({ pageParam, signal }) => {
-            return api.controller.getSongList({
+        queryFn: async ({ pageParam, signal }) => {
+            const startIndex = Number(pageParam);
+            const fresh = await api.controller.getSongList({
                 apiClientProps: { serverId, signal },
                 query: {
                     limit: itemLimit,
                     sortBy,
                     sortOrder,
-                    startIndex: Number(pageParam),
+                    startIndex,
                     ...additionalQuery,
                 },
             });
+            const existing =
+                readSnapshot<InfiniteData<SongListResponse, string>>(effectiveQueryKey);
+            writeSnapshot(effectiveQueryKey, mergePage(existing, String(startIndex), fresh));
+            return fresh;
         },
-        queryKey: overrideQueryKey || defaultQueryKey,
+        queryKey: effectiveQueryKey,
     });
 
     return query;

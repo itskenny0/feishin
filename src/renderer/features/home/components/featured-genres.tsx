@@ -8,6 +8,7 @@ import styles from './featured-genres.module.css';
 
 import { api } from '/@/renderer/api';
 import { queryKeys } from '/@/renderer/api/query-keys';
+import { readSnapshot, writeSnapshot } from '/@/renderer/cache';
 import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { useFuzzyGenreIds } from '/@/renderer/features/genres/api/genres-api';
 import { useGenreListSuspenseQuery } from '/@/renderer/features/genres/queries/genres-queries';
@@ -21,6 +22,7 @@ import { Button } from '/@/shared/components/button/button';
 import { Group } from '/@/shared/components/group/group';
 import { TextTitle } from '/@/shared/components/text-title/text-title';
 import {
+    Album,
     AlbumListSort,
     Genre,
     GenreListSort,
@@ -163,7 +165,10 @@ const useGenreCoverAlbum = (genreId: string, serverId: string) =>
     useQuery({
         enabled: Boolean(genreId && serverId),
         gcTime: 1000 * 60 * 60 * 24,
+        placeholderData: (() =>
+            readSnapshot<Album | null>(['featured-genre-cover', serverId, genreId])) as never,
         queryFn: async ({ signal }) => {
+            const key = ['featured-genre-cover', serverId, genreId] as const;
             const res = await api.controller.getAlbumList({
                 apiClientProps: { serverId, signal },
                 query: {
@@ -174,7 +179,9 @@ const useGenreCoverAlbum = (genreId: string, serverId: string) =>
                     startIndex: 0,
                 },
             });
-            return res?.items?.[0] ?? null;
+            const result = res?.items?.[0] ?? null;
+            writeSnapshot(key, result);
+            return result;
         },
         queryKey: ['featured-genre-cover', serverId, genreId] as const,
         // 24h — covers are functionally static and re-fetching costs an

@@ -1,6 +1,7 @@
 import { UseSuspenseQueryOptions } from '@tanstack/react-query';
 
 import { api } from '/@/renderer/api';
+import { resolvePlaylistPage } from '/@/renderer/cache';
 import { useItemListInfiniteLoader } from '/@/renderer/components/item-list/helpers/item-list-infinite-loader';
 import { useItemListColumnReorder } from '/@/renderer/components/item-list/helpers/use-item-list-column-reorder';
 import { useItemListColumnResize } from '/@/renderer/components/item-list/helpers/use-item-list-column-resize';
@@ -51,6 +52,12 @@ export const PlaylistListInfiniteTable = ({
             itemType: LibraryItem.PLAYLIST,
             listCountQuery,
             listQueryFn,
+            localFetchPage: (args) =>
+                resolvePlaylistPage({
+                    limit: args.limit,
+                    query: args.query as PlaylistListQuery,
+                    startIndex: args.startIndex,
+                }),
             query,
             serverId,
         });

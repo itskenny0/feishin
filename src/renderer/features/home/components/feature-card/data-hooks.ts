@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { generatePath } from 'react-router';
 
 import { api } from '/@/renderer/api';
+import { readSnapshot, writeSnapshot } from '/@/renderer/cache';
 import {
     FeatureCardData,
     SONGS_PER_CARD,
@@ -85,7 +86,13 @@ const useArtistCandidates = (serverId: string | undefined) =>
     useQuery({
         enabled: Boolean(serverId),
         gcTime: 1000 * 60 * 60,
+        placeholderData: (() =>
+            readSnapshot<ArtistCandidate[]>([
+                'feature-card-artists-v2',
+                serverId ?? '',
+            ])) as never,
         queryFn: async ({ signal }) => {
+            const key = ['feature-card-artists-v2', serverId ?? ''] as const;
             if (!serverId) return [] as ArtistCandidate[];
             const res = await api.controller.getAlbumArtistList({
                 apiClientProps: { serverId, signal },
@@ -116,7 +123,9 @@ const useArtistCandidates = (serverId: string | undefined) =>
             // Last-ditch fallback: tiny libraries where every artist has
             // exactly one song still get a working card rather than the
             // 'Nothing to feature yet' state — better to show something.
-            return usable.length > 0 ? usable : all;
+            const result = usable.length > 0 ? usable : all;
+            writeSnapshot(key, result);
+            return result;
         },
         // v2 — invalidate any stale empty-result cache from the previous
         // tiered-filter version that some clients may have persisted.
@@ -128,6 +137,12 @@ const useArtistSongs = (artistId: null | string, serverId: string | undefined) =
     useQuery({
         enabled: Boolean(artistId && serverId),
         gcTime: 1000 * 60 * 30,
+        placeholderData: (() =>
+            readSnapshot<Song[]>([
+                'feature-card-artist-songs',
+                serverId ?? '',
+                artistId ?? '',
+            ])) as never,
         // Intentionally NO keepPreviousData here. The artist-card auto-skips
         // single-song artists by calling goNext() from a useEffect, which can
         // change the current artist several times in quick succession. With
@@ -136,6 +151,11 @@ const useArtistSongs = (artistId: null | string, serverId: string | undefined) =
         // reads as 'wrong songs for this artist'. Better to flash a brief
         // skeleton than to display inconsistent state.
         queryFn: async ({ signal }) => {
+            const key = [
+                'feature-card-artist-songs',
+                serverId ?? '',
+                artistId ?? '',
+            ] as const;
             if (!artistId || !serverId) return [] as Song[];
             // Over-fetch so dedupeSongsByTitle still produces a full grid for
             // libraries where the same track is tagged on a single + album +
@@ -150,7 +170,12 @@ const useArtistSongs = (artistId: null | string, serverId: string | undefined) =
                     startIndex: 0,
                 },
             });
-            return dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(0, SONGS_PER_CARD);
+            const processed = dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(
+                0,
+                SONGS_PER_CARD,
+            );
+            writeSnapshot(key, processed);
+            return processed;
         },
         queryKey: ['feature-card-artist-songs', serverId ?? '', artistId ?? ''] as const,
         staleTime: 1000 * 60 * 5,
@@ -283,7 +308,13 @@ const useGenreCandidates = (serverId: string | undefined) =>
     useQuery({
         enabled: Boolean(serverId),
         gcTime: 1000 * 60 * 60,
+        placeholderData: (() =>
+            readSnapshot<GenreCandidate[]>([
+                'feature-card-genres',
+                serverId ?? '',
+            ])) as never,
         queryFn: async ({ signal }) => {
+            const key = ['feature-card-genres', serverId ?? ''] as const;
             if (!serverId) return [] as GenreCandidate[];
             const res = await api.controller.getGenreList({
                 apiClientProps: { serverId, signal },
@@ -294,12 +325,14 @@ const useGenreCandidates = (serverId: string | undefined) =>
                     startIndex: 0,
                 },
             });
-            return (res?.items ?? []).map((g: Genre) => ({
+            const processed: GenreCandidate[] = (res?.items ?? []).map((g: Genre) => ({
                 albumCount: g.albumCount ?? null,
                 id: g.id,
                 name: g.name,
                 songCount: g.songCount ?? null,
             }));
+            writeSnapshot(key, processed);
+            return processed;
         },
         queryKey: ['feature-card-genres', serverId ?? ''] as const,
         staleTime: 1000 * 60 * 60,
@@ -314,11 +347,22 @@ const useGenreSongs = (
     useQuery({
         enabled: Boolean(genreId && serverId),
         gcTime: 1000 * 60 * 30,
+        placeholderData: (() =>
+            readSnapshot<Song[]>([
+                'feature-card-genre-songs',
+                serverId ?? '',
+                genreId ?? '',
+            ])) as never,
         // No keepPreviousData: when the user clicks prev/next or the 30s
         // rotation fires, we want the grid to clear immediately so the
         // title and songs are never out of sync. Brief skeleton flash is
         // acceptable; lingering wrong-genre songs under a new title is not.
         queryFn: async ({ signal }) => {
+            const key = [
+                'feature-card-genre-songs',
+                serverId ?? '',
+                genreId ?? '',
+            ] as const;
             if (!genreId || !serverId) return [] as Song[];
             // Jellyfin uses genre id; navidrome/subsonic use genre name. Pass the
             // form that matches the server (mirrors the shuffle-all modal logic).
@@ -327,7 +371,12 @@ const useGenreSongs = (
                 apiClientProps: { serverId, signal },
                 query: { genre: genreParam, limit: SONGS_PER_CARD * 3, played: Played.All },
             });
-            return dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(0, SONGS_PER_CARD);
+            const processed = dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(
+                0,
+                SONGS_PER_CARD,
+            );
+            writeSnapshot(key, processed);
+            return processed;
         },
         queryKey: ['feature-card-genre-songs', serverId ?? '', genreId ?? ''] as const,
         staleTime: 1000 * 60 * 5,
@@ -387,7 +436,13 @@ export const useGenreFeatureData = (
 const useRecentlyPlayedSongs = (serverId: string | undefined) =>
     useQuery({
         enabled: Boolean(serverId),
+        placeholderData: (() =>
+            readSnapshot<Song[]>([
+                'feature-card-recently-played',
+                serverId ?? '',
+            ])) as never,
         queryFn: async ({ signal }) => {
+            const key = ['feature-card-recently-played', serverId ?? ''] as const;
             if (!serverId) return [] as Song[];
             const res = await api.controller.getSongList({
                 apiClientProps: { serverId, signal },
@@ -398,7 +453,12 @@ const useRecentlyPlayedSongs = (serverId: string | undefined) =>
                     startIndex: 0,
                 },
             });
-            return dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(0, SONGS_PER_CARD);
+            const processed = dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(
+                0,
+                SONGS_PER_CARD,
+            );
+            writeSnapshot(key, processed);
+            return processed;
         },
         queryKey: ['feature-card-recently-played', serverId ?? ''] as const,
         staleTime: 1000 * 60 * 2,
@@ -426,7 +486,10 @@ export const useRecentlyPlayedFeatureData = (
 const useTopPlayedSongs = (serverId: string | undefined) =>
     useQuery({
         enabled: Boolean(serverId),
+        placeholderData: (() =>
+            readSnapshot<Song[]>(['feature-card-top-played', serverId ?? ''])) as never,
         queryFn: async ({ signal }) => {
+            const key = ['feature-card-top-played', serverId ?? ''] as const;
             if (!serverId) return [] as Song[];
             const res = await api.controller.getSongList({
                 apiClientProps: { serverId, signal },
@@ -437,7 +500,12 @@ const useTopPlayedSongs = (serverId: string | undefined) =>
                     startIndex: 0,
                 },
             });
-            return dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(0, SONGS_PER_CARD);
+            const processed = dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(
+                0,
+                SONGS_PER_CARD,
+            );
+            writeSnapshot(key, processed);
+            return processed;
         },
         queryKey: ['feature-card-top-played', serverId ?? ''] as const,
         staleTime: 1000 * 60 * 10,
@@ -465,7 +533,10 @@ export const useTopPlayedFeatureData = (
 const useFavoritesSongs = (serverId: string | undefined) =>
     useQuery({
         enabled: Boolean(serverId),
+        placeholderData: (() =>
+            readSnapshot<Song[]>(['feature-card-favorites', serverId ?? ''])) as never,
         queryFn: async ({ signal }) => {
+            const key = ['feature-card-favorites', serverId ?? ''] as const;
             if (!serverId) return [] as Song[];
             const res = await api.controller.getSongList({
                 apiClientProps: { serverId, signal },
@@ -477,7 +548,12 @@ const useFavoritesSongs = (serverId: string | undefined) =>
                     startIndex: 0,
                 },
             });
-            return dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(0, SONGS_PER_CARD);
+            const processed = dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(
+                0,
+                SONGS_PER_CARD,
+            );
+            writeSnapshot(key, processed);
+            return processed;
         },
         // staleTime 0 so reshuffle truly re-randomises rather than serving cached
         queryKey: ['feature-card-favorites', serverId ?? ''] as const,
@@ -562,7 +638,10 @@ export const useUnplayedFeatureData = (
 const useForgottenFavoritesSongs = (serverId: string | undefined) =>
     useQuery({
         enabled: Boolean(serverId),
+        placeholderData: (() =>
+            readSnapshot<Song[]>(['feature-card-forgotten', serverId ?? ''])) as never,
         queryFn: async ({ signal }) => {
+            const key = ['feature-card-forgotten', serverId ?? ''] as const;
             if (!serverId) return [] as Song[];
             // Favorites sorted by least-recently-played first. Result is
             // approximate: "favorites you haven't touched in a while" without
@@ -577,7 +656,12 @@ const useForgottenFavoritesSongs = (serverId: string | undefined) =>
                     startIndex: 0,
                 },
             });
-            return dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(0, SONGS_PER_CARD);
+            const processed = dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(
+                0,
+                SONGS_PER_CARD,
+            );
+            writeSnapshot(key, processed);
+            return processed;
         },
         queryKey: ['feature-card-forgotten', serverId ?? ''] as const,
         staleTime: 1000 * 60 * 30,
@@ -605,11 +689,22 @@ export const useForgottenFavoritesFeatureData = (
 const useTimeMachineSongs = (year: null | number, serverId: string | undefined) =>
     useQuery({
         enabled: Boolean(year && serverId),
+        placeholderData: (() =>
+            readSnapshot<Song[]>([
+                'feature-card-time-machine',
+                serverId ?? '',
+                year ?? 0,
+            ])) as never,
         // No keepPreviousData: the auto-skip below can churn the year
         // multiple times in succession. The 2-tier `shown` state below
         // hides those transitions from the user; React-Query keeping
         // stale data here would just confuse the dispatch path.
         queryFn: async ({ signal }) => {
+            const key = [
+                'feature-card-time-machine',
+                serverId ?? '',
+                year ?? 0,
+            ] as const;
             if (!year || !serverId) return [] as Song[];
             const res = await api.controller.getRandomSongList({
                 apiClientProps: { serverId, signal },
@@ -620,7 +715,12 @@ const useTimeMachineSongs = (year: null | number, serverId: string | undefined) 
                     played: Played.All,
                 },
             });
-            return dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(0, SONGS_PER_CARD);
+            const processed = dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(
+                0,
+                SONGS_PER_CARD,
+            );
+            writeSnapshot(key, processed);
+            return processed;
         },
         queryKey: ['feature-card-time-machine', serverId ?? '', year ?? 0] as const,
         staleTime: 1000 * 60 * 5,
@@ -726,8 +826,19 @@ export const useTimeMachineFeatureData = (
 const useDecadeSongs = (decadeStart: null | number, serverId: string | undefined) =>
     useQuery({
         enabled: Boolean(decadeStart !== null && serverId),
+        placeholderData: (() =>
+            readSnapshot<Song[]>([
+                'feature-card-decade',
+                serverId ?? '',
+                decadeStart ?? -1,
+            ])) as never,
         // See useTimeMachineSongs — no keepPreviousData here either.
         queryFn: async ({ signal }) => {
+            const key = [
+                'feature-card-decade',
+                serverId ?? '',
+                decadeStart ?? -1,
+            ] as const;
             if (decadeStart === null || !serverId) return [] as Song[];
             const res = await api.controller.getRandomSongList({
                 apiClientProps: { serverId, signal },
@@ -738,7 +849,12 @@ const useDecadeSongs = (decadeStart: null | number, serverId: string | undefined
                     played: Played.All,
                 },
             });
-            return dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(0, SONGS_PER_CARD);
+            const processed = dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(
+                0,
+                SONGS_PER_CARD,
+            );
+            writeSnapshot(key, processed);
+            return processed;
         },
         queryKey: ['feature-card-decade', serverId ?? '', decadeStart ?? -1] as const,
         staleTime: 1000 * 60 * 5,
