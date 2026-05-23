@@ -14,6 +14,7 @@ import type { ServerListItem } from '/@/shared/types/domain-types';
 
 import { api } from '/@/renderer/api';
 import { getActiveCacheDb } from '/@/renderer/cache/db';
+import { evict } from '/@/renderer/cache/eviction';
 import { MAX_CACHE_SIZE, resolveThumbnailWithBytes } from '/@/renderer/cache/images';
 import { useCacheStore } from '/@/renderer/cache/store';
 import { useSettingsStore } from '/@/renderer/store';
@@ -99,23 +100,58 @@ const collectPending = async (): Promise<PendingThumbnail[]> => {
  * cached item paid that Dexie round-trip. Bypassing the lookup makes
  * already-cached items effectively free.
  */
+// Pre-built request templates by itemType. The sweep iterates 18k+
+// items; rebuilding the full ImageRequest each iteration (which reads
+// the auth store, runs URL serialization, etc.) is wasted work since
+// only the ID varies. We build one template per itemType once at sweep
+// init and string-replace the ID per fetch.
+interface RequestTemplate {
+    credentials?: RequestCredentials;
+    headers?: Record<string, string>;
+    urlAfter: string;
+    urlBefore: string;
+}
+
+const ID_PLACEHOLDER = '__FEISHIN_ID_PLACEHOLDER__';
+
+const buildRequestTemplate = (
+    serverId: string,
+    itemType: LibraryItem,
+): RequestTemplate | undefined => {
+    const request = api.controller.getImageRequest({
+        apiClientProps: { serverId },
+        query: { id: ID_PLACEHOLDER, itemType, size: MAX_CACHE_SIZE },
+    });
+    if (!request) return undefined;
+    const idx = request.url.indexOf(ID_PLACEHOLDER);
+    if (idx < 0) return undefined;
+    return {
+        credentials: request.credentials,
+        headers: request.headers,
+        urlAfter: request.url.slice(idx + ID_PLACEHOLDER.length),
+        urlBefore: request.url.slice(0, idx),
+    };
+};
+
 const fetchOne = async (
     pending: PendingThumbnail,
-    serverId: string,
+    template: RequestTemplate,
     signal: AbortSignal,
     existingKeys: Set<string>,
 ): Promise<{ bytes: number }> => {
     if (signal.aborted) return { bytes: 0 };
-
     if (existingKeys.has(pending.itemId)) return { bytes: 0 };
 
-    const request = api.controller.getImageRequest({
-        apiClientProps: { serverId },
-        query: { id: pending.itemId, itemType: pending.itemType, size: MAX_CACHE_SIZE },
-    });
-    if (!request) return { bytes: 0 };
     const db = getActiveCacheDb();
     if (!db) return { bytes: 0 };
+
+    const url = template.urlBefore + pending.itemId + template.urlAfter;
+    const request = {
+        cacheKey: url,
+        credentials: template.credentials,
+        headers: template.headers,
+        url,
+    };
 
     const { bytes } = await resolveThumbnailWithBytes(pending.itemId, MAX_CACHE_SIZE, request, {
         signal,
@@ -268,19 +304,66 @@ export const runThumbnailsSweep = async (
 
     flushProgress(true);
 
-    // Simple bounded-concurrency worker pool.
-    const queue = pending.slice();
+    // Hoist the per-itemType request templates once. The sweep iterates
+    // ~18k items; rebuilding the ImageRequest per iteration (which
+    // reads the auth store and re-serializes the URL) is wasted work
+    // since only the ID varies. Cache the URL prefix/suffix and auth
+    // headers once and string-substitute the ID per fetch.
+    const templates: Partial<Record<LibraryItem, RequestTemplate>> = {};
+    for (const lt of [LibraryItem.ALBUM, LibraryItem.ALBUM_ARTIST, LibraryItem.PLAYLIST]) {
+        const tpl = buildRequestTemplate(server.id, lt);
+        if (tpl) templates[lt] = tpl;
+    }
+
+    // Cursor-based dispatch instead of queue.shift() — workers each
+    // grab their next index via a shared monotonic counter, avoiding
+    // the O(n) array rebuild cost and the implicit shared-state
+    // serialization point.
+    let cursor = 0;
+
+    // Adaptive backoff. Rolling latency window over the last
+    // BACKOFF_WINDOW completed fetches. If the average exceeds
+    // BACKOFF_THRESHOLD_MS we pause new dispatches for BACKOFF_PAUSE_MS
+    // and cap effective concurrency in half until latency recovers.
+    const BACKOFF_WINDOW = 8;
+    const BACKOFF_THRESHOLD_MS = 5_000;
+    const BACKOFF_PAUSE_MS = 2_000;
+    const latencyWindow: number[] = [];
+    let cappedConcurrency = concurrency;
+    let lastBackoffAt = 0;
+    const recordLatency = (ms: number): void => {
+        latencyWindow.push(ms);
+        if (latencyWindow.length > BACKOFF_WINDOW) latencyWindow.shift();
+    };
+    const shouldBackOff = (): boolean => {
+        if (latencyWindow.length < BACKOFF_WINDOW) return false;
+        const avg = latencyWindow.reduce((a, b) => a + b, 0) / latencyWindow.length;
+        return avg > BACKOFF_THRESHOLD_MS;
+    };
+
     const workers: Promise<void>[] = [];
 
     const work = async (workerId: number): Promise<void> => {
-        while (queue.length > 0) {
+        while (cursor < pending.length) {
             if (signal.aborted) return;
-            const next = queue.shift();
-            if (!next) return;
+            if (workerId >= cappedConcurrency) {
+                // Adaptive cap: this worker is over the current cap;
+                // sleep briefly and re-check. If latency recovers we
+                // come back online.
+                await new Promise((r) => setTimeout(r, BACKOFF_PAUSE_MS));
+                continue;
+            }
+            const idx = cursor;
+            cursor += 1;
+            if (idx >= pending.length) return;
+            const next = pending[idx];
+            const template = templates[next.itemType];
+            if (!template) {
+                done += 1;
+                skipped += 1;
+                continue;
+            }
             const wasCached = existingKeys.has(next.itemId);
-            // Stuck-worker watchdog: log if a single item takes more
-            // than 5s. Helps the user correlate "0 kB/s on the OS
-            // indicator" with which item the worker is wedged on.
             const itemStart = Date.now();
             const stuckTimer = setTimeout(() => {
                 console.warn('[cache] thumbnails sweep: worker stuck >5s on item', {
@@ -289,22 +372,18 @@ export const runThumbnailsSweep = async (
                 });
             }, 5_000);
             try {
-                const { bytes } = await fetchOne(next, server.id, signal, existingKeys);
+                const { bytes } = await fetchOne(next, template, signal, existingKeys);
                 bytesDownloaded += bytes;
                 if (wasCached) {
                     skipped += 1;
                 } else if (bytes > 0) {
                     fetched += 1;
                 } else {
-                    // Resolver returned 0 bytes for an uncached item — most
-                    // likely a 404 (server has no artwork for this id).
-                    // It just wrote a negative-cache marker; add to the
-                    // in-memory skip set so a later iteration of this
-                    // sweep doesn't re-process it.
                     existingKeys.add(next.itemId);
                     skipped += 1;
                 }
                 const elapsedMs = Date.now() - itemStart;
+                recordLatency(elapsedMs);
                 if (elapsedMs > 5_000) {
                     console.info('[cache] thumbnails sweep: slow item recovered', {
                         elapsedMs,
@@ -314,6 +393,7 @@ export const runThumbnailsSweep = async (
                 }
             } catch (err) {
                 failed += 1;
+                recordLatency(Date.now() - itemStart);
                 console.warn('[cache] thumbnails sweep: fetch failed', {
                     err: (err as Error).message,
                     item: next.itemId,
@@ -324,12 +404,31 @@ export const runThumbnailsSweep = async (
             done += 1;
             flushProgress();
 
-            // Anomaly: failure ratio crossed 25% over a meaningful sample
-            // size. Throttled to one warn per 10s so a flapping server
-            // doesn't spam the log buffer.
-            const now = Date.now();
-            if (done >= 50 && failed / done > 0.25 && now - lastAnomalyWarnAt > 10_000) {
-                lastAnomalyWarnAt = now;
+            // Adaptive concurrency: if rolling latency suggests the
+            // server is overloaded, halve effective concurrency and
+            // pause new dispatches briefly. Recover by ramping cap
+            // back up as latency drops.
+            const nowTs = Date.now();
+            if (shouldBackOff() && nowTs - lastBackoffAt > BACKOFF_PAUSE_MS * 2) {
+                lastBackoffAt = nowTs;
+                cappedConcurrency = Math.max(1, Math.floor(cappedConcurrency / 2));
+                console.warn('[cache] thumbnails sweep: backing off', {
+                    avgLatencyMs: Math.round(
+                        latencyWindow.reduce((a, b) => a + b, 0) / latencyWindow.length,
+                    ),
+                    newCap: cappedConcurrency,
+                });
+                latencyWindow.length = 0;
+                await new Promise((r) => setTimeout(r, BACKOFF_PAUSE_MS));
+            } else if (cappedConcurrency < concurrency && latencyWindow.length >= BACKOFF_WINDOW) {
+                const avg = latencyWindow.reduce((a, b) => a + b, 0) / latencyWindow.length;
+                if (avg < BACKOFF_THRESHOLD_MS / 2) {
+                    cappedConcurrency = Math.min(concurrency, cappedConcurrency + 1);
+                }
+            }
+
+            if (done >= 50 && failed / done > 0.25 && nowTs - lastAnomalyWarnAt > 10_000) {
+                lastAnomalyWarnAt = nowTs;
                 console.warn('[cache] thumbnails sweep: ANOMALY: failure rate high', {
                     done,
                     failed,
@@ -388,4 +487,15 @@ export const runThumbnailsSweep = async (
     // object indefinitely (and the `Math.min(total - 1, …)` clamp
     // pins the displayed counter at total-1 forever).
     actions.setSweep(undefined);
+
+    // Run a single eviction pass now that the sweep is done. During
+    // the sweep the per-write evict() listener in eviction.ts is
+    // gated off (it would otherwise scan the ByteSize index every
+    // 250ms and serialize against the worker pool). Catching up now
+    // keeps the cap honored.
+    try {
+        await evict();
+    } catch (err) {
+        console.warn('[cache] thumbnails sweep: post-evict failed', err);
+    }
 };

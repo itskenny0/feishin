@@ -7,6 +7,7 @@
 import type { ImageRequest } from '/@/shared/types/domain-types';
 
 import { getActiveCacheDb } from './db';
+import { recordStat } from './stats';
 
 // Single cache size for every blob. Covers any reasonable mobile / tablet
 // / desktop full-screen player display; on lower-DPR display surfaces the
@@ -74,8 +75,14 @@ const rewriteUrlToCacheSize = (url: string): string => {
 
 // Module-level dedup map. Keyed by `itemId` — any concurrent calls for
 // the same item, regardless of caller-supplied display size, share the
-// single upstream fetch.
-const inFlight = new Map<string, Promise<string | undefined>>();
+// single upstream fetch. The promise resolves to {url, bytes} so the
+// sweep's `resolveThumbnailWithBytes` wrapper can report download size
+// without an extra Dexie round-trip.
+export interface ResolverResult {
+    bytes: number;
+    url: string | undefined;
+}
+const inFlight = new Map<string, Promise<ResolverResult>>();
 
 // Sampled-logging counters. Hits fire on every render; logging each one
 // would flood devtools, so we sample. Misses are interesting and always log.
@@ -131,79 +138,71 @@ export const resolveThumbnail = async (
     const existing = inFlight.get(itemId);
     if (existing) {
         const result = await existing;
-        return result ?? url;
+        return result.url ?? url;
     }
 
-    const task = (async (): Promise<string | undefined> => {
+    const task = (async (): Promise<ResolverResult> => {
         try {
-            if (signal?.aborted) return undefined;
+            if (signal?.aborted) return { bytes: 0, url: undefined };
             const row = await db.thumbnails.get(itemId);
             if (row) {
-                // Real blob row: serve it.
                 if (row.Blob) {
-                    await db.thumbnails.update(itemId, { LastUsed: Date.now() });
+                    // Throttle LastUsed writes to once per hour per
+                    // item. Without this, every cache HIT issues an
+                    // IndexedDB write — under a 24-worker sweep that
+                    // means hundreds of writes/sec just to bump a
+                    // timestamp, all serialized against the sweep's
+                    // own put()s. LRU eviction only consults LastUsed
+                    // during a (rare) sweep pass; per-render precision
+                    // is overkill.
+                    const now = Date.now();
+                    if (now - (row.LastUsed ?? 0) > 3_600_000) {
+                        void db.thumbnails.update(itemId, { LastUsed: now });
+                    }
                     hitCount += 1;
+                    recordStat('blobHit');
                     if (hitCount % HIT_LOG_SAMPLE === 0) {
                         console.info('[cache] thumbnail hits', { total: hitCount });
                     }
-                    return URL.createObjectURL(row.Blob);
+                    return { bytes: 0, url: URL.createObjectURL(row.Blob) };
                 }
-                // Negative-cache marker. If it's still fresh, skip the
-                // network entirely and let the caller fall back to its
-                // inherited URL — the server already told us this item
-                // doesn't have artwork. Update LastUsed so the LRU
-                // eviction doesn't drop popular-but-art-less items
-                // prematurely.
                 const missAt = row.MissAt ?? 0;
-                if (Date.now() - missAt < MISS_TTL_MS) {
-                    await db.thumbnails.update(itemId, { LastUsed: Date.now() });
-                    return undefined;
+                const nowMs = Date.now();
+                if (nowMs - missAt < MISS_TTL_MS) {
+                    if (nowMs - (row.LastUsed ?? 0) > 3_600_000) {
+                        void db.thumbnails.update(itemId, { LastUsed: nowMs });
+                    }
+                    recordStat('missMarkerHit');
+                    return { bytes: 0, url: undefined };
                 }
-                // Stale miss: fall through to refetch. The TTL is there
-                // so newly-added artwork on the server eventually wins.
+                // Stale miss: fall through to refetch.
             }
 
-            // Always fetch at MAX_CACHE_SIZE regardless of what the
-            // caller wanted — one blob per item, downscaled by the
-            // browser for smaller surfaces.
             const fetchUrl = rewriteUrlToCacheSize(url);
-
-            // 20s per-fetch timeout. Browser fetch() has no built-in
-            // timeout, so a server that accepts a connection but never
-            // responds (or a Capacitor WebView holding the request
-            // internally) would otherwise hang a worker indefinitely.
             const timeoutAt = AbortSignal.timeout(20_000);
             const combinedSignal = signal ? AbortSignal.any([signal, timeoutAt]) : timeoutAt;
             let res: Response;
             try {
                 res = await fetch(fetchUrl, { credentials, headers, signal: combinedSignal });
             } catch (err) {
-                if ((err as Error)?.name === 'AbortError') return undefined;
+                if ((err as Error)?.name === 'AbortError') {
+                    return { bytes: 0, url: undefined };
+                }
                 if ((err as Error)?.name === 'TimeoutError') {
                     console.warn('[cache] thumbnail fetch timed out', { itemId });
-                    return undefined;
+                    recordStat('failed');
+                    return { bytes: 0, url: undefined };
                 }
                 console.warn('[cache] thumbnail fetch threw', {
                     error: (err as Error)?.message ?? String(err),
                     errorName: (err as Error)?.name,
                     hasAuthHeader: Boolean(headers?.Authorization),
                     itemId,
-                    urlHost: (() => {
-                        try {
-                            return new URL(fetchUrl).host;
-                        } catch {
-                            return 'unparseable';
-                        }
-                    })(),
                 });
-                return undefined;
+                recordStat('failed');
+                return { bytes: 0, url: undefined };
             }
             if (!res.ok) {
-                // 404 = item has no artwork, common on many Jellyfin
-                // libraries. Write a negative-cache row so the next call
-                // (resolver, sweep, or list mount) skips the network
-                // instead of re-issuing the same 404. The MISS_TTL_MS
-                // window above bounds how long that marker is honored.
                 if (res.status === 404) {
                     if (db === getActiveCacheDb()) {
                         try {
@@ -217,6 +216,7 @@ export const resolveThumbnail = async (
                                 MissAt: Date.now(),
                                 Size: MAX_CACHE_SIZE,
                             });
+                            recordStat('missWrite');
                         } catch (err) {
                             console.warn('[cache] thumbnail miss-write failed', {
                                 error: (err as Error)?.message,
@@ -230,18 +230,14 @@ export const resolveThumbnail = async (
                         itemId,
                         status: res.status,
                     });
+                    recordStat('failed');
                 }
-                return undefined;
+                return { bytes: 0, url: undefined };
             }
 
             const blob = await res.blob();
-            if (signal?.aborted) return undefined;
-
-            // The lifecycle Job 2 closes the active DB when the user
-            // disables the cache. The handle we captured at task entry
-            // may already be closed if disable happened mid-fetch; bail
-            // out before the put() throws.
-            if (db !== getActiveCacheDb()) return undefined;
+            if (signal?.aborted) return { bytes: 0, url: undefined };
+            if (db !== getActiveCacheDb()) return { bytes: 0, url: undefined };
 
             await db.thumbnails.put({
                 __cachedAt: Date.now(),
@@ -255,64 +251,69 @@ export const resolveThumbnail = async (
             });
             emitWritten();
             missCount += 1;
+            recordStat('fetched', blob.size);
             console.info('[cache] thumbnail fetched', {
                 bytes: blob.size,
                 itemId,
                 missesSoFar: missCount,
             });
-            return URL.createObjectURL(blob);
+            return { bytes: blob.size, url: URL.createObjectURL(blob) };
         } catch (err) {
-            if ((err as Error)?.name === 'AbortError') return undefined;
+            if ((err as Error)?.name === 'AbortError') return { bytes: 0, url: undefined };
             console.warn('[cache] thumbnail fetch failed', {
                 error: (err as Error)?.message ?? String(err),
                 errorName: (err as Error)?.name,
                 itemId,
             });
-            return undefined;
+            recordStat('failed');
+            return { bytes: 0, url: undefined };
         } finally {
             inFlight.delete(itemId);
         }
     })();
 
     inFlight.set(itemId, task);
-    const result = await task;
+    const result = (await task).url;
     return result ?? url;
 };
 
 /**
  * Resolve a thumbnail AND report the byte size that landed in Dexie.
  * Used by the thumbnail sweep to populate the progress chip's
- * downloaded-bytes counter. Returns `{ bytes: 0 }` on cache hit / abort /
- * fetch failure so the sweep can still increment its done counter
- * uniformly.
+ * downloaded-bytes counter. The inner resolver task now returns
+ * `{url, bytes}` directly, so we don't need the before/after Dexie
+ * round-trip the previous implementation paid per fetch — eliminating
+ * 2 IndexedDB reads per sweep item.
  */
 export const resolveThumbnailWithBytes = async (
     itemId: string,
-    size: number,
+    _size: number,
     request: ImageRequest | string,
     options?: ResolveThumbnailOptions,
 ): Promise<{ bytes: number; url: string }> => {
-    const fallbackUrl = typeof request === 'string' ? request : request.url;
+    const { credentials, headers, url } = normaliseRequest(request);
     const db = getActiveCacheDb();
-    if (!db) return { bytes: 0, url: fallbackUrl };
+    if (!db) return { bytes: 0, url };
 
-    const before = await db.thumbnails.get(itemId);
-    const resolved = await resolveThumbnail(itemId, size, request, options);
-    // A row with a Blob counts as a real cache hit (no new bytes). A
-    // FRESH negative-cache marker also counts as "no new bytes" — the
-    // resolver returned without touching the network. A STALE marker
-    // is treated like an absent row because the resolver may have just
-    // refetched and replaced it with a real blob; check the after-row
-    // byte count to find out.
-    if (before?.Blob) return { bytes: 0, url: resolved };
-    if (before && !before.Blob) {
-        const missAt = before.MissAt ?? 0;
-        if (Date.now() - missAt < MISS_TTL_MS) {
-            return { bytes: 0, url: resolved };
-        }
+    const signal = options?.signal;
+    if (signal?.aborted) return { bytes: 0, url };
+
+    // Share the in-flight task with `resolveThumbnail` — both APIs do
+    // the same work; only the return shape differs. If the task hasn't
+    // started yet (rare in the sweep, since the sweep is the only
+    // caller, but possible if BaseImage raced ahead), kick it off via
+    // resolveThumbnail and then await the same map entry. The shared
+    // task is the same one resolveThumbnail uses.
+    if (!inFlight.has(itemId)) {
+        // Pre-seed by calling resolveThumbnail; it sets inFlight before
+        // awaiting. Swallow its return — we want the {url, bytes} shape
+        // from the map entry below.
+        void resolveThumbnail(itemId, _size, { cacheKey: url, credentials, headers, url }, options);
     }
-    const after = await db.thumbnails.get(itemId);
-    return { bytes: after?.ByteSize ?? 0, url: resolved };
+    const task = inFlight.get(itemId);
+    if (!task) return { bytes: 0, url };
+    const result = await task;
+    return { bytes: result.bytes, url: result.url ?? url };
 };
 
 /**

@@ -2,11 +2,14 @@ export { CachedImage } from './cached-image';
 export type { CachedImageProps } from './cached-image';
 export { isCacheAvailable, isCacheAvailableSync } from './capability';
 export {
+    clearLastOpenError,
     closeCacheDb,
     deleteCacheDb,
     getActiveCacheDb,
+    getLastOpenError,
     LibraryCacheDb,
     openCacheDb,
+    resetCacheDb,
     setActiveCacheDb,
 } from './db';
 export { EnableCacheModal } from './enable-cache-modal';

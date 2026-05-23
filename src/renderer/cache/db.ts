@@ -97,23 +97,34 @@ export class LibraryCacheDb extends Dexie {
         // to a single `ItemId` primary key. The cache now stores one blob
         // per item at MAX_CACHE_SIZE (see images.ts) and lets the browser
         // downscale for smaller display surfaces — this cuts the sweep
-        // queue and Jellyfin-side resize cost by 5x. Dexie discards the
-        // existing thumbnails rows when the primary key changes, which is
-        // fine: it's a cache, the user can refill it.
-        this.version(4).stores({
-            albums: 'Id, [AlbumArtistId+SortName], DateLastSaved, SortName, ProductionYear, __cachedAt',
-            artists: 'Id, SortName, Name, DateLastSaved, Kind, __cachedAt',
-            favorites:
-                '[ItemId+ItemType], IsFavorite, Rating, LastPlayedDate, PlayCount, __cachedAt',
-            genres: 'Id, SortName, Name, __cachedAt',
-            lyrics: 'SongId, __cachedAt',
-            mutationQueue: 'id, status, createdAt, idempotencyKey',
-            playlists: 'Id, SortName, DateLastSaved, __cachedAt',
-            playlistSongs: '[PlaylistId+ListOrder], PlaylistId, SongId, __cachedAt',
-            songs: 'Id, [AlbumId+ParentIndexNumber+IndexNumber], AlbumArtistId, DateLastSaved, [AlbumId+IndexNumber], __cachedAt',
-            syncMeta: 'EntityType',
-            thumbnails: 'ItemId, LastUsed, ByteSize, MissAt, __cachedAt',
-        });
+        // queue and Jellyfin-side resize cost by 5x. The .upgrade()
+        // callback explicitly clears the existing thumbnails table so
+        // Dexie doesn't try to migrate compound-keyed rows into a single-
+        // keyed schema (which would either silently fail or get stuck
+        // mid-transaction, leaving `getActiveCacheDb()` permanently
+        // undefined and the dashboard reset buttons inoperable).
+        this.version(4)
+            .stores({
+                albums: 'Id, [AlbumArtistId+SortName], DateLastSaved, SortName, ProductionYear, __cachedAt',
+                artists: 'Id, SortName, Name, DateLastSaved, Kind, __cachedAt',
+                favorites:
+                    '[ItemId+ItemType], IsFavorite, Rating, LastPlayedDate, PlayCount, __cachedAt',
+                genres: 'Id, SortName, Name, __cachedAt',
+                lyrics: 'SongId, __cachedAt',
+                mutationQueue: 'id, status, createdAt, idempotencyKey',
+                playlists: 'Id, SortName, DateLastSaved, __cachedAt',
+                playlistSongs: '[PlaylistId+ListOrder], PlaylistId, SongId, __cachedAt',
+                songs: 'Id, [AlbumId+ParentIndexNumber+IndexNumber], AlbumArtistId, DateLastSaved, [AlbumId+IndexNumber], __cachedAt',
+                syncMeta: 'EntityType',
+                thumbnails: 'ItemId, LastUsed, ByteSize, MissAt, __cachedAt',
+            })
+            .upgrade(async (tx) => {
+                try {
+                    await tx.table('thumbnails').clear();
+                } catch (err) {
+                    console.warn('[cache] v4 upgrade: thumbnails.clear failed', err);
+                }
+            });
     }
 }
 const handles = new Map<Key, LibraryCacheDb>();
@@ -125,8 +136,24 @@ const keyFor = (serverId: string, userId: string): Key => `${serverId}:${userId}
 
 /**
  * Open (or reuse) the cache DB for a (serverId, userId) pair. Returns
- * undefined if IndexedDB is unavailable on this platform.
+ * undefined if IndexedDB is unavailable on this platform. Surfaces a
+ * structured error to the caller so the lifecycle can present a
+ * user-actionable "reset cache" prompt when a schema upgrade fails.
  */
+export interface CacheDbOpenError {
+    error: Error;
+    serverId: string;
+    userId: string;
+}
+
+let lastOpenError: CacheDbOpenError | undefined;
+
+export const getLastOpenError = (): CacheDbOpenError | undefined => lastOpenError;
+
+export const clearLastOpenError = (): void => {
+    lastOpenError = undefined;
+};
+
 export const openCacheDb = async (
     serverId: string,
     userId: string,
@@ -137,11 +164,53 @@ export const openCacheDb = async (
     let db = handles.get(k);
     if (!db) {
         db = new LibraryCacheDb(dbName(serverId, userId));
-        await db.open();
+        try {
+            await db.open();
+        } catch (err) {
+            console.warn('[cache] openCacheDb failed', { error: err, serverId, userId });
+            lastOpenError = { error: err as Error, serverId, userId };
+            return undefined;
+        }
         handles.set(k, db);
     }
     active = { db, key: k };
+    lastOpenError = undefined;
     return db;
+};
+
+/**
+ * Hard-reset the cache DB for a (serverId, userId) pair. Unlike
+ * `deleteCacheDb`, this can be called even when the DB handle is
+ * permanently broken (e.g. a schema upgrade failed and `active` is
+ * undefined). Closes any open handle first, then issues a raw
+ * `indexedDB.deleteDatabase` so the next openCacheDb starts fresh.
+ */
+export const resetCacheDb = async (serverId: string, userId: string): Promise<void> => {
+    const k = keyFor(serverId, userId);
+    const existing = handles.get(k);
+    if (existing) {
+        try {
+            existing.close();
+        } catch {
+            /* swallow */
+        }
+        handles.delete(k);
+    }
+    if (active?.key === k) active = undefined;
+    try {
+        await Dexie.delete(dbName(serverId, userId));
+    } catch (err) {
+        console.warn('[cache] resetCacheDb: Dexie.delete failed', err);
+        if (typeof indexedDB !== 'undefined') {
+            await new Promise<void>((resolve) => {
+                const req = indexedDB.deleteDatabase(dbName(serverId, userId));
+                req.onsuccess = () => resolve();
+                req.onerror = () => resolve();
+                req.onblocked = () => resolve();
+            });
+        }
+    }
+    lastOpenError = undefined;
 };
 
 /**

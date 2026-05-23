@@ -7,10 +7,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import {
+    clearLastOpenError,
     formatBytes as formatBytesSI,
     formatCount,
     getActiveCacheDb,
+    getLastOpenError,
     hydrate,
+    openCacheDb,
+    resetCacheDb,
     useCacheStore,
     useSmoothSweep,
 } from '/@/renderer/cache';
@@ -328,6 +332,39 @@ export const LibrarySyncSettings = () => {
         }
     }, [refreshBytesUsed, resetEntityCountsForClear, t]);
 
+    // Hard-reset path that bypasses the active-handle requirement.
+    // Triggered when the lifecycle reports a schema upgrade / open
+    // failure — in that state the normal Clear / Re-sync buttons can't
+    // do anything because they need a live db handle.
+    const openErr = getLastOpenError();
+    const handleForceReset = useCallback(async () => {
+        if (!safeConfirm('Reset and rebuild the cache database from scratch?')) return;
+        const err = getLastOpenError();
+        const serverId = err?.serverId ?? currentServer?.id;
+        const userId = err?.userId ?? currentServer?.userId;
+        if (!serverId || !userId) {
+            toast.error({ message: 'No server selected.' });
+            return;
+        }
+        try {
+            console.info('[cache] dashboard: force-reset DB', { serverId, userId });
+            await resetCacheDb(serverId, userId);
+            clearLastOpenError();
+            resetEntityCountsForClear();
+            setThumbnailCount(0);
+            setThumbnailBytes(0);
+            setSyncMeta({});
+            const reopened = await openCacheDb(serverId, userId);
+            if (reopened && currentServer) {
+                void hydrate(currentServer, 'full');
+            }
+            toast.success({ message: 'Cache database reset.' });
+        } catch (e) {
+            console.warn('[cache] dashboard: force-reset failed', { err: e });
+            toast.error({ message: (e as Error).message ?? String(e) });
+        }
+    }, [currentServer, resetEntityCountsForClear]);
+
     const handleSliderCommit = useCallback(
         (bytes: number) => {
             console.info('[cache] dashboard: storage cap set', { bytes });
@@ -362,6 +399,31 @@ export const LibrarySyncSettings = () => {
                 <Title order={3}>{t('page.setting.librarySync')}</Title>
                 <Alert color="yellow">
                     {t('page.setting.librarySyncDashboard.statusUnavailable')}
+                </Alert>
+            </Stack>
+        );
+    }
+
+    if (openErr) {
+        return (
+            <Stack gap="md">
+                <Title order={3}>{t('page.setting.librarySync')}</Title>
+                <Alert color="red" title="Cache database failed to open">
+                    <Stack gap="xs">
+                        <Text size="sm">
+                            The local cache database failed to open or upgrade. The sweep, offline
+                            reads, and the in-app reset buttons cannot work until the database is
+                            rebuilt from scratch.
+                        </Text>
+                        <Text c="dimmed" size="xs">
+                            {openErr.error.name}: {openErr.error.message}
+                        </Text>
+                        <Group>
+                            <Button color="red" onClick={handleForceReset} variant="filled">
+                                Reset cache database
+                            </Button>
+                        </Group>
+                    </Stack>
                 </Alert>
             </Stack>
         );

@@ -325,9 +325,18 @@ export const clearThumbnails = async (): Promise<void> => {
 // `images.ts` and triggers an eviction pass. Debounced to coalesce
 // burst writes (initial library hydration emits many in quick
 // succession; running eviction once per burst is plenty).
+//
+// CRITICAL: skip eviction while a thumbnails sweep is active. The
+// previous implementation ran a full index scan + count fan-out every
+// 250ms during sync, which serialized against the worker pool's writes
+// and was the dominant cause of the 20-30s synchronized stalls the
+// user surfaced via the watchdog logs. The sweep's own completion path
+// now triggers a single eviction pass at the end (see
+// `runThumbnailsSweep` in `sync/thumbnails.ts`).
 if (typeof window !== 'undefined') {
     let pendingTimer: ReturnType<typeof setTimeout> | undefined;
     const schedule = (): void => {
+        if (useCacheStore.getState().sweep?.entity === 'thumbnails') return;
         if (pendingTimer !== undefined) return;
         pendingTimer = setTimeout(() => {
             pendingTimer = undefined;

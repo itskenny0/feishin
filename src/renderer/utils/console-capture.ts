@@ -5,6 +5,14 @@
 // time and tee every call into a bounded in-memory buffer. The user opens
 // "Show logs" in Settings → Library sync to view + copy the buffer.
 
+import packageJson from '../../../package.json';
+
+// Stamped onto every entry so screenshots sent for debugging immediately
+// identify which build produced them. Falls back to the bare package
+// version when the build pipeline hasn't injected a tag-specific value.
+const BUILD_VERSION =
+    (typeof process !== 'undefined' && process.env?.VITE_BUILD_VERSION) || packageJson.version;
+
 export interface ConsoleEntry {
     args: string;
     level: ConsoleEntryLevel;
@@ -46,7 +54,7 @@ const safeStringify = (value: unknown): string => {
 
 const push = (level: ConsoleEntryLevel, args: unknown[]): void => {
     const entry: ConsoleEntry = {
-        args: args.map(safeStringify).join(' '),
+        args: `[v${BUILD_VERSION}] ${args.map(safeStringify).join(' ')}`,
         level,
         timestamp: Date.now(),
     };
