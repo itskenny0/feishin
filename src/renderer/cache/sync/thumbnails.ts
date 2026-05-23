@@ -98,17 +98,26 @@ const collectPending = async (
  * Run one thumbnail fetch through the shared resolver. The resolver
  * dedups in-flight requests, checks the existing Dexie row, and writes
  * back to the table on miss — we don't have to do any of that here.
+ *
+ * `existingKeys` is a pre-computed set of `${itemId}:${size}` strings
+ * built ONCE at sweep start. Without it, each of the 64 workers ran
+ * its own `db.thumbnails.get()` against IndexedDB just to discover a
+ * row already existed; the user reported 2.6 items/sec on re-syncs
+ * because every cached item paid that Dexie round-trip. Bypassing the
+ * lookup makes already-cached items effectively free.
  */
 const fetchOne = async (
     pending: PendingThumbnail,
     serverId: string,
     signal: AbortSignal,
+    existingKeys: Set<string>,
 ): Promise<{ bytes: number }> => {
     if (signal.aborted) return { bytes: 0 };
-    // getImageRequest returns the URL + the Authorization header. We need
-    // the header on Capacitor / Android where there are no cookies — the
-    // bare URL path was 401-ing every fetch and producing 0 cached
-    // thumbnails. Pass the whole request through to the resolver.
+
+    // Cheap in-memory skip for already-cached items.
+    const key = `${pending.itemId}:${pending.size}`;
+    if (existingKeys.has(key)) return { bytes: 0 };
+
     const request = api.controller.getImageRequest({
         apiClientProps: { serverId },
         query: { id: pending.itemId, itemType: pending.itemType, size: pending.size },
@@ -117,17 +126,13 @@ const fetchOne = async (
     const db = getActiveCacheDb();
     if (!db) return { bytes: 0 };
 
-    // Skip if the row already exists — saves a redundant network call
-    // when the user has been browsing while the sweep is in flight.
-    const existing = await db.thumbnails.get([pending.itemId, pending.size]);
-    if (existing) return { bytes: 0 };
-
     const { bytes } = await resolveThumbnailWithBytes(
         pending.itemId,
         pending.size,
         request,
         { signal },
     );
+    if (bytes > 0) existingKeys.add(key);
     return { bytes };
 };
 
@@ -184,18 +189,53 @@ export const runThumbnailsSweep = async (
     let done = 0;
     let bytesDownloaded = 0;
 
-    actions.setSweep({
-        entity: 'thumbnails',
-        progress: {
-            bytesDownloaded: 0,
-            bytesPerSec: 0,
-            done: 0,
-            estimatedTotalBytes: undefined,
-            itemsPerSec: 0,
-            startedAt,
-            total,
-        },
-    });
+    // Pre-fetch every existing thumbnail row's [itemId, size] pair so the
+    // worker pool can skip them without a Dexie round-trip per item. On a
+    // re-sync where the cache is mostly warm this turns a 2.6 items/sec
+    // crawl into a near-instant scan.
+    const db = getActiveCacheDb();
+    const existingKeys = new Set<string>();
+    if (db) {
+        try {
+            const rows = await db.thumbnails.toArray();
+            for (const row of rows) {
+                existingKeys.add(`${row.ItemId}:${row.Size}`);
+            }
+            console.info('[cache] thumbnails sweep: prefetched existing keys', {
+                count: existingKeys.size,
+            });
+        } catch (err) {
+            console.warn('[cache] thumbnails sweep: prefetch failed', err);
+        }
+    }
+
+    // Throttle setSweep so the dashboard / sync chip don't re-render at
+    // worker speed (which was causing the main thread to choke). One
+    // update every 50ms is more than the 20fps the UI promises.
+    const SWEEP_UPDATE_MS = 50;
+    let lastUpdateAt = 0;
+    const flushProgress = (force = false) => {
+        const now = Date.now();
+        if (!force && now - lastUpdateAt < SWEEP_UPDATE_MS) return;
+        lastUpdateAt = now;
+        const elapsed = Math.max(1, (now - startedAt) / 1000);
+        const estimatedTotalBytes =
+            done > 0 ? Math.round(bytesDownloaded * (total / done)) : undefined;
+        actions.setSweep({
+            entity: 'thumbnails',
+            progress: {
+                bytesDownloaded,
+                bytesPerSec: bytesDownloaded / elapsed,
+                done,
+                estimatedTotalBytes,
+                itemsPerSec: done / elapsed,
+                startedAt,
+                total,
+            },
+        });
+    };
+
+    flushProgress(true);
 
     // Simple bounded-concurrency worker pool.
     const queue = pending.slice();
@@ -207,7 +247,7 @@ export const runThumbnailsSweep = async (
             const next = queue.shift();
             if (!next) return;
             try {
-                const { bytes } = await fetchOne(next, server.id, signal);
+                const { bytes } = await fetchOne(next, server.id, signal, existingKeys);
                 bytesDownloaded += bytes;
             } catch (err) {
                 console.warn('[cache] thumbnails sweep: fetch failed', {
@@ -216,25 +256,7 @@ export const runThumbnailsSweep = async (
                 });
             }
             done += 1;
-            const elapsed = Math.max(1, (Date.now() - startedAt) / 1000);
-            // Extrapolate the final payload size like the entity sweeps:
-            // bytesDownloaded * (total / done). The estimate only becomes
-                // accurate as `done / total` rises but it's the best we can
-                // do without a server-side total.
-            const estimatedTotalBytes =
-                done > 0 ? Math.round(bytesDownloaded * (total / done)) : undefined;
-            actions.setSweep({
-                entity: 'thumbnails',
-                progress: {
-                    bytesDownloaded,
-                    bytesPerSec: bytesDownloaded / elapsed,
-                    done,
-                    estimatedTotalBytes,
-                    itemsPerSec: done / elapsed,
-                    startedAt,
-                    total,
-                },
-            });
+            flushProgress();
         }
     };
 
@@ -244,13 +266,19 @@ export const runThumbnailsSweep = async (
 
     await Promise.all(workers);
 
+    // Make sure the final tick lands in the store even if it would
+    // have been throttled — the user should see the completed total.
+    flushProgress(true);
+
     if (signal.aborted) {
         console.warn('[cache] thumbnails sweep: aborted', { done, total });
         return;
     }
 
     console.info('[cache] thumbnails sweep: complete', {
+        bytes: bytesDownloaded,
         durationMs: Date.now() - startedAt,
         items: total,
+        skipped: existingKeys.size,
     });
 };
