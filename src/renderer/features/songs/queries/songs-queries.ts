@@ -23,6 +23,7 @@ import {
     SongDetailResponse,
     SongListQuery,
     SongListResponse,
+    SongListSort,
 } from '/@/shared/types/domain-types';
 
 // ---------------------------------------------------------------------------
@@ -110,7 +111,9 @@ export const useSongListQuery = (args: SongListHookArgs) => {
             if (rows.length === 0) return undefined;
 
             let favoriteSongIds: Set<string> | undefined;
-            if (query.favorite !== undefined) {
+            const needsFavorites =
+                query.favorite !== undefined || query.sortBy === SongListSort.FAVORITED;
+            if (needsFavorites) {
                 // `ItemType` is part of the compound primary key but not a
                 // standalone index, so the previous .where('ItemType') form
                 // threw a SchemaError that the outer try/catch swallowed.
