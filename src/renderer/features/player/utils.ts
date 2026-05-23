@@ -2,6 +2,7 @@ import { QueryClient } from '@tanstack/react-query';
 
 import { api } from '/@/renderer/api';
 import { queryKeys } from '/@/renderer/api/query-keys';
+import { writeSnapshot } from '/@/renderer/cache';
 import { albumQueries } from '/@/renderer/features/albums/api/album-api';
 import { folderQueries } from '/@/renderer/features/folders/api/folder-api';
 import { playlistsQueries } from '/@/renderer/features/playlists/api/playlists-api';
@@ -69,22 +70,26 @@ export const fetchPlaylistSongsBatch = async (args: {
     startIndex: number;
 }) => {
     const { limit, playlistId, queryClient, serverId, startIndex } = args;
+    // Distinct from the whole-playlist cache key so a streamed-batch
+    // result doesn't satisfy a later full-playlist fetch with partial
+    // data, and vice versa.
+    const queryKey = [
+        ...queryKeys.playlists.songList(serverId, playlistId),
+        'batch',
+        startIndex,
+        limit,
+    ];
     const res = await queryClient.fetchQuery({
         gcTime: 1000 * 60,
-        queryFn: ({ signal }) =>
-            api.controller.getPlaylistSongList({
+        queryFn: async ({ signal }) => {
+            const fresh = await api.controller.getPlaylistSongList({
                 apiClientProps: { serverId, signal },
                 query: { id: playlistId, limit, startIndex },
-            }),
-        // Distinct from the whole-playlist cache key so a streamed-batch
-        // result doesn't satisfy a later full-playlist fetch with partial
-        // data, and vice versa.
-        queryKey: [
-            ...queryKeys.playlists.songList(serverId, playlistId),
-            'batch',
-            startIndex,
-            limit,
-        ],
+            });
+            writeSnapshot(queryKey, fresh);
+            return fresh;
+        },
+        queryKey,
         staleTime: 1000 * 60,
     });
     return res;
