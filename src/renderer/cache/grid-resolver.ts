@@ -25,7 +25,9 @@ import {
 
 import {
     AlbumArtistListQuery,
+    AlbumArtistListSort,
     AlbumListQuery,
+    AlbumListSort,
     ArtistListQuery,
     Genre,
     GenreListQuery,
@@ -80,8 +82,9 @@ export const resolveAlbumPage = async (
     }
     if (rows.length === 0) return undefined;
 
-    const favoriteAlbumIds =
-        query.favorite !== undefined ? await readFavoriteIds(db, 'Album') : undefined;
+    const needsFavorites =
+        query.favorite !== undefined || query.sortBy === AlbumListSort.FAVORITED;
+    const favoriteAlbumIds = needsFavorites ? await readFavoriteIds(db, 'Album') : undefined;
 
     const out = filterAlbumsLocal({
         favoriteAlbumIds,
@@ -107,8 +110,11 @@ export const resolveAlbumArtistPage = async (
     const rows = await db.artists.where('Kind').equals('AlbumArtist').toArray();
     if (rows.length === 0) return undefined;
 
-    const favoriteArtistIds =
-        query.favorite !== undefined ? await readFavoriteIds(db, 'AlbumArtist') : undefined;
+    const needsFavorites =
+        query.favorite !== undefined || query.sortBy === AlbumArtistListSort.FAVORITED;
+    const favoriteArtistIds = needsFavorites
+        ? await readFavoriteIds(db, 'AlbumArtist')
+        : undefined;
 
     const out = filterAlbumArtistsLocal({
         favoriteArtistIds,

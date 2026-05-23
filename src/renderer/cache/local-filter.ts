@@ -233,7 +233,16 @@ export const filterAlbumsLocal = (args: FilterAlbumsArgs): AlbumListResponse | u
         );
     }
 
-    out = sortAlbums(out.slice(), query.sortBy);
+    if (query.sortBy === AlbumListSort.FAVORITED) {
+        if (!favoriteAlbumIds) return undefined;
+        out = out.slice().sort((a, b) => {
+            const af = favoriteAlbumIds.has(a.Id) ? 1 : 0;
+            const bf = favoriteAlbumIds.has(b.Id) ? 1 : 0;
+            return bf - af;
+        });
+    } else {
+        out = sortAlbums(out.slice(), query.sortBy);
+    }
     out = applyDirection(out, query.sortOrder);
 
     const totalRecordCount = out.length;
@@ -338,7 +347,16 @@ export const filterAlbumArtistsLocal = (
         out = out.filter((r) => r.Payload.genres?.some((g) => set.has(g.id)));
     }
 
-    out = sortArtists(out.slice(), query.sortBy);
+    if (query.sortBy === AlbumArtistListSort.FAVORITED) {
+        if (!favoriteArtistIds) return undefined;
+        out = out.slice().sort((a, b) => {
+            const af = favoriteArtistIds.has(a.Id) ? 1 : 0;
+            const bf = favoriteArtistIds.has(b.Id) ? 1 : 0;
+            return bf - af;
+        });
+    } else {
+        out = sortArtists(out.slice(), query.sortBy);
+    }
     out = applyDirection(out, query.sortOrder);
 
     const totalRecordCount = out.length;
