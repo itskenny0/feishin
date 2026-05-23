@@ -13,14 +13,7 @@ import { useSuspenseQuery } from '@tanstack/react-query';
 
 import { controller } from '/@/renderer/api/controller';
 import { queryKeys } from '/@/renderer/api/query-keys';
-import {
-    getActiveCacheDb,
-    isCacheAvailableSync,
-    markSearchDirty,
-    readSnapshot,
-    useCachedQuery,
-    writeSnapshot,
-} from '/@/renderer/cache';
+import { cachedSwr, markSearchDirty, readSnapshot, useCachedQuery } from '/@/renderer/cache';
 import { Genre, GenreListQuery, GenreListResponse } from '/@/shared/types/domain-types';
 
 interface CachedQueryHookOptions {
@@ -105,44 +98,31 @@ export const useGenreListSuspenseQuery = (args: GenreSuspenseQueryArgs) => {
         // so react-query still kicks off a background refetch.
         initialData: () => readSnapshot<GenreListResponse>(queryKey),
         initialDataUpdatedAt: 0,
-        queryFn: async (ctx) => {
-            const db = isCacheAvailableSync() ? getActiveCacheDb() : undefined;
-
-            if (db) {
-                try {
-                    const rows = await db.genres.orderBy('SortName').toArray();
-                    if (rows.length > 0) {
-                        writeSnapshot(queryKey, {
-                            items: rows.map((r) => r.Payload),
-                            startIndex: 0,
-                            totalRecordCount: rows.length,
-                        });
-                    }
-                } catch (err) {
-                    console.warn('[cache] genres fromCache failed', queryKey, err);
-                }
-            }
-
-            const fresh = (await controller.getGenreList({
-                apiClientProps: { serverId: serverId ?? '', signal: ctx.signal },
-                query,
-            })) as GenreListResponse;
-
-            if (db) {
-                try {
+        queryFn: (ctx) =>
+            cachedSwr<GenreListResponse>({
+                apply: async (db, fresh) => {
                     const items = fresh?.items ?? [];
-                    if (items.length > 0) {
-                        await db.genres.bulkPut(items.map(toCachedGenreRow));
-                        markSearchDirty('all');
-                    }
-                } catch (err) {
-                    console.warn('[cache] genres apply failed', queryKey, err);
-                }
-            }
-
-            writeSnapshot(queryKey, fresh);
-            return fresh;
-        },
+                    if (items.length === 0) return;
+                    await db.genres.bulkPut(items.map(toCachedGenreRow));
+                    markSearchDirty('all');
+                },
+                ctx,
+                fromCache: async (db) => {
+                    const rows = await db.genres.orderBy('SortName').toArray();
+                    if (rows.length === 0) return undefined;
+                    return {
+                        items: rows.map((r) => r.Payload),
+                        startIndex: 0,
+                        totalRecordCount: rows.length,
+                    };
+                },
+                queryKey,
+                remote: ({ signal }) =>
+                    controller.getGenreList({
+                        apiClientProps: { serverId: serverId ?? '', signal },
+                        query,
+                    }) as Promise<GenreListResponse>,
+            }),
         queryKey,
         staleTime: options?.staleTime,
     });

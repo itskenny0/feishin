@@ -5,14 +5,6 @@ import { generatePath, Link } from 'react-router';
 
 import styles from './album-of-the-day-card.module.css';
 
-import { api } from '/@/renderer/api';
-import {
-    getActiveCacheDb,
-    isCacheAvailableSync,
-    readSnapshot,
-    toCachedAlbumRow,
-    writeSnapshot,
-} from '/@/renderer/cache';
 import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { albumQueries } from '/@/renderer/features/albums/api/album-api';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
@@ -54,60 +46,39 @@ const localDateKey = (): string => {
     return `${y}-${m}-${dd}`;
 };
 
-const useAlbumOfTheDayCandidates = (serverId: string | undefined, dateKey: string) =>
-    useQuery({
+// The candidate pool doesn't need to refetch at midnight; the dateKey is
+// consumed by the caller for the daily seed and the next stale-while-
+// revalidate tick will refresh the RANDOM ordering anyway.
+const useAlbumOfTheDayCandidates = (serverId: string | undefined) => {
+    // Delegate to the cache-aware albumQueries.list factory so the random
+    // pool also benefits from Dexie fromCache + snapshot fallback.
+    const listQuery = useQuery({
+        ...albumQueries.list({
+            query: {
+                limit: CANDIDATE_POOL_SIZE,
+                sortBy: AlbumListSort.RANDOM,
+                sortOrder: SortOrder.DESC,
+                startIndex: 0,
+            },
+            serverId: serverId ?? '',
+        }),
         enabled: Boolean(serverId),
         gcTime: 1000 * 60 * 60 * 24,
-        placeholderData: (() =>
-            readSnapshot<Album[]>([
-                'feature-card-album-of-the-day-pool',
-                serverId ?? '',
-                dateKey,
-            ])) as never,
-        queryFn: async ({ signal }) => {
-            const key = ['feature-card-album-of-the-day-pool', serverId ?? '', dateKey] as const;
-            if (!serverId) {
-                const empty = [] as Album[];
-                writeSnapshot(key, empty);
-                return empty;
-            }
-            const res = await api.controller.getAlbumList({
-                apiClientProps: { serverId, signal },
-                query: {
-                    limit: CANDIDATE_POOL_SIZE,
-                    sortBy: AlbumListSort.RANDOM,
-                    sortOrder: SortOrder.DESC,
-                    startIndex: 0,
-                },
-            });
-            const items = (res?.items ?? []) as Album[];
-            // Write the random pool through to the Dexie albums table so
-            // subsequent visits to those album detail pages paint from
-            // cache. RANDOM is server-side so the order changes per call,
-            // but each album payload is still a valid cache row.
-            if (isCacheAvailableSync() && items.length > 0) {
-                try {
-                    const db = getActiveCacheDb();
-                    if (db) await db.albums.bulkPut(items.map(toCachedAlbumRow));
-                } catch {
-                    /* swallow */
-                }
-            }
-            // Prefer albums with covers (they look great in the big-cover
-            // layout) but fall back to the full pool if the library doesn't
-            // have any cover art — otherwise the card would stay stuck on
-            // skeleton forever for libraries without images.
-            const withImage = items.filter((a) => Boolean(a.imageId));
-            const result = withImage.length > 0 ? withImage : items;
-            writeSnapshot(key, result);
-            return result;
-        },
-        // staleTime 24h so we don't re-roll mid-day; the candidate pool is
-        // refreshed on the next calendar day either way (via the queryKey
-        // including the date string).
-        queryKey: ['feature-card-album-of-the-day-pool', serverId ?? '', dateKey] as const,
         staleTime: 1000 * 60 * 60 * 24,
     });
+
+    const items = useMemo<Album[]>(() => {
+        const all = (listQuery.data?.items ?? []) as Album[];
+        // Prefer albums with covers (they look great in the big-cover
+        // layout) but fall back to the full pool if the library doesn't
+        // have any cover art — otherwise the card would stay stuck on
+        // skeleton forever for libraries without images.
+        const withImage = all.filter((a) => Boolean(a.imageId));
+        return withImage.length > 0 ? withImage : all;
+    }, [listQuery.data]);
+
+    return { data: items, isLoading: listQuery.isLoading };
+};
 
 /**
  * Tracks the local date key and re-renders consumers when midnight crosses,
@@ -135,10 +106,7 @@ export const AlbumOfTheDayCard = () => {
     const { addToQueueByData } = usePlayer();
 
     const today = useLocalDateKey();
-    const { data: candidates, isLoading: candidatesLoading } = useAlbumOfTheDayCandidates(
-        serverId,
-        today,
-    );
+    const { data: candidates, isLoading: candidatesLoading } = useAlbumOfTheDayCandidates(serverId);
 
     const featured = useMemo<Album | null>(() => {
         if (!candidates || candidates.length === 0) return null;

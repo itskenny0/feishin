@@ -8,10 +8,10 @@ import {
     getActiveCacheDb,
     isCacheAvailableSync,
     readSnapshot,
+    snapshotSwr,
     toCachedArtistRow,
     toCachedGenreRow,
     toCachedSongRow,
-    writeSnapshot,
 } from '/@/renderer/cache';
 import {
     FeatureCardData,
@@ -132,42 +132,41 @@ const useArtistCandidates = (serverId: string | undefined) =>
         gcTime: 1000 * 60 * 60,
         placeholderData: (() =>
             readSnapshot<ArtistCandidate[]>(['feature-card-artists-v2', serverId ?? ''])) as never,
-        queryFn: async ({ signal }) => {
+        queryFn: (ctx) => {
             const key = ['feature-card-artists-v2', serverId ?? ''] as const;
-            if (!serverId) return [] as ArtistCandidate[];
-            const res = await api.controller.getAlbumArtistList({
-                apiClientProps: { serverId, signal },
-                query: {
-                    limit: CANDIDATE_FETCH_LIMIT,
-                    sortBy: AlbumArtistListSort.RANDOM,
-                    sortOrder: SortOrder.DESC,
-                    startIndex: 0,
+            return snapshotSwr<ArtistCandidate[]>({
+                ctx,
+                queryKey: key,
+                remote: async ({ signal }) => {
+                    if (!serverId) return [] as ArtistCandidate[];
+                    const res = await api.controller.getAlbumArtistList({
+                        apiClientProps: { serverId, signal },
+                        query: {
+                            limit: CANDIDATE_FETCH_LIMIT,
+                            sortBy: AlbumArtistListSort.RANDOM,
+                            sortOrder: SortOrder.DESC,
+                            startIndex: 0,
+                        },
+                    });
+                    await writeArtistsToCache(res?.items ?? [], 'AlbumArtist');
+                    const all: ArtistCandidate[] = (res?.items ?? []).map((a: AlbumArtist) => ({
+                        id: a.id,
+                        name: a.name,
+                        songCount: a.songCount ?? null,
+                    }));
+
+                    // Drop only artists with a *known* songCount < 2. Null
+                    // counts (server omits SongCount) pass through so we
+                    // never end up with an empty pool just because the
+                    // API didn't return the count.
+                    const usable = all.filter((a) => a.songCount === null || a.songCount >= 2);
+
+                    // Tiny libraries where every artist has exactly one
+                    // song still get a working card rather than the empty
+                    // state — better to show something.
+                    return usable.length > 0 ? usable : all;
                 },
             });
-            await writeArtistsToCache(res?.items ?? [], 'AlbumArtist');
-            const all: ArtistCandidate[] = (res?.items ?? []).map((a: AlbumArtist) => ({
-                id: a.id,
-                name: a.name,
-                songCount: a.songCount ?? null,
-            }));
-
-            // The user's original ask: 'single-song artists should never
-            // appear'. Take that literally — drop only artists with a
-            // *known* songCount < 2. Null counts (server omits SongCount)
-            // pass through, so we never end up with an empty pool just
-            // because the API didn't return the count.
-            //
-            // Earlier iterations of this code had a tiered cascade
-            // (>=30 → >=10 → >=5) which produced a permanently empty
-            // pool on servers that didn't populate SongCount at all.
-            const usable = all.filter((a) => a.songCount === null || a.songCount >= 2);
-
-            // Last-ditch fallback: tiny libraries where every artist has
-            // exactly one song still get a working card rather than the
-            // 'Nothing to feature yet' state — better to show something.
-            const result = usable.length > 0 ? usable : all;
-            writeSnapshot(key, result);
-            return result;
         },
         // v2 — invalidate any stale empty-result cache from the previous
         // tiered-filter version that some clients may have persisted.
@@ -192,30 +191,34 @@ const useArtistSongs = (artistId: null | string, serverId: string | undefined) =
         // the previous artist's songs lingered in the grid — visually that
         // reads as 'wrong songs for this artist'. Better to flash a brief
         // skeleton than to display inconsistent state.
-        queryFn: async ({ signal }) => {
+        queryFn: (ctx) => {
             const key = ['feature-card-artist-songs', serverId ?? '', artistId ?? ''] as const;
-            if (!artistId || !serverId) return [] as Song[];
-            // Over-fetch so dedupeSongsByTitle still produces a full grid for
-            // libraries where the same track is tagged on a single + album +
-            // compilation. 3× is enough for typical duplication levels.
-            const res = await api.controller.getSongList({
-                apiClientProps: { serverId, signal },
-                query: {
-                    albumArtistIds: [artistId],
-                    limit: SONGS_PER_CARD * 3,
-                    sortBy: SongListSort.RANDOM,
-                    sortOrder: SortOrder.DESC,
-                    startIndex: 0,
+            return snapshotSwr<Song[]>({
+                ctx,
+                queryKey: key,
+                remote: async ({ signal }) => {
+                    if (!artistId || !serverId) return [] as Song[];
+                    // Over-fetch so dedupeSongsByTitle still produces a full
+                    // grid for libraries where the same track is tagged on a
+                    // single + album + compilation. 3× is enough for typical
+                    // duplication levels.
+                    const res = await api.controller.getSongList({
+                        apiClientProps: { serverId, signal },
+                        query: {
+                            albumArtistIds: [artistId],
+                            limit: SONGS_PER_CARD * 3,
+                            sortBy: SongListSort.RANDOM,
+                            sortOrder: SortOrder.DESC,
+                            startIndex: 0,
+                        },
+                    });
+                    await writeSongsToCache((res?.items ?? []) as Song[]);
+                    return dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(
+                        0,
+                        SONGS_PER_CARD,
+                    );
                 },
             });
-            await writeSongsToCache((res?.items ?? []) as Song[]);
-            await writeSongsToCache((res?.items ?? []) as Song[]);
-            const processed = dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(
-                0,
-                SONGS_PER_CARD,
-            );
-            writeSnapshot(key, processed);
-            return processed;
         },
         queryKey: ['feature-card-artist-songs', serverId ?? '', artistId ?? ''] as const,
         staleTime: 1000 * 60 * 5,
@@ -350,27 +353,31 @@ const useGenreCandidates = (serverId: string | undefined) =>
         gcTime: 1000 * 60 * 60,
         placeholderData: (() =>
             readSnapshot<GenreCandidate[]>(['feature-card-genres', serverId ?? ''])) as never,
-        queryFn: async ({ signal }) => {
+        queryFn: (ctx) => {
             const key = ['feature-card-genres', serverId ?? ''] as const;
-            if (!serverId) return [] as GenreCandidate[];
-            const res = await api.controller.getGenreList({
-                apiClientProps: { serverId, signal },
-                query: {
-                    limit: CANDIDATE_FETCH_LIMIT,
-                    sortBy: GenreListSort.NAME,
-                    sortOrder: SortOrder.ASC,
-                    startIndex: 0,
+            return snapshotSwr<GenreCandidate[]>({
+                ctx,
+                queryKey: key,
+                remote: async ({ signal }) => {
+                    if (!serverId) return [] as GenreCandidate[];
+                    const res = await api.controller.getGenreList({
+                        apiClientProps: { serverId, signal },
+                        query: {
+                            limit: CANDIDATE_FETCH_LIMIT,
+                            sortBy: GenreListSort.NAME,
+                            sortOrder: SortOrder.ASC,
+                            startIndex: 0,
+                        },
+                    });
+                    await writeGenresToCache(res?.items ?? []);
+                    return (res?.items ?? []).map((g: Genre) => ({
+                        albumCount: g.albumCount ?? null,
+                        id: g.id,
+                        name: g.name,
+                        songCount: g.songCount ?? null,
+                    }));
                 },
             });
-            await writeGenresToCache(res?.items ?? []);
-            const processed: GenreCandidate[] = (res?.items ?? []).map((g: Genre) => ({
-                albumCount: g.albumCount ?? null,
-                id: g.id,
-                name: g.name,
-                songCount: g.songCount ?? null,
-            }));
-            writeSnapshot(key, processed);
-            return processed;
         },
         queryKey: ['feature-card-genres', serverId ?? ''] as const,
         staleTime: 1000 * 60 * 60,
@@ -395,23 +402,32 @@ const useGenreSongs = (
         // rotation fires, we want the grid to clear immediately so the
         // title and songs are never out of sync. Brief skeleton flash is
         // acceptable; lingering wrong-genre songs under a new title is not.
-        queryFn: async ({ signal }) => {
+        queryFn: (ctx) => {
             const key = ['feature-card-genre-songs', serverId ?? '', genreId ?? ''] as const;
-            if (!genreId || !serverId) return [] as Song[];
-            // Jellyfin uses genre id; navidrome/subsonic use genre name. Pass the
-            // form that matches the server (mirrors the shuffle-all modal logic).
-            const genreParam = serverType === 'jellyfin' ? genreId : genreName;
-            const res = await api.controller.getRandomSongList({
-                apiClientProps: { serverId, signal },
-                query: { genre: genreParam, limit: SONGS_PER_CARD * 3, played: Played.All },
+            return snapshotSwr<Song[]>({
+                ctx,
+                queryKey: key,
+                remote: async ({ signal }) => {
+                    if (!genreId || !serverId) return [] as Song[];
+                    // Jellyfin uses genre id; navidrome/subsonic use genre
+                    // name. Pass the form that matches the server (mirrors
+                    // the shuffle-all modal logic).
+                    const genreParam = serverType === 'jellyfin' ? genreId : genreName;
+                    const res = await api.controller.getRandomSongList({
+                        apiClientProps: { serverId, signal },
+                        query: {
+                            genre: genreParam,
+                            limit: SONGS_PER_CARD * 3,
+                            played: Played.All,
+                        },
+                    });
+                    await writeSongsToCache((res?.items ?? []) as Song[]);
+                    return dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(
+                        0,
+                        SONGS_PER_CARD,
+                    );
+                },
             });
-            await writeSongsToCache((res?.items ?? []) as Song[]);
-            const processed = dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(
-                0,
-                SONGS_PER_CARD,
-            );
-            writeSnapshot(key, processed);
-            return processed;
         },
         queryKey: ['feature-card-genre-songs', serverId ?? '', genreId ?? ''] as const,
         staleTime: 1000 * 60 * 5,
@@ -473,25 +489,29 @@ const useRecentlyPlayedSongs = (serverId: string | undefined) =>
         enabled: Boolean(serverId),
         placeholderData: (() =>
             readSnapshot<Song[]>(['feature-card-recently-played', serverId ?? ''])) as never,
-        queryFn: async ({ signal }) => {
+        queryFn: (ctx) => {
             const key = ['feature-card-recently-played', serverId ?? ''] as const;
-            if (!serverId) return [] as Song[];
-            const res = await api.controller.getSongList({
-                apiClientProps: { serverId, signal },
-                query: {
-                    limit: SONGS_PER_CARD * 3,
-                    sortBy: SongListSort.RECENTLY_PLAYED,
-                    sortOrder: SortOrder.DESC,
-                    startIndex: 0,
+            return snapshotSwr<Song[]>({
+                ctx,
+                queryKey: key,
+                remote: async ({ signal }) => {
+                    if (!serverId) return [] as Song[];
+                    const res = await api.controller.getSongList({
+                        apiClientProps: { serverId, signal },
+                        query: {
+                            limit: SONGS_PER_CARD * 3,
+                            sortBy: SongListSort.RECENTLY_PLAYED,
+                            sortOrder: SortOrder.DESC,
+                            startIndex: 0,
+                        },
+                    });
+                    await writeSongsToCache((res?.items ?? []) as Song[]);
+                    return dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(
+                        0,
+                        SONGS_PER_CARD,
+                    );
                 },
             });
-            await writeSongsToCache((res?.items ?? []) as Song[]);
-            const processed = dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(
-                0,
-                SONGS_PER_CARD,
-            );
-            writeSnapshot(key, processed);
-            return processed;
         },
         queryKey: ['feature-card-recently-played', serverId ?? ''] as const,
         staleTime: 1000 * 60 * 2,
@@ -521,25 +541,29 @@ const useTopPlayedSongs = (serverId: string | undefined) =>
         enabled: Boolean(serverId),
         placeholderData: (() =>
             readSnapshot<Song[]>(['feature-card-top-played', serverId ?? ''])) as never,
-        queryFn: async ({ signal }) => {
+        queryFn: (ctx) => {
             const key = ['feature-card-top-played', serverId ?? ''] as const;
-            if (!serverId) return [] as Song[];
-            const res = await api.controller.getSongList({
-                apiClientProps: { serverId, signal },
-                query: {
-                    limit: SONGS_PER_CARD * 3,
-                    sortBy: SongListSort.PLAY_COUNT,
-                    sortOrder: SortOrder.DESC,
-                    startIndex: 0,
+            return snapshotSwr<Song[]>({
+                ctx,
+                queryKey: key,
+                remote: async ({ signal }) => {
+                    if (!serverId) return [] as Song[];
+                    const res = await api.controller.getSongList({
+                        apiClientProps: { serverId, signal },
+                        query: {
+                            limit: SONGS_PER_CARD * 3,
+                            sortBy: SongListSort.PLAY_COUNT,
+                            sortOrder: SortOrder.DESC,
+                            startIndex: 0,
+                        },
+                    });
+                    await writeSongsToCache((res?.items ?? []) as Song[]);
+                    return dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(
+                        0,
+                        SONGS_PER_CARD,
+                    );
                 },
             });
-            await writeSongsToCache((res?.items ?? []) as Song[]);
-            const processed = dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(
-                0,
-                SONGS_PER_CARD,
-            );
-            writeSnapshot(key, processed);
-            return processed;
         },
         queryKey: ['feature-card-top-played', serverId ?? ''] as const,
         staleTime: 1000 * 60 * 10,
@@ -569,26 +593,30 @@ const useFavoritesSongs = (serverId: string | undefined) =>
         enabled: Boolean(serverId),
         placeholderData: (() =>
             readSnapshot<Song[]>(['feature-card-favorites', serverId ?? ''])) as never,
-        queryFn: async ({ signal }) => {
+        queryFn: (ctx) => {
             const key = ['feature-card-favorites', serverId ?? ''] as const;
-            if (!serverId) return [] as Song[];
-            const res = await api.controller.getSongList({
-                apiClientProps: { serverId, signal },
-                query: {
-                    favorite: true,
-                    limit: SONGS_PER_CARD * 3,
-                    sortBy: SongListSort.RANDOM,
-                    sortOrder: SortOrder.DESC,
-                    startIndex: 0,
+            return snapshotSwr<Song[]>({
+                ctx,
+                queryKey: key,
+                remote: async ({ signal }) => {
+                    if (!serverId) return [] as Song[];
+                    const res = await api.controller.getSongList({
+                        apiClientProps: { serverId, signal },
+                        query: {
+                            favorite: true,
+                            limit: SONGS_PER_CARD * 3,
+                            sortBy: SongListSort.RANDOM,
+                            sortOrder: SortOrder.DESC,
+                            startIndex: 0,
+                        },
+                    });
+                    await writeSongsToCache((res?.items ?? []) as Song[]);
+                    return dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(
+                        0,
+                        SONGS_PER_CARD,
+                    );
                 },
             });
-            await writeSongsToCache((res?.items ?? []) as Song[]);
-            const processed = dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(
-                0,
-                SONGS_PER_CARD,
-            );
-            writeSnapshot(key, processed);
-            return processed;
         },
         // staleTime 0 so reshuffle truly re-randomises rather than serving cached
         queryKey: ['feature-card-favorites', serverId ?? ''] as const,
@@ -618,13 +646,23 @@ const useUnplayedSongs = (serverId: string | undefined, reseedCounter: number) =
     useQuery({
         enabled: Boolean(serverId),
         placeholderData: keepPreviousData,
-        queryFn: async ({ signal }) => {
-            if (!serverId) return [] as Song[];
-            const res = await api.controller.getRandomSongList({
-                apiClientProps: { serverId, signal },
-                query: { limit: SONGS_PER_CARD * 3, played: Played.Never },
+        queryFn: (ctx) => {
+            const key = ['feature-card-unplayed', serverId ?? '', reseedCounter] as const;
+            return snapshotSwr<Song[]>({
+                ctx,
+                queryKey: key,
+                remote: async ({ signal }) => {
+                    if (!serverId) return [] as Song[];
+                    const res = await api.controller.getRandomSongList({
+                        apiClientProps: { serverId, signal },
+                        query: { limit: SONGS_PER_CARD * 3, played: Played.Never },
+                    });
+                    return dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(
+                        0,
+                        SONGS_PER_CARD,
+                    );
+                },
             });
-            return dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(0, SONGS_PER_CARD);
         },
         // The reseed counter is part of the queryKey so reshuffle gets a fresh
         // server-side random sample instead of the cached set.
@@ -675,29 +713,33 @@ const useForgottenFavoritesSongs = (serverId: string | undefined) =>
         enabled: Boolean(serverId),
         placeholderData: (() =>
             readSnapshot<Song[]>(['feature-card-forgotten', serverId ?? ''])) as never,
-        queryFn: async ({ signal }) => {
+        queryFn: (ctx) => {
             const key = ['feature-card-forgotten', serverId ?? ''] as const;
-            if (!serverId) return [] as Song[];
-            // Favorites sorted by least-recently-played first. Result is
-            // approximate: "favorites you haven't touched in a while" without
-            // needing an absolute date filter.
-            const res = await api.controller.getSongList({
-                apiClientProps: { serverId, signal },
-                query: {
-                    favorite: true,
-                    limit: SONGS_PER_CARD * 3,
-                    sortBy: SongListSort.RECENTLY_PLAYED,
-                    sortOrder: SortOrder.ASC,
-                    startIndex: 0,
+            return snapshotSwr<Song[]>({
+                ctx,
+                queryKey: key,
+                remote: async ({ signal }) => {
+                    if (!serverId) return [] as Song[];
+                    // Favorites sorted by least-recently-played first.
+                    // Result is approximate: "favorites you haven't touched
+                    // in a while" without needing an absolute date filter.
+                    const res = await api.controller.getSongList({
+                        apiClientProps: { serverId, signal },
+                        query: {
+                            favorite: true,
+                            limit: SONGS_PER_CARD * 3,
+                            sortBy: SongListSort.RECENTLY_PLAYED,
+                            sortOrder: SortOrder.ASC,
+                            startIndex: 0,
+                        },
+                    });
+                    await writeSongsToCache((res?.items ?? []) as Song[]);
+                    return dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(
+                        0,
+                        SONGS_PER_CARD,
+                    );
                 },
             });
-            await writeSongsToCache((res?.items ?? []) as Song[]);
-            const processed = dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(
-                0,
-                SONGS_PER_CARD,
-            );
-            writeSnapshot(key, processed);
-            return processed;
         },
         queryKey: ['feature-card-forgotten', serverId ?? ''] as const,
         staleTime: 1000 * 60 * 30,
@@ -735,25 +777,29 @@ const useTimeMachineSongs = (year: null | number, serverId: string | undefined) 
         // multiple times in succession. The 2-tier `shown` state below
         // hides those transitions from the user; React-Query keeping
         // stale data here would just confuse the dispatch path.
-        queryFn: async ({ signal }) => {
+        queryFn: (ctx) => {
             const key = ['feature-card-time-machine', serverId ?? '', year ?? 0] as const;
-            if (!year || !serverId) return [] as Song[];
-            const res = await api.controller.getRandomSongList({
-                apiClientProps: { serverId, signal },
-                query: {
-                    limit: SONGS_PER_CARD * 3,
-                    maxYear: year,
-                    minYear: year,
-                    played: Played.All,
+            return snapshotSwr<Song[]>({
+                ctx,
+                queryKey: key,
+                remote: async ({ signal }) => {
+                    if (!year || !serverId) return [] as Song[];
+                    const res = await api.controller.getRandomSongList({
+                        apiClientProps: { serverId, signal },
+                        query: {
+                            limit: SONGS_PER_CARD * 3,
+                            maxYear: year,
+                            minYear: year,
+                            played: Played.All,
+                        },
+                    });
+                    await writeSongsToCache((res?.items ?? []) as Song[]);
+                    return dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(
+                        0,
+                        SONGS_PER_CARD,
+                    );
                 },
             });
-            await writeSongsToCache((res?.items ?? []) as Song[]);
-            const processed = dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(
-                0,
-                SONGS_PER_CARD,
-            );
-            writeSnapshot(key, processed);
-            return processed;
         },
         queryKey: ['feature-card-time-machine', serverId ?? '', year ?? 0] as const,
         staleTime: 1000 * 60 * 5,
@@ -866,25 +912,29 @@ const useDecadeSongs = (decadeStart: null | number, serverId: string | undefined
                 decadeStart ?? -1,
             ])) as never,
         // See useTimeMachineSongs — no keepPreviousData here either.
-        queryFn: async ({ signal }) => {
+        queryFn: (ctx) => {
             const key = ['feature-card-decade', serverId ?? '', decadeStart ?? -1] as const;
-            if (decadeStart === null || !serverId) return [] as Song[];
-            const res = await api.controller.getRandomSongList({
-                apiClientProps: { serverId, signal },
-                query: {
-                    limit: SONGS_PER_CARD * 3,
-                    maxYear: decadeStart + 9,
-                    minYear: decadeStart,
-                    played: Played.All,
+            return snapshotSwr<Song[]>({
+                ctx,
+                queryKey: key,
+                remote: async ({ signal }) => {
+                    if (decadeStart === null || !serverId) return [] as Song[];
+                    const res = await api.controller.getRandomSongList({
+                        apiClientProps: { serverId, signal },
+                        query: {
+                            limit: SONGS_PER_CARD * 3,
+                            maxYear: decadeStart + 9,
+                            minYear: decadeStart,
+                            played: Played.All,
+                        },
+                    });
+                    await writeSongsToCache((res?.items ?? []) as Song[]);
+                    return dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(
+                        0,
+                        SONGS_PER_CARD,
+                    );
                 },
             });
-            await writeSongsToCache((res?.items ?? []) as Song[]);
-            const processed = dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(
-                0,
-                SONGS_PER_CARD,
-            );
-            writeSnapshot(key, processed);
-            return processed;
         },
         queryKey: ['feature-card-decade', serverId ?? '', decadeStart ?? -1] as const,
         staleTime: 1000 * 60 * 5,

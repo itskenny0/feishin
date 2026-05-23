@@ -53,15 +53,34 @@ export const AlbumInfiniteSingleFeatureCarousel = ({
             initialPageParam: '0',
             queryFn: async ({ pageParam, signal }) => {
                 const startIndex = Number(pageParam);
-                const fresh = await api.controller.getAlbumList({
-                    apiClientProps: { serverId, signal },
-                    query: {
-                        limit: itemLimit,
-                        sortBy: AlbumListSort.RANDOM,
-                        sortOrder: SortOrder.DESC,
-                        startIndex,
-                    },
-                });
+                // Suspense-safe network call: on offline failure return the
+                // previously-cached page (or an empty page) instead of
+                // throwing out of the queryFn so Suspense never gets stuck.
+                let fresh: AlbumListResponse;
+                try {
+                    fresh = await api.controller.getAlbumList({
+                        apiClientProps: { serverId, signal },
+                        query: {
+                            limit: itemLimit,
+                            sortBy: AlbumListSort.RANDOM,
+                            sortOrder: SortOrder.DESC,
+                            startIndex,
+                        },
+                    });
+                } catch (err) {
+                    if ((err as Error)?.name === 'AbortError') throw err;
+                    console.info(
+                        '[cache] album-infinite-single carousel cold network failed; using snapshot',
+                        effectiveQueryKey,
+                        { error: (err as Error)?.message },
+                    );
+                    const existing =
+                        readSnapshot<InfiniteData<AlbumListResponse, string>>(effectiveQueryKey);
+                    const cachedPage = existing?.pages?.find(
+                        (_p, i) => existing.pageParams?.[i] === String(startIndex),
+                    );
+                    return cachedPage ?? { items: [], startIndex, totalRecordCount: 0 };
+                }
                 if (isCacheAvailableSync()) {
                     try {
                         const db = getActiveCacheDb();

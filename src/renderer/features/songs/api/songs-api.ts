@@ -4,7 +4,13 @@ import { api } from '/@/renderer/api';
 import { controller } from '/@/renderer/api/controller';
 import { queryKeys } from '/@/renderer/api/query-keys';
 import { getOptimizedListCount } from '/@/renderer/api/utils-list-count';
-import { cachedSwr, readSnapshot, toCachedSongRow } from '/@/renderer/cache';
+import {
+    cachedSwr,
+    filterSongsLocal,
+    readSnapshot,
+    snapshotSwr,
+    toCachedSongRow,
+} from '/@/renderer/cache';
 import { QueryHookArgs } from '/@/renderer/lib/react-query';
 import {
     AlbumRadioQuery,
@@ -102,6 +108,45 @@ export const songsQueries = {
                         }
                     },
                     ctx,
+                    fromCache: async (db) => {
+                        // Mirror the album-list cache reader: pick the cheapest
+                        // Dexie index available, then hand the row set to the
+                        // shared local-filter pipeline so search/sort/pagination
+                        // matches what the network would return.
+                        let rows;
+                        if (args.query?.albumIds && args.query.albumIds.length === 1) {
+                            rows = await db.songs
+                                .where('AlbumId')
+                                .equals(args.query.albumIds[0])
+                                .toArray();
+                        } else if (
+                            args.query?.albumArtistIds &&
+                            args.query.albumArtistIds.length === 1
+                        ) {
+                            rows = await db.songs
+                                .where('AlbumArtistId')
+                                .equals(args.query.albumArtistIds[0])
+                                .toArray();
+                        } else {
+                            rows = await db.songs.toArray();
+                        }
+                        if (rows.length === 0) return undefined;
+                        let favoriteSongIds: Set<string> | undefined;
+                        if (args.query?.favorite !== undefined) {
+                            const favs = await db.favorites
+                                .filter((r) => r.ItemType === 'Song')
+                                .toArray();
+                            favoriteSongIds = new Set(
+                                favs.filter((f) => f.IsFavorite).map((f) => f.ItemId),
+                            );
+                        }
+                        const out = filterSongsLocal({
+                            favoriteSongIds,
+                            query: args.query,
+                            rows,
+                        });
+                        return out as SongListResponse | undefined;
+                    },
                     queryKey: key,
                     remote: ({ signal }) =>
                         controller.getSongList({
@@ -166,29 +211,47 @@ export const songsQueries = {
         });
     },
     random: (args: QueryHookArgs<RandomSongListQuery>) => {
+        const key = queryKeys.songs.randomSongList(args.serverId, args.query);
         return queryOptions({
-            queryFn: ({ signal }) => {
-                return api.controller.getRandomSongList({
-                    apiClientProps: { serverId: args.serverId, signal },
-                    query: args.query,
-                });
-            },
-            queryKey: queryKeys.songs.randomSongList(args.serverId, args.query),
+            initialData: (() => readSnapshot(key)) as never,
+            initialDataUpdatedAt: 0,
+            queryFn: (ctx) =>
+                // Random results are server-side state with no faithful
+                // Dexie reproduction. snapshotSwr preserves the previous
+                // pick offline and prevents the queryFn from throwing on
+                // network failure.
+                snapshotSwr<SongListResponse>({
+                    ctx,
+                    queryKey: key,
+                    remote: ({ signal }) =>
+                        api.controller.getRandomSongList({
+                            apiClientProps: { serverId: args.serverId, signal },
+                            query: args.query,
+                        }) as Promise<SongListResponse>,
+                }),
+            queryKey: key,
             ...args.options,
         });
     },
     similar: (args: QueryHookArgs<SimilarSongsQuery>) => {
+        const key = queryKeys.songs.similar(args.serverId, args.query);
         return queryOptions({
-            queryFn: ({ signal }) => {
-                return api.controller.getSimilarSongs({
-                    apiClientProps: { serverId: args.serverId, signal },
-                    query: {
-                        count: args.query.count ?? 50,
-                        songId: args.query.songId,
-                    },
-                });
-            },
-            queryKey: queryKeys.songs.similar(args.serverId, args.query),
+            initialData: (() => readSnapshot(key)) as never,
+            initialDataUpdatedAt: 0,
+            queryFn: (ctx) =>
+                snapshotSwr<Song[]>({
+                    ctx,
+                    queryKey: key,
+                    remote: ({ signal }) =>
+                        api.controller.getSimilarSongs({
+                            apiClientProps: { serverId: args.serverId, signal },
+                            query: {
+                                count: args.query.count ?? 50,
+                                songId: args.query.songId,
+                            },
+                        }) as Promise<Song[]>,
+                }),
+            queryKey: key,
             ...args.options,
         });
     },

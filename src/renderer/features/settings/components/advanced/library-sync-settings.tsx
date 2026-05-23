@@ -27,6 +27,7 @@ import {
     isQuotaCapped,
 } from '/@/renderer/cache/eviction';
 import { cancelHydration } from '/@/renderer/cache/sync';
+import { CacheStatsWidget } from '/@/renderer/features/settings/components/advanced/cache-stats-widget';
 import { ConsoleLogViewer } from '/@/renderer/features/settings/components/advanced/console-log-viewer';
 import { useAuthStore, useSettingsStore } from '/@/renderer/store';
 import { toast } from '/@/shared/components/toast/toast';
@@ -141,8 +142,16 @@ export const LibrarySyncSettings = () => {
     const quotaCapped = useMemo(() => isQuotaCapped(), []);
 
     // Refresh thumbnail count + total byte size + per-entity sync metadata
-    // on mount, whenever the sweep state changes, and on server switch.
-    // Reads everything in one batch so the dashboard is consistent.
+    // on mount, on server switch, on sweep ENTITY transitions, and on a
+    // 2-second interval while a sweep is active. Previously the effect
+    // depended on the full `sweep` reference which mutated every 50ms
+    // (the per-page setSweep throttle); each effect run started an
+    // async Dexie read and was immediately cancelled by the next render,
+    // so the dashboard's Storage used / Thumbnails bytes display never
+    // moved past the post-clear zero state. Now the effect's identity
+    // only changes on coarse transitions and a self-managed interval
+    // drives the in-sweep refresh cadence.
+    const sweepEntity = sweep?.entity;
     useEffect(() => {
         let cancelled = false;
         const db = getActiveCacheDb();
@@ -154,14 +163,8 @@ export const LibrarySyncSettings = () => {
                 cancelled = true;
             };
         }
-        void (async () => {
+        const refresh = async (): Promise<void> => {
             try {
-                // Use cachedBytes() (which reads the ByteSize index
-                // instead of materialising every Blob). The dashboard
-                // refresh fires repeatedly during a sweep — pulling
-                // hundreds of MB of blobs out of IndexedDB on each
-                // refresh was the dominant contributor to slow
-                // thumbnail downloads.
                 const [count, bytes, metaRows] = await Promise.all([
                     db.thumbnails.count(),
                     cachedBytes(),
@@ -186,11 +189,14 @@ export const LibrarySyncSettings = () => {
                     setThumbnailBytes(undefined);
                 }
             }
-        })();
+        };
+        void refresh();
+        const interval = sweepEntity ? setInterval(() => void refresh(), 2000) : undefined;
         return () => {
             cancelled = true;
+            if (interval) clearInterval(interval);
         };
-    }, [sweep, activeServer]);
+    }, [sweepEntity, activeServer]);
 
     // Resolve the effective cap (user override or platform default). Reruns
     // whenever the persisted cap changes so the readout updates immediately
@@ -657,6 +663,9 @@ export const LibrarySyncSettings = () => {
                     </Text>
                 </Group>
             </Stack>
+
+            {/* Historical cache hit/miss stats */}
+            <CacheStatsWidget />
 
             {/* Diagnostics + logs */}
             <Stack gap={4}>

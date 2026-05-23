@@ -10,8 +10,8 @@ import {
     getActiveCacheDb,
     isCacheAvailableSync,
     readSnapshot,
+    snapshotSwr,
     toCachedAlbumRow,
-    writeSnapshot,
 } from '/@/renderer/cache';
 import { AppRoute } from '/@/renderer/router/routes';
 import { useCurrentServer } from '/@/renderer/store';
@@ -105,36 +105,37 @@ export const NewSinceLastVisit = () => {
         enabled: Boolean(serverId),
         placeholderData: (() =>
             readSnapshot<Album[]>(['home-new-since-last-visit', serverId])) as never,
-        queryFn: async ({ signal }) => {
+        queryFn: (ctx) => {
             const key = ['home-new-since-last-visit', serverId] as const;
-            if (!serverId) {
-                const empty = [] as Album[];
-                writeSnapshot(key, empty);
-                return empty;
-            }
-            const res = await api.controller.getAlbumList({
-                apiClientProps: { serverId, signal },
-                query: {
-                    limit: PROBE_LIMIT,
-                    sortBy: AlbumListSort.RECENTLY_ADDED,
-                    sortOrder: SortOrder.DESC,
-                    startIndex: 0,
+            return snapshotSwr<Album[]>({
+                ctx,
+                queryKey: key,
+                remote: async ({ signal }) => {
+                    if (!serverId) return [] as Album[];
+                    const res = await api.controller.getAlbumList({
+                        apiClientProps: { serverId, signal },
+                        query: {
+                            limit: PROBE_LIMIT,
+                            sortBy: AlbumListSort.RECENTLY_ADDED,
+                            sortOrder: SortOrder.DESC,
+                            startIndex: 0,
+                        },
+                    });
+                    const result = (res?.items ?? []) as Album[];
+                    // Write-through into Dexie albums so subsequent grid/list
+                    // mounts hit cache even if the recently-added probe was
+                    // the first contact with these rows.
+                    if (isCacheAvailableSync() && result.length > 0) {
+                        try {
+                            const db = getActiveCacheDb();
+                            if (db) await db.albums.bulkPut(result.map(toCachedAlbumRow));
+                        } catch {
+                            /* swallow */
+                        }
+                    }
+                    return result;
                 },
             });
-            const result = (res?.items ?? []) as Album[];
-            // Write-through into Dexie albums so subsequent grid/list mounts
-            // hit cache even if the recently-added probe was the first
-            // contact with these rows.
-            if (isCacheAvailableSync() && result.length > 0) {
-                try {
-                    const db = getActiveCacheDb();
-                    if (db) await db.albums.bulkPut(result.map(toCachedAlbumRow));
-                } catch {
-                    /* swallow */
-                }
-            }
-            writeSnapshot(key, result);
-            return result;
         },
         queryKey: ['home-new-since-last-visit', serverId] as const,
         staleTime: 1000 * 60 * 5,

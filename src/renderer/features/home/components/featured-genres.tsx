@@ -12,8 +12,8 @@ import {
     getActiveCacheDb,
     isCacheAvailableSync,
     readSnapshot,
+    snapshotSwr,
     toCachedAlbumRow,
-    writeSnapshot,
 } from '/@/renderer/cache';
 import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { useFuzzyGenreIds } from '/@/renderer/features/genres/api/genres-api';
@@ -173,31 +173,36 @@ const useGenreCoverAlbum = (genreId: string, serverId: string) =>
         gcTime: 1000 * 60 * 60 * 24,
         placeholderData: (() =>
             readSnapshot<Album | null>(['featured-genre-cover', serverId, genreId])) as never,
-        queryFn: async ({ signal }) => {
+        queryFn: (ctx) => {
             const key = ['featured-genre-cover', serverId, genreId] as const;
-            const res = await api.controller.getAlbumList({
-                apiClientProps: { serverId, signal },
-                query: {
-                    genreIds: [genreId],
-                    limit: 1,
-                    sortBy: AlbumListSort.RANDOM,
-                    sortOrder: SortOrder.DESC,
-                    startIndex: 0,
+            return snapshotSwr<Album | null>({
+                ctx,
+                queryKey: key,
+                remote: async ({ signal }) => {
+                    const res = await api.controller.getAlbumList({
+                        apiClientProps: { serverId, signal },
+                        query: {
+                            genreIds: [genreId],
+                            limit: 1,
+                            sortBy: AlbumListSort.RANDOM,
+                            sortOrder: SortOrder.DESC,
+                            startIndex: 0,
+                        },
+                    });
+                    const result = res?.items?.[0] ?? null;
+                    // Write-through to Dexie albums table so clicking
+                    // through to the album detail page paints from cache.
+                    if (result && isCacheAvailableSync()) {
+                        try {
+                            const db = getActiveCacheDb();
+                            if (db) await db.albums.put(toCachedAlbumRow(result));
+                        } catch {
+                            /* swallow */
+                        }
+                    }
+                    return result;
                 },
             });
-            const result = res?.items?.[0] ?? null;
-            // Write-through to Dexie albums table so clicking through to
-            // the album detail page paints from cache.
-            if (result && isCacheAvailableSync()) {
-                try {
-                    const db = getActiveCacheDb();
-                    if (db) await db.albums.put(toCachedAlbumRow(result));
-                } catch {
-                    /* swallow */
-                }
-            }
-            writeSnapshot(key, result);
-            return result;
         },
         queryKey: ['featured-genre-cover', serverId, genreId] as const,
         // 24h — covers are functionally static and re-fetching costs an
@@ -221,26 +226,35 @@ const GenrePlayButton = ({ genre }: { genre: Genre }) => {
         // getSongList accepts genreIds (plural array); getRandomSongList
         // only takes a single genre string, which would defeat the fuzzy
         // expansion. Sort RANDOM + a generous limit gives a comparable
-        // shuffled set.
-        const data = await queryClient.fetchQuery({
-            gcTime: 0,
-            queryFn: () => {
-                return api.controller.getSongList({
-                    apiClientProps: { serverId },
-                    query: {
-                        genreIds: fuzzyIds,
-                        limit: 100,
-                        sortBy: SongListSort.RANDOM,
-                        sortOrder: SortOrder.DESC,
-                        startIndex: 0,
-                    },
-                });
-            },
-            queryKey: queryKeys.player.fetch(),
-            staleTime: 0,
-        });
+        // shuffled set. Wrap in try/catch so an offline tap doesn't throw
+        // out of the click handler — the queue just stays put.
+        try {
+            const data = await queryClient.fetchQuery({
+                gcTime: 0,
+                queryFn: (ctx) =>
+                    snapshotSwr({
+                        ctx,
+                        queryKey: queryKeys.player.fetch(),
+                        remote: ({ signal }) =>
+                            api.controller.getSongList({
+                                apiClientProps: { serverId, signal },
+                                query: {
+                                    genreIds: fuzzyIds,
+                                    limit: 100,
+                                    sortBy: SongListSort.RANDOM,
+                                    sortOrder: SortOrder.DESC,
+                                    startIndex: 0,
+                                },
+                            }),
+                    }),
+                queryKey: queryKeys.player.fetch(),
+                staleTime: 0,
+            });
 
-        player.addToQueueByData(data?.items || [], Play.NOW);
+            player.addToQueueByData(data?.items || [], Play.NOW);
+        } catch (err) {
+            console.warn('[featured-genres] play failed', err);
+        }
     }, [player, queryClient, serverId, fuzzyIds]);
 
     return (

@@ -3,8 +3,9 @@ import { useTranslation } from 'react-i18next';
 
 import styles from './feeling-lucky-button.module.css';
 
-import { api } from '/@/renderer/api';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
+import { songsQueries } from '/@/renderer/features/songs/api/songs-api';
+import { queryClient } from '/@/renderer/lib/react-query';
 import { useCurrentServer } from '/@/renderer/store';
 import { Icon } from '/@/shared/components/icon/icon';
 import { toast } from '/@/shared/components/toast/toast';
@@ -39,23 +40,28 @@ export const FeelingLuckyButton = () => {
             played: Played.All,
         };
 
-        // Kick off the tail fetch in parallel; it can resolve after we've
-        // already started playback.
-        const tailPromise = api.controller
-            .getRandomSongList({
-                apiClientProps: { serverId: server.id },
-                query: { ...baseQuery, limit: TAIL_BATCH_LIMIT },
-            })
+        // Route both batches through the cache-aware songsQueries.random
+        // factory so an offline tap is downgraded to the snapshot pool
+        // (or no-op) rather than throwing out of the click handler.
+        const tailPromise = queryClient
+            .fetchQuery(
+                songsQueries.random({
+                    query: { ...baseQuery, limit: TAIL_BATCH_LIMIT },
+                    serverId: server.id,
+                }),
+            )
             .catch((err) => {
                 console.warn('[feeling-lucky] tail fetch failed', err);
                 return null;
             });
 
         try {
-            const first = await api.controller.getRandomSongList({
-                apiClientProps: { serverId: server.id },
-                query: baseQuery,
-            });
+            const first = await queryClient.fetchQuery(
+                songsQueries.random({
+                    query: baseQuery,
+                    serverId: server.id,
+                }),
+            );
 
             const firstItems = (first?.items ?? []) as Song[];
             if (firstItems.length === 0) {
