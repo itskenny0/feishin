@@ -78,6 +78,11 @@ export const albumQueries = {
                                 /* fall through with empty songs */
                             }
                         }
+                        console.info('[cache] albums: detail cache hit', {
+                            id: args.query.id,
+                            songs: songs.length,
+                            songsSource: payload.songs?.length ? 'detail-payload' : songs.length > 0 ? 'db.songs' : 'empty',
+                        });
                         return { ...payload, songs } as AlbumDetailResponse;
                     },
                     queryKey: key,

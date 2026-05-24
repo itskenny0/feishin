@@ -301,7 +301,7 @@ export const useAlbumDetailQuery = (args: AlbumDetailQueryArgs) => {
                 fromCache: async (db) => {
                     const row = await db.albums.get(query.id);
                     if (row?.Payload !== undefined) {
-                        logCacheHitSampled('detail');
+                        console.info('[cache] albums: detail cache hit', { id: query.id, songs: (row.Payload as AlbumDetailResponse | undefined)?.songs?.length ?? 0 });
                         return row.Payload as AlbumDetailResponse;
                     }
                     return undefined;
@@ -342,7 +342,10 @@ export const useAlbumDetailSuspenseQuery = (args: AlbumDetailSuspenseQueryArgs) 
                 fromCache: async (db) => {
                     const row = await db.albums.get(query.id);
                     const payload = row?.Payload as AlbumDetailResponse | undefined;
-                    if (!payload) return undefined;
+                    if (!payload) {
+                        console.info('[cache] albums: detail-suspense miss (no db row)', { id: query.id });
+                        return undefined;
+                    }
                     // Three-tier song resolution: nested in album payload →
                     // db.songs.where('AlbumId') → snapshot. The third tier
                     // protects against the "tracklist draws then erases"
@@ -354,19 +357,23 @@ export const useAlbumDetailSuspenseQuery = (args: AlbumDetailSuspenseQueryArgs) 
                     // initialData. By falling back to the snapshot here
                     // we keep the visible state.
                     let songs = payload.songs ?? [];
+                    let songsSource = 'payload';
                     if (songs.length === 0) {
                         try {
                             const songRows = await db.songs
                                 .where('AlbumId')
                                 .equals(query.id)
                                 .toArray();
-                            songs = songRows
-                                .sort(
-                                    (a, b) =>
-                                        (a.ParentIndexNumber ?? 0) - (b.ParentIndexNumber ?? 0) ||
-                                        (a.IndexNumber ?? 0) - (b.IndexNumber ?? 0),
-                                )
-                                .map((r) => r.Payload);
+                            if (songRows.length > 0) {
+                                songs = songRows
+                                    .sort(
+                                        (a, b) =>
+                                            (a.ParentIndexNumber ?? 0) - (b.ParentIndexNumber ?? 0) ||
+                                            (a.IndexNumber ?? 0) - (b.IndexNumber ?? 0),
+                                    )
+                                    .map((r) => r.Payload);
+                                songsSource = 'db.songs';
+                            }
                         } catch {
                             /* swallow */
                         }
@@ -375,9 +382,16 @@ export const useAlbumDetailSuspenseQuery = (args: AlbumDetailSuspenseQueryArgs) 
                         const snap = readSnapshot<AlbumDetailResponse>(queryKey);
                         if (snap?.songs && snap.songs.length > 0) {
                             songs = snap.songs;
+                            songsSource = 'snapshot';
+                        } else {
+                            songsSource = 'empty';
                         }
                     }
-                    logCacheHitSampled('detail-suspense');
+                    console.info('[cache] albums: detail-suspense cache hit', {
+                        id: query.id,
+                        songs: songs.length,
+                        songsSource,
+                    });
                     return { ...payload, songs } as AlbumDetailResponse;
                 },
                 queryKey,
