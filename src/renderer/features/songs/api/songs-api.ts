@@ -228,7 +228,24 @@ export const songsQueries = {
                             const total = await db.songs.count();
                             return total > 0 ? total - favCount : 0;
                         }
-                        if (args.query.albumIds || args.query.artistIds || args.query.genreIds) {
+                        // Single-album or single-albumArtist count is cheap via Dexie
+                        // index and avoids the virtual scroll thinking there are N total
+                        // songs when only a subset belongs to this album/artist.
+                        if (args.query.albumIds?.length === 1 && !args.query.artistIds) {
+                            const count = await db.songs
+                                .where('AlbumId')
+                                .equals(args.query.albumIds[0])
+                                .count();
+                            return count > 0 ? count : undefined;
+                        }
+                        if (args.query.albumArtistIds?.length === 1 && !args.query.albumIds && !args.query.artistIds) {
+                            const count = await db.songs
+                                .where('AlbumArtistId')
+                                .equals(args.query.albumArtistIds[0])
+                                .count();
+                            return count > 0 ? count : undefined;
+                        }
+                        if (args.query.albumIds || args.query.artistIds || args.query.genreIds || args.query.albumArtistIds) {
                             return undefined;
                         }
                         const cachedCount = await db.songs.count();

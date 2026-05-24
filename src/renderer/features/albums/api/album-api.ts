@@ -202,6 +202,14 @@ export const albumQueries = {
                             const total = await db.albums.count();
                             return total > 0 ? total - favCount : 0;
                         }
+                        // Single-artist album count is cheap via Dexie index.
+                        if (args.query.artistIds?.length === 1) {
+                            const count = await db.albums
+                                .where('AlbumArtistId')
+                                .equals(args.query.artistIds[0])
+                                .count();
+                            return count > 0 ? count : undefined;
+                        }
                         if (args.query.artistIds) {
                             return undefined;
                         }
