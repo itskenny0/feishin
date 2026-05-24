@@ -392,7 +392,7 @@ const AlbumArtistMetadataTopSongsContent = ({
         onLongPress: () => handlePlay(LONG_PRESS_PLAY_BEHAVIOR[Play.LAST]),
     });
 
-    const isLoading = !topSongsQuery.isError && (topSongsQuery.isLoading || !topSongsQuery.data);
+    const isLoading = !topSongsQuery.isError && topSongsQuery.isLoading;
 
     if (!isLoading && !tableConfig) return null;
     if (!isLoading && songs.length === 0) return null;
@@ -683,8 +683,7 @@ const AlbumArtistMetadataFavoriteSongs = ({
         onLongPress: () => handlePlay(LONG_PRESS_PLAY_BEHAVIOR[Play.LAST]),
     });
 
-    const isLoading =
-        !favoriteSongsQuery.isError && (favoriteSongsQuery.isLoading || !favoriteSongsQuery.data);
+    const isLoading = !favoriteSongsQuery.isError && favoriteSongsQuery.isLoading;
 
     if (!isLoading && !tableConfig) return null;
     if (!isLoading && songs.length === 0) return null;
