@@ -30,6 +30,7 @@ import {
     markSearchDirty,
     mergePage,
     readSnapshot,
+    toCachedAlbumRow as toCachedAlbumRowBase,
     useCachedQuery,
     useCacheStore,
     writeSnapshot,
@@ -103,15 +104,7 @@ interface CachedQueryHookOptions {
 
 const nowMs = () => Date.now();
 
-const toCachedAlbumRow = (album: Album): CachedAlbum => ({
-    __cachedAt: nowMs(),
-    AlbumArtistId: album.albumArtists?.[0]?.id ?? '',
-    DateLastSaved: album.updatedAt ?? '',
-    Id: album.id,
-    Payload: album,
-    ProductionYear: album.releaseYear ?? undefined,
-    SortName: album.sortName ?? (album.name ?? '').toLowerCase(),
-});
+const toCachedAlbumRow = toCachedAlbumRowBase;
 
 const toCachedSongRow = (song: Song): CachedSong => ({
     __cachedAt: nowMs(),

@@ -174,7 +174,10 @@ export const albumQueries = {
                 cachedSwr<number>({
                     ctx,
                     fromCache: async (db) => {
-                        if (args.query.searchTerm) {
+                        if (
+                            args.query.searchTerm ||
+                            args.query.genreIds?.length
+                        ) {
                             const rows = await db.albums.toArray();
                             const result = filterAlbumsLocal({
                                 query: { ...args.query, startIndex: 0 },
@@ -184,7 +187,6 @@ export const albumQueries = {
                         }
                         if (
                             args.query.artistIds ||
-                            args.query.genreIds ||
                             args.query.favorite !== undefined
                         ) {
                             return undefined;

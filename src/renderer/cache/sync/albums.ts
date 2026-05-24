@@ -3,6 +3,7 @@ import type { CachedAlbum } from '../types';
 import type { SweepContext } from './sweep';
 
 import { runSweep } from './sweep';
+import { toCachedAlbumRow } from '../row-mappers';
 
 import { controller } from '/@/renderer/api/controller';
 import { AlbumListSort, ServerListItem, SortOrder } from '/@/shared/types/domain-types';
@@ -26,16 +27,7 @@ const fetchAlbumsPage =
             },
         });
 
-        const now = Date.now();
-        const items: CachedAlbum[] = (result?.items ?? []).map((album) => ({
-            __cachedAt: now,
-            AlbumArtistId: album.albumArtists[0]?.id ?? '',
-            DateLastSaved: album.updatedAt,
-            Id: album.id,
-            Payload: album,
-            ProductionYear: album.releaseYear ?? undefined,
-            SortName: album.sortName,
-        }));
+        const items: CachedAlbum[] = (result?.items ?? []).map(toCachedAlbumRow);
 
         return {
             items,
