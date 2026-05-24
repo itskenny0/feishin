@@ -153,20 +153,23 @@ export const searchQueries = {
                     return buildLocalAlbumArtistsResponse(localArtists);
                 }
 
-                // Network succeeded — seed the snapshot with local hits so
-                // the next mount on the same query string renders instantly.
+                // Network succeeded — seed the snapshot with local fuse hits in
+                // the background (never await) so the Fuse index build (1-2s for
+                // large libraries) doesn't block the queryFn from resolving and
+                // returning the network result to the UI immediately.
                 if (startIndex === 0) {
-                    const localArtists = await localPromise;
-                    if (localArtists.length > 0) {
-                        seedSnapshotWithLocalPage(
-                            queryKey,
-                            buildLocalAlbumArtistsResponse(localArtists),
-                        );
-                    }
-                    logSearchUiHitSampled('albumArtists', {
-                        localCount: localArtists.length,
-                        ms: Math.round(performance.now() - t0),
-                        q: searchTerm,
+                    void localPromise.then((localArtists) => {
+                        if (localArtists.length > 0) {
+                            seedSnapshotWithLocalPage(
+                                queryKey,
+                                buildLocalAlbumArtistsResponse(localArtists),
+                            );
+                        }
+                        logSearchUiHitSampled('albumArtists', {
+                            localCount: localArtists.length,
+                            ms: Math.round(performance.now() - t0),
+                            q: searchTerm,
+                        });
                     });
                 }
 
@@ -249,14 +252,15 @@ export const searchQueries = {
                 }
 
                 if (startIndex === 0) {
-                    const localAlbums = await localPromise;
-                    if (localAlbums.length > 0) {
-                        seedSnapshotWithLocalPage(queryKey, buildLocalAlbumsResponse(localAlbums));
-                    }
-                    logSearchUiHitSampled('albums', {
-                        localCount: localAlbums.length,
-                        ms: Math.round(performance.now() - t0),
-                        q: searchTerm,
+                    void localPromise.then((localAlbums) => {
+                        if (localAlbums.length > 0) {
+                            seedSnapshotWithLocalPage(queryKey, buildLocalAlbumsResponse(localAlbums));
+                        }
+                        logSearchUiHitSampled('albums', {
+                            localCount: localAlbums.length,
+                            ms: Math.round(performance.now() - t0),
+                            q: searchTerm,
+                        });
                     });
                 }
 
@@ -333,14 +337,15 @@ export const searchQueries = {
                 }
 
                 if (startIndex === 0) {
-                    const localSongs = await localPromise;
-                    if (localSongs.length > 0) {
-                        seedSnapshotWithLocalPage(queryKey, buildLocalSongsResponse(localSongs));
-                    }
-                    logSearchUiHitSampled('songs', {
-                        localCount: localSongs.length,
-                        ms: Math.round(performance.now() - t0),
-                        q: searchTerm,
+                    void localPromise.then((localSongs) => {
+                        if (localSongs.length > 0) {
+                            seedSnapshotWithLocalPage(queryKey, buildLocalSongsResponse(localSongs));
+                        }
+                        logSearchUiHitSampled('songs', {
+                            localCount: localSongs.length,
+                            ms: Math.round(performance.now() - t0),
+                            q: searchTerm,
+                        });
                     });
                 }
 
