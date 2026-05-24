@@ -294,11 +294,42 @@ export const useAlbumDetailQuery = (args: AlbumDetailQueryArgs) => {
                 ctx,
                 fromCache: async (db) => {
                     const row = await db.albums.get(query.id);
-                    if (row?.Payload !== undefined) {
-                        console.info('[cache] albums: detail cache hit', { id: query.id, songs: (row.Payload as AlbumDetailResponse | undefined)?.songs?.length ?? 0 });
-                        return row.Payload as AlbumDetailResponse;
+                    const payload = row?.Payload as AlbumDetailResponse | undefined;
+                    if (!payload) return undefined;
+                    // Mirror the three-tier song resolution from useAlbumDetailSuspenseQuery.
+                    // Without this the album sweep (which writes plain Album rows with no
+                    // songs) overwrites the Dexie payload and this fromCache returns
+                    // songs:[] — which propagates through the shared React Query key and
+                    // erases the tracklist rendered by the suspense query in the content
+                    // component, even though that query has the correct song fallbacks.
+                    let songs = payload.songs ?? [];
+                    if (songs.length === 0) {
+                        try {
+                            const songRows = await db.songs
+                                .where('AlbumId')
+                                .equals(query.id)
+                                .toArray();
+                            if (songRows.length > 0) {
+                                songs = songRows
+                                    .sort(
+                                        (a, b) =>
+                                            (a.ParentIndexNumber ?? 0) - (b.ParentIndexNumber ?? 0) ||
+                                            (a.IndexNumber ?? 0) - (b.IndexNumber ?? 0),
+                                    )
+                                    .map((r) => r.Payload);
+                            }
+                        } catch {
+                            /* swallow */
+                        }
                     }
-                    return undefined;
+                    if (songs.length === 0) {
+                        const snap = readSnapshot<AlbumDetailResponse>(queryKey);
+                        if (snap?.songs && snap.songs.length > 0) {
+                            songs = snap.songs;
+                        }
+                    }
+                    console.info('[cache] albums: detail cache hit', { id: query.id, songs: songs.length });
+                    return { ...payload, songs } as AlbumDetailResponse;
                 },
                 queryKey,
                 remote: (ctx) =>
