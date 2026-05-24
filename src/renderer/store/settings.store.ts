@@ -835,6 +835,7 @@ const LocalCacheSettingsSchema = z.object({
     // modern HTTP/2 servers. Range enforced at sweep start.
     thumbnailConcurrency: z.number().int().min(1).max(64).optional(),
     thumbnailSizes: z.array(LocalCacheThumbnailSizeSchema).optional(),
+    sweepProgressSmoothing: z.boolean().optional(),
 });
 
 /**

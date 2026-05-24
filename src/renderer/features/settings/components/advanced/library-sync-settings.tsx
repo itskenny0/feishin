@@ -112,6 +112,7 @@ export const LibrarySyncSettings = () => {
     const entities = useSettingsStore((s) => s.localCache?.entities);
     const thumbnailSizes = useSettingsStore((s) => s.localCache?.thumbnailSizes);
     const thumbnailConcurrency = useSettingsStore((s) => s.localCache?.thumbnailConcurrency);
+    const sweepProgressSmoothing = useSettingsStore((s) => s.localCache?.sweepProgressSmoothing ?? false);
 
     const [thumbnailCount, setThumbnailCount] = useState<number | undefined>(undefined);
     const [thumbnailBytes, setThumbnailBytes] = useState<number | undefined>(undefined);
@@ -638,6 +639,25 @@ export const LibrarySyncSettings = () => {
                             {t('page.setting.librarySyncDashboard.thumbnailConcurrencyHelp', {
                                 defaultValue:
                                     'Number of cover-art fetches the sweep runs in parallel. Raise it to saturate a fast LAN; lower it if the server gets unhappy.',
+                            })}
+                        </Text>
+                    </Stack>
+
+                    {/* Progress bar animation toggle */}
+                    <Stack gap={4} mt="sm">
+                        <Switch
+                            checked={sweepProgressSmoothing}
+                            label={t('page.setting.librarySyncDashboard.smoothProgressLabel', {
+                                defaultValue: 'Animate sync progress bar',
+                            })}
+                            onChange={(e) =>
+                                setLocalCache({ sweepProgressSmoothing: e.currentTarget.checked })
+                            }
+                        />
+                        <Text c="dimmed" size="xs">
+                            {t('page.setting.librarySyncDashboard.smoothProgressHelp', {
+                                defaultValue:
+                                    'Interpolates the counter and progress bar between page updates at 20 fps. Smoother visuals but uses slightly more CPU while this page is open.',
                             })}
                         </Text>
                     </Stack>

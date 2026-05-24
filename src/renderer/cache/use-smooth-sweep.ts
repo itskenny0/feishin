@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { useCacheStore } from './store';
+import { useSettingsStore } from '/@/renderer/store';
 
 export interface SmoothSweepView {
     bytesDownloaded: number;
@@ -52,11 +53,34 @@ const EMPTY_VIEW: SmoothSweepView = {
  * Returns an `EMPTY_VIEW` shape (entity === undefined) when no sweep is
  * active. Consumers can guard on `entity` to render nothing.
  */
+const sweepToView = (sweep: ReturnType<typeof useCacheStore.getState>['sweep']): SmoothSweepView => {
+    if (!sweep) return EMPTY_VIEW;
+    return {
+        bytesDownloaded: sweep.progress.bytesDownloaded,
+        bytesPerSec: sweep.progress.bytesPerSec,
+        done: sweep.progress.done,
+        entity: sweep.entity,
+        estimatedTotalBytes: sweep.progress.estimatedTotalBytes,
+        itemsPerSec: sweep.progress.itemsPerSec,
+        pageIndex: sweep.progress.pageIndex,
+        pageTotal: sweep.progress.pageTotal,
+        phase: sweep.progress.phase,
+        startedAt: sweep.progress.startedAt,
+        total: sweep.progress.total,
+    };
+};
+
 export const useSmoothSweep = (): SmoothSweepView => {
     const sweep = useCacheStore((s) => s.sweep);
+    const smoothing = useSettingsStore((s) => s.localCache.sweepProgressSmoothing ?? false);
     const [view, setView] = useState<SmoothSweepView>(EMPTY_VIEW);
 
+    // When smoothing is off, return a memoized raw view derived directly from
+    // the store — no rAF loop, no interpolation, no extra renders.
+    const rawView = useMemo(() => sweepToView(sweep), [sweep]);
+
     useEffect(() => {
+        if (!smoothing) return undefined;
         if (!sweep) {
             setView(EMPTY_VIEW);
             return undefined;
@@ -134,7 +158,8 @@ export const useSmoothSweep = (): SmoothSweepView => {
         };
         raf = requestAnimationFrame(tick);
         return () => cancelAnimationFrame(raf);
-    }, [sweep]);
+    }, [sweep, smoothing]);
 
+    if (!smoothing) return rawView;
     return view;
 };
