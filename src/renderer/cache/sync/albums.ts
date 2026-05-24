@@ -2,8 +2,8 @@ import type { LibraryCacheDb } from '../db';
 import type { CachedAlbum } from '../types';
 import type { SweepContext } from './sweep';
 
-import { runSweep } from './sweep';
 import { toCachedAlbumRow } from '../row-mappers';
+import { runSweep } from './sweep';
 
 import { controller } from '/@/renderer/api/controller';
 import { AlbumListSort, ServerListItem, SortOrder } from '/@/shared/types/domain-types';

@@ -117,9 +117,6 @@ const emitWritten = (): void => {
 };
 
 export interface ResolveThumbnailOptions {
-    // When set, the fetch is aborted when the signal fires. The cache
-    // pipeline returns `undefined` (caller falls back to the raw URL).
-    signal?: AbortSignal;
     // Internal flag used by resolveThumbnailWithBytes. When true the
     // resolver skips URL.createObjectURL so the sweep does not register
     // thousands of blob: URLs that are never revoked. Without this flag
@@ -128,6 +125,9 @@ export interface ResolveThumbnailOptions {
     // Blob), causing progressive memory growth that eventually triggered
     // frequent GC pauses and dropped throughput below 0.1 items/sec.
     _skipBlobUrl?: boolean;
+    // When set, the fetch is aborted when the signal fires. The cache
+    // pipeline returns `undefined` (caller falls back to the raw URL).
+    signal?: AbortSignal;
 }
 
 /**
@@ -411,7 +411,12 @@ export const resolveThumbnailWithBytes = async (
         // browser URL registry would hold the Blob indefinitely, causing
         // progressive heap growth during the sweep (hundreds of MB after
         // ~1k thumbnails → GC pressure → throughput collapses to <0.1/s).
-        void resolveThumbnail(itemId, _size, { cacheKey: url, credentials, headers, url }, { ...options, _skipBlobUrl: true });
+        void resolveThumbnail(
+            itemId,
+            _size,
+            { cacheKey: url, credentials, headers, url },
+            { ...options, _skipBlobUrl: true },
+        );
     }
     const task = inFlight.get(itemId);
     if (!task) return { bytes: 0, url };

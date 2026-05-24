@@ -168,8 +168,7 @@ const readAlbumsFromCache = async (
     } else {
         rows = await db.albums.toArray();
     }
-    const needsFavorites =
-        query.favorite !== undefined || query.sortBy === AlbumListSort.FAVORITED;
+    const needsFavorites = query.favorite !== undefined || query.sortBy === AlbumListSort.FAVORITED;
     const favoriteAlbumIds = needsFavorites ? await readFavoriteAlbumIds(db) : undefined;
     return filterAlbumsLocal({ favoriteAlbumIds, query, rows });
 };
@@ -312,7 +311,8 @@ export const useAlbumDetailQuery = (args: AlbumDetailQueryArgs) => {
                                 songs = songRows
                                     .sort(
                                         (a, b) =>
-                                            (a.ParentIndexNumber ?? 0) - (b.ParentIndexNumber ?? 0) ||
+                                            (a.ParentIndexNumber ?? 0) -
+                                                (b.ParentIndexNumber ?? 0) ||
                                             (a.IndexNumber ?? 0) - (b.IndexNumber ?? 0),
                                     )
                                     .map((r) => r.Payload);
@@ -327,7 +327,10 @@ export const useAlbumDetailQuery = (args: AlbumDetailQueryArgs) => {
                             songs = snap.songs;
                         }
                     }
-                    console.info('[cache] albums: detail cache hit', { id: query.id, songs: songs.length });
+                    console.info('[cache] albums: detail cache hit', {
+                        id: query.id,
+                        songs: songs.length,
+                    });
                     return { ...payload, songs } as AlbumDetailResponse;
                 },
                 queryKey,
@@ -367,7 +370,9 @@ export const useAlbumDetailSuspenseQuery = (args: AlbumDetailSuspenseQueryArgs) 
                     const row = await db.albums.get(query.id);
                     const payload = row?.Payload as AlbumDetailResponse | undefined;
                     if (!payload) {
-                        console.info('[cache] albums: detail-suspense miss (no db row)', { id: query.id });
+                        console.info('[cache] albums: detail-suspense miss (no db row)', {
+                            id: query.id,
+                        });
                         return undefined;
                     }
                     // Three-tier song resolution: nested in album payload →
@@ -392,7 +397,8 @@ export const useAlbumDetailSuspenseQuery = (args: AlbumDetailSuspenseQueryArgs) 
                                 songs = songRows
                                     .sort(
                                         (a, b) =>
-                                            (a.ParentIndexNumber ?? 0) - (b.ParentIndexNumber ?? 0) ||
+                                            (a.ParentIndexNumber ?? 0) -
+                                                (b.ParentIndexNumber ?? 0) ||
                                             (a.IndexNumber ?? 0) - (b.IndexNumber ?? 0),
                                     )
                                     .map((r) => r.Payload);
@@ -475,12 +481,18 @@ export const useAlbumListCountQuery = (args: AlbumListCountQueryArgs) => {
                 fromCache: async (db) => {
                     if (query.searchTerm || (query.genreIds?.length && !query.musicFolderId)) {
                         const rows = await db.albums.toArray();
-                        const result = filterAlbumsLocal({ query: { ...query, startIndex: 0 }, rows });
+                        const result = filterAlbumsLocal({
+                            query: { ...query, startIndex: 0 },
+                            rows,
+                        });
                         if (result !== undefined) return result.totalRecordCount ?? 0;
                     }
                     // Serve favorite-only count from Dexie so the virtual scroll
                     // doesn't collapse to 0 rows when offline (list query serves items).
-                    if (query.favorite !== undefined && isFullyUnfilteredCountQuery({ ...query, favorite: undefined })) {
+                    if (
+                        query.favorite !== undefined &&
+                        isFullyUnfilteredCountQuery({ ...query, favorite: undefined })
+                    ) {
                         const favRows = await db.favorites
                             .filter((r) => r.ItemType === 'Album')
                             .toArray();
@@ -492,7 +504,10 @@ export const useAlbumListCountQuery = (args: AlbumListCountQueryArgs) => {
                         return total > 0 ? total - favCount : 0;
                     }
                     // Single-artist count is cheap via the indexed column.
-                    if (query.artistIds?.length === 1 && isFullyUnfilteredCountQuery({ ...query, artistIds: undefined })) {
+                    if (
+                        query.artistIds?.length === 1 &&
+                        isFullyUnfilteredCountQuery({ ...query, artistIds: undefined })
+                    ) {
                         const count = await db.albums
                             .where('AlbumArtistId')
                             .equals(query.artistIds[0])

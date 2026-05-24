@@ -204,9 +204,16 @@ export const songsQueries = {
                             });
                             if (result !== undefined) return result.totalRecordCount ?? 0;
                         }
-                        if (args.query.genreIds?.length && !args.query.albumIds && !args.query.artistIds) {
+                        if (
+                            args.query.genreIds?.length &&
+                            !args.query.albumIds &&
+                            !args.query.artistIds
+                        ) {
                             const rows = await db.songs.toArray();
-                            const result = filterSongsLocal({ query: { ...args.query, startIndex: 0 }, rows });
+                            const result = filterSongsLocal({
+                                query: { ...args.query, startIndex: 0 },
+                                rows,
+                            });
                             if (result !== undefined) return result.totalRecordCount ?? 0;
                         }
                         // Serve favorite-only count from Dexie so the favorites songs
@@ -238,14 +245,23 @@ export const songsQueries = {
                                 .count();
                             return count > 0 ? count : undefined;
                         }
-                        if (args.query.albumArtistIds?.length === 1 && !args.query.albumIds && !args.query.artistIds) {
+                        if (
+                            args.query.albumArtistIds?.length === 1 &&
+                            !args.query.albumIds &&
+                            !args.query.artistIds
+                        ) {
                             const count = await db.songs
                                 .where('AlbumArtistId')
                                 .equals(args.query.albumArtistIds[0])
                                 .count();
                             return count > 0 ? count : undefined;
                         }
-                        if (args.query.albumIds || args.query.artistIds || args.query.genreIds || args.query.albumArtistIds) {
+                        if (
+                            args.query.albumIds ||
+                            args.query.artistIds ||
+                            args.query.genreIds ||
+                            args.query.albumArtistIds
+                        ) {
                             return undefined;
                         }
                         const cachedCount = await db.songs.count();

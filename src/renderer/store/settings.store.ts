@@ -830,12 +830,12 @@ const LocalCacheSettingsSchema = z.object({
     capacityBytes: z.number().optional(),
     enabled: z.boolean().optional(),
     entities: LocalCacheEntitiesSchema.optional(),
+    sweepProgressSmoothing: z.boolean().optional(),
     // Worker count for the thumbnail pre-cache sweep. Higher = faster but
     // more concurrent fetches / IndexedDB writes. 24 is the default on
     // modern HTTP/2 servers. Range enforced at sweep start.
     thumbnailConcurrency: z.number().int().min(1).max(64).optional(),
     thumbnailSizes: z.array(LocalCacheThumbnailSizeSchema).optional(),
-    sweepProgressSmoothing: z.boolean().optional(),
 });
 
 /**

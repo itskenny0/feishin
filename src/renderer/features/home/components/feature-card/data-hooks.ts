@@ -114,10 +114,7 @@ const useArtistCandidates = (serverId: string | undefined) =>
                 ctx,
                 fromCache: async (db) => {
                     if (!isCacheAvailableSync()) return undefined;
-                    const rows = await db.artists
-                        .where('Kind')
-                        .equals('AlbumArtist')
-                        .toArray();
+                    const rows = await db.artists.where('Kind').equals('AlbumArtist').toArray();
                     if (rows.length === 0) return undefined;
                     const all: ArtistCandidate[] = rows.map((r) => ({
                         id: r.Payload.id,
@@ -190,10 +187,7 @@ const useArtistSongs = (artistId: null | string, serverId: string | undefined) =
                 ctx,
                 fromCache: async (db) => {
                     if (!artistId || !isCacheAvailableSync()) return undefined;
-                    const rows = await db.songs
-                        .where('AlbumArtistId')
-                        .equals(artistId)
-                        .toArray();
+                    const rows = await db.songs.where('AlbumArtistId').equals(artistId).toArray();
                     if (rows.length === 0) return undefined;
                     const songs = dedupeSongsByTitle(rows.map((r) => r.Payload)).slice(
                         0,

@@ -81,7 +81,11 @@ export const albumQueries = {
                         console.info('[cache] albums: detail cache hit', {
                             id: args.query.id,
                             songs: songs.length,
-                            songsSource: payload.songs?.length ? 'detail-payload' : songs.length > 0 ? 'db.songs' : 'empty',
+                            songsSource: payload.songs?.length
+                                ? 'detail-payload'
+                                : songs.length > 0
+                                  ? 'db.songs'
+                                  : 'empty',
                         });
                         return { ...payload, songs } as AlbumDetailResponse;
                     },
@@ -174,10 +178,7 @@ export const albumQueries = {
                 cachedSwr<number>({
                     ctx,
                     fromCache: async (db) => {
-                        if (
-                            args.query.searchTerm ||
-                            args.query.genreIds?.length
-                        ) {
+                        if (args.query.searchTerm || args.query.genreIds?.length) {
                             const rows = await db.albums.toArray();
                             const result = filterAlbumsLocal({
                                 query: { ...args.query, startIndex: 0 },
@@ -188,10 +189,7 @@ export const albumQueries = {
                         // Serve favorite-only count from Dexie so the favorites albums
                         // list shows items offline (list query already has the rows;
                         // without a count the virtual scroll renders 0 rows).
-                        if (
-                            args.query.favorite !== undefined &&
-                            !args.query.artistIds
-                        ) {
+                        if (args.query.favorite !== undefined && !args.query.artistIds) {
                             const favRows = await db.favorites
                                 .filter((r) => r.ItemType === 'Album')
                                 .toArray();

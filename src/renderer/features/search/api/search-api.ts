@@ -254,7 +254,10 @@ export const searchQueries = {
                 if (startIndex === 0) {
                     void localPromise.then((localAlbums) => {
                         if (localAlbums.length > 0) {
-                            seedSnapshotWithLocalPage(queryKey, buildLocalAlbumsResponse(localAlbums));
+                            seedSnapshotWithLocalPage(
+                                queryKey,
+                                buildLocalAlbumsResponse(localAlbums),
+                            );
                         }
                         logSearchUiHitSampled('albums', {
                             localCount: localAlbums.length,
@@ -339,7 +342,10 @@ export const searchQueries = {
                 if (startIndex === 0) {
                     void localPromise.then((localSongs) => {
                         if (localSongs.length > 0) {
-                            seedSnapshotWithLocalPage(queryKey, buildLocalSongsResponse(localSongs));
+                            seedSnapshotWithLocalPage(
+                                queryKey,
+                                buildLocalSongsResponse(localSongs),
+                            );
                         }
                         logSearchUiHitSampled('songs', {
                             localCount: localSongs.length,

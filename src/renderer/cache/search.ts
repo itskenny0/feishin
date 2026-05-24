@@ -308,10 +308,19 @@ if (typeof window !== 'undefined') {
             // build happens during browser idle time.
             const entity = prevSweep.entity;
             let buildFn: (() => Promise<unknown>) | undefined;
-            if (entity === 'albums') { markSearchDirty('albums'); buildFn = ensureAlbumsIndex; }
-            else if (entity === 'artists') { markSearchDirty('artists'); buildFn = ensureArtistsIndex; }
-            else if (entity === 'songs') { markSearchDirty('songs'); buildFn = ensureSongsIndex; }
-            else if (entity === 'playlists') { markSearchDirty('playlists'); buildFn = ensurePlaylistsIndex; }
+            if (entity === 'albums') {
+                markSearchDirty('albums');
+                buildFn = ensureAlbumsIndex;
+            } else if (entity === 'artists') {
+                markSearchDirty('artists');
+                buildFn = ensureArtistsIndex;
+            } else if (entity === 'songs') {
+                markSearchDirty('songs');
+                buildFn = ensureSongsIndex;
+            } else if (entity === 'playlists') {
+                markSearchDirty('playlists');
+                buildFn = ensurePlaylistsIndex;
+            }
             if (buildFn) {
                 const fn = buildFn;
                 if (typeof requestIdleCallback !== 'undefined') {

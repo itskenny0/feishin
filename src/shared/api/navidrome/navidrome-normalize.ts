@@ -435,6 +435,7 @@ const normalizeAlbumArtist = (
         _serverType: ServerType.NAVIDROME,
         albumCount,
         biography: item.biography || null,
+        createdAt: item.createdAt ?? null,
         duration: null,
         genres: (item.genres || []).map((genre) => ({
             _itemType: LibraryItem.GENRE,
@@ -447,7 +448,6 @@ const normalizeAlbumArtist = (
             name: genre.name,
             songCount: null,
         })),
-        createdAt: item.createdAt ?? null,
         id: item.id,
         imageId,
         imageUrl: null,

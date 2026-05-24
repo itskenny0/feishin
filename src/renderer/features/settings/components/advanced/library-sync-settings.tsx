@@ -112,7 +112,9 @@ export const LibrarySyncSettings = () => {
     const entities = useSettingsStore((s) => s.localCache?.entities);
     const thumbnailSizes = useSettingsStore((s) => s.localCache?.thumbnailSizes);
     const thumbnailConcurrency = useSettingsStore((s) => s.localCache?.thumbnailConcurrency);
-    const sweepProgressSmoothing = useSettingsStore((s) => s.localCache?.sweepProgressSmoothing ?? false);
+    const sweepProgressSmoothing = useSettingsStore(
+        (s) => s.localCache?.sweepProgressSmoothing ?? false,
+    );
 
     const [thumbnailCount, setThumbnailCount] = useState<number | undefined>(undefined);
     const [thumbnailBytes, setThumbnailBytes] = useState<number | undefined>(undefined);

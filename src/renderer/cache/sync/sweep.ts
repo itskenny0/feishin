@@ -140,10 +140,13 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
                 return;
             }
             if (isSweepNetworkError(err)) {
-                console.warn(`[cache] sweep:${entity} page failed (network) — checkpoint preserved for resume`, {
-                    error: (err as Error)?.message,
-                    startIndex,
-                });
+                console.warn(
+                    `[cache] sweep:${entity} page failed (network) — checkpoint preserved for resume`,
+                    {
+                        error: (err as Error)?.message,
+                        startIndex,
+                    },
+                );
                 return;
             }
             console.warn(`[cache] sweep:${entity} page failed`, { error: err, startIndex });

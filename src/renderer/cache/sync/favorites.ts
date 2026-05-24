@@ -1,8 +1,8 @@
 import type { CachedFavorite } from '../types';
 import type { SweepContext } from './sweep';
 
-import { isSweepNetworkError } from './sweep';
 import { useCacheStore } from '../store';
+import { isSweepNetworkError } from './sweep';
 
 import { controller } from '/@/renderer/api/controller';
 import {
@@ -128,163 +128,166 @@ export const runFavoritesSweep = async (
 
     let albums: CachedFavorite[] = [];
     try {
-    if (startPhase < 1) {
-        albums = await collectFavorites(
-            'albums',
-            signal,
-            async (startIndex, limit) => {
-                const result = await controller.getAlbumList({
-                    apiClientProps: { serverId: server.id, signal },
-                    query: {
-                        favorite: true,
-                        limit,
-                        sortBy: AlbumListSort.NAME,
-                        sortOrder: SortOrder.ASC,
-                        startIndex,
-                    },
-                });
-                return {
-                    items: result?.items ?? [],
-                    total: result?.totalRecordCount ?? 0,
-                };
-            },
-            (album, cachedAt) => ({
-                __cachedAt: cachedAt,
-                IsFavorite: true,
-                ItemId: album.id,
-                ItemType: 'Album',
-                LastPlayedDate: album.lastPlayedAt ?? undefined,
-                PlayCount: album.playCount ?? 0,
-                Rating: album.userRating ?? undefined,
-            }),
-            acc,
-        );
-        if (signal.aborted) {
-            console.info('[cache] sweep:favorites aborted');
-            return;
+        if (startPhase < 1) {
+            albums = await collectFavorites(
+                'albums',
+                signal,
+                async (startIndex, limit) => {
+                    const result = await controller.getAlbumList({
+                        apiClientProps: { serverId: server.id, signal },
+                        query: {
+                            favorite: true,
+                            limit,
+                            sortBy: AlbumListSort.NAME,
+                            sortOrder: SortOrder.ASC,
+                            startIndex,
+                        },
+                    });
+                    return {
+                        items: result?.items ?? [],
+                        total: result?.totalRecordCount ?? 0,
+                    };
+                },
+                (album, cachedAt) => ({
+                    __cachedAt: cachedAt,
+                    IsFavorite: true,
+                    ItemId: album.id,
+                    ItemType: 'Album',
+                    LastPlayedDate: album.lastPlayedAt ?? undefined,
+                    PlayCount: album.playCount ?? 0,
+                    Rating: album.userRating ?? undefined,
+                }),
+                acc,
+            );
+            if (signal.aborted) {
+                console.info('[cache] sweep:favorites aborted');
+                return;
+            }
+            await db.favorites.bulkPut(albums);
+            emitFavoritesProgress(acc);
+            await checkpoint(1);
         }
-        await db.favorites.bulkPut(albums);
-        emitFavoritesProgress(acc);
-        await checkpoint(1);
-    }
 
-    if (signal.aborted) return;
+        if (signal.aborted) return;
 
-    let artists: CachedFavorite[] = [];
-    if (startPhase < 2) {
-        artists = await collectFavorites(
-            'artists',
-            signal,
-            async (startIndex, limit) => {
-                const result = await controller.getAlbumArtistList({
-                    apiClientProps: { serverId: server.id, signal },
-                    query: {
-                        favorite: true,
-                        limit,
-                        sortBy: AlbumArtistListSort.NAME,
-                        sortOrder: SortOrder.ASC,
-                        startIndex,
-                    },
-                });
-                return {
-                    items: result?.items ?? [],
-                    total: result?.totalRecordCount ?? 0,
-                };
-            },
-            (artist, cachedAt) => ({
-                __cachedAt: cachedAt,
-                IsFavorite: true,
-                ItemId: artist.id,
-                ItemType: 'AlbumArtist',
-                LastPlayedDate: artist.lastPlayedAt ?? undefined,
-                PlayCount: artist.playCount ?? 0,
-                Rating: artist.userRating ?? undefined,
-            }),
-            acc,
-        );
-        if (signal.aborted) {
-            console.info('[cache] sweep:favorites aborted');
-            return;
+        let artists: CachedFavorite[] = [];
+        if (startPhase < 2) {
+            artists = await collectFavorites(
+                'artists',
+                signal,
+                async (startIndex, limit) => {
+                    const result = await controller.getAlbumArtistList({
+                        apiClientProps: { serverId: server.id, signal },
+                        query: {
+                            favorite: true,
+                            limit,
+                            sortBy: AlbumArtistListSort.NAME,
+                            sortOrder: SortOrder.ASC,
+                            startIndex,
+                        },
+                    });
+                    return {
+                        items: result?.items ?? [],
+                        total: result?.totalRecordCount ?? 0,
+                    };
+                },
+                (artist, cachedAt) => ({
+                    __cachedAt: cachedAt,
+                    IsFavorite: true,
+                    ItemId: artist.id,
+                    ItemType: 'AlbumArtist',
+                    LastPlayedDate: artist.lastPlayedAt ?? undefined,
+                    PlayCount: artist.playCount ?? 0,
+                    Rating: artist.userRating ?? undefined,
+                }),
+                acc,
+            );
+            if (signal.aborted) {
+                console.info('[cache] sweep:favorites aborted');
+                return;
+            }
+            await db.favorites.bulkPut(artists);
+            emitFavoritesProgress(acc);
+            await checkpoint(2);
         }
-        await db.favorites.bulkPut(artists);
-        emitFavoritesProgress(acc);
-        await checkpoint(2);
-    }
 
-    if (signal.aborted) return;
+        if (signal.aborted) return;
 
-    let songs: CachedFavorite[] = [];
-    if (startPhase < 3) {
-        songs = await collectFavorites(
-            'songs',
-            signal,
-            async (startIndex, limit) => {
-                const result = await controller.getSongList({
-                    apiClientProps: { serverId: server.id, signal },
-                    query: {
-                        favorite: true,
-                        limit,
-                        sortBy: SongListSort.NAME,
-                        sortOrder: SortOrder.ASC,
-                        startIndex,
-                    },
-                });
-                return {
-                    items: result?.items ?? [],
-                    total: result?.totalRecordCount ?? 0,
-                };
-            },
-            (song, cachedAt) => ({
-                __cachedAt: cachedAt,
-                IsFavorite: true,
-                ItemId: song.id,
-                ItemType: 'Song',
-                LastPlayedDate: song.lastPlayedAt ?? undefined,
-                PlayCount: song.playCount,
-                Rating: song.userRating ?? undefined,
-            }),
-            acc,
-        );
-        if (signal.aborted) {
-            console.info('[cache] sweep:favorites aborted');
-            return;
+        let songs: CachedFavorite[] = [];
+        if (startPhase < 3) {
+            songs = await collectFavorites(
+                'songs',
+                signal,
+                async (startIndex, limit) => {
+                    const result = await controller.getSongList({
+                        apiClientProps: { serverId: server.id, signal },
+                        query: {
+                            favorite: true,
+                            limit,
+                            sortBy: SongListSort.NAME,
+                            sortOrder: SortOrder.ASC,
+                            startIndex,
+                        },
+                    });
+                    return {
+                        items: result?.items ?? [],
+                        total: result?.totalRecordCount ?? 0,
+                    };
+                },
+                (song, cachedAt) => ({
+                    __cachedAt: cachedAt,
+                    IsFavorite: true,
+                    ItemId: song.id,
+                    ItemType: 'Song',
+                    LastPlayedDate: song.lastPlayedAt ?? undefined,
+                    PlayCount: song.playCount,
+                    Rating: song.userRating ?? undefined,
+                }),
+                acc,
+            );
+            if (signal.aborted) {
+                console.info('[cache] sweep:favorites aborted');
+                return;
+            }
+            await db.favorites.bulkPut(songs);
+            emitFavoritesProgress(acc);
+            await checkpoint(3);
         }
-        await db.favorites.bulkPut(songs);
-        emitFavoritesProgress(acc);
-        await checkpoint(3);
-    }
 
-    const totalRows = albums.length + artists.length + songs.length;
-    console.info('[cache] sweep:favorites all sub-fetches done', {
-        albums: albums.length,
-        artists: artists.length,
-        songs: songs.length,
-    });
+        const totalRows = albums.length + artists.length + songs.length;
+        console.info('[cache] sweep:favorites all sub-fetches done', {
+            albums: albums.length,
+            artists: artists.length,
+            songs: songs.length,
+        });
 
-    const completedAt = Date.now();
-    await db.syncMeta.put({
-        EntityType: 'favorites',
-        hydrationState: 'full',
-        lastFullSyncAt: completedAt,
-        lastSweepAt: completedAt,
-        nextStartIndex: undefined,
-        pausedUntil: undefined,
-        totalCount: totalRows,
-    });
+        const completedAt = Date.now();
+        await db.syncMeta.put({
+            EntityType: 'favorites',
+            hydrationState: 'full',
+            lastFullSyncAt: completedAt,
+            lastSweepAt: completedAt,
+            nextStartIndex: undefined,
+            pausedUntil: undefined,
+            totalCount: totalRows,
+        });
 
-    actions.setEntityCount('favorites', totalRows);
-    actions.setHydrationState('favorites', 'full');
-    actions.setSweep(undefined);
-    console.info('[cache] sweep:favorites done', {
-        durationMs: Date.now() - now,
-        totalRows,
-    });
+        actions.setEntityCount('favorites', totalRows);
+        actions.setHydrationState('favorites', 'full');
+        actions.setSweep(undefined);
+        console.info('[cache] sweep:favorites done', {
+            durationMs: Date.now() - now,
+            totalRows,
+        });
     } catch (err) {
         if ((err as Error)?.name === 'AbortError') return;
         if (isSweepNetworkError(err)) {
-            console.warn('[cache] sweep:favorites network error - checkpoint preserved for resume', {
-                error: (err as Error)?.message,
-            });
+            console.warn(
+                '[cache] sweep:favorites network error - checkpoint preserved for resume',
+                {
+                    error: (err as Error)?.message,
+                },
+            );
             actions.setSweep(undefined);
             return;
         }

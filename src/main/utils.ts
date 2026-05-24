@@ -27,7 +27,6 @@ export const getHostname = (): string => {
     }
 };
 
-
 export const hotkeyToElectronAccelerator = (hotkey: string) => {
     let accelerator = hotkey;
 

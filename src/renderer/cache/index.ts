@@ -22,7 +22,14 @@ export {
     resolvePlaylistPage,
     resolveSongPage,
 } from './grid-resolver';
-export { cachedSwr, mergePage, readEntityCountFallback, snapshotSwr, useCachedInfiniteQuery, useCachedQuery } from './hooks';
+export {
+    cachedSwr,
+    mergePage,
+    readEntityCountFallback,
+    snapshotSwr,
+    useCachedInfiniteQuery,
+    useCachedQuery,
+} from './hooks';
 export { HydrationBanner } from './hydration-banner';
 export { resolveThumbnail } from './images';
 export { useCacheLifecycle } from './lifecycle';

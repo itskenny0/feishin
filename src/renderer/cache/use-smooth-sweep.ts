@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { useCacheStore } from './store';
+
 import { useSettingsStore } from '/@/renderer/store';
 
 export interface SmoothSweepView {
@@ -53,7 +54,9 @@ const EMPTY_VIEW: SmoothSweepView = {
  * Returns an `EMPTY_VIEW` shape (entity === undefined) when no sweep is
  * active. Consumers can guard on `entity` to render nothing.
  */
-const sweepToView = (sweep: ReturnType<typeof useCacheStore.getState>['sweep']): SmoothSweepView => {
+const sweepToView = (
+    sweep: ReturnType<typeof useCacheStore.getState>['sweep'],
+): SmoothSweepView => {
     if (!sweep) return EMPTY_VIEW;
     return {
         bytesDownloaded: sweep.progress.bytesDownloaded,

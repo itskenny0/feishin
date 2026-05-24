@@ -98,10 +98,7 @@ export const artistsQueries = {
                     },
                     ctx,
                     fromCache: async (db) => {
-                        const rows = await db.artists
-                            .where('Kind')
-                            .equals('AlbumArtist')
-                            .toArray();
+                        const rows = await db.artists.where('Kind').equals('AlbumArtist').toArray();
                         if (rows.length === 0) return undefined;
                         const needsFavorites =
                             args.query.favorite !== undefined ||
@@ -166,7 +163,10 @@ export const artistsQueries = {
                                 return favRows.filter((f) => f.IsFavorite).length;
                             }
                             const favCount = favRows.filter((f) => f.IsFavorite).length;
-                            const total = await db.artists.where('Kind').equals('AlbumArtist').count();
+                            const total = await db.artists
+                                .where('Kind')
+                                .equals('AlbumArtist')
+                                .count();
                             return total > 0 ? total - favCount : 0;
                         }
                         if (args.query._custom) {
@@ -223,10 +223,7 @@ export const artistsQueries = {
                     },
                     ctx,
                     fromCache: async (db) => {
-                        const rows = await db.artists
-                            .where('Kind')
-                            .equals('Artist')
-                            .toArray();
+                        const rows = await db.artists.where('Kind').equals('Artist').toArray();
                         if (rows.length === 0) return undefined;
                         const needsFavorites =
                             args.query.favorite !== undefined ||
@@ -274,10 +271,7 @@ export const artistsQueries = {
                     ctx,
                     fromCache: async (db) => {
                         if (args.query.searchTerm) {
-                            const rows = await db.artists
-                                .where('Kind')
-                                .equals('Artist')
-                                .toArray();
+                            const rows = await db.artists.where('Kind').equals('Artist').toArray();
                             const result = filterArtistsLocal({
                                 query: { ...args.query, startIndex: 0 },
                                 rows,

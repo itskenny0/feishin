@@ -82,8 +82,7 @@ export const resolveAlbumPage = async (
     }
     if (rows.length === 0) return undefined;
 
-    const needsFavorites =
-        query.favorite !== undefined || query.sortBy === AlbumListSort.FAVORITED;
+    const needsFavorites = query.favorite !== undefined || query.sortBy === AlbumListSort.FAVORITED;
     const favoriteAlbumIds = needsFavorites ? await readFavoriteIds(db, 'Album') : undefined;
 
     const out = filterAlbumsLocal({
@@ -112,9 +111,7 @@ export const resolveAlbumArtistPage = async (
 
     const needsFavorites =
         query.favorite !== undefined || query.sortBy === AlbumArtistListSort.FAVORITED;
-    const favoriteArtistIds = needsFavorites
-        ? await readFavoriteIds(db, 'AlbumArtist')
-        : undefined;
+    const favoriteArtistIds = needsFavorites ? await readFavoriteIds(db, 'AlbumArtist') : undefined;
 
     const out = filterAlbumArtistsLocal({
         favoriteArtistIds,
@@ -181,9 +178,7 @@ export const resolveSongPage = async (
 
     const needsSongFavorites =
         query.favorite !== undefined || query.sortBy === SongListSort.FAVORITED;
-    const favoriteSongIds = needsSongFavorites
-        ? await readFavoriteIds(db, 'Song')
-        : undefined;
+    const favoriteSongIds = needsSongFavorites ? await readFavoriteIds(db, 'Song') : undefined;
 
     const out = filterSongsLocal({
         favoriteSongIds,

@@ -6,12 +6,7 @@ import { Link } from 'react-router';
 import styles from './new-since-last-visit.module.css';
 
 import { api } from '/@/renderer/api';
-import {
-    cachedSwr,
-    isCacheAvailableSync,
-    readSnapshot,
-    toCachedAlbumRow,
-} from '/@/renderer/cache';
+import { cachedSwr, isCacheAvailableSync, readSnapshot, toCachedAlbumRow } from '/@/renderer/cache';
 import { AppRoute } from '/@/renderer/router/routes';
 import { useCurrentServer } from '/@/renderer/store';
 import { Icon } from '/@/shared/components/icon/icon';

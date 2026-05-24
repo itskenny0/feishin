@@ -3,7 +3,13 @@ import { useMemo } from 'react';
 
 import { api } from '/@/renderer/api';
 import { queryKeys } from '/@/renderer/api/query-keys';
-import { cachedSwr, filterGenresLocal, readEntityCountFallback, readSnapshot, toCachedGenreRow } from '/@/renderer/cache';
+import {
+    cachedSwr,
+    filterGenresLocal,
+    readEntityCountFallback,
+    readSnapshot,
+    toCachedGenreRow,
+} from '/@/renderer/cache';
 import { QueryHookArgs } from '/@/renderer/lib/react-query';
 import { useCurrentServerId } from '/@/renderer/store';
 import {

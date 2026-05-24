@@ -186,10 +186,7 @@ const useGenreCoverAlbum = (genreId: string, serverId: string) =>
                 // indexed lookup instead of a full db.albums.toArray() scan.
                 fromCache: async (db) => {
                     if (!isCacheAvailableSync()) return undefined;
-                    const row = await db.albums
-                        .where('GenreIds')
-                        .equals(genreId)
-                        .first();
+                    const row = await db.albums.where('GenreIds').equals(genreId).first();
                     return row ? row.Payload : undefined;
                 },
                 queryKey: key,
