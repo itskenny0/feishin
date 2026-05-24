@@ -100,7 +100,11 @@ export const JF_FIELDS = {
         'ItemCounts',
     ],
     ALBUM_DETAIL: ['Genres', 'DateCreated', 'ChildCount', 'People', 'Tags', 'ProviderIds', 'Path'],
-    ALBUM_LIST: ['People', 'Tags', 'Studios', 'SortName', 'ProviderIds', 'ChildCount', 'Path', 'Genres'],
+    // GenreItems is required for genre IDs (not just names) to appear in the
+    // normalized album.genres[].id — used by the *GenreIds Dexie index and
+    // the filterAlbumsLocal genre filter. Genres (name-only) stays for
+    // backwards-compat with any path that reads item.Genres directly.
+    ALBUM_LIST: ['People', 'Tags', 'Studios', 'SortName', 'ProviderIds', 'ChildCount', 'Path', 'Genres', 'GenreItems'],
     FOLDER: ['Genres', 'DateCreated', 'MediaSources', 'ParentId', 'Path'],
     GENRE: ['ItemCounts'],
     PLAYLIST_DETAIL: [

@@ -171,16 +171,23 @@ export const cachedSwr = async <TData>(args: {
     let cached: TData | undefined;
     if (db && fromCache) {
         try {
-            const timeoutTicket = new Promise<undefined>((resolve) =>
-                setTimeout(resolve, FROM_CACHE_TIMEOUT_MS),
+            // Use a sentinel to distinguish a genuine timeout (sentinel wins
+            // the race) from a legitimate cache miss (fromCache returns
+            // undefined quickly). Previously both cases logged "timed out",
+            // making it impossible to tell whether the DB query was slow or
+            // just found no matching row.
+            const TIMEOUT_SENTINEL = Symbol();
+            const timeoutTicket = new Promise<typeof TIMEOUT_SENTINEL>((resolve) =>
+                setTimeout(() => resolve(TIMEOUT_SENTINEL), FROM_CACHE_TIMEOUT_MS),
             );
             const result = await Promise.race([fromCache(db), timeoutTicket]);
-            if (result !== undefined) {
-                cached = result;
-                writeSnapshot(queryKey, cached);
-            } else {
+            if (result === TIMEOUT_SENTINEL) {
                 console.info('[cache] fromCache timed out — falling back to network', queryKey);
+            } else if (result !== undefined) {
+                cached = result as TData;
+                writeSnapshot(queryKey, cached);
             }
+            // result === undefined → genuine cache miss, fall through to network silently
         } catch (err) {
             console.warn('[cache] fromCache failed', queryKey, err);
         }

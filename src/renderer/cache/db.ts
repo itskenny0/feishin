@@ -165,6 +165,28 @@ export class LibraryCacheDb extends Dexie {
             syncMeta: 'EntityType',
             thumbnails: 'ItemId, LastUsed, ByteSize, MissAt, __cachedAt',
         });
+
+        // v7: add multi-entry `*GenreIds` index to albums so the featured-genres
+        // home-page tiles can look up a genre-matching album with an O(log n) index
+        // scan instead of a full db.albums.toArray() + JavaScript find(). The `*`
+        // prefix tells Dexie to index each element of the string[] array separately.
+        // Purely additive; existing rows get an empty [] for GenreIds and are never
+        // matched by the genre query — they become correct once the next sweep/write
+        // populates the field.
+        this.version(7).stores({
+            albums: 'Id, AlbumArtistId, [AlbumArtistId+SortName], DateLastSaved, SortName, ProductionYear, *GenreIds, __cachedAt',
+            artists: 'Id, SortName, Name, DateLastSaved, Kind, __cachedAt',
+            favorites:
+                '[ItemId+ItemType], IsFavorite, Rating, LastPlayedDate, PlayCount, __cachedAt',
+            genres: 'Id, SortName, Name, __cachedAt',
+            lyrics: 'SongId, __cachedAt',
+            mutationQueue: 'id, status, createdAt, idempotencyKey',
+            playlists: 'Id, SortName, DateLastSaved, __cachedAt',
+            playlistSongs: '[PlaylistId+ListOrder], PlaylistId, SongId, __cachedAt',
+            songs: 'Id, AlbumId, [AlbumId+ParentIndexNumber+IndexNumber], AlbumArtistId, DateLastSaved, [AlbumId+IndexNumber], __cachedAt',
+            syncMeta: 'EntityType',
+            thumbnails: 'ItemId, LastUsed, ByteSize, MissAt, __cachedAt',
+        });
     }
 }
 const handles = new Map<Key, LibraryCacheDb>();

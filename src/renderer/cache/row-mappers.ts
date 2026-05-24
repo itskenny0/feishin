@@ -22,6 +22,7 @@ export const toCachedAlbumRow = (album: Album): CachedAlbum => ({
     __cachedAt: nowMs(),
     AlbumArtistId: album.albumArtists?.[0]?.id ?? '',
     DateLastSaved: album.updatedAt ?? '',
+    GenreIds: (album.genres ?? []).map((g) => g.id),
     Id: album.id,
     Payload: album,
     ProductionYear: album.releaseYear ?? undefined,

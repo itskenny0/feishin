@@ -12,6 +12,10 @@ export type ArtistKind = 'AlbumArtist' | 'Artist';
 export interface CachedAlbum extends CachedBase {
     AlbumArtistId: string;
     DateLastSaved: string;
+    // Multi-entry indexed column: Dexie indexes each element separately so
+    // `where('GenreIds').equals(genreId)` runs as an O(log n) index scan
+    // rather than a full table scan.
+    GenreIds: string[];
     Id: string;
     Payload: Album;
     ProductionYear: number | undefined;
