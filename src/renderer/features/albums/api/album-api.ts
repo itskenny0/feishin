@@ -185,10 +185,24 @@ export const albumQueries = {
                             });
                             if (result !== undefined) return result.totalRecordCount ?? 0;
                         }
+                        // Serve favorite-only count from Dexie so the favorites albums
+                        // list shows items offline (list query already has the rows;
+                        // without a count the virtual scroll renders 0 rows).
                         if (
-                            args.query.artistIds ||
-                            args.query.favorite !== undefined
+                            args.query.favorite !== undefined &&
+                            !args.query.artistIds
                         ) {
+                            const favRows = await db.favorites
+                                .filter((r) => r.ItemType === 'Album')
+                                .toArray();
+                            if (args.query.favorite === true) {
+                                return favRows.filter((f) => f.IsFavorite).length;
+                            }
+                            const favCount = favRows.filter((f) => f.IsFavorite).length;
+                            const total = await db.albums.count();
+                            return total > 0 ? total - favCount : 0;
+                        }
+                        if (args.query.artistIds) {
                             return undefined;
                         }
                         const cachedCount = await db.albums.count();

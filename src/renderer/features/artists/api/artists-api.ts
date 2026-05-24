@@ -156,7 +156,20 @@ export const artistsQueries = {
                             });
                             if (result !== undefined) return result.totalRecordCount ?? 0;
                         }
-                        if (args.query.favorite !== undefined || args.query._custom) {
+                        // Serve favorite-only count from Dexie so the favorites artists
+                        // list is not empty offline (virtual scroll needs a count > 0).
+                        if (args.query.favorite !== undefined && !args.query._custom) {
+                            const favRows = await db.favorites
+                                .filter((r) => r.ItemType === 'AlbumArtist')
+                                .toArray();
+                            if (args.query.favorite === true) {
+                                return favRows.filter((f) => f.IsFavorite).length;
+                            }
+                            const favCount = favRows.filter((f) => f.IsFavorite).length;
+                            const total = await db.artists.where('Kind').equals('AlbumArtist').count();
+                            return total > 0 ? total - favCount : 0;
+                        }
+                        if (args.query._custom) {
                             return undefined;
                         }
                         const cachedCount = await db.artists
@@ -271,7 +284,20 @@ export const artistsQueries = {
                             });
                             if (result !== undefined) return result.totalRecordCount ?? 0;
                         }
-                        if (args.query.favorite !== undefined || args.query._custom) {
+                        // Serve favorite-only count from Dexie so the favorites artists
+                        // list is not empty offline (virtual scroll needs a count > 0).
+                        if (args.query.favorite !== undefined && !args.query._custom) {
+                            const favRows = await db.favorites
+                                .filter((r) => r.ItemType === 'Artist')
+                                .toArray();
+                            if (args.query.favorite === true) {
+                                return favRows.filter((f) => f.IsFavorite).length;
+                            }
+                            const favCount = favRows.filter((f) => f.IsFavorite).length;
+                            const total = await db.artists.where('Kind').equals('Artist').count();
+                            return total > 0 ? total - favCount : 0;
+                        }
+                        if (args.query._custom) {
                             return undefined;
                         }
                         const cachedCount = await db.artists.where('Kind').equals('Artist').count();

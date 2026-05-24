@@ -209,12 +209,26 @@ export const songsQueries = {
                             const result = filterSongsLocal({ query: { ...args.query, startIndex: 0 }, rows });
                             if (result !== undefined) return result.totalRecordCount ?? 0;
                         }
+                        // Serve favorite-only count from Dexie so the favorites songs
+                        // list is not empty offline (the list query already serves items
+                        // from cache; without a count the virtual scroll renders 0 rows).
                         if (
-                            args.query.albumIds ||
-                            args.query.artistIds ||
-                            args.query.genreIds ||
-                            args.query.favorite !== undefined
+                            args.query.favorite !== undefined &&
+                            !args.query.albumIds &&
+                            !args.query.artistIds &&
+                            !args.query.genreIds?.length
                         ) {
+                            const favRows = await db.favorites
+                                .filter((r) => r.ItemType === 'Song')
+                                .toArray();
+                            if (args.query.favorite === true) {
+                                return favRows.filter((f) => f.IsFavorite).length;
+                            }
+                            const favCount = favRows.filter((f) => f.IsFavorite).length;
+                            const total = await db.songs.count();
+                            return total > 0 ? total - favCount : 0;
+                        }
+                        if (args.query.albumIds || args.query.artistIds || args.query.genreIds) {
                             return undefined;
                         }
                         const cachedCount = await db.songs.count();
