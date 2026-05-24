@@ -448,6 +448,27 @@ export const useAlbumListCountQuery = (args: AlbumListCountQueryArgs) => {
                         const result = filterAlbumsLocal({ query: { ...query, startIndex: 0 }, rows });
                         if (result !== undefined) return result.totalRecordCount ?? 0;
                     }
+                    // Serve favorite-only count from Dexie so the virtual scroll
+                    // doesn't collapse to 0 rows when offline (list query serves items).
+                    if (query.favorite !== undefined && isFullyUnfilteredCountQuery({ ...query, favorite: undefined })) {
+                        const favRows = await db.favorites
+                            .filter((r) => r.ItemType === 'Album')
+                            .toArray();
+                        if (query.favorite === true) {
+                            return favRows.filter((f) => f.IsFavorite).length;
+                        }
+                        const favCount = favRows.filter((f) => f.IsFavorite).length;
+                        const total = await db.albums.count();
+                        return total > 0 ? total - favCount : 0;
+                    }
+                    // Single-artist count is cheap via the indexed column.
+                    if (query.artistIds?.length === 1 && isFullyUnfilteredCountQuery({ ...query, artistIds: undefined })) {
+                        const count = await db.albums
+                            .where('AlbumArtistId')
+                            .equals(query.artistIds[0])
+                            .count();
+                        if (count > 0) return count;
+                    }
                     if (!isFullyUnfilteredCountQuery(query)) return undefined;
                     // Fast path: use the in-memory entity count from the Zustand store
                     // (populated by the lifecycle restore and sweep progress events).
