@@ -301,15 +301,24 @@ if (typeof window !== 'undefined') {
         const next = state.sweep;
         if (prevSweep && !next) {
             // The just-completed sweep targeted `prevSweep.entity`. Map
-            // sync entity types to search-index entities and mark dirty.
+            // sync entity types to search-index entities and mark dirty,
+            // then schedule a background index build so the first user
+            // search after a sweep is instant rather than paying a 1-4s
+            // build cost. Uses requestIdleCallback when available so the
+            // build happens during browser idle time.
             const entity = prevSweep.entity;
-            if (
-                entity === 'albums' ||
-                entity === 'artists' ||
-                entity === 'songs' ||
-                entity === 'playlists'
-            ) {
-                markSearchDirty(entity);
+            let buildFn: (() => Promise<unknown>) | undefined;
+            if (entity === 'albums') { markSearchDirty('albums'); buildFn = ensureAlbumsIndex; }
+            else if (entity === 'artists') { markSearchDirty('artists'); buildFn = ensureArtistsIndex; }
+            else if (entity === 'songs') { markSearchDirty('songs'); buildFn = ensureSongsIndex; }
+            else if (entity === 'playlists') { markSearchDirty('playlists'); buildFn = ensurePlaylistsIndex; }
+            if (buildFn) {
+                const fn = buildFn;
+                if (typeof requestIdleCallback !== 'undefined') {
+                    requestIdleCallback(() => void fn());
+                } else {
+                    setTimeout(() => void fn(), 500);
+                }
             }
         }
         prevSweep = next;
