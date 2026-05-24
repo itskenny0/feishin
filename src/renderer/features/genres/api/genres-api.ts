@@ -3,7 +3,7 @@ import { useMemo } from 'react';
 
 import { api } from '/@/renderer/api';
 import { queryKeys } from '/@/renderer/api/query-keys';
-import { cachedSwr, readEntityCountFallback, readSnapshot, toCachedGenreRow } from '/@/renderer/cache';
+import { cachedSwr, filterGenresLocal, readEntityCountFallback, readSnapshot, toCachedGenreRow } from '/@/renderer/cache';
 import { QueryHookArgs } from '/@/renderer/lib/react-query';
 import { useCurrentServerId } from '/@/renderer/store';
 import {
@@ -30,30 +30,13 @@ export const genresQueries = {
                         }
                     },
                     ctx,
-                    // Cache-first: if the Dexie genres table has rows, return
-                    // a synthetic GenreListResponse so any concurrent mounts
-                    // during the network round-trip see a primed value.
-                    // Filters that the cache can't answer fall through to
-                    // the network unchanged.
+                    // Cache-first: pipe the full row set through
+                    // filterGenresLocal so searchTerm filtering, sort, and
+                    // pagination match what the network would return.
                     fromCache: async (db) => {
                         const rows = await db.genres.toArray();
                         if (rows.length === 0) return undefined;
-                        const sorted = rows
-                            .slice()
-                            .sort((a, b) => (a.SortName ?? '').localeCompare(b.SortName ?? ''));
-                        if (args.query.sortOrder === SortOrder.DESC) sorted.reverse();
-                        const startIndex = args.query.startIndex ?? 0;
-                        const limit = args.query.limit;
-                        const page =
-                            limit === undefined || limit < 0
-                                ? sorted.slice(startIndex)
-                                : sorted.slice(startIndex, startIndex + limit);
-                        const items = page.map((r) => r.Payload);
-                        return {
-                            items,
-                            startIndex,
-                            totalRecordCount: sorted.length,
-                        };
+                        return filterGenresLocal({ query: args.query, rows }) ?? undefined;
                     },
                     queryKey: key,
                     remote: ({ signal }) =>
@@ -80,6 +63,14 @@ export const genresQueries = {
                 cachedSwr<number>({
                     ctx,
                     fromCache: async (db) => {
+                        if (args.query.searchTerm) {
+                            const rows = await db.genres.toArray();
+                            const result = filterGenresLocal({
+                                query: { ...args.query, startIndex: 0 },
+                                rows,
+                            });
+                            if (result !== undefined) return result.totalRecordCount ?? 0;
+                        }
                         const cachedCount = await db.genres.count();
                         return cachedCount > 0 ? cachedCount : undefined;
                     },
