@@ -14,7 +14,7 @@
         "viewPlaylists": "$t(entity.playlist, {\"count\": 2}) anzeigen",
         "refresh": "$t(common.refresh)",
         "removeFromQueue": "Aus wiedergabeliste entfernen",
-        "setRating": "Bewerten",
+        "setRating": "Bewertung setzen",
         "toggleSmartPlaylistEditor": "Editor für $t(entity.smartPlaylist) ein-/ausblenden",
         "removeFromFavorites": "Aus $t(entity.favorite, {\"count\": 2}) entfernen",
         "openIn": {
@@ -41,7 +41,9 @@
         "selectRangeOfItems": "Wählen sie eine reihe von elementen",
         "holdToMoveToTop": "Halten um nach oben zu bewegen",
         "holdToMoveToBottom": "Halten um nach unten zu bewegen",
-        "goToCurrent": "Zu aktuellem eintrag wechseln"
+        "goToCurrent": "Zu aktuellem eintrag wechseln",
+        "collapseAllFolders": "Alle Ordner einklappen",
+        "expandAllFolders": "Alle Ordner ausklappen"
     },
     "common": {
         "backward": "Zurück",
