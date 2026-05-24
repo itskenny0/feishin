@@ -37,7 +37,6 @@ import {
 } from '/@/renderer/cache';
 import { queryClient } from '/@/renderer/lib/react-query';
 import {
-    Album,
     AlbumDetailQuery,
     AlbumDetailResponse,
     AlbumListQuery,
