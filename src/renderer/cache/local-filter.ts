@@ -23,6 +23,9 @@ import type {
     AlbumListResponse,
     ArtistListQuery,
     ArtistListResponse,
+    Genre,
+    GenreListQuery,
+    GenreListResponse,
     Playlist,
     PlaylistListQuery,
     PlaylistListResponse,
@@ -31,7 +34,7 @@ import type {
     SongListResponse,
 } from '/@/shared/types/domain-types';
 
-import type { CachedAlbum, CachedArtist, CachedPlaylist, CachedSong } from './types';
+import type { CachedAlbum, CachedArtist, CachedGenre, CachedPlaylist, CachedSong } from './types';
 
 import {
     AlbumArtistListSort,
@@ -646,6 +649,46 @@ export const filterPlaylistsLocal = (
     const items = paginate(out, startIndex, query.limit).map<Playlist>((r) => r.Payload);
 
     console.info('[cache] filter: playlists', {
+        fromCount,
+        hits: totalRecordCount,
+        ms: Math.round(performance.now() - start),
+        page: items.length,
+    });
+
+    return { items, startIndex, totalRecordCount };
+};
+
+// ---------------------------------------------------------------------------
+// Genres
+// ---------------------------------------------------------------------------
+
+export interface FilterGenresArgs {
+    query: GenreListQuery;
+    rows: CachedGenre[];
+}
+
+export const filterGenresLocal = (args: FilterGenresArgs): GenreListResponse | undefined => {
+    const { query, rows } = args;
+    if (query._custom && Object.keys(query._custom).length > 0) return undefined;
+
+    const start = performance.now();
+    const fromCount = rows.length;
+
+    let out = rows.slice();
+
+    if (query.searchTerm) {
+        const needle = query.searchTerm.toLowerCase();
+        out = out.filter((r) => (r.SortName ?? '').toLowerCase().includes(needle));
+    }
+
+    out.sort((a, b) => cmpStr(a.SortName ?? '', b.SortName ?? ''));
+    out = applyDirection(out, query.sortOrder);
+
+    const totalRecordCount = out.length;
+    const startIndex = query.startIndex ?? 0;
+    const items = paginate(out, startIndex, query.limit).map<Genre>((r) => r.Payload);
+
+    console.info('[cache] filter: genres', {
         fromCount,
         hits: totalRecordCount,
         ms: Math.round(performance.now() - start),

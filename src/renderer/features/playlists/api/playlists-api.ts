@@ -2,7 +2,7 @@ import { queryOptions } from '@tanstack/react-query';
 
 import { api } from '/@/renderer/api';
 import { queryKeys } from '/@/renderer/api/query-keys';
-import { cachedSwr, filterPlaylistsLocal, readSnapshot, toCachedPlaylistRow } from '/@/renderer/cache';
+import { cachedSwr, filterPlaylistsLocal, readEntityCountFallback, readSnapshot, toCachedPlaylistRow } from '/@/renderer/cache';
 import { QueryHookArgs } from '/@/renderer/lib/react-query';
 import {
     ListCountQuery,
@@ -81,7 +81,7 @@ export const playlistsQueries = {
         );
         return queryOptions({
             gcTime: 1000 * 60 * 60,
-            initialData: (() => readSnapshot(key)) as never,
+            initialData: (() => readEntityCountFallback(key, 'playlists')) as never,
             initialDataUpdatedAt: 0,
             queryFn: (ctx) =>
                 cachedSwr<number>({

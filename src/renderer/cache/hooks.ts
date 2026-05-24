@@ -3,6 +3,7 @@ import type { InfiniteData, QueryFunctionContext, QueryKey } from '@tanstack/rea
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 
 import type { LibraryCacheDb } from './db';
+import type { EntityType } from './types';
 
 import { getActiveCacheDb } from './db';
 import { readSnapshot, writeSnapshot } from './snapshot';
@@ -46,6 +47,18 @@ const waitForActiveDb = (): Promise<LibraryCacheDb | undefined> => {
             }
         });
     });
+};
+
+// Reads the entity count for the given entity type from the in-memory snapshot
+// map first (fastest), falling back to the Zustand store's entityCounts which
+// is populated as each sweep page completes. Used as the `initialData` factory
+// for listCount queries so that navigating to a library surface after a sweep
+// doesn't suspend on a DB read — the store count is already in memory.
+export const readEntityCountFallback = (key: QueryKey, entity: EntityType): number | undefined => {
+    const snap = readSnapshot<number>(key);
+    if (snap !== undefined) return snap;
+    const storeCount = useCacheStore.getState().entityCounts[entity];
+    return storeCount && storeCount > 0 ? storeCount : undefined;
 };
 
 // Per-queryKey throttle map for background revalidates. After a

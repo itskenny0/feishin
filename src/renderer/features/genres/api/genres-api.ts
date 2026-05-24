@@ -3,7 +3,7 @@ import { useMemo } from 'react';
 
 import { api } from '/@/renderer/api';
 import { queryKeys } from '/@/renderer/api/query-keys';
-import { cachedSwr, readSnapshot, toCachedGenreRow } from '/@/renderer/cache';
+import { cachedSwr, readEntityCountFallback, readSnapshot, toCachedGenreRow } from '/@/renderer/cache';
 import { QueryHookArgs } from '/@/renderer/lib/react-query';
 import { useCurrentServerId } from '/@/renderer/store';
 import {
@@ -74,7 +74,7 @@ export const genresQueries = {
         );
         return queryOptions({
             gcTime: 1000 * 60 * 60,
-            initialData: (() => readSnapshot(key)) as never,
+            initialData: (() => readEntityCountFallback(key, 'genres')) as never,
             initialDataUpdatedAt: 0,
             queryFn: (ctx) =>
                 cachedSwr<number>({

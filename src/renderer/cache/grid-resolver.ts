@@ -20,6 +20,8 @@ import {
     filterAlbumArtistsLocal,
     filterAlbumsLocal,
     filterArtistsLocal,
+    filterGenresLocal,
+    filterPlaylistsLocal,
     filterSongsLocal,
 } from './local-filter';
 
@@ -29,11 +31,8 @@ import {
     AlbumListQuery,
     AlbumListSort,
     ArtistListQuery,
-    Genre,
     GenreListQuery,
-    Playlist,
     PlaylistListQuery,
-    PlaylistListSort,
     SongListQuery,
     SongListSort,
 } from '/@/shared/types/domain-types';
@@ -210,14 +209,10 @@ export const resolveGenrePage = async (
     const rows = await db.genres.toArray();
     if (rows.length === 0) return undefined;
 
-    const sorted = rows.slice().sort((a, b) => (a.SortName ?? '').localeCompare(b.SortName ?? ''));
-    if (query.sortOrder === 'DESC') sorted.reverse();
-
-    const items: Genre[] = sorted
-        .slice(startIndex, startIndex + limit)
-        .map((r) => r.Payload as Genre);
-    logHit('genres', items.length);
-    return { items };
+    const out = filterGenresLocal({ query: { ...query, limit, startIndex }, rows });
+    if (out === undefined) return undefined;
+    logHit('genres', out.items.length);
+    return { items: out.items };
 };
 
 // ---------------------------------------------------------------------------
@@ -234,46 +229,8 @@ export const resolvePlaylistPage = async (
     const rows = await db.playlists.toArray();
     if (rows.length === 0) return undefined;
 
-    let sorted = rows.slice();
-    if (query.searchTerm) {
-        const needle = query.searchTerm.toLowerCase();
-        sorted = sorted.filter((r) => (r.Payload?.name ?? '').toLowerCase().includes(needle));
-    }
-
-    // Honour every PlaylistListSort variant the type defines. Falling back
-    // to NAME when an unknown sort is requested keeps the cache responsive
-    // for newer sort enums and unknown shapes from the wire.
-    switch (query.sortBy) {
-        case PlaylistListSort.DURATION:
-            sorted.sort((a, b) => (a.Payload?.duration ?? 0) - (b.Payload?.duration ?? 0));
-            break;
-        case PlaylistListSort.OWNER:
-            sorted.sort((a, b) => (a.Payload?.owner ?? '').localeCompare(b.Payload?.owner ?? ''));
-            break;
-        case PlaylistListSort.PUBLIC:
-            sorted.sort(
-                (a, b) => Number(b.Payload?.public ?? false) - Number(a.Payload?.public ?? false),
-            );
-            break;
-        case PlaylistListSort.SONG_COUNT:
-            sorted.sort((a, b) => (a.Payload?.songCount ?? 0) - (b.Payload?.songCount ?? 0));
-            break;
-        case PlaylistListSort.UPDATED_AT:
-            // DateLastSaved is the cached `updatedAt`; empty strings sort
-            // to the front of ASC / back of DESC, which is the same
-            // behaviour the server gives for rows missing the field.
-            sorted.sort((a, b) => (a.DateLastSaved ?? '').localeCompare(b.DateLastSaved ?? ''));
-            break;
-        case PlaylistListSort.NAME:
-        default:
-            sorted.sort((a, b) => (a.SortName ?? '').localeCompare(b.SortName ?? ''));
-            break;
-    }
-    if (query.sortOrder === 'DESC') sorted.reverse();
-
-    const items: Playlist[] = sorted
-        .slice(startIndex, startIndex + limit)
-        .map((r) => r.Payload as Playlist);
-    logHit('playlists', items.length);
-    return { items };
+    const out = filterPlaylistsLocal({ query: { ...query, limit, startIndex }, rows });
+    if (out === undefined) return undefined;
+    logHit('playlists', out.items.length);
+    return { items: out.items };
 };
