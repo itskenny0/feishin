@@ -7,10 +7,9 @@ import styles from './new-since-last-visit.module.css';
 
 import { api } from '/@/renderer/api';
 import {
-    getActiveCacheDb,
+    cachedSwr,
     isCacheAvailableSync,
     readSnapshot,
-    snapshotSwr,
     toCachedAlbumRow,
 } from '/@/renderer/cache';
 import { AppRoute } from '/@/renderer/router/routes';
@@ -107,8 +106,31 @@ export const NewSinceLastVisit = () => {
             readSnapshot<Album[]>(['home-new-since-last-visit', serverId])) as never,
         queryFn: (ctx) => {
             const key = ['home-new-since-last-visit', serverId] as const;
-            return snapshotSwr<Album[]>({
+            return cachedSwr<Album[]>({
+                apply: async (db, fresh) => {
+                    const items = fresh ?? [];
+                    if (items.length > 0) {
+                        await db.albums.bulkPut(items.map(toCachedAlbumRow));
+                    }
+                },
                 ctx,
+                // Serve the most recently added albums from Dexie when offline.
+                // Sort by Payload.createdAt descending to approximate the server's
+                // RECENTLY_ADDED ordering. Albums without a createdAt are excluded
+                // — the count logic already skips null values.
+                fromCache: async (db) => {
+                    if (!isCacheAvailableSync()) return undefined;
+                    const rows = await db.albums.toArray();
+                    if (rows.length === 0) return undefined;
+                    const sorted = rows
+                        .filter((r) => r.Payload.createdAt)
+                        .sort((a, b) => {
+                            const at = new Date(a.Payload.createdAt!).getTime();
+                            const bt = new Date(b.Payload.createdAt!).getTime();
+                            return bt - at;
+                        });
+                    return sorted.slice(0, PROBE_LIMIT).map((r) => r.Payload);
+                },
                 queryKey: key,
                 remote: async ({ signal }) => {
                     if (!serverId) return [] as Album[];
@@ -121,19 +143,7 @@ export const NewSinceLastVisit = () => {
                             startIndex: 0,
                         },
                     });
-                    const result = (res?.items ?? []) as Album[];
-                    // Write-through into Dexie albums so subsequent grid/list
-                    // mounts hit cache even if the recently-added probe was
-                    // the first contact with these rows.
-                    if (isCacheAvailableSync() && result.length > 0) {
-                        try {
-                            const db = getActiveCacheDb();
-                            if (db) await db.albums.bulkPut(result.map(toCachedAlbumRow));
-                        } catch {
-                            /* swallow */
-                        }
-                    }
-                    return result;
+                    return (res?.items ?? []) as Album[];
                 },
             });
         },
