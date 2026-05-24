@@ -282,6 +282,10 @@ export const usePlaylistSongListQuery = (args: PlaylistSongListQueryArgs) => {
     return useCachedQuery<PlaylistSongListResponse>({
         apply: async (db, fresh) => {
             await replacePlaylistSongs(db, playlistId, fresh);
+            console.info('[cache] playlists: songList applied', {
+                id: playlistId,
+                songs: fresh?.items?.length ?? 0,
+            });
         },
         enabled: options?.enabled ?? Boolean(serverId && playlistId),
         fromCache: async (db) => {
@@ -290,6 +294,10 @@ export const usePlaylistSongListQuery = (args: PlaylistSongListQueryArgs) => {
                 .equals(playlistId)
                 .sortBy('ListOrder');
             if (rows.length === 0) return undefined;
+            console.info('[cache] playlists: songList cache hit', {
+                id: playlistId,
+                songs: rows.length,
+            });
             return {
                 items: rows.map((r) => r.SongPayload),
                 startIndex: 0,
@@ -329,6 +337,10 @@ export const usePlaylistSongListSuspenseQuery = (args: PlaylistSongListSuspenseQ
             cachedSwr<PlaylistSongListResponse>({
                 apply: async (db, fresh) => {
                     await replacePlaylistSongs(db, playlistId, fresh);
+                    console.info('[cache] playlists: songList applied', {
+                        id: playlistId,
+                        songs: fresh?.items?.length ?? 0,
+                    });
                 },
                 ctx,
                 fromCache: async (db) => {
@@ -337,6 +349,10 @@ export const usePlaylistSongListSuspenseQuery = (args: PlaylistSongListSuspenseQ
                         .equals(playlistId)
                         .sortBy('ListOrder');
                     if (rows.length === 0) return undefined;
+                    console.info('[cache] playlists: songList cache hit', {
+                        id: playlistId,
+                        songs: rows.length,
+                    });
                     return {
                         items: rows.map((r) => r.SongPayload),
                         startIndex: 0,

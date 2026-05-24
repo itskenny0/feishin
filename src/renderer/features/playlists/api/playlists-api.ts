@@ -141,6 +141,10 @@ export const playlistsQueries = {
                         if (rows.length === 0) return undefined;
                         rows.sort((a, b) => a.ListOrder - b.ListOrder);
                         const items = rows.map((r) => r.SongPayload);
+                        console.info('[cache] playlists: songList cache hit', {
+                            id: args.query.id,
+                            songs: items.length,
+                        });
                         return {
                             items,
                             startIndex: 0,
