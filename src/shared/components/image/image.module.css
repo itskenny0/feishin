@@ -34,7 +34,7 @@
 
 .image-container {
     position: relative;
-    display: flex;
+    display: grid;
     width: 100%;
     height: 100%;
     aspect-ratio: 1 / 1;

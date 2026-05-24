@@ -392,3 +392,23 @@
         filter: drop-shadow(0 8px 16px rgb(0 0 0 / 55%));
     }
 }
+
+/*
+ * Portrait phones in the 361–430px range hit BOTH the portrait rule
+ * (grid-template-columns: 120px | 1fr, .image 120px) and the big-phone
+ * rule above (.image 280px). The portrait rule runs first in source order
+ * so the layout switches to side-by-side with a 120px column — but then
+ * the big-phone rule overrides the image to 280px, putting a 280px image
+ * in a 120px column and making the cover appear as a narrow tall strip.
+ *
+ * Reset back to the stacked layout so the 280px cover actually fits.
+ */
+@media (361px <= width <= 430px) and (orientation: portrait) {
+    .library-header {
+        grid-template-areas: 'image' 'info';
+        grid-template-rows: auto 1fr;
+        grid-template-columns: 1fr;
+        justify-items: center;
+        text-align: center;
+    }
+}

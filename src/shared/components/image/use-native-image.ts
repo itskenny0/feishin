@@ -129,11 +129,19 @@ export function useNativeImage({
                 // so the subsequent network branch is a fall-back for
                 // bundles where the cache module isn't available.
                 if (request.cacheItemId && request.cacheSize) {
-                    const cached = await tryResolveThumbnail(
-                        request.cacheItemId,
-                        request.cacheSize,
-                        request,
-                    );
+                    // Race the cache lookup against a 5s cap. The lookup
+                    // may await a shared in-flight promise from the thumbnail
+                    // sweep (which has its own 20s network timeout); without
+                    // the race the image component spins for up to 20s before
+                    // the sweep task resolves and we can fall through to a
+                    // direct fetch.
+                    const cacheTimeout = new Promise<undefined>((resolve) => {
+                        setTimeout(() => resolve(undefined), 5_000);
+                    });
+                    const cached = await Promise.race([
+                        tryResolveThumbnail(request.cacheItemId, request.cacheSize, request),
+                        cacheTimeout,
+                    ]);
                     if (abortController.signal.aborted) {
                         // The resolver creates a fresh blob: URL even on a
                         // cache hit. If the consumer unmounted while the
