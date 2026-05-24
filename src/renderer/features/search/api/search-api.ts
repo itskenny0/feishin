@@ -115,59 +115,60 @@ export const searchQueries = {
             queryFn: async ({ pageParam, signal }) => {
                 if (!serverId) throw new Error('serverId required');
                 const startIndex = (pageParam ?? 0) as number;
+                const t0 = performance.now();
 
-                // Local-first: on the first page only, run the fuse index
-                // against the trimmed search term and seed the snapshot
-                // map so the NEXT mount of this same query string renders
-                // synchronously via `placeholderData`. The lookup is fired
-                // in parallel with the network call so the network round
-                // trip isn't delayed by fuse's ~50 ms build.
+                // Fire local fuse lookup in parallel with the network so we
+                // pay zero extra latency on the hot path and have results
+                // ready to return immediately on network failure.
                 const localPromise =
                     startIndex === 0 && searchTerm.trim()
-                        ? (async () => {
-                              const t0 = performance.now();
-                              try {
-                                  const localArtists = await searchArtistsLocal(
-                                      searchTerm,
-                                      SEARCH_PAGE_SIZE,
-                                  );
-                                  if (localArtists.length > 0) {
-                                      seedSnapshotWithLocalPage(
-                                          queryKey,
-                                          buildLocalAlbumArtistsResponse(localArtists),
-                                      );
-                                  }
-                                  logSearchUiHitSampled('albumArtists', {
-                                      localCount: localArtists.length,
-                                      ms: Math.round(performance.now() - t0),
-                                      q: searchTerm,
-                                  });
-                              } catch (err) {
-                                  console.warn(
-                                      '[cache] search-ui: local lookup failed (albumArtists)',
-                                      err,
-                                  );
-                              }
-                          })()
-                        : undefined;
+                        ? searchArtistsLocal(searchTerm, SEARCH_PAGE_SIZE)
+                        : Promise.resolve([] as AlbumArtist[]);
 
-                const fresh = await api.controller.search({
-                    apiClientProps: { serverId, signal },
-                    query: {
-                        albumArtistLimit: SEARCH_PAGE_SIZE,
-                        albumArtistStartIndex: startIndex,
-                        albumLimit: 0,
-                        albumStartIndex: 0,
-                        query: searchTerm,
-                        songLimit: 0,
-                        songStartIndex: 0,
-                    },
-                });
+                let fresh: SearchResponse;
+                try {
+                    fresh = await api.controller.search({
+                        apiClientProps: { serverId, signal },
+                        query: {
+                            albumArtistLimit: SEARCH_PAGE_SIZE,
+                            albumArtistStartIndex: startIndex,
+                            albumLimit: 0,
+                            albumStartIndex: 0,
+                            query: searchTerm,
+                            songLimit: 0,
+                            songStartIndex: 0,
+                        },
+                    });
+                } catch (err) {
+                    // Offline / network failure — return fuse results for
+                    // the first page so the UI shows something useful. Pages
+                    // beyond the first have no local equivalent, so re-throw.
+                    if (startIndex !== 0) throw err;
+                    const localArtists = await localPromise;
+                    logSearchUiHitSampled('albumArtists', {
+                        localCount: localArtists.length,
+                        ms: Math.round(performance.now() - t0),
+                        q: searchTerm,
+                    });
+                    return buildLocalAlbumArtistsResponse(localArtists);
+                }
 
-                // Make sure the local seed has landed before we overwrite
-                // the snapshot with the fresh page — otherwise a slow
-                // fuse build could clobber the just-written fresh result.
-                if (localPromise) await localPromise;
+                // Network succeeded — seed the snapshot with local hits so
+                // the next mount on the same query string renders instantly.
+                if (startIndex === 0) {
+                    const localArtists = await localPromise;
+                    if (localArtists.length > 0) {
+                        seedSnapshotWithLocalPage(
+                            queryKey,
+                            buildLocalAlbumArtistsResponse(localArtists),
+                        );
+                    }
+                    logSearchUiHitSampled('albumArtists', {
+                        localCount: localArtists.length,
+                        ms: Math.round(performance.now() - t0),
+                        q: searchTerm,
+                    });
+                }
 
                 // Persist the authoritative network page so a remount on
                 // the same query string skips straight past the fuse hits
@@ -215,50 +216,49 @@ export const searchQueries = {
             queryFn: async ({ pageParam, signal }) => {
                 if (!serverId) throw new Error('serverId required');
                 const startIndex = (pageParam ?? 0) as number;
+                const t0 = performance.now();
 
                 const localPromise =
                     startIndex === 0 && searchTerm.trim()
-                        ? (async () => {
-                              const t0 = performance.now();
-                              try {
-                                  const localAlbums = await searchAlbumsLocal(
-                                      searchTerm,
-                                      SEARCH_PAGE_SIZE,
-                                  );
-                                  if (localAlbums.length > 0) {
-                                      seedSnapshotWithLocalPage(
-                                          queryKey,
-                                          buildLocalAlbumsResponse(localAlbums),
-                                      );
-                                  }
-                                  logSearchUiHitSampled('albums', {
-                                      localCount: localAlbums.length,
-                                      ms: Math.round(performance.now() - t0),
-                                      q: searchTerm,
-                                  });
-                              } catch (err) {
-                                  console.warn(
-                                      '[cache] search-ui: local lookup failed (albums)',
-                                      err,
-                                  );
-                              }
-                          })()
-                        : undefined;
+                        ? searchAlbumsLocal(searchTerm, SEARCH_PAGE_SIZE)
+                        : Promise.resolve([] as Album[]);
 
-                const fresh = await api.controller.search({
-                    apiClientProps: { serverId, signal },
-                    query: {
-                        albumArtistLimit: 0,
-                        albumArtistStartIndex: 0,
-                        albumLimit: SEARCH_PAGE_SIZE,
-                        albumStartIndex: startIndex,
-                        query: searchTerm,
-                        songLimit: 0,
-                        songStartIndex: 0,
-                    },
-                });
+                let fresh: SearchResponse;
+                try {
+                    fresh = await api.controller.search({
+                        apiClientProps: { serverId, signal },
+                        query: {
+                            albumArtistLimit: 0,
+                            albumArtistStartIndex: 0,
+                            albumLimit: SEARCH_PAGE_SIZE,
+                            albumStartIndex: startIndex,
+                            query: searchTerm,
+                            songLimit: 0,
+                            songStartIndex: 0,
+                        },
+                    });
+                } catch (err) {
+                    if (startIndex !== 0) throw err;
+                    const localAlbums = await localPromise;
+                    logSearchUiHitSampled('albums', {
+                        localCount: localAlbums.length,
+                        ms: Math.round(performance.now() - t0),
+                        q: searchTerm,
+                    });
+                    return buildLocalAlbumsResponse(localAlbums);
+                }
 
-                if (localPromise) await localPromise;
+                if (startIndex === 0) {
+                    const localAlbums = await localPromise;
+                    if (localAlbums.length > 0) {
+                        seedSnapshotWithLocalPage(queryKey, buildLocalAlbumsResponse(localAlbums));
+                    }
+                    logSearchUiHitSampled('albums', {
+                        localCount: localAlbums.length,
+                        ms: Math.round(performance.now() - t0),
+                        q: searchTerm,
+                    });
+                }
 
                 const existing = readSnapshot<InfiniteData<SearchResponse, number>>(queryKey);
                 const pages = existing?.pages ? [...existing.pages] : [];
@@ -300,50 +300,49 @@ export const searchQueries = {
             queryFn: async ({ pageParam, signal }) => {
                 if (!serverId) throw new Error('serverId required');
                 const startIndex = (pageParam ?? 0) as number;
+                const t0 = performance.now();
 
                 const localPromise =
                     startIndex === 0 && searchTerm.trim()
-                        ? (async () => {
-                              const t0 = performance.now();
-                              try {
-                                  const localSongs = await searchSongsLocal(
-                                      searchTerm,
-                                      SEARCH_PAGE_SIZE,
-                                  );
-                                  if (localSongs.length > 0) {
-                                      seedSnapshotWithLocalPage(
-                                          queryKey,
-                                          buildLocalSongsResponse(localSongs),
-                                      );
-                                  }
-                                  logSearchUiHitSampled('songs', {
-                                      localCount: localSongs.length,
-                                      ms: Math.round(performance.now() - t0),
-                                      q: searchTerm,
-                                  });
-                              } catch (err) {
-                                  console.warn(
-                                      '[cache] search-ui: local lookup failed (songs)',
-                                      err,
-                                  );
-                              }
-                          })()
-                        : undefined;
+                        ? searchSongsLocal(searchTerm, SEARCH_PAGE_SIZE)
+                        : Promise.resolve([] as Song[]);
 
-                const fresh = await api.controller.search({
-                    apiClientProps: { serverId, signal },
-                    query: {
-                        albumArtistLimit: 0,
-                        albumArtistStartIndex: 0,
-                        albumLimit: 0,
-                        albumStartIndex: 0,
-                        query: searchTerm,
-                        songLimit: SEARCH_PAGE_SIZE,
-                        songStartIndex: startIndex,
-                    },
-                });
+                let fresh: SearchResponse;
+                try {
+                    fresh = await api.controller.search({
+                        apiClientProps: { serverId, signal },
+                        query: {
+                            albumArtistLimit: 0,
+                            albumArtistStartIndex: 0,
+                            albumLimit: 0,
+                            albumStartIndex: 0,
+                            query: searchTerm,
+                            songLimit: SEARCH_PAGE_SIZE,
+                            songStartIndex: startIndex,
+                        },
+                    });
+                } catch (err) {
+                    if (startIndex !== 0) throw err;
+                    const localSongs = await localPromise;
+                    logSearchUiHitSampled('songs', {
+                        localCount: localSongs.length,
+                        ms: Math.round(performance.now() - t0),
+                        q: searchTerm,
+                    });
+                    return buildLocalSongsResponse(localSongs);
+                }
 
-                if (localPromise) await localPromise;
+                if (startIndex === 0) {
+                    const localSongs = await localPromise;
+                    if (localSongs.length > 0) {
+                        seedSnapshotWithLocalPage(queryKey, buildLocalSongsResponse(localSongs));
+                    }
+                    logSearchUiHitSampled('songs', {
+                        localCount: localSongs.length,
+                        ms: Math.round(performance.now() - t0),
+                        q: searchTerm,
+                    });
+                }
 
                 const existing = readSnapshot<InfiniteData<SearchResponse, number>>(queryKey);
                 const pages = existing?.pages ? [...existing.pages] : [];
