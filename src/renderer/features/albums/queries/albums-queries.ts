@@ -449,7 +449,7 @@ export const useAlbumListCountQuery = (args: AlbumListCountQueryArgs) => {
             cachedSwr<number>({
                 ctx,
                 fromCache: async (db) => {
-                    if (query.genreIds?.length && !query.musicFolderId && !query.searchTerm) {
+                    if (query.searchTerm || (query.genreIds?.length && !query.musicFolderId)) {
                         const rows = await db.albums.toArray();
                         const result = filterAlbumsLocal({ query: { ...query, startIndex: 0 }, rows });
                         if (result !== undefined) return result.totalRecordCount ?? 0;
