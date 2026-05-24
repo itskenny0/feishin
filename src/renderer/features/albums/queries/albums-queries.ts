@@ -31,6 +31,7 @@ import {
     mergePage,
     readSnapshot,
     useCachedQuery,
+    useCacheStore,
     writeSnapshot,
 } from '/@/renderer/cache';
 import { queryClient } from '/@/renderer/lib/react-query';
@@ -455,6 +456,15 @@ export const useAlbumListCountQuery = (args: AlbumListCountQueryArgs) => {
                         if (result !== undefined) return result.totalRecordCount ?? 0;
                     }
                     if (!isFullyUnfilteredCountQuery(query)) return undefined;
+                    // Fast path: use the in-memory entity count from the Zustand store
+                    // (populated by the lifecycle restore and sweep progress events).
+                    // This avoids an IndexedDB read entirely and is safe to use as the
+                    // count for an unfiltered list — the sweep keeps it in sync.
+                    const storeCount = useCacheStore.getState().entityCounts.albums;
+                    if (storeCount && storeCount > 0) {
+                        logCacheHitSampled('listCount');
+                        return storeCount;
+                    }
                     const cachedCount = await db.albums.count();
                     if (cachedCount > 0) {
                         logCacheHitSampled('listCount');

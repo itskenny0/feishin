@@ -160,11 +160,27 @@ export const cachedSwr = async <TData>(args: {
     const { apply, ctx, fromCache, queryKey, remote } = args;
     const db = fromCache ? await waitForActiveDb() : activeDb();
 
+    // Guard: if a concurrent IndexedDB write transaction (e.g. the songs sweep
+    // bulk-inserting 500 rows) holds the DB lock, `fromCache` can block for
+    // 10–20 seconds. Race against a 2-second wall-clock timeout so the render
+    // path is never stuck waiting on a slow Dexie call. If the timeout fires
+    // first we treat it as a cache miss and fall through to the cold path; the
+    // Dexie call completes in the background but its result is discarded.
+    const FROM_CACHE_TIMEOUT_MS = 2_000;
+
     let cached: TData | undefined;
     if (db && fromCache) {
         try {
-            cached = await fromCache(db);
-            if (cached !== undefined) writeSnapshot(queryKey, cached);
+            const timeoutTicket = new Promise<undefined>((resolve) =>
+                setTimeout(resolve, FROM_CACHE_TIMEOUT_MS),
+            );
+            const result = await Promise.race([fromCache(db), timeoutTicket]);
+            if (result !== undefined) {
+                cached = result;
+                writeSnapshot(queryKey, cached);
+            } else {
+                console.info('[cache] fromCache timed out — falling back to network', queryKey);
+            }
         } catch (err) {
             console.warn('[cache] fromCache failed', queryKey, err);
         }

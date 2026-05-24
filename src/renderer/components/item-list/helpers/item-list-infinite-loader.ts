@@ -276,13 +276,21 @@ export const useItemListInfiniteLoader = ({
                 lastFetchedPageRef.current = -1;
                 currentVisibleRangeRef.current = null;
 
-                // Invalidate and wait for count query to refetch
-                await queryClient.ensureQueryData({
-                    queryKey: countQueryKey,
-                });
-
-                // Fetch the first page after count is refetched
-                await fetchPage(pageToFetch);
+                // Race against a 2.5-second wall-clock timeout. When offline
+                // the cold paths inside ensureQueryData / fetchPage can block
+                // for up to COLD_NETWORK_TIMEOUT_MS (8 s) before resolving
+                // with null. We must not hold the Suspense boundary open that
+                // long — the grid renders empty then fills from cache once the
+                // background calls settle.
+                await Promise.race([
+                    (async () => {
+                        await queryClient.ensureQueryData({
+                            queryKey: countQueryKey,
+                        });
+                        await fetchPage(pageToFetch);
+                    })(),
+                    new Promise<void>((resolve) => setTimeout(resolve, 2500)),
+                ]);
             } finally {
                 setIsRefetching(false);
                 isRefetchingRef.current = false;
