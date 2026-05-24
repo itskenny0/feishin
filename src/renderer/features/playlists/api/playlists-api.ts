@@ -87,6 +87,14 @@ export const playlistsQueries = {
                 cachedSwr<number>({
                     ctx,
                     fromCache: async (db) => {
+                        if (args.query.searchTerm) {
+                            const rows = await db.playlists.toArray();
+                            const result = filterPlaylistsLocal({
+                                query: { ...args.query, startIndex: 0 },
+                                rows,
+                            });
+                            if (result !== undefined) return result.totalRecordCount ?? 0;
+                        }
                         const cachedCount = await db.playlists.count();
                         return cachedCount > 0 ? cachedCount : undefined;
                     },
