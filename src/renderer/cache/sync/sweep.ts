@@ -29,6 +29,17 @@ export interface SweepContext {
 
 const DEFAULT_PAGE_SIZE = 500;
 
+export const isSweepNetworkError = (err: unknown): boolean => {
+    const name = (err as Error)?.name;
+    if (name === 'AbortError') return false;
+    const message = (err as Error)?.message ?? '';
+    return (
+        name === 'TypeError' ||
+        name === 'NetworkError' ||
+        /network|fetch|offline|ECONNREFUSED|ETIMEDOUT|ENOTFOUND/i.test(message)
+    );
+};
+
 export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> => {
     const {
         ctx,
@@ -126,6 +137,13 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
         } catch (err) {
             if ((err as Error)?.name === 'AbortError' || signal.aborted) {
                 console.info(`[cache] sweep:${entity} aborted during fetch`, { startIndex });
+                return;
+            }
+            if (isSweepNetworkError(err)) {
+                console.warn(`[cache] sweep:${entity} page failed (network) — checkpoint preserved for resume`, {
+                    error: (err as Error)?.message,
+                    startIndex,
+                });
                 return;
             }
             console.warn(`[cache] sweep:${entity} page failed`, { error: err, startIndex });

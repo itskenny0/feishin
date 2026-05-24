@@ -1,6 +1,7 @@
 import type { CachedFavorite } from '../types';
 import type { SweepContext } from './sweep';
 
+import { isSweepNetworkError } from './sweep';
 import { useCacheStore } from '../store';
 
 import { controller } from '/@/renderer/api/controller';
@@ -126,6 +127,7 @@ export const runFavoritesSweep = async (
     };
 
     let albums: CachedFavorite[] = [];
+    try {
     if (startPhase < 1) {
         albums = await collectFavorites(
             'albums',
@@ -277,4 +279,15 @@ export const runFavoritesSweep = async (
         durationMs: Date.now() - now,
         totalRows,
     });
+    } catch (err) {
+        if ((err as Error)?.name === 'AbortError') return;
+        if (isSweepNetworkError(err)) {
+            console.warn('[cache] sweep:favorites network error - checkpoint preserved for resume', {
+                error: (err as Error)?.message,
+            });
+            actions.setSweep(undefined);
+            return;
+        }
+        throw err;
+    }
 };
