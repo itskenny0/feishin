@@ -135,8 +135,29 @@ const useArtistCandidates = (serverId: string | undefined) =>
             readSnapshot<ArtistCandidate[]>(['feature-card-artists-v2', serverId ?? ''])) as never,
         queryFn: (ctx) => {
             const key = ['feature-card-artists-v2', serverId ?? ''] as const;
-            return snapshotSwr<ArtistCandidate[]>({
+            return cachedSwr<ArtistCandidate[]>({
+                apply: async (_db, fresh) => {
+                    await writeArtistsToCache(
+                        (fresh ?? []).map((c) => ({ id: c.id, name: c.name } as AlbumArtist)),
+                        'AlbumArtist',
+                    );
+                },
                 ctx,
+                fromCache: async (db) => {
+                    if (!isCacheAvailableSync()) return undefined;
+                    const rows = await db.artists
+                        .where('Kind')
+                        .equals('AlbumArtist')
+                        .toArray();
+                    if (rows.length === 0) return undefined;
+                    const all: ArtistCandidate[] = rows.map((r) => ({
+                        id: r.Payload.id,
+                        name: r.Payload.name,
+                        songCount: r.Payload.songCount ?? null,
+                    }));
+                    const usable = all.filter((a) => a.songCount === null || a.songCount >= 2);
+                    return usable.length > 0 ? usable : all;
+                },
                 queryKey: key,
                 remote: async ({ signal }) => {
                     if (!serverId) return [] as ArtistCandidate[];
@@ -149,7 +170,6 @@ const useArtistCandidates = (serverId: string | undefined) =>
                             startIndex: 0,
                         },
                     });
-                    await writeArtistsToCache(res?.items ?? [], 'AlbumArtist');
                     const all: ArtistCandidate[] = (res?.items ?? []).map((a: AlbumArtist) => ({
                         id: a.id,
                         name: a.name,
@@ -371,8 +391,29 @@ const useGenreCandidates = (serverId: string | undefined) =>
             readSnapshot<GenreCandidate[]>(['feature-card-genres', serverId ?? ''])) as never,
         queryFn: (ctx) => {
             const key = ['feature-card-genres', serverId ?? ''] as const;
-            return snapshotSwr<GenreCandidate[]>({
+            return cachedSwr<GenreCandidate[]>({
+                apply: async (_db, fresh) => {
+                    await writeGenresToCache(
+                        (fresh ?? []).map((c) => ({
+                            albumCount: c.albumCount,
+                            id: c.id,
+                            name: c.name,
+                            songCount: c.songCount,
+                        } as Genre)),
+                    );
+                },
                 ctx,
+                fromCache: async (db) => {
+                    if (!isCacheAvailableSync()) return undefined;
+                    const rows = await db.genres.toArray();
+                    if (rows.length === 0) return undefined;
+                    return rows.map((r) => ({
+                        albumCount: r.Payload.albumCount ?? null,
+                        id: r.Payload.id,
+                        name: r.Payload.name,
+                        songCount: r.Payload.songCount ?? null,
+                    }));
+                },
                 queryKey: key,
                 remote: async ({ signal }) => {
                     if (!serverId) return [] as GenreCandidate[];
@@ -385,7 +426,6 @@ const useGenreCandidates = (serverId: string | undefined) =>
                             startIndex: 0,
                         },
                     });
-                    await writeGenresToCache(res?.items ?? []);
                     return (res?.items ?? []).map((g: Genre) => ({
                         albumCount: g.albumCount ?? null,
                         id: g.id,
