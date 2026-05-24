@@ -200,6 +200,9 @@ function Submenu(props: SubmenuProps) {
     };
 
     const setCloseTimeout = (timeout: NodeJS.Timeout) => {
+        if (closeTimeoutRef.current) {
+            clearTimeout(closeTimeoutRef.current);
+        }
         closeTimeoutRef.current = timeout;
     };
 
@@ -215,6 +218,25 @@ function Submenu(props: SubmenuProps) {
         [disabled, isCloseDisabled, open],
     );
 
+    // Intercept onOpenChange so Radix's native SubTrigger pointerleave
+    // (which calls onOpenChange(false) immediately) goes through the
+    // same 150ms close timeout as our own handleMouseLeave on the
+    // trigger. Without this, making Sub controlled caused the submenu
+    // to close before the mouse could travel from the trigger to the
+    // SubContent — SubmenuContent.handleMouseEnter never got a chance
+    // to cancel the close. Open signals still take effect immediately.
+    const handleOpenChange = (isOpen: boolean) => {
+        if (isOpen) {
+            cancelCloseTimeout();
+            setOpen(true);
+        } else {
+            const timeout = setTimeout(() => {
+                setOpen(false);
+            }, 150);
+            setCloseTimeout(timeout);
+        }
+    };
+
     // onOpenChange wires Radix's built-in dismiss paths back into our
     // controlled `open` state. Without it, tapping outside the submenu
     // (the parent menu, the backdrop, anywhere else) had no way to
@@ -223,7 +245,7 @@ function Submenu(props: SubmenuProps) {
     // controlled. The only escape paths left were making a selection
     // or the system back button — the regression the user reported.
     return (
-        <RadixContextMenu.Sub onOpenChange={setOpen} open={open}>
+        <RadixContextMenu.Sub onOpenChange={handleOpenChange} open={open}>
             <SubmenuContext.Provider value={context}>{children}</SubmenuContext.Provider>
         </RadixContextMenu.Sub>
     );
