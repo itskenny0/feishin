@@ -40,8 +40,9 @@ const EMPTY_VIEW: SmoothSweepView = {
 
 /**
  * Subscribes to useCacheStore.sweep and returns an interpolated view that
- * updates at the display refresh rate (typically 60 fps, comfortably above
- * the >= 20 fps requirement) via requestAnimationFrame. Between real
+ * updates at 20 fps via requestAnimationFrame (rAF fires at the display
+ * refresh rate but setView is throttled to 20fps to avoid starving async
+ * callbacks from sync workers on expensive-to-render pages). Between real
  * per-page updates from the sweep engine, `done` and `bytesDownloaded`
  * advance optimistically using the stored `itemsPerSec` / `bytesPerSec`
  * rates. When a real update lands (the underlying `sweep` reference
@@ -87,8 +88,19 @@ export const useSmoothSweep = (): SmoothSweepView => {
         // 2s keeps us responsive on healthy sweeps without lying for
         // minutes on a stuck one.
         const EXTRAPOLATION_CAP_SEC = 2;
-        const tick = () => {
-            const rawElapsed = (performance.now() - baselineNow) / 1000;
+        // Throttle setView to 20fps. The rAF itself still fires at the
+        // display refresh rate (60fps) but skipped frames do no React
+        // work. Without this cap the settings page re-renders 60×/sec —
+        // at 10ms per render that occupies >60% of the main thread and
+        // starves the thumbnail workers' async callbacks, collapsing
+        // throughput to a crawl while the stats page is open.
+        const RENDER_INTERVAL_MS = 1000 / 20; // 50ms → 20fps
+        let lastRenderMs = 0;
+        const tick = (nowMs: DOMHighResTimeStamp) => {
+            raf = requestAnimationFrame(tick);
+            if (nowMs - lastRenderMs < RENDER_INTERVAL_MS) return;
+            lastRenderMs = nowMs;
+            const rawElapsed = (nowMs - baselineNow) / 1000;
             const elapsedSec = Math.min(EXTRAPOLATION_CAP_SEC, rawElapsed);
             // Clamp extrapolation to `total - 1` so the UI doesn't
             // claim done before the real signal lands — UNLESS the
@@ -119,7 +131,6 @@ export const useSmoothSweep = (): SmoothSweepView => {
                 startedAt,
                 total,
             });
-            raf = requestAnimationFrame(tick);
         };
         raf = requestAnimationFrame(tick);
         return () => cancelAnimationFrame(raf);
