@@ -9,10 +9,9 @@ import styles from './featured-genres.module.css';
 import { api } from '/@/renderer/api';
 import { queryKeys } from '/@/renderer/api/query-keys';
 import {
-    getActiveCacheDb,
+    cachedSwr,
     isCacheAvailableSync,
     readSnapshot,
-    snapshotSwr,
     toCachedAlbumRow,
 } from '/@/renderer/cache';
 import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
@@ -175,8 +174,19 @@ const useGenreCoverAlbum = (genreId: string, serverId: string) =>
             readSnapshot<Album | null>(['featured-genre-cover', serverId, genreId])) as never,
         queryFn: (ctx) => {
             const key = ['featured-genre-cover', serverId, genreId] as const;
-            return snapshotSwr<Album | null>({
+            return cachedSwr<Album | null>({
+                apply: async (db, fresh) => {
+                    if (fresh) await db.albums.put(toCachedAlbumRow(fresh));
+                },
                 ctx,
+                // Serve any cached album with this genre tag so the tile
+                // renders cover art offline after a sync has run.
+                fromCache: async (db) => {
+                    if (!isCacheAvailableSync()) return undefined;
+                    const all = await db.albums.toArray();
+                    const match = all.find((r) => r.Payload.genres?.some((g) => g.id === genreId));
+                    return match ? match.Payload : undefined;
+                },
                 queryKey: key,
                 remote: async ({ signal }) => {
                     const res = await api.controller.getAlbumList({
@@ -189,18 +199,7 @@ const useGenreCoverAlbum = (genreId: string, serverId: string) =>
                             startIndex: 0,
                         },
                     });
-                    const result = res?.items?.[0] ?? null;
-                    // Write-through to Dexie albums table so clicking
-                    // through to the album detail page paints from cache.
-                    if (result && isCacheAvailableSync()) {
-                        try {
-                            const db = getActiveCacheDb();
-                            if (db) await db.albums.put(toCachedAlbumRow(result));
-                        } catch {
-                            /* swallow */
-                        }
-                    }
-                    return result;
+                    return res?.items?.[0] ?? null;
                 },
             });
         },

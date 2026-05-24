@@ -5,6 +5,7 @@ import { generatePath } from 'react-router';
 
 import { api } from '/@/renderer/api';
 import {
+    cachedSwr,
     getActiveCacheDb,
     isCacheAvailableSync,
     readSnapshot,
@@ -193,8 +194,24 @@ const useArtistSongs = (artistId: null | string, serverId: string | undefined) =
         // skeleton than to display inconsistent state.
         queryFn: (ctx) => {
             const key = ['feature-card-artist-songs', serverId ?? '', artistId ?? ''] as const;
-            return snapshotSwr<Song[]>({
+            return cachedSwr<Song[]>({
+                apply: async (_db, fresh) => {
+                    await writeSongsToCache(fresh ?? []);
+                },
                 ctx,
+                fromCache: async (db) => {
+                    if (!artistId || !isCacheAvailableSync()) return undefined;
+                    const rows = await db.songs
+                        .where('AlbumArtistId')
+                        .equals(artistId)
+                        .toArray();
+                    if (rows.length === 0) return undefined;
+                    const songs = dedupeSongsByTitle(rows.map((r) => r.Payload)).slice(
+                        0,
+                        SONGS_PER_CARD,
+                    );
+                    return songs.length > 0 ? songs : undefined;
+                },
                 queryKey: key,
                 remote: async ({ signal }) => {
                     if (!artistId || !serverId) return [] as Song[];
@@ -212,7 +229,6 @@ const useArtistSongs = (artistId: null | string, serverId: string | undefined) =
                             startIndex: 0,
                         },
                     });
-                    await writeSongsToCache((res?.items ?? []) as Song[]);
                     return dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(
                         0,
                         SONGS_PER_CARD,
