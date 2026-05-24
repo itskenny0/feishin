@@ -196,6 +196,14 @@ export const songsQueries = {
                 cachedSwr<number>({
                     ctx,
                     fromCache: async (db) => {
+                        if (args.query.searchTerm) {
+                            const rows = await db.songs.toArray();
+                            const result = filterSongsLocal({
+                                query: { ...args.query, startIndex: 0 },
+                                rows,
+                            });
+                            if (result !== undefined) return result.totalRecordCount ?? 0;
+                        }
                         if (args.query.genreIds?.length && !args.query.albumIds && !args.query.artistIds) {
                             const rows = await db.songs.toArray();
                             const result = filterSongsLocal({ query: { ...args.query, startIndex: 0 }, rows });

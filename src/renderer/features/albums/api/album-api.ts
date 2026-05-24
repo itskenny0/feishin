@@ -174,6 +174,14 @@ export const albumQueries = {
                 cachedSwr<number>({
                     ctx,
                     fromCache: async (db) => {
+                        if (args.query.searchTerm) {
+                            const rows = await db.albums.toArray();
+                            const result = filterAlbumsLocal({
+                                query: { ...args.query, startIndex: 0 },
+                                rows,
+                            });
+                            if (result !== undefined) return result.totalRecordCount ?? 0;
+                        }
                         if (
                             args.query.artistIds ||
                             args.query.genreIds ||
