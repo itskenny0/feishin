@@ -12,6 +12,7 @@ import {
     cachedSwr,
     isCacheAvailableSync,
     readSnapshot,
+    snapshotSwr,
     toCachedAlbumRow,
 } from '/@/renderer/cache';
 import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';

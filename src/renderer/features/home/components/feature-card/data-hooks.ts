@@ -10,8 +10,6 @@ import {
     isCacheAvailableSync,
     readSnapshot,
     snapshotSwr,
-    toCachedArtistRow,
-    toCachedGenreRow,
     toCachedSongRow,
 } from '/@/renderer/cache';
 import {
@@ -89,29 +87,6 @@ const writeSongsToCache = async (songs: Song[]): Promise<void> => {
     try {
         const db = getActiveCacheDb();
         if (db) await db.songs.bulkPut(songs.map(toCachedSongRow));
-    } catch {
-        /* swallow */
-    }
-};
-
-const writeArtistsToCache = async (
-    artists: AlbumArtist[],
-    kind: 'AlbumArtist' | 'Artist' = 'AlbumArtist',
-): Promise<void> => {
-    if (!isCacheAvailableSync() || artists.length === 0) return;
-    try {
-        const db = getActiveCacheDb();
-        if (db) await db.artists.bulkPut(artists.map((a) => toCachedArtistRow(a, kind)));
-    } catch {
-        /* swallow */
-    }
-};
-
-const writeGenresToCache = async (genres: Genre[]): Promise<void> => {
-    if (!isCacheAvailableSync() || genres.length === 0) return;
-    try {
-        const db = getActiveCacheDb();
-        if (db) await db.genres.bulkPut(genres.map(toCachedGenreRow));
     } catch {
         /* swallow */
     }

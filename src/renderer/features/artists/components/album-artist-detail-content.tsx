@@ -1047,6 +1047,7 @@ const AlbumArtistMetadataSimilarArtists = ({
                 _serverType: (server?.type as ServerType) || ServerType.JELLYFIN,
                 albumCount: null,
                 biography: null,
+                createdAt: null,
                 duration: null,
                 genres: [],
                 id: relatedArtist.id,
