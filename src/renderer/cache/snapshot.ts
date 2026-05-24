@@ -22,14 +22,13 @@ import type { QueryKey } from '@tanstack/react-query';
 // never exceeds a few MB and we evict the least-recently-written entries
 // first.
 const STORAGE_KEY = 'feishin:cache:snapshots:v1';
-// Lifted from the original 200/3MB cap after the cache audit doubled the
-// number of factories that write snapshots (every queryOptions factory
-// now mirrors its response). Modern browsers grant origins multi-GB
-// localStorage quotas; 6MB / 600 entries leaves comfortable headroom for
-// every list / detail / count / sidecar surface across both servers
-// without trimming surfaces the user is likely to revisit.
-const MAX_ENTRIES = 600;
-const MAX_BYTES = 6 * 1024 * 1024;
+// Kept intentionally conservative: localStorage quota is shared with auth
+// state and settings. Chromium grants 5MB per origin by default; we target
+// ≤3MB so snapshots never crowd out other keys even under heavy use.
+// 300 entries of ~10KB average = 3MB — covers the most-recently-visited
+// list pages and detail surfaces without hoarding stale history.
+const MAX_ENTRIES = 300;
+const MAX_BYTES = 3 * 1024 * 1024;
 const PERSIST_DEBOUNCE_MS = 500;
 
 // LRU-ish: we track insertion order via Map iteration. Map preserves
@@ -56,10 +55,12 @@ const persistNow = (): void => {
     if (!isBrowser) return;
     try {
         // Walk newest-to-oldest, dropping entries once we hit either cap.
-        // We serialize each entry individually so a single large blob can
-        // be skipped without blowing the budget for everything after it.
+        // Store raw objects (not pre-serialized strings) so the final
+        // JSON.stringify(kept) encodes each value once; double-encoding
+        // would escape quotes/backslashes and make the stored blob 1.5-2×
+        // larger than the byte budget suggests.
         const reversed = Array.from(snapshots.entries()).reverse();
-        const kept: [string, string][] = [];
+        const kept: [string, unknown][] = [];
         let bytes = 0;
         for (const [k, v] of reversed) {
             if (kept.length >= MAX_ENTRIES) break;
@@ -71,10 +72,13 @@ const persistNow = (): void => {
                 // it can still live in memory for the current session.
                 continue;
             }
-            const entryBytes = k.length + serialized.length + 4;
+            // +10 accounts for key quoting, array brackets, and comma overhead
+            // in the outer JSON.stringify — keep the estimate tight so we never
+            // cut too many entries when objects are small.
+            const entryBytes = k.length + serialized.length + 10;
             if (bytes + entryBytes > MAX_BYTES) continue;
             bytes += entryBytes;
-            kept.push([k, serialized]);
+            kept.push([k, v]);
         }
         // Reverse again so we end up writing oldest-first and the most-
         // recent entries are the last ones in the stored object.
@@ -98,14 +102,16 @@ const restoreFromStorage = (): void => {
     try {
         const raw = localStorage.getItem(STORAGE_KEY);
         if (!raw) return;
-        const parsed = JSON.parse(raw) as [string, string][];
+        const parsed = JSON.parse(raw) as [string, unknown][];
         if (!Array.isArray(parsed)) return;
         for (const entry of parsed) {
             if (!Array.isArray(entry) || entry.length !== 2) continue;
             const [k, v] = entry;
-            if (typeof k !== 'string' || typeof v !== 'string') continue;
+            if (typeof k !== 'string') continue;
             try {
-                snapshots.set(k, JSON.parse(v));
+                // New format stores the value as a parsed object directly.
+                // Old format stored a JSON string — parse it for backward compat.
+                snapshots.set(k, typeof v === 'string' ? JSON.parse(v) : v);
             } catch {
                 // Skip an individual unparseable entry but keep the rest.
             }
