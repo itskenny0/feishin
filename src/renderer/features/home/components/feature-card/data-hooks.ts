@@ -136,12 +136,6 @@ const useArtistCandidates = (serverId: string | undefined) =>
         queryFn: (ctx) => {
             const key = ['feature-card-artists-v2', serverId ?? ''] as const;
             return cachedSwr<ArtistCandidate[]>({
-                apply: async (_db, fresh) => {
-                    await writeArtistsToCache(
-                        (fresh ?? []).map((c) => ({ id: c.id, name: c.name } as AlbumArtist)),
-                        'AlbumArtist',
-                    );
-                },
                 ctx,
                 fromCache: async (db) => {
                     if (!isCacheAvailableSync()) return undefined;
@@ -392,16 +386,6 @@ const useGenreCandidates = (serverId: string | undefined) =>
         queryFn: (ctx) => {
             const key = ['feature-card-genres', serverId ?? ''] as const;
             return cachedSwr<GenreCandidate[]>({
-                apply: async (_db, fresh) => {
-                    await writeGenresToCache(
-                        (fresh ?? []).map((c) => ({
-                            albumCount: c.albumCount,
-                            id: c.id,
-                            name: c.name,
-                            songCount: c.songCount,
-                        } as Genre)),
-                    );
-                },
                 ctx,
                 fromCache: async (db) => {
                     if (!isCacheAvailableSync()) return undefined;
