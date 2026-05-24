@@ -10,11 +10,46 @@ import { api } from '/@/renderer/api';
 import { queryKeys } from '/@/renderer/api/query-keys';
 import {
     cachedSwr,
+    getActiveCacheDb,
     isCacheAvailableSync,
     readSnapshot,
     snapshotSwr,
     toCachedAlbumRow,
 } from '/@/renderer/cache';
+import type { CachedAlbum } from '/@/renderer/cache/types';
+
+// All genre tiles on the home page call fromCache simultaneously. Without a
+// shared scan, each tile triggers an independent db.albums.toArray() — 12-18
+// full table scans hitting IndexedDB concurrently, all racing the 2-second
+// fromCache timeout. Serialise into a single pending promise + 30s in-memory
+// result so the work happens once per home-page render.
+let _albumScanPromise: Promise<CachedAlbum[]> | null = null;
+let _albumScanResult: CachedAlbum[] | null = null;
+let _albumScanTs = 0;
+const ALBUM_SCAN_TTL_MS = 30_000;
+
+function getAlbumsCached(): Promise<CachedAlbum[]> {
+    const now = Date.now();
+    if (_albumScanResult && now - _albumScanTs < ALBUM_SCAN_TTL_MS) {
+        return Promise.resolve(_albumScanResult);
+    }
+    if (_albumScanPromise) return _albumScanPromise;
+    const db = getActiveCacheDb();
+    if (!db) return Promise.resolve([]);
+    _albumScanPromise = db.albums
+        .toArray()
+        .then((rows) => {
+            _albumScanResult = rows;
+            _albumScanTs = Date.now();
+            _albumScanPromise = null;
+            return rows;
+        })
+        .catch(() => {
+            _albumScanPromise = null;
+            return [];
+        });
+    return _albumScanPromise;
+}
 import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { useFuzzyGenreIds } from '/@/renderer/features/genres/api/genres-api';
 import { useGenreListSuspenseQuery } from '/@/renderer/features/genres/queries/genres-queries';
@@ -182,9 +217,11 @@ const useGenreCoverAlbum = (genreId: string, serverId: string) =>
                 ctx,
                 // Serve any cached album with this genre tag so the tile
                 // renders cover art offline after a sync has run.
-                fromCache: async (db) => {
+                // Uses getAlbumsCached() so all concurrent genre tiles share
+                // a single Dexie scan instead of each doing a full table read.
+                fromCache: async (_db) => {
                     if (!isCacheAvailableSync()) return undefined;
-                    const all = await db.albums.toArray();
+                    const all = await getAlbumsCached();
                     const match = all.find((r) => r.Payload.genres?.some((g) => g.id === genreId));
                     return match ? match.Payload : undefined;
                 },
