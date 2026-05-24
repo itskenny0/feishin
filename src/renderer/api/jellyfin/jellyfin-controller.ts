@@ -100,7 +100,7 @@ export const JF_FIELDS = {
         'ItemCounts',
     ],
     ALBUM_DETAIL: ['Genres', 'DateCreated', 'ChildCount', 'People', 'Tags', 'ProviderIds', 'Path'],
-    ALBUM_LIST: ['People', 'Tags', 'Studios', 'SortName', 'ProviderIds', 'ChildCount', 'Path'],
+    ALBUM_LIST: ['People', 'Tags', 'Studios', 'SortName', 'ProviderIds', 'ChildCount', 'Path', 'Genres'],
     FOLDER: ['Genres', 'DateCreated', 'MediaSources', 'ParentId', 'Path'],
     GENRE: ['ItemCounts'],
     PLAYLIST_DETAIL: [
