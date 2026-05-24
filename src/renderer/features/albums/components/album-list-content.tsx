@@ -1,4 +1,4 @@
-import { lazy, Suspense, useMemo } from 'react';
+import { lazy, Suspense, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useListContext } from '/@/renderer/context/list-context';
@@ -116,7 +116,7 @@ export const AlbumListView = ({
 }) => {
     const { t } = useTranslation();
     const server = useCurrentServer();
-    const { pageKey } = useListContext();
+    const { pageKey, setItemCount } = useListContext();
 
     const { query } = useAlbumListFilters(pageKey as ItemListKey);
 
@@ -137,6 +137,10 @@ export const AlbumListView = ({
         query: { ...mergedQuery, limit: itemsPerPage },
         serverId: server.id,
     });
+
+    useEffect(() => {
+        if (countQuery.data !== undefined) setItemCount?.(countQuery.data);
+    }, [countQuery.data, setItemCount]);
 
     if (countQuery.data === 0) {
         const fallback: EmptyStateProps = {
