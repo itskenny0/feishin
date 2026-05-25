@@ -2,7 +2,7 @@ import { Collapse, UnstyledButton } from '@mantine/core';
 import { closeAllModals, openModal } from '@mantine/modals';
 import isElectron from 'is-electron';
 import { nanoid } from 'nanoid/non-secure';
-import { FocusEvent, useEffect, useState } from 'react';
+import { FocusEvent, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { api } from '/@/renderer/api';
@@ -252,6 +252,7 @@ function StepProgress({ current, total }: { current: number; total: number }) {
 export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
     const { t } = useTranslation();
     const focusTrapRef = useFocusTrap(true);
+    const containerRef = useRef<HTMLDivElement | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const { addServer, setCurrentServer } = useAuthStoreActions();
     const serverList = useServerList();
@@ -262,6 +263,22 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
 
     const serverLock = isServerLock();
     const isWizard = isMobileShell && onCancel === null;
+
+    const setStackRef = (node: HTMLDivElement | null) => {
+        containerRef.current = node;
+        focusTrapRef(node);
+    };
+
+    useEffect(() => {
+        if (!isWizard) return;
+        const timer = setTimeout(() => {
+            const el = containerRef.current?.querySelector<HTMLElement>(
+                '[data-autofocus]:not([disabled])',
+            );
+            el?.focus();
+        }, 50);
+        return () => clearTimeout(timer);
+    }, [step, isWizard]);
 
     const form = useForm({
         initialValues: {
@@ -449,7 +466,7 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
 
     return (
         <form onSubmit={handleSubmit}>
-            <Stack gap="md" ref={focusTrapRef}>
+            <Stack gap="md" ref={setStackRef}>
                 {isWizard ? (
                     <>
                         {/* Wizard header */}
@@ -525,7 +542,7 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
                                     data-autofocus
                                     disabled={serverLock}
                                     error={
-                                        form.values.url && !urlHasHostname
+                                        form.values.url.length > 'http://'.length && !urlHasHostname
                                             ? t('form.addServer.urlInvalid')
                                             : undefined
                                     }
