@@ -1,7 +1,7 @@
 import { closeAllModals } from '@mantine/modals';
 import isElectron from 'is-electron';
 import { nanoid } from 'nanoid/non-secure';
-import { useEffect, useState } from 'react';
+import { FocusEvent, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { api } from '/@/renderer/api';
@@ -94,6 +94,19 @@ const ALL_SERVERS = Object.keys(SERVER_TYPES).map((serverType) => {
     };
 });
 
+function normalizeInputUrl(raw: string): string {
+    const trimmed = raw.trim();
+    if (!trimmed) return trimmed;
+    if (!trimmed.match(/^https?:\/\//)) return 'http://' + trimmed.replace(/\/$/, '');
+    return trimmed.replace(/\/$/, '');
+}
+
+const URL_PLACEHOLDERS: Record<ServerType, string> = {
+    [ServerType.JELLYFIN]: 'http://jellyfin.yourdomain.com',
+    [ServerType.NAVIDROME]: 'http://navidrome.yourdomain.com',
+    [ServerType.SUBSONIC]: 'http://your-subsonic-server.com',
+};
+
 export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
     const { t } = useTranslation();
     const focusTrapRef = useFocusTrap(true);
@@ -118,11 +131,25 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
             type:
                 (localSettings
                     ? localSettings.env.SERVER_TYPE
-                    : toServerType(window.SERVER_TYPE)) ?? ServerType.NAVIDROME,
-            url: (localSettings ? localSettings.env.SERVER_URL : window.SERVER_URL) ?? 'https://',
+                    : toServerType(window.SERVER_TYPE)) ?? ServerType.JELLYFIN,
+            url: (localSettings ? localSettings.env.SERVER_URL : window.SERVER_URL) ?? 'http://',
             username: '',
         },
     });
+
+    const mobileInputProps = isMobileShell
+        ? {
+              onFocus: (e: FocusEvent<HTMLInputElement>) =>
+                  e.currentTarget.scrollIntoView({ behavior: 'smooth', block: 'center' }),
+          }
+        : {};
+
+    const handleUrlBlur = (e: FocusEvent<HTMLInputElement>) => {
+        const normalized = normalizeInputUrl(e.currentTarget.value);
+        form.setFieldValue('url', normalized);
+        // also run form's own onBlur for touched/error state
+        form.getInputProps('url').onBlur?.(e);
+    };
 
     const isSubmitDisabled =
         !form.values.name || !form.values.url || !form.values.username || !form.values.password;
@@ -264,16 +291,22 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
                                     context: 'name',
                                 })}
                                 required
+                                {...mobileInputProps}
                                 {...form.getInputProps('name')}
                             />
                             <TextInput
+                                autoCapitalize="none"
+                                autoComplete="url"
+                                autoCorrect="off"
                                 disabled={serverLock}
-                                label={t('form.addServer.input', {
-                                    context: 'url',
-                                })}
-                                placeholder="https://music.example.com"
+                                inputMode="url"
+                                label={t('form.addServer.input', { context: 'url' })}
+                                placeholder={URL_PLACEHOLDERS[form.values.type as ServerType]}
                                 required
+                                spellCheck={false}
+                                {...mobileInputProps}
                                 {...form.getInputProps('url')}
+                                onBlur={handleUrlBlur}
                             />
                         </Stack>
                     ) : (
@@ -285,16 +318,22 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
                                     context: 'name',
                                 })}
                                 required
+                                {...mobileInputProps}
                                 {...form.getInputProps('name')}
                             />
                             <TextInput
+                                autoCapitalize="none"
+                                autoComplete="url"
+                                autoCorrect="off"
                                 disabled={serverLock}
-                                label={t('form.addServer.input', {
-                                    context: 'url',
-                                })}
-                                placeholder="https://music.example.com"
+                                inputMode="url"
+                                label={t('form.addServer.input', { context: 'url' })}
+                                placeholder={URL_PLACEHOLDERS[form.values.type as ServerType]}
                                 required
+                                spellCheck={false}
+                                {...mobileInputProps}
                                 {...form.getInputProps('url')}
+                                onBlur={handleUrlBlur}
                             />
                         </Group>
                     )}
@@ -319,16 +358,22 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
                         />
                     )}
                     <TextInput
+                        autoCapitalize="none"
+                        autoComplete="username"
+                        autoCorrect="off"
                         label={t('form.addServer.input', {
                             context: 'username',
                         })}
                         required
+                        {...mobileInputProps}
                         {...form.getInputProps('username')}
                     />
                     <PasswordInput
+                        autoComplete="current-password"
                         label={t('form.addServer.input', {
                             context: 'password',
                         })}
+                        {...mobileInputProps}
                         {...form.getInputProps('password')}
                     />
                     {localSettings && form.values.type === ServerType.NAVIDROME && (
