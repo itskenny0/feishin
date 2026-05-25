@@ -215,6 +215,12 @@ const URL_PLACEHOLDERS: Record<ServerType, string> = {
     [ServerType.SUBSONIC]: 'http://your-subsonic-server.com',
 };
 
+const DEFAULT_NAMES: Record<ServerType, string> = {
+    [ServerType.JELLYFIN]: 'My Jellyfin',
+    [ServerType.NAVIDROME]: 'My Navidrome',
+    [ServerType.SUBSONIC]: 'My OpenSubsonic',
+};
+
 export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
     const { t } = useTranslation();
     const focusTrapRef = useFocusTrap(true);
@@ -275,8 +281,23 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
     const handleUrlBlur = (e: FocusEvent<HTMLInputElement>) => {
         const normalized = normalizeInputUrl(e.currentTarget.value);
         form.setFieldValue('url', normalized);
-        // also run form's own onBlur for touched/error state
         form.getInputProps('url').onBlur?.(e);
+
+        if (!normalized) return;
+
+        const defaultName = DEFAULT_NAMES[form.values.type as ServerType] ?? 'My Server';
+        const isStillDefault =
+            !form.values.name || Object.values(DEFAULT_NAMES).includes(form.values.name);
+        if (!isStillDefault) return;
+
+        try {
+            const url = new URL(normalized);
+            const hostname = url.hostname.replace(/^www\./, '');
+            const firstSegment = hostname.split('.')[0];
+            form.setFieldValue('name', firstSegment || defaultName);
+        } catch {
+            // invalid URL — leave name as-is
+        }
     };
 
     const isSubmitDisabled =
