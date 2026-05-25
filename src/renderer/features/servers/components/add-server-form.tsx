@@ -1,4 +1,4 @@
-import { Collapse } from '@mantine/core';
+import { Collapse, UnstyledButton } from '@mantine/core';
 import { closeAllModals, openModal } from '@mantine/modals';
 import isElectron from 'is-electron';
 import { nanoid } from 'nanoid/non-secure';
@@ -102,6 +102,7 @@ function JellyfinFirstTypePicker({
                 onClick={() => onChange(ServerType.JELLYFIN)}
             />
             <Button
+                disabled={disabled}
                 onClick={toggleOther}
                 rightSection={<Icon icon={otherOpen ? 'arrowUpS' : 'arrowDownS'} size="sm" />}
                 size="xs"
@@ -180,31 +181,31 @@ function ServerTypeCard({
     onClick: () => void;
 }) {
     return (
-        <div
-            onClick={() => !disabled && onClick()}
+        <UnstyledButton
+            aria-checked={isSelected}
+            aria-label={label}
+            disabled={disabled}
+            onClick={onClick}
+            role="radio"
             style={{
+                border: isSelected
+                    ? '2px solid var(--mantine-color-primary-6)'
+                    : '2px solid transparent',
+                borderRadius: 'var(--mantine-radius-md)',
                 cursor: disabled ? 'default' : 'pointer',
                 opacity: disabled ? 0.6 : 1,
+                padding: 'var(--mantine-spacing-md)',
+                textAlign: 'center' as const,
+                width: '100%',
             }}
         >
-            <Paper
-                p="md"
-                style={{
-                    border: isSelected
-                        ? '2px solid var(--mantine-color-primary-6)'
-                        : '2px solid transparent',
-                    textAlign: 'center',
-                }}
-                withBorder
-            >
-                <Stack align="center" gap="xs">
-                    <img alt={label} height={40} src={icon} width={40} />
-                    <Text fw={isSelected ? 700 : 400} size="sm">
-                        {label}
-                    </Text>
-                </Stack>
-            </Paper>
-        </div>
+            <Stack align="center" gap="xs">
+                <img alt={label} height={40} src={icon} width={40} />
+                <Text fw={isSelected ? 700 : 400} size="sm">
+                    {label}
+                </Text>
+            </Stack>
+        </UnstyledButton>
     );
 }
 
