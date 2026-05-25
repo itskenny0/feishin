@@ -236,7 +236,13 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
         initialValues: {
             legacyAuth: isLegacyAuth(),
             name:
-                (localSettings ? localSettings.env.SERVER_NAME : window.SERVER_NAME) || 'My Server',
+                (localSettings ? localSettings.env.SERVER_NAME : window.SERVER_NAME) ||
+                (DEFAULT_NAMES[
+                    ((localSettings
+                        ? localSettings.env.SERVER_TYPE
+                        : toServerType(window.SERVER_TYPE)) ?? ServerType.JELLYFIN) as ServerType
+                ] ??
+                    'My Server'),
             password: '',
             preferInstantMix: undefined,
             preferRemoteUrl: false,
