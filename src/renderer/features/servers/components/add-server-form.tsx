@@ -223,10 +223,11 @@ const DEFAULT_NAMES: Record<ServerType, string> = {
 };
 
 function StepProgress({ current, total }: { current: number; total: number }) {
+    const { t } = useTranslation();
     return (
         <Stack align="center" gap="xs">
             <Text c="dimmed" size="xs">
-                Step {current} of {total}
+                {t('form.addServer.stepProgress', { current, total })}
             </Text>
             <Group gap="xs">
                 {Array.from({ length: total }).map((_, i) => (
@@ -474,7 +475,7 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
                                     value={form.values.type as ServerType}
                                 />
                                 <Button fullWidth onClick={() => setStep(1)}>
-                                    Continue
+                                    {t('common.continue')}
                                 </Button>
                             </Stack>
                         )}
@@ -487,7 +488,7 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
                                     <Stack gap="xs">
                                         {!isDone && discovered.length === 0 && (
                                             <Text c="dimmed" size="xs">
-                                                Scanning local network…
+                                                {t('form.addServer.scanning')}
                                             </Text>
                                         )}
                                         {discovered.map((server) => (
@@ -520,10 +521,11 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
                                     autoCapitalize="none"
                                     autoComplete="url"
                                     autoCorrect="off"
+                                    data-autofocus
                                     disabled={serverLock}
                                     error={
                                         form.values.url && !urlHasHostname
-                                            ? 'Enter a valid server URL'
+                                            ? t('form.addServer.urlInvalid')
                                             : undefined
                                     }
                                     inputMode="url"
@@ -567,7 +569,7 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
                                     fullWidth
                                     onClick={() => setStep(2)}
                                 >
-                                    Continue
+                                    {t('common.continue')}
                                 </Button>
                             </Stack>
                         )}
@@ -579,6 +581,7 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
                                     autoCapitalize="none"
                                     autoComplete="username"
                                     autoCorrect="off"
+                                    data-autofocus
                                     label={t('form.addServer.input', { context: 'username' })}
                                     required
                                     {...form.getInputProps('username')}
@@ -638,7 +641,7 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
                                         type="submit"
                                         variant="filled"
                                     >
-                                        Connect
+                                        {t('common.connect')}
                                     </ModalButton>
                                 </Group>
                             </Stack>

@@ -76,6 +76,8 @@
         "comingSoon": "Coming soon…",
         "configure": "Configure",
         "confirm": "Confirm",
+        "connect": "Connect",
+        "continue": "Continue",
         "create": "Create",
         "currentSong": "Current $t(entity.track, {\"count\": 1})",
         "decrease": "Decrease",
@@ -405,8 +407,11 @@
             "jellyfinWarning_title": "Heads up",
             "jellyfinWarning_useJellyfin": "Use Jellyfin instead",
             "otherServerTypes": "Other server types",
+            "scanning": "Scanning local network…",
+            "stepProgress": "Step {{current}} of {{total}}",
             "success": "Server added successfully",
-            "title": "Add Server"
+            "title": "Add Server",
+            "urlInvalid": "Enter a valid server URL"
         },
         "largeFetchConfirmation": {
             "title": "Add items to the queue",
