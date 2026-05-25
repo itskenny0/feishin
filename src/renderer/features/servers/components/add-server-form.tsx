@@ -708,7 +708,7 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
                             <Stack gap="xs">
                                 {!isDone && discovered.length === 0 && (
                                     <Text c="dimmed" size="xs">
-                                        Scanning local network…
+                                        {t('form.addServer.scanning')}
                                     </Text>
                                 )}
                                 {discovered.map((server) => (
