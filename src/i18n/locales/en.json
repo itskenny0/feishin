@@ -399,9 +399,6 @@
             "input_remoteUrlPlaceholder": "Optional: public URL for external features",
             "input_savePassword": "Save Password",
             "input_url": "URL",
-            "input_urlPlaceholder_jellyfin": "http://jellyfin.yourdomain.com",
-            "input_urlPlaceholder_navidrome": "http://navidrome.yourdomain.com",
-            "input_urlPlaceholder_subsonic": "http://your-subsonic-server.com",
             "input_username": "Username",
             "success": "Server added successfully",
             "title": "Add Server"

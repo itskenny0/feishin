@@ -97,7 +97,10 @@ const ALL_SERVERS = Object.keys(SERVER_TYPES).map((serverType) => {
 function normalizeInputUrl(raw: string): string {
     const trimmed = raw.trim();
     if (!trimmed) return trimmed;
-    if (!trimmed.match(/^https?:\/\//)) return 'http://' + trimmed.replace(/\/$/, '');
+    if (!/^https?:\/\//i.test(trimmed)) return 'http://' + trimmed.replace(/\/$/, '');
+    // Only strip trailing slash when there's a host (not just a bare scheme)
+    const withoutScheme = trimmed.replace(/^https?:\/\//i, '');
+    if (!withoutScheme || withoutScheme === '/') return trimmed;
     return trimmed.replace(/\/$/, '');
 }
 
@@ -291,8 +294,8 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
                                     context: 'name',
                                 })}
                                 required
-                                {...mobileInputProps}
                                 {...form.getInputProps('name')}
+                                {...mobileInputProps}
                             />
                             <TextInput
                                 autoCapitalize="none"
@@ -304,8 +307,8 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
                                 placeholder={URL_PLACEHOLDERS[form.values.type as ServerType]}
                                 required
                                 spellCheck={false}
-                                {...mobileInputProps}
                                 {...form.getInputProps('url')}
+                                {...mobileInputProps}
                                 onBlur={handleUrlBlur}
                             />
                         </Stack>
@@ -318,8 +321,8 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
                                     context: 'name',
                                 })}
                                 required
-                                {...mobileInputProps}
                                 {...form.getInputProps('name')}
+                                {...mobileInputProps}
                             />
                             <TextInput
                                 autoCapitalize="none"
@@ -331,8 +334,8 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
                                 placeholder={URL_PLACEHOLDERS[form.values.type as ServerType]}
                                 required
                                 spellCheck={false}
-                                {...mobileInputProps}
                                 {...form.getInputProps('url')}
+                                {...mobileInputProps}
                                 onBlur={handleUrlBlur}
                             />
                         </Group>
@@ -365,16 +368,16 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
                             context: 'username',
                         })}
                         required
-                        {...mobileInputProps}
                         {...form.getInputProps('username')}
+                        {...mobileInputProps}
                     />
                     <PasswordInput
                         autoComplete="current-password"
                         label={t('form.addServer.input', {
                             context: 'password',
                         })}
-                        {...mobileInputProps}
                         {...form.getInputProps('password')}
+                        {...mobileInputProps}
                     />
                     {localSettings && form.values.type === ServerType.NAVIDROME && (
                         <Checkbox
