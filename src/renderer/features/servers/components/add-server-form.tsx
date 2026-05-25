@@ -258,6 +258,7 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
     const { isDone, servers: discovered } = useAutodiscovery();
     const isMobileShell = useIsMobileShell();
     const [step, setStep] = useState(0);
+    const [advancedOpen, { toggle: toggleAdvanced }] = useDisclosure(false);
 
     const serverLock = isServerLock();
     const isWizard = isMobileShell && onCancel === null;
@@ -630,7 +631,22 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
                                 {isElectron() && (
                                     <>
                                         <Divider />
-                                        <IgnoreCorsSslSwitches />
+                                        <Button
+                                            onClick={toggleAdvanced}
+                                            rightSection={
+                                                <Icon
+                                                    icon={advancedOpen ? 'arrowUpS' : 'arrowDownS'}
+                                                    size="sm"
+                                                />
+                                            }
+                                            size="xs"
+                                            variant="subtle"
+                                        >
+                                            {t('form.addServer.advanced')}
+                                        </Button>
+                                        <Collapse expanded={advancedOpen}>
+                                            <IgnoreCorsSslSwitches />
+                                        </Collapse>
                                         <Divider />
                                     </>
                                 )}

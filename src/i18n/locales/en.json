@@ -388,6 +388,7 @@
     },
     "form": {
         "addServer": {
+            "advanced": "Advanced",
             "error_savePassword": "An error occurred when trying to save the password",
             "ignoreCors": "Ignore CORS ($t(common.restartRequired))",
             "ignoreSsl": "Ignore SSL ($t(common.restartRequired))",
