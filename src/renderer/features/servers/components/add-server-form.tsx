@@ -16,13 +16,14 @@ import SubsonicIcon from '/@/renderer/features/servers/assets/opensubsonic.png';
 import { IgnoreCorsSslSwitches } from '/@/renderer/features/servers/components/ignore-cors-ssl-switches';
 import { useIsMobileShell } from '/@/renderer/hooks/use-breakpoint';
 import { useAuthStoreActions, useServerList } from '/@/renderer/store';
+import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
+import { Box } from '/@/shared/components/box/box';
 import { Button } from '/@/shared/components/button/button';
 import { Checkbox } from '/@/shared/components/checkbox/checkbox';
 import { Divider } from '/@/shared/components/divider/divider';
 import { Group } from '/@/shared/components/group/group';
 import { Icon } from '/@/shared/components/icon/icon';
 import { ModalButton } from '/@/shared/components/modal/model-shared';
-import { Paper } from '/@/shared/components/paper/paper';
 import { PasswordInput } from '/@/shared/components/password-input/password-input';
 import { Stack } from '/@/shared/components/stack/stack';
 import { TextInput } from '/@/shared/components/text-input/text-input';
@@ -221,16 +222,44 @@ const DEFAULT_NAMES: Record<ServerType, string> = {
     [ServerType.SUBSONIC]: 'My OpenSubsonic',
 };
 
+function StepProgress({ current, total }: { current: number; total: number }) {
+    return (
+        <Stack align="center" gap="xs">
+            <Text c="dimmed" size="xs">
+                Step {current} of {total}
+            </Text>
+            <Group gap="xs">
+                {Array.from({ length: total }).map((_, i) => (
+                    <Box
+                        key={i}
+                        style={{
+                            background:
+                                i < current
+                                    ? 'var(--mantine-color-primary-6)'
+                                    : 'var(--mantine-color-default-border)',
+                            borderRadius: '50%',
+                            height: 8,
+                            width: 8,
+                        }}
+                    />
+                ))}
+            </Group>
+        </Stack>
+    );
+}
+
 export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
     const { t } = useTranslation();
     const focusTrapRef = useFocusTrap(true);
     const [isLoading, setIsLoading] = useState(false);
     const { addServer, setCurrentServer } = useAuthStoreActions();
     const serverList = useServerList();
-    const { servers: discovered } = useAutodiscovery();
+    const { isDone, servers: discovered } = useAutodiscovery();
     const isMobileShell = useIsMobileShell();
+    const [step, setStep] = useState(0);
 
     const serverLock = isServerLock();
+    const isWizard = isMobileShell && onCancel === null;
 
     const form = useForm({
         initialValues: {
@@ -314,12 +343,16 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
         }
     };
 
+    const urlHasHostname = (() => {
+        try {
+            return new URL(form.values.url).hostname.length > 0;
+        } catch {
+            return false;
+        }
+    })();
+
     const isSubmitDisabled =
         !form.values.name || !form.values.url || !form.values.username || !form.values.password;
-
-    const fillServerDetails = (server: DiscoveredServerItem) => {
-        form.setValues({ ...server });
-    };
 
     const handleSubmit = form.onSubmit(async (values) => {
         if (serverLock && Object.keys(serverList).length >= 1) {
@@ -413,183 +446,370 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
     });
 
     return (
-        <>
-            <Stack>
-                {discovered.map((server) => (
-                    <Paper key={server.url} p="10px">
-                        <Group>
-                            <img height="32" src={SERVER_TYPES[server.type].icon} width="32" />
-                            <div
-                                onClick={() => fillServerDetails(server)}
-                                style={{ cursor: 'pointer' }}
-                            >
-                                <Text fw={700}>{server.name}</Text>
-                                <Text>
-                                    {SERVER_TYPES[server.type].name} server at {server.url}
-                                </Text>
-                            </div>
+        <form onSubmit={handleSubmit}>
+            <Stack gap="md" ref={focusTrapRef}>
+                {isWizard ? (
+                    <>
+                        {/* Wizard header */}
+                        <Group align="center" justify="space-between">
+                            {step > 0 ? (
+                                <ActionIcon
+                                    icon="arrowLeft"
+                                    onClick={() => setStep((s) => s - 1)}
+                                    variant="subtle"
+                                />
+                            ) : (
+                                <Box style={{ width: 28 }} />
+                            )}
+                            <StepProgress current={step + 1} total={3} />
+                            <Box style={{ width: 28 }} />
                         </Group>
-                    </Paper>
-                ))}
-            </Stack>
-            <form onSubmit={handleSubmit}>
-                <Stack m={5} ref={focusTrapRef}>
-                    <JellyfinFirstTypePicker
-                        disabled={serverLock}
-                        onChange={handleTypeSelect}
-                        value={form.values.type as ServerType}
-                    />
-                    {isMobileShell ? (
-                        // On phones the name/url side-by-side made both
-                        // inputs uncomfortably narrow (especially since
-                        // URL placeholders are long). Stack vertically.
-                        <Stack gap="md">
-                            <TextInput
-                                data-autofocus
-                                disabled={serverLock}
-                                label={t('form.addServer.input', {
-                                    context: 'name',
-                                })}
-                                required
-                                {...form.getInputProps('name')}
-                                {...mobileInputProps}
-                            />
-                            <TextInput
-                                autoCapitalize="none"
-                                autoComplete="url"
-                                autoCorrect="off"
-                                disabled={serverLock}
-                                inputMode="url"
-                                label={t('form.addServer.input', { context: 'url' })}
-                                placeholder={URL_PLACEHOLDERS[form.values.type as ServerType]}
-                                required
-                                spellCheck={false}
-                                {...form.getInputProps('url')}
-                                {...mobileInputProps}
-                                onBlur={handleUrlBlur}
-                            />
-                        </Stack>
-                    ) : (
-                        <Group grow>
-                            <TextInput
-                                data-autofocus
-                                disabled={serverLock}
-                                label={t('form.addServer.input', {
-                                    context: 'name',
-                                })}
-                                required
-                                {...form.getInputProps('name')}
-                                {...mobileInputProps}
-                            />
-                            <TextInput
-                                autoCapitalize="none"
-                                autoComplete="url"
-                                autoCorrect="off"
-                                disabled={serverLock}
-                                inputMode="url"
-                                label={t('form.addServer.input', { context: 'url' })}
-                                placeholder={URL_PLACEHOLDERS[form.values.type as ServerType]}
-                                required
-                                spellCheck={false}
-                                {...form.getInputProps('url')}
-                                {...mobileInputProps}
-                                onBlur={handleUrlBlur}
-                            />
-                        </Group>
-                    )}
-                    <TextInput
-                        disabled={serverLock}
-                        label={t('form.addServer.input', {
-                            context: 'remoteUrl',
-                        })}
-                        placeholder={t('form.addServer.input', {
-                            context: 'remoteUrlPlaceholder',
-                        })}
-                        {...form.getInputProps('remoteUrl')}
-                    />
-                    {form.values.remoteUrl && (
-                        <Checkbox
-                            label={t('form.addServer.input', {
-                                context: 'preferRemoteUrl',
-                            })}
-                            {...form.getInputProps('preferRemoteUrl', {
-                                type: 'checkbox',
-                            })}
-                        />
-                    )}
-                    <TextInput
-                        autoCapitalize="none"
-                        autoComplete="username"
-                        autoCorrect="off"
-                        label={t('form.addServer.input', {
-                            context: 'username',
-                        })}
-                        required
-                        {...form.getInputProps('username')}
-                        {...mobileInputProps}
-                    />
-                    <PasswordInput
-                        autoComplete="current-password"
-                        label={t('form.addServer.input', {
-                            context: 'password',
-                        })}
-                        {...form.getInputProps('password')}
-                        {...mobileInputProps}
-                    />
-                    {localSettings && form.values.type === ServerType.NAVIDROME && (
-                        <Checkbox
-                            label={t('form.addServer.input', {
-                                context: 'savePassword',
-                            })}
-                            {...form.getInputProps('savePassword', {
-                                type: 'checkbox',
-                            })}
-                        />
-                    )}
-                    {form.values.type === ServerType.SUBSONIC && (
-                        <Checkbox
-                            disabled={serverLock}
-                            label={t('form.addServer.input', {
-                                context: 'legacyAuthentication',
-                            })}
-                            {...form.getInputProps('legacyAuth', { type: 'checkbox' })}
-                        />
-                    )}
-                    {form.values.type === ServerType.JELLYFIN && (
-                        <Checkbox
-                            description={t('form.addServer.input', {
-                                context: 'preferInstantMixDescription',
-                            })}
-                            label={t('form.addServer.input', {
-                                context: 'preferInstantMix',
-                            })}
-                            {...form.getInputProps('preferInstantMix', {
-                                type: 'checkbox',
-                            })}
-                        />
-                    )}
-                    {isElectron() && (
-                        <>
-                            <Divider />
-                            <IgnoreCorsSslSwitches />
-                            <Divider />
-                        </>
-                    )}
-                    <Group grow justify="flex-end">
-                        {onCancel && (
-                            <ModalButton onClick={onCancel}>{t('common.cancel')}</ModalButton>
+
+                        {/* Step 0: Server type */}
+                        {step === 0 && (
+                            <Stack gap="md">
+                                <JellyfinFirstTypePicker
+                                    disabled={serverLock}
+                                    onChange={handleTypeSelect}
+                                    value={form.values.type as ServerType}
+                                />
+                                <Button fullWidth onClick={() => setStep(1)}>
+                                    Continue
+                                </Button>
+                            </Stack>
                         )}
-                        <ModalButton
-                            disabled={isSubmitDisabled}
-                            loading={isLoading}
-                            type="submit"
-                            variant="filled"
-                        >
-                            {t('common.add')}
-                        </ModalButton>
-                    </Group>
-                </Stack>
-            </form>
-        </>
+
+                        {/* Step 1: Server details */}
+                        {step === 1 && (
+                            <Stack gap="md">
+                                {/* Autodiscovery chips — Electron only */}
+                                {isElectron() && (
+                                    <Stack gap="xs">
+                                        {!isDone && discovered.length === 0 && (
+                                            <Text c="dimmed" size="xs">
+                                                Scanning local network…
+                                            </Text>
+                                        )}
+                                        {discovered.map((server) => (
+                                            <Button
+                                                key={server.url}
+                                                leftSection={
+                                                    <img
+                                                        alt={SERVER_TYPES[server.type].name}
+                                                        height={16}
+                                                        src={SERVER_TYPES[server.type].icon}
+                                                        width={16}
+                                                    />
+                                                }
+                                                onClick={() =>
+                                                    form.setValues({
+                                                        name: server.name,
+                                                        type: server.type,
+                                                        url: server.url,
+                                                    })
+                                                }
+                                                size="xs"
+                                                variant="light"
+                                            >
+                                                {server.name} ({new URL(server.url).hostname})
+                                            </Button>
+                                        ))}
+                                    </Stack>
+                                )}
+                                <TextInput
+                                    autoCapitalize="none"
+                                    autoComplete="url"
+                                    autoCorrect="off"
+                                    disabled={serverLock}
+                                    error={
+                                        form.values.url && !urlHasHostname
+                                            ? 'Enter a valid server URL'
+                                            : undefined
+                                    }
+                                    inputMode="url"
+                                    label={t('form.addServer.input', { context: 'url' })}
+                                    placeholder={URL_PLACEHOLDERS[form.values.type as ServerType]}
+                                    required
+                                    spellCheck={false}
+                                    {...form.getInputProps('url')}
+                                    {...mobileInputProps}
+                                    onBlur={handleUrlBlur}
+                                />
+                                <TextInput
+                                    disabled={serverLock}
+                                    label={t('form.addServer.input', { context: 'name' })}
+                                    required
+                                    {...form.getInputProps('name')}
+                                    {...mobileInputProps}
+                                />
+                                <TextInput
+                                    disabled={serverLock}
+                                    label={t('form.addServer.input', { context: 'remoteUrl' })}
+                                    placeholder={t('form.addServer.input', {
+                                        context: 'remoteUrlPlaceholder',
+                                    })}
+                                    {...form.getInputProps('remoteUrl')}
+                                />
+                                {form.values.remoteUrl && (
+                                    <Checkbox
+                                        label={t('form.addServer.input', {
+                                            context: 'preferRemoteUrl',
+                                        })}
+                                        {...form.getInputProps('preferRemoteUrl', {
+                                            type: 'checkbox',
+                                        })}
+                                    />
+                                )}
+                                <Button
+                                    disabled={
+                                        !form.values.url || !form.values.name || !urlHasHostname
+                                    }
+                                    fullWidth
+                                    onClick={() => setStep(2)}
+                                >
+                                    Continue
+                                </Button>
+                            </Stack>
+                        )}
+
+                        {/* Step 2: Credentials */}
+                        {step === 2 && (
+                            <Stack gap="md">
+                                <TextInput
+                                    autoCapitalize="none"
+                                    autoComplete="username"
+                                    autoCorrect="off"
+                                    label={t('form.addServer.input', { context: 'username' })}
+                                    required
+                                    {...form.getInputProps('username')}
+                                    {...mobileInputProps}
+                                />
+                                <PasswordInput
+                                    autoComplete="current-password"
+                                    label={t('form.addServer.input', { context: 'password' })}
+                                    {...form.getInputProps('password')}
+                                    {...mobileInputProps}
+                                />
+                                {localSettings && form.values.type === ServerType.NAVIDROME && (
+                                    <Checkbox
+                                        label={t('form.addServer.input', {
+                                            context: 'savePassword',
+                                        })}
+                                        {...form.getInputProps('savePassword', {
+                                            type: 'checkbox',
+                                        })}
+                                    />
+                                )}
+                                {form.values.type === ServerType.SUBSONIC && (
+                                    <Checkbox
+                                        disabled={serverLock}
+                                        label={t('form.addServer.input', {
+                                            context: 'legacyAuthentication',
+                                        })}
+                                        {...form.getInputProps('legacyAuth', {
+                                            type: 'checkbox',
+                                        })}
+                                    />
+                                )}
+                                {form.values.type === ServerType.JELLYFIN && (
+                                    <Checkbox
+                                        description={t('form.addServer.input', {
+                                            context: 'preferInstantMixDescription',
+                                        })}
+                                        label={t('form.addServer.input', {
+                                            context: 'preferInstantMix',
+                                        })}
+                                        {...form.getInputProps('preferInstantMix', {
+                                            type: 'checkbox',
+                                        })}
+                                    />
+                                )}
+                                {isElectron() && (
+                                    <>
+                                        <Divider />
+                                        <IgnoreCorsSslSwitches />
+                                        <Divider />
+                                    </>
+                                )}
+                                <Group grow justify="flex-end">
+                                    <ModalButton
+                                        disabled={isSubmitDisabled}
+                                        loading={isLoading}
+                                        type="submit"
+                                        variant="filled"
+                                    >
+                                        Connect
+                                    </ModalButton>
+                                </Group>
+                            </Stack>
+                        )}
+                    </>
+                ) : (
+                    /* ── Single-page layout (tablet+, desktop, modal context) ── */
+                    <>
+                        <JellyfinFirstTypePicker
+                            disabled={serverLock}
+                            onChange={handleTypeSelect}
+                            value={form.values.type as ServerType}
+                        />
+                        {isMobileShell ? (
+                            <Stack gap="md">
+                                <TextInput
+                                    data-autofocus
+                                    disabled={serverLock}
+                                    label={t('form.addServer.input', { context: 'name' })}
+                                    required
+                                    {...form.getInputProps('name')}
+                                />
+                                <TextInput
+                                    autoCapitalize="none"
+                                    autoComplete="url"
+                                    autoCorrect="off"
+                                    disabled={serverLock}
+                                    inputMode="url"
+                                    label={t('form.addServer.input', { context: 'url' })}
+                                    placeholder={URL_PLACEHOLDERS[form.values.type as ServerType]}
+                                    required
+                                    spellCheck={false}
+                                    {...form.getInputProps('url')}
+                                    {...mobileInputProps}
+                                    onBlur={handleUrlBlur}
+                                />
+                            </Stack>
+                        ) : (
+                            <Group grow>
+                                <TextInput
+                                    data-autofocus
+                                    disabled={serverLock}
+                                    label={t('form.addServer.input', { context: 'name' })}
+                                    required
+                                    {...form.getInputProps('name')}
+                                />
+                                <TextInput
+                                    autoCapitalize="none"
+                                    autoComplete="url"
+                                    autoCorrect="off"
+                                    disabled={serverLock}
+                                    inputMode="url"
+                                    label={t('form.addServer.input', { context: 'url' })}
+                                    placeholder={URL_PLACEHOLDERS[form.values.type as ServerType]}
+                                    required
+                                    spellCheck={false}
+                                    {...form.getInputProps('url')}
+                                    onBlur={handleUrlBlur}
+                                />
+                            </Group>
+                        )}
+                        {/* Autodiscovery chips — Electron only */}
+                        {isElectron() && (
+                            <Stack gap="xs">
+                                {!isDone && discovered.length === 0 && (
+                                    <Text c="dimmed" size="xs">
+                                        Scanning local network…
+                                    </Text>
+                                )}
+                                {discovered.map((server) => (
+                                    <Button
+                                        key={server.url}
+                                        leftSection={
+                                            <img
+                                                alt={SERVER_TYPES[server.type].name}
+                                                height={16}
+                                                src={SERVER_TYPES[server.type].icon}
+                                                width={16}
+                                            />
+                                        }
+                                        onClick={() =>
+                                            form.setValues({
+                                                name: server.name,
+                                                type: server.type,
+                                                url: server.url,
+                                            })
+                                        }
+                                        size="xs"
+                                        variant="light"
+                                    >
+                                        {server.name} ({new URL(server.url).hostname})
+                                    </Button>
+                                ))}
+                            </Stack>
+                        )}
+                        <TextInput
+                            disabled={serverLock}
+                            label={t('form.addServer.input', { context: 'remoteUrl' })}
+                            placeholder={t('form.addServer.input', {
+                                context: 'remoteUrlPlaceholder',
+                            })}
+                            {...form.getInputProps('remoteUrl')}
+                        />
+                        {form.values.remoteUrl && (
+                            <Checkbox
+                                label={t('form.addServer.input', { context: 'preferRemoteUrl' })}
+                                {...form.getInputProps('preferRemoteUrl', { type: 'checkbox' })}
+                            />
+                        )}
+                        <TextInput
+                            autoCapitalize="none"
+                            autoComplete="username"
+                            autoCorrect="off"
+                            label={t('form.addServer.input', { context: 'username' })}
+                            required
+                            {...form.getInputProps('username')}
+                            {...mobileInputProps}
+                        />
+                        <PasswordInput
+                            autoComplete="current-password"
+                            label={t('form.addServer.input', { context: 'password' })}
+                            {...form.getInputProps('password')}
+                            {...mobileInputProps}
+                        />
+                        {localSettings && form.values.type === ServerType.NAVIDROME && (
+                            <Checkbox
+                                label={t('form.addServer.input', { context: 'savePassword' })}
+                                {...form.getInputProps('savePassword', { type: 'checkbox' })}
+                            />
+                        )}
+                        {form.values.type === ServerType.SUBSONIC && (
+                            <Checkbox
+                                disabled={serverLock}
+                                label={t('form.addServer.input', {
+                                    context: 'legacyAuthentication',
+                                })}
+                                {...form.getInputProps('legacyAuth', { type: 'checkbox' })}
+                            />
+                        )}
+                        {form.values.type === ServerType.JELLYFIN && (
+                            <Checkbox
+                                description={t('form.addServer.input', {
+                                    context: 'preferInstantMixDescription',
+                                })}
+                                label={t('form.addServer.input', { context: 'preferInstantMix' })}
+                                {...form.getInputProps('preferInstantMix', { type: 'checkbox' })}
+                            />
+                        )}
+                        {isElectron() && (
+                            <>
+                                <Divider />
+                                <IgnoreCorsSslSwitches />
+                                <Divider />
+                            </>
+                        )}
+                        <Group grow justify="flex-end">
+                            {onCancel && (
+                                <ModalButton onClick={onCancel}>{t('common.cancel')}</ModalButton>
+                            )}
+                            <ModalButton
+                                disabled={isSubmitDisabled}
+                                loading={isLoading}
+                                type="submit"
+                                variant="filled"
+                            >
+                                {t('common.add')}
+                            </ModalButton>
+                        </Group>
+                    </>
+                )}
+            </Stack>
+        </form>
     );
 };
