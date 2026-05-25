@@ -76,7 +76,7 @@ const ActionRequiredRoute = () => {
                         width: '100%',
                     }}
                 >
-                    <ScrollArea style={{ maxHeight: 'calc(100vh - 50px)' }}>
+                    <ScrollArea style={{ maxHeight: 'calc(100dvh - 50px)' }}>
                         <Group wrap="nowrap">
                             {displayedCheck && (
                                 <ActionRequiredContainer title={displayedCheck.title}>
