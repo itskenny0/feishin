@@ -299,8 +299,16 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
         try {
             const url = new URL(normalized);
             const hostname = url.hostname.replace(/^www\./, '');
-            const firstSegment = hostname.split('.')[0];
-            form.setFieldValue('name', firstSegment || defaultName);
+            const isRawAddress =
+                /^\d+(\.\d+){3}$/.test(hostname) || // IPv4
+                hostname.startsWith('[') || // IPv6
+                hostname === 'localhost';
+            if (isRawAddress) {
+                form.setFieldValue('name', defaultName);
+            } else {
+                const firstSegment = hostname.split('.')[0];
+                form.setFieldValue('name', firstSegment || defaultName);
+            }
         } catch {
             // invalid URL — leave name as-is
         }
