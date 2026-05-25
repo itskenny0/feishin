@@ -1,4 +1,5 @@
-import { closeAllModals } from '@mantine/modals';
+import { Collapse } from '@mantine/core';
+import { closeAllModals, openModal } from '@mantine/modals';
 import isElectron from 'is-electron';
 import { nanoid } from 'nanoid/non-secure';
 import { FocusEvent, useEffect, useState } from 'react';
@@ -15,17 +16,19 @@ import SubsonicIcon from '/@/renderer/features/servers/assets/opensubsonic.png';
 import { IgnoreCorsSslSwitches } from '/@/renderer/features/servers/components/ignore-cors-ssl-switches';
 import { useIsMobileShell } from '/@/renderer/hooks/use-breakpoint';
 import { useAuthStoreActions, useServerList } from '/@/renderer/store';
+import { Button } from '/@/shared/components/button/button';
 import { Checkbox } from '/@/shared/components/checkbox/checkbox';
 import { Divider } from '/@/shared/components/divider/divider';
 import { Group } from '/@/shared/components/group/group';
+import { Icon } from '/@/shared/components/icon/icon';
 import { ModalButton } from '/@/shared/components/modal/model-shared';
 import { Paper } from '/@/shared/components/paper/paper';
 import { PasswordInput } from '/@/shared/components/password-input/password-input';
-import { SegmentedControl } from '/@/shared/components/segmented-control/segmented-control';
 import { Stack } from '/@/shared/components/stack/stack';
 import { TextInput } from '/@/shared/components/text-input/text-input';
 import { Text } from '/@/shared/components/text/text';
 import { toast } from '/@/shared/components/toast/toast';
+import { useDisclosure } from '/@/shared/hooks/use-disclosure';
 import { useFocusTrap } from '/@/shared/hooks/use-focus-trap';
 import { useForm } from '/@/shared/hooks/use-form';
 import { AuthenticationResponse, ServerListItemWithCredential } from '/@/shared/types/domain-types';
@@ -41,15 +44,6 @@ interface AddServerFormProps {
 interface ServerDetails {
     icon: string;
     name: string;
-}
-
-function ServerIconWithLabel({ icon, label }: { icon: string; label: string }) {
-    return (
-        <Stack align="center" justify="center">
-            <img height="50" src={icon} width="50" />
-            <Text>{label}</Text>
-        </Stack>
-    );
 }
 
 function useAutodiscovery() {
@@ -86,13 +80,81 @@ const SERVER_TYPES: Record<ServerType, ServerDetails> = {
     },
 };
 
-const ALL_SERVERS = Object.keys(SERVER_TYPES).map((serverType) => {
-    const info = SERVER_TYPES[serverType];
-    return {
-        label: <ServerIconWithLabel icon={info.icon} label={info.name} />,
-        value: serverType,
-    };
-});
+function JellyfinFirstTypePicker({
+    disabled,
+    onChange,
+    value,
+}: {
+    disabled?: boolean;
+    onChange: (type: ServerType) => void;
+    value: ServerType;
+}) {
+    const { t } = useTranslation();
+    const [otherOpen, { toggle: toggleOther }] = useDisclosure(value !== ServerType.JELLYFIN);
+
+    return (
+        <Stack gap="sm">
+            <ServerTypeCard
+                disabled={disabled}
+                icon={JellyfinIcon}
+                isSelected={value === ServerType.JELLYFIN}
+                label="Jellyfin"
+                onClick={() => onChange(ServerType.JELLYFIN)}
+            />
+            <Button
+                onClick={toggleOther}
+                rightSection={<Icon icon={otherOpen ? 'arrowUpS' : 'arrowDownS'} size="sm" />}
+                size="xs"
+                variant="subtle"
+            >
+                {t('form.addServer.otherServerTypes')}
+            </Button>
+            <Collapse expanded={otherOpen}>
+                <Group gap="sm" grow>
+                    <ServerTypeCard
+                        disabled={disabled}
+                        icon={NavidromeIcon}
+                        isSelected={value === ServerType.NAVIDROME}
+                        label="Navidrome"
+                        onClick={() => onChange(ServerType.NAVIDROME)}
+                    />
+                    <ServerTypeCard
+                        disabled={disabled}
+                        icon={SubsonicIcon}
+                        isSelected={value === ServerType.SUBSONIC}
+                        label="OpenSubsonic"
+                        onClick={() => onChange(ServerType.SUBSONIC)}
+                    />
+                </Group>
+            </Collapse>
+        </Stack>
+    );
+}
+
+function NonJellyfinWarningModal({
+    onConfirm,
+    onRevert,
+    typeName,
+}: {
+    onConfirm: () => void;
+    onRevert: () => void;
+    typeName: string;
+}) {
+    const { t } = useTranslation();
+    return (
+        <Stack gap="md">
+            <Text>{t('form.addServer.jellyfinWarning_body')}</Text>
+            <Group gap="sm" justify="flex-end">
+                <Button onClick={onRevert} variant="default">
+                    {t('form.addServer.jellyfinWarning_useJellyfin')}
+                </Button>
+                <Button onClick={onConfirm} variant="filled">
+                    {t('form.addServer.jellyfinWarning_continue', { type: typeName })}
+                </Button>
+            </Group>
+        </Stack>
+    );
+}
 
 function normalizeInputUrl(raw: string): string {
     const trimmed = raw.trim();
@@ -102,6 +164,48 @@ function normalizeInputUrl(raw: string): string {
     const withoutScheme = trimmed.replace(/^https?:\/\//i, '');
     if (!withoutScheme || withoutScheme === '/') return trimmed;
     return trimmed.replace(/\/$/, '');
+}
+
+function ServerTypeCard({
+    disabled,
+    icon,
+    isSelected,
+    label,
+    onClick,
+}: {
+    disabled?: boolean;
+    icon: string;
+    isSelected: boolean;
+    label: string;
+    onClick: () => void;
+}) {
+    return (
+        <div
+            onClick={() => !disabled && onClick()}
+            style={{
+                cursor: disabled ? 'default' : 'pointer',
+                opacity: disabled ? 0.6 : 1,
+            }}
+        >
+            <Paper
+                p="md"
+                style={{
+                    border: isSelected
+                        ? '2px solid var(--mantine-color-primary-6)'
+                        : '2px solid transparent',
+                    textAlign: 'center',
+                }}
+                withBorder
+            >
+                <Stack align="center" gap="xs">
+                    <img alt={label} height={40} src={icon} width={40} />
+                    <Text fw={isSelected ? 700 : 400} size="sm">
+                        {label}
+                    </Text>
+                </Stack>
+            </Paper>
+        </div>
+    );
 }
 
 const URL_PLACEHOLDERS: Record<ServerType, string> = {
@@ -146,6 +250,26 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
                   e.currentTarget.scrollIntoView({ behavior: 'smooth', block: 'center' }),
           }
         : {};
+
+    const handleTypeSelect = (newType: ServerType) => {
+        if (newType !== ServerType.JELLYFIN && form.values.type === ServerType.JELLYFIN) {
+            openModal({
+                children: (
+                    <NonJellyfinWarningModal
+                        onConfirm={() => {
+                            form.setFieldValue('type', newType);
+                            closeAllModals();
+                        }}
+                        onRevert={closeAllModals}
+                        typeName={SERVER_TYPES[newType].name}
+                    />
+                ),
+                title: t('form.addServer.jellyfinWarning_title'),
+            });
+        } else {
+            form.setFieldValue('type', newType);
+        }
+    };
 
     const handleUrlBlur = (e: FocusEvent<HTMLInputElement>) => {
         const normalized = normalizeInputUrl(e.currentTarget.value);
@@ -274,13 +398,10 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
             </Stack>
             <form onSubmit={handleSubmit}>
                 <Stack m={5} ref={focusTrapRef}>
-                    <SegmentedControl
-                        data={ALL_SERVERS}
+                    <JellyfinFirstTypePicker
                         disabled={serverLock}
-                        fullWidth
-                        p="md"
-                        withItemsBorders={false}
-                        {...form.getInputProps('type')}
+                        onChange={handleTypeSelect}
+                        value={form.values.type as ServerType}
                     />
                     {isMobileShell ? (
                         // On phones the name/url side-by-side made both

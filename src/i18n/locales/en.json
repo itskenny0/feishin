@@ -400,6 +400,11 @@
             "input_savePassword": "Save Password",
             "input_url": "URL",
             "input_username": "Username",
+            "jellyfinWarning_body": "This build of Feishin is maintained primarily for Jellyfin servers. Other server types are unsupported and may be unstable or broken.",
+            "jellyfinWarning_continue": "Continue with {{type}}",
+            "jellyfinWarning_title": "Heads up",
+            "jellyfinWarning_useJellyfin": "Use Jellyfin instead",
+            "otherServerTypes": "Other server types",
             "success": "Server added successfully",
             "title": "Add Server"
         },
