@@ -2,7 +2,7 @@ import { Collapse, UnstyledButton } from '@mantine/core';
 import { closeAllModals, openModal } from '@mantine/modals';
 import isElectron from 'is-electron';
 import { nanoid } from 'nanoid/non-secure';
-import { FocusEvent, useEffect, useRef, useState } from 'react';
+import { FocusEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { api } from '/@/renderer/api';
@@ -264,10 +264,18 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
     const serverLock = isServerLock();
     const isWizard = isMobileShell && onCancel === null;
 
-    const setStackRef = (node: HTMLDivElement | null) => {
-        containerRef.current = node;
-        focusTrapRef(node);
-    };
+    // Must be a STABLE callback. An inline ref function gets a new identity
+    // every render, so React detaches + re-attaches it on each keystroke;
+    // Mantine's focus trap then re-runs focusNode() and yanks focus back to
+    // the [data-autofocus] field, so typing in any later field jumps to the
+    // first one. Memoizing keeps the trap attached once.
+    const setStackRef = useCallback(
+        (node: HTMLDivElement | null) => {
+            containerRef.current = node;
+            focusTrapRef(node);
+        },
+        [focusTrapRef],
+    );
 
     useEffect(() => {
         if (!isWizard) return;
