@@ -124,6 +124,10 @@ export const MobileFullscreenPlayerHeader = memo(
                         <ActionIcon
                             icon="settings2"
                             iconProps={{ size: 'lg' }}
+                            // Controlled popover: Mantine only auto-toggles an
+                            // UNcontrolled target on click, so we must flip the
+                            // state ourselves or the shade never opens.
+                            onClick={() => setConfigOpen((o) => !o)}
                             tooltip={{ label: t('common.configure'), openDelay: 400 }}
                             variant={isPageHovered ? 'default' : 'subtle'}
                         />
