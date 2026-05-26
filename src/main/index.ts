@@ -284,6 +284,16 @@ let currentRepeatMode: PlayerRepeat = PlayerRepeat.NONE;
 let currentSidebarCollapsed = false;
 let currentShuffleEnabled = false;
 let playbackMenuAccelerators: MenuPlaybackState['accelerators'] = {};
+let inputFocused = false;
+
+ipcMain.on('input-focus-state', (_event, focused: boolean) => {
+    const next = !!focused;
+    if (inputFocused === next) return;
+    inputFocused = next;
+    if (isMacOS()) {
+        rebuildMainMenu();
+    }
+});
 
 if (process.env.NODE_ENV === 'production') {
     import('source-map-support').then((sourceMapSupport) => {
@@ -344,7 +354,7 @@ const rebuildMainMenu = () => {
     if (!menuBuilder || !mainWindow) return;
 
     menuBuilder.buildMenu({
-        accelerators: playbackMenuAccelerators,
+        accelerators: inputFocused ? {} : playbackMenuAccelerators,
         playbackStatus: currentPlaybackStatus,
         privateMode: currentPrivateMode,
         repeatMode: currentRepeatMode,

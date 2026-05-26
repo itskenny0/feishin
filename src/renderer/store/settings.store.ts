@@ -786,9 +786,28 @@ const QueryBuilderSettingsSchema = z.object({
     tag: z.array(QueryBuilderCustomFieldSchema),
 });
 
+export const AUTO_DJ_MODE = {
+    ALBUMS: 'albums',
+    SONGS: 'songs',
+} as const;
+
+export type AutoDJMode = (typeof AUTO_DJ_MODE)[keyof typeof AUTO_DJ_MODE];
+
+export const AUTO_DJ_STRATEGY = {
+    LIBRARY_RANDOM: 'library_random',
+    SIMILAR: 'similar',
+} as const;
+
+export type AutoDJStrategy = (typeof AUTO_DJ_STRATEGY)[keyof typeof AUTO_DJ_STRATEGY];
+
+const autoDjStrategyEnum = z.enum(['similar', 'library_random']);
+
 const AutoDJSettingsSchema = z.object({
+    albumStrategy: autoDjStrategyEnum,
     enabled: z.boolean(),
     itemCount: z.number(),
+    mode: z.enum(['songs', 'albums']),
+    songStrategy: autoDjStrategyEnum,
     timing: z.number(),
 });
 
@@ -1305,8 +1324,11 @@ export const TRACKMAP_ADVANCED_DEFAULTS = {
 
 const initialState: SettingsState = {
     autoDJ: {
+        albumStrategy: AUTO_DJ_STRATEGY.SIMILAR,
         enabled: false,
         itemCount: 5,
+        mode: 'songs',
+        songStrategy: AUTO_DJ_STRATEGY.SIMILAR,
         timing: 1,
     },
     css: {

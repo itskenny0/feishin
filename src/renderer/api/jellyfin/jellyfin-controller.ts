@@ -1166,7 +1166,9 @@ export const JellyfinController: InternalControllerEndpoint = {
             throw new Error('Failed to get server info');
         }
 
-        const defaultFeatures = {};
+        const defaultFeatures = {
+            [ServerFeature.REPORT_PLAYBACK]: [1],
+        };
 
         const features = {
             ...defaultFeatures,

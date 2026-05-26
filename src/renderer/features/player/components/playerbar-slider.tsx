@@ -121,7 +121,6 @@ export const CustomPlayerbarSlider = ({ ...props }: SliderProps) => {
                 label: styles.label,
                 root: styles.root,
                 thumb: styles.thumb,
-                track: styles.track,
             }}
             {...props}
             size={6}
