@@ -124,8 +124,32 @@ export const snapshotSwr = async <TData>(args: {
         }
         return cached;
     }
+
+    // Cold-path hard timeout. On Capacitor WebView offline, `fetch()` can hang
+    // indefinitely instead of throwing. Race against an 8s timeout so the
+    // queryFn always settles — otherwise an awaiting caller (e.g. the "feeling
+    // lucky" button's fetchQuery) is stuck forever. On timeout, fall back to a
+    // snapshot if one exists, else null.
+    const COLD_NETWORK_TIMEOUT_MS = 8_000;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let timedOut = false;
+    const fallback = (): TData => {
+        const snap = readSnapshot<TData>(queryKey);
+        return (snap !== undefined ? snap : null) as TData;
+    };
+    const timeoutPromise = new Promise<TData>((resolve) => {
+        timer = setTimeout(() => {
+            timedOut = true;
+            resolve(fallback());
+        }, COLD_NETWORK_TIMEOUT_MS);
+    });
+
     try {
-        const fresh = await remote(ctx);
+        const fresh = await Promise.race([remote(ctx), timeoutPromise]);
+        if (timedOut) {
+            console.info('[cache] snapshot cold network timed out', queryKey);
+            return fresh;
+        }
         writeSnapshot(queryKey, fresh);
         return fresh;
     } catch (err) {
@@ -133,9 +157,11 @@ export const snapshotSwr = async <TData>(args: {
             console.info('[cache] cold network failed; returning null', queryKey, {
                 error: (err as Error)?.message,
             });
-            return null as unknown as TData;
+            return fallback();
         }
         throw err;
+    } finally {
+        if (timer) clearTimeout(timer);
     }
 };
 
