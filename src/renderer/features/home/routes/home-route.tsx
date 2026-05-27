@@ -15,12 +15,14 @@ import { FeelingLuckyButton } from '/@/renderer/features/home/components/feeling
 import { LibraryStats } from '/@/renderer/features/home/components/library-stats';
 import { NewSinceLastVisit } from '/@/renderer/features/home/components/new-since-last-visit';
 import { QuickFilterChips } from '/@/renderer/features/home/components/quick-filter-chips';
+import { MobileDevicePickerButton } from '/@/renderer/features/jellyfin-remote-target';
 import { AnimatedPage } from '/@/renderer/features/shared/components/animated-page';
 import { ComponentErrorBoundary } from '/@/renderer/features/shared/components/component-error-boundary';
 import { LibraryContainer } from '/@/renderer/features/shared/components/library-container';
 import { LibraryHeaderBar } from '/@/renderer/features/shared/components/library-header-bar';
 import { PageErrorBoundary } from '/@/renderer/features/shared/components/page-error-boundary';
 import { SongInfiniteCarousel } from '/@/renderer/features/songs/components/song-infinite-carousel';
+import { useIsMobileShell } from '/@/renderer/hooks/use-breakpoint';
 import {
     HomeFeatureStyle,
     HomeItem,
@@ -49,6 +51,7 @@ const HomeRoute = () => {
     const scrollAreaRef = useRef<HTMLDivElement>(null);
     const server = useCurrentServer();
     const { windowBarStyle } = useWindowSettings();
+    const isMobileShell = useIsMobileShell();
     const homeFeature = useHomeFeature();
     const homeFeatureContent = useHomeFeatureContent();
     const homeFeatureStyle = useHomeFeatureStyle();
@@ -236,6 +239,11 @@ const HomeRoute = () => {
                         <LibraryHeaderBar>
                             <LibraryHeaderBar.Title>{t('page.home.title')}</LibraryHeaderBar.Title>
                             <SyncChip />
+                            {/* Cold-start Jellyfin Connect entry: on mobile the
+                                device picker otherwise only lives in the player
+                                bar, which isn't shown until something plays.
+                                Self-gates to Jellyfin servers. */}
+                            {isMobileShell && <MobileDevicePickerButton iconSize="lg" />}
                         </LibraryHeaderBar>
                     ),
                     offset: 200,

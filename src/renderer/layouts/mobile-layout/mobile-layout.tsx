@@ -8,6 +8,7 @@ import { Outlet, useLocation } from 'react-router';
 import styles from './mobile-layout.module.css';
 
 import { ContextMenuController } from '/@/renderer/features/context-menu/context-menu-controller';
+import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
 import { FullScreenVisualizer } from '/@/renderer/features/player/components/full-screen-visualizer';
 import { MobileFullscreenPlayer } from '/@/renderer/features/player/components/mobile-fullscreen-player';
 import { RouteSkeleton } from '/@/renderer/features/shared/components/route-skeleton';
@@ -53,7 +54,12 @@ export const MobileLayout = ({ shell }: MobileLayoutProps) => {
      * collapses the player grid track to 0.
      */
     const currentSong = usePlayerSong();
-    const hasSong = Boolean(currentSong?.id);
+    // Show the player bar when something is playing locally OR a Jellyfin
+    // Connect target is active — so connecting to a remote (even an
+    // already-playing one) surfaces the bar + its controls and cast button,
+    // and the bar stays put while controlling the remote.
+    const remoteTargetActive = useRemoteTargetStore((s) => s.targetDeviceId !== null);
+    const hasSong = Boolean(currentSong?.id) || remoteTargetActive;
 
     // Pull-to-refresh on the main content scroll container: invalidate all
     // active react-query queries so the current route refetches. The hook
