@@ -1,8 +1,9 @@
 import type { Song } from '/@/shared/types/domain-types';
 
 // src/renderer/features/jellyfin-remote-target/hooks/use-active-player-source.tsx
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { interpolatePositionMs } from '/@/renderer/features/jellyfin-remote-target/controller/remote-play';
 import { useRemoteTarget } from '/@/renderer/features/jellyfin-remote-target/hooks/use-remote-target';
 import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
 import { usePlayerSong, usePlayerStatus, usePlayerVolume } from '/@/renderer/store/player.store';
@@ -98,4 +99,37 @@ export const useActiveIsPaused = (): boolean => {
     );
     const isRemote = useRemoteTargetStore((s) => s.targetDeviceId !== null);
     return isRemote ? remoteIsPaused : localStatus !== PlayerStatus.PLAYING;
+};
+
+/**
+ * Remote playback position in ms, interpolated at animation framerate so the
+ * seek bar advances smoothly between the 3s /Sessions polls. Returns 0 when no
+ * remote target is active.
+ */
+export const useRemoteInterpolatedPositionMs = (): number => {
+    const isRemote = useRemoteTargetStore((s) => s.targetDeviceId !== null);
+    const playState = useRemoteTargetStore((s) => s.mirrored.playState);
+    const durationMs = useRemoteTargetStore((s) => s.mirrored.nowPlayingItem?.duration);
+    const [posMs, setPosMs] = useState(0);
+    const frame = useRef<null | number>(null);
+
+    useEffect(() => {
+        if (!isRemote) {
+            setPosMs(0);
+            return;
+        }
+        const tick = () => {
+            setPosMs(interpolatePositionMs(playState, Date.now(), durationMs ?? undefined));
+            if (!playState.isPaused) {
+                frame.current = requestAnimationFrame(tick);
+            }
+        };
+        tick();
+        return () => {
+            if (frame.current !== null) cancelAnimationFrame(frame.current);
+            frame.current = null;
+        };
+    }, [isRemote, playState, durationMs]);
+
+    return posMs;
 };
