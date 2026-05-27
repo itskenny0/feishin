@@ -15,11 +15,11 @@ import { Separator } from '/@/shared/components/separator/separator';
 import { TextTitle } from '/@/shared/components/text-title/text-title';
 import { Text } from '/@/shared/components/text/text';
 import { PlaybackSelectors } from '/@/shared/constants/playback-selectors';
-import { QueueSong } from '/@/shared/types/domain-types';
+import { Song } from '/@/shared/types/domain-types';
 import { isPlausibleReleaseYear } from '/@/shared/utils/release-year';
 
 interface MobileFullscreenPlayerMetadataProps {
-    currentSong?: QueueSong;
+    currentSong?: Song;
     onToggleFavorite: (e: MouseEvent<HTMLButtonElement>) => void;
     onUpdateRating: (rating: number) => void;
     radioArtist?: string;

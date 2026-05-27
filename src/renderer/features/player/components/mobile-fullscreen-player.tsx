@@ -18,6 +18,7 @@ import styles from './mobile-fullscreen-player.module.css';
 
 import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { ContextMenuController } from '/@/renderer/features/context-menu/context-menu-controller';
+import { useActiveNowPlayingItem } from '/@/renderer/features/jellyfin-remote-target/hooks/use-active-player-source';
 import { useHasLyrics } from '/@/renderer/features/lyrics/api/lyrics-api';
 import { Lyrics } from '/@/renderer/features/lyrics/lyrics';
 import { PlayQueue } from '/@/renderer/features/now-playing/components/play-queue';
@@ -522,7 +523,11 @@ export const MobileFullscreenPlayer = () => {
         visualizerAsBackground,
     } = useFullScreenPlayerStore();
     const currentSong = usePlayerSong();
-    const { currentSong: currentSongData } = usePlayerData();
+    // The song to surface on the player face: the remote device's now-playing
+    // when a Jellyfin Connect target is active, else the local song (no-op
+    // locally). `currentSong` is kept for local-only secondary surfaces
+    // (lyrics, related-artist/album cards, context menu).
+    const displaySong = useActiveNowPlayingItem();
     const isRadioActive = useIsRadioActive();
     const { isPlaying: isRadioPlaying, metadata: radioMetadata, stationName } = useRadioPlayer();
     const server = useCurrentServer();
@@ -737,12 +742,12 @@ export const MobileFullscreenPlayer = () => {
     const handleToggleFavorite = useCallback(
         (e: MouseEvent<HTMLButtonElement>) => {
             e.stopPropagation();
-            const song = currentSongData;
+            const song = displaySong;
             if (!song?.id) return;
 
             setFavorite(song._serverId, [song.id], LibraryItem.SONG, !song.userFavorite);
         },
-        [currentSongData, setFavorite],
+        [displaySong, setFavorite],
     );
 
     const handleToggleLyrics = useCallback(() => {
@@ -761,7 +766,7 @@ export const MobileFullscreenPlayer = () => {
     const isPlayerState = activeTab !== 'queue' && activeTab !== 'lyrics';
     const isQueueState = activeTab === 'queue';
     const isLyricsState = activeTab === 'lyrics';
-    const isSongDefined = Boolean(currentSong?.id);
+    const isSongDefined = Boolean(displaySong?.id);
     const showRating =
         showRatingsSetting &&
         isSongDefined &&
@@ -842,7 +847,7 @@ export const MobileFullscreenPlayer = () => {
                         <MobileFullscreenPlayerAlbumArt />
                         <div className={styles.playerFaceControlStack}>
                             <MobileFullscreenPlayerMetadata
-                                currentSong={currentSong}
+                                currentSong={displaySong ?? undefined}
                                 onToggleFavorite={handleToggleFavorite}
                                 onUpdateRating={handleUpdateRating}
                                 radioArtist={
@@ -858,9 +863,13 @@ export const MobileFullscreenPlayer = () => {
                                 }
                                 showRating={showRating}
                             />
-                            <MobileFullscreenPlayerProgress currentSong={currentSong} />
+                            <MobileFullscreenPlayerProgress
+                                currentSong={displaySong ?? undefined}
+                            />
                             <MobileFullscreenPlayerVolume />
-                            <MobileFullscreenPlayerControls currentSong={currentSong} />
+                            <MobileFullscreenPlayerControls
+                                currentSong={displaySong ?? undefined}
+                            />
                         </div>
                     </div>
                     <MobileFullscreenPlayerBottomControls

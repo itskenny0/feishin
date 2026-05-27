@@ -4,6 +4,7 @@ import { memo, MouseEvent } from 'react';
 import styles from './mobile-fullscreen-player.module.css';
 
 import { MobileDevicePickerButton } from '/@/renderer/features/jellyfin-remote-target';
+import { useActivePlayerSource } from '/@/renderer/features/jellyfin-remote-target/hooks/use-active-player-source';
 import { usePlayerData } from '/@/renderer/store';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Group } from '/@/shared/components/group/group';
@@ -30,8 +31,12 @@ export const MobileFullscreenPlayerBottomControls = memo(
     }: MobileFullscreenPlayerBottomControlsProps) => {
         // Queue badge mirrors the desktop right-controls QueueButton —
         // surfaces "how many tracks are queued?" at a glance so the user
-        // doesn't have to switch into the queue tab to find out.
-        const { queueLength } = usePlayerData();
+        // doesn't have to switch into the queue tab to find out. In remote
+        // mode it reflects the mirrored remote queue length.
+        const { queueLength: localQueueLength } = usePlayerData();
+        const source = useActivePlayerSource();
+        const queueLength =
+            source.mode === 'remote' ? (source.queue?.length ?? 0) : localQueueLength;
 
         return (
             <div className={styles.bottomControlsBar}>

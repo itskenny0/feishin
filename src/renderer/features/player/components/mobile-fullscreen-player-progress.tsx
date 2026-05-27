@@ -4,6 +4,8 @@ import { ErrorBoundary } from 'react-error-boundary';
 
 import styles from './mobile-fullscreen-player.module.css';
 
+import { useRemoteInterpolatedPositionMs } from '/@/renderer/features/jellyfin-remote-target/hooks/use-active-player-source';
+import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
 import { PlayerbarSeekSlider } from '/@/renderer/features/player/components/playerbar-seek-slider';
 import { TrackmapCanvas } from '/@/renderer/features/trackmap';
 import { usePlayerTimestamp } from '/@/renderer/store';
@@ -15,7 +17,7 @@ import {
 import { Spinner } from '/@/shared/components/spinner/spinner';
 import { Text } from '/@/shared/components/text/text';
 import { PlaybackSelectors } from '/@/shared/constants/playback-selectors';
-import { QueueSong } from '/@/shared/types/domain-types';
+import { Song } from '/@/shared/types/domain-types';
 
 const PlayerbarWaveform = lazy(() =>
     import('/@/renderer/features/player/components/playerbar-waveform').then((module) => ({
@@ -24,12 +26,18 @@ const PlayerbarWaveform = lazy(() =>
 );
 
 interface MobileFullscreenPlayerProgressProps {
-    currentSong?: QueueSong;
+    currentSong?: Song;
 }
 
 export const MobileFullscreenPlayerProgress = memo(
     ({ currentSong }: MobileFullscreenPlayerProgressProps) => {
-        const currentTime = usePlayerTimestamp();
+        const localTime = usePlayerTimestamp();
+        const isRemote = useRemoteTargetStore((s) => s.targetDeviceId !== null);
+        const remotePositionMs = useRemoteInterpolatedPositionMs();
+        // Elapsed-time readout: interpolated remote position in remote mode,
+        // local timestamp otherwise. The seek slider below is already
+        // remote-aware on its own.
+        const currentTime = isRemote ? remotePositionMs / 1000 : localTime;
         const playerbarSlider = usePlayerbarSlider();
         const songDuration = currentSong?.duration ? currentSong.duration / 1000 : 0;
         const formattedDuration = formatDuration(songDuration * 1000 || 0);

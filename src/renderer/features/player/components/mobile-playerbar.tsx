@@ -11,6 +11,13 @@ import styles from './mobile-playerbar.module.css';
 import { ItemImage } from '/@/renderer/components/item-image/item-image';
 import { ContextMenuController } from '/@/renderer/features/context-menu/context-menu-controller';
 import { MobileDevicePickerButton } from '/@/renderer/features/jellyfin-remote-target';
+import {
+    useActiveIsPaused,
+    useActiveNowPlayingItem,
+    useRemoteInterpolatedPositionMs,
+    useTransportEnabled,
+} from '/@/renderer/features/jellyfin-remote-target/hooks/use-active-player-source';
+import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
 import { MainPlayButton, PlayerButton } from '/@/renderer/features/player/components/player-button';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
 import { ComponentErrorBoundary } from '/@/renderer/features/shared/components/component-error-boundary';
@@ -20,8 +27,6 @@ import { AppRoute } from '/@/renderer/router/routes';
 import {
     useFullScreenPlayerStore,
     useFullScreenPlayerStoreActions,
-    usePlayerSong,
-    usePlayerStatus,
     useSetFullScreenPlayerStore,
 } from '/@/renderer/store';
 import {
@@ -38,7 +43,6 @@ import { Text } from '/@/shared/components/text/text';
 import { Tooltip } from '/@/shared/components/tooltip/tooltip';
 import { PlaybackSelectors } from '/@/shared/constants/playback-selectors';
 import { LibraryItem } from '/@/shared/types/domain-types';
-import { PlayerStatus } from '/@/shared/types/types';
 import { albumFolderFromSongPath } from '/@/shared/utils/album-folder-from-path';
 
 export const MobilePlayerbar = () => {
@@ -46,8 +50,14 @@ export const MobilePlayerbar = () => {
     const { expanded: isFullScreenPlayerExpanded } = useFullScreenPlayerStore();
     const setFullScreenPlayerStore = useSetFullScreenPlayerStore();
     const { setStore } = useFullScreenPlayerStoreActions();
-    const currentSong = usePlayerSong();
-    const status = usePlayerStatus();
+    // Active source: mirrors the remote device's now-playing/state when a
+    // Jellyfin Connect target is selected, else the local player (no-op locally).
+    const currentSong = useActiveNowPlayingItem();
+    const isPaused = useActiveIsPaused();
+    const canPrevious = useTransportEnabled('PreviousTrack');
+    const canNext = useTransportEnabled('NextTrack');
+    const canPlayPause = useTransportEnabled('PlayPause');
+    const isRemote = useRemoteTargetStore((s) => s.targetDeviceId !== null);
     const { mediaNext, mediaPrevious, mediaTogglePlayPause } = usePlayer();
     const title = currentSong?.name;
     const artists = currentSong?.artists;
@@ -352,6 +362,7 @@ export const MobilePlayerbar = () => {
                 <MobileDevicePickerButton iconSize="md" variant="subtle" />
                 {showNavButtons && (
                     <PlayerButton
+                        disabled={!canPrevious}
                         icon={<Icon fill="default" icon="mediaPrevious" size="md" />}
                         onClick={(e) => {
                             e.stopPropagation();
@@ -365,8 +376,8 @@ export const MobilePlayerbar = () => {
                     />
                 )}
                 <MainPlayButton
-                    disabled={currentSong?.id === undefined}
-                    isPaused={status === PlayerStatus.PAUSED}
+                    disabled={currentSong?.id === undefined || !canPlayPause}
+                    isPaused={isPaused}
                     onClick={(e) => {
                         e.stopPropagation();
                         mediaTogglePlayPause();
@@ -374,6 +385,7 @@ export const MobilePlayerbar = () => {
                 />
                 {showNavButtons && (
                     <PlayerButton
+                        disabled={!canNext}
                         icon={<Icon fill="default" icon="mediaNext" size="md" />}
                         onClick={(e) => {
                             e.stopPropagation();
@@ -387,7 +399,7 @@ export const MobilePlayerbar = () => {
                     />
                 )}
             </div>
-            <MiniPlayerProgressStrip durationMs={currentSong?.duration ?? 0} />
+            <MiniPlayerProgressStrip durationMs={currentSong?.duration ?? 0} isRemote={isRemote} />
         </div>
     );
 };
@@ -405,25 +417,31 @@ export const MobilePlayerbar = () => {
  * does `currentSong.duration / 1000`). Convert duration to seconds
  * before the division so both sides of the ratio are in seconds.
  */
-const MiniPlayerProgressStrip = memo(({ durationMs }: { durationMs: number }) => {
-    const timestamp = useTimestampStoreBase((state) => state.timestamp);
-    const songDurationSec = durationMs > 0 ? durationMs / 1000 : 0;
-    const progressPct =
-        songDurationSec > 0 ? Math.min(100, Math.max(0, (timestamp / songDurationSec) * 100)) : 0;
+const MiniPlayerProgressStrip = memo(
+    ({ durationMs, isRemote }: { durationMs: number; isRemote: boolean }) => {
+        const localTimestamp = useTimestampStoreBase((state) => state.timestamp);
+        const remotePositionMs = useRemoteInterpolatedPositionMs();
+        const timestamp = isRemote ? remotePositionMs / 1000 : localTimestamp;
+        const songDurationSec = durationMs > 0 ? durationMs / 1000 : 0;
+        const progressPct =
+            songDurationSec > 0
+                ? Math.min(100, Math.max(0, (timestamp / songDurationSec) * 100))
+                : 0;
 
-    return (
-        <div
-            aria-hidden
-            className={styles.progress}
-            style={
-                {
-                    ['--mobile-playerbar-progress' as string]: `${progressPct}%`,
-                } as React.CSSProperties
-            }
-        >
-            <div className={styles.progressFill} />
-        </div>
-    );
-});
+        return (
+            <div
+                aria-hidden
+                className={styles.progress}
+                style={
+                    {
+                        ['--mobile-playerbar-progress' as string]: `${progressPct}%`,
+                    } as React.CSSProperties
+                }
+            >
+                <div className={styles.progressFill} />
+            </div>
+        );
+    },
+);
 
 MiniPlayerProgressStrip.displayName = 'MiniPlayerProgressStrip';

@@ -3,21 +3,20 @@ import { useTranslation } from 'react-i18next';
 
 import styles from './mobile-fullscreen-player.module.css';
 
+import {
+    useActiveIsPaused,
+    useTransportEnabled,
+} from '/@/renderer/features/jellyfin-remote-target/hooks/use-active-player-source';
 import { MainPlayButton, PlayerButton } from '/@/renderer/features/player/components/player-button';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
 import { triggerHaptic } from '/@/renderer/hooks/use-haptic';
-import {
-    usePlayerRepeat,
-    usePlayerShuffle,
-    usePlayerStatus,
-    useSkipButtons,
-} from '/@/renderer/store';
+import { usePlayerRepeat, usePlayerShuffle, useSkipButtons } from '/@/renderer/store';
 import { Icon } from '/@/shared/components/icon/icon';
-import { QueueSong } from '/@/shared/types/domain-types';
-import { PlayerRepeat, PlayerShuffle, PlayerStatus } from '/@/shared/types/types';
+import { Song } from '/@/shared/types/domain-types';
+import { PlayerRepeat, PlayerShuffle } from '/@/shared/types/types';
 
 interface MobileFullscreenPlayerControlsProps {
-    currentSong?: QueueSong;
+    currentSong?: Song;
 }
 
 /**
@@ -33,9 +32,16 @@ export const MobileFullscreenPlayerControls = memo(
     ({ currentSong }: MobileFullscreenPlayerControlsProps) => {
         const currentSongId = currentSong?.id;
         const { t } = useTranslation();
-        const status = usePlayerStatus();
+        const isPaused = useActiveIsPaused();
         const shuffle = usePlayerShuffle();
         const repeat = usePlayerRepeat();
+        // Capability gating: in remote mode, disable transport the target
+        // doesn't advertise. Always enabled in local mode.
+        const canShuffle = useTransportEnabled('Shuffle');
+        const canPrevious = useTransportEnabled('PreviousTrack');
+        const canPlayPause = useTransportEnabled('PlayPause');
+        const canNext = useTransportEnabled('NextTrack');
+        const canRepeat = useTransportEnabled('SetRepeatMode');
         // The 15s skip-back / skip-forward pair is only useful on long
         // tracks (podcasts, mixes, long-form sets). For songs under 8
         // minutes you're better off just letting it play to the next
@@ -64,6 +70,7 @@ export const MobileFullscreenPlayerControls = memo(
         return (
             <div className={styles.controlsContainer}>
                 <PlayerButton
+                    disabled={!canShuffle}
                     icon={
                         <Icon
                             fill={shuffleActive ? 'primary' : 'default'}
@@ -85,6 +92,7 @@ export const MobileFullscreenPlayerControls = memo(
                     variant="tertiary"
                 />
                 <PlayerButton
+                    disabled={!canPrevious}
                     icon={<Icon fill="default" icon="mediaPrevious" size="xl" />}
                     onClick={mediaPrevious}
                     tooltip={{
@@ -107,8 +115,8 @@ export const MobileFullscreenPlayerControls = memo(
                     />
                 )}
                 <MainPlayButton
-                    disabled={currentSongId === undefined}
-                    isPaused={status === PlayerStatus.PAUSED}
+                    disabled={currentSongId === undefined || !canPlayPause}
+                    isPaused={isPaused}
                     onClick={() => {
                         // A firmer impact pulse on play/pause — the main
                         // transport action gets a slightly heavier tick
@@ -139,6 +147,7 @@ export const MobileFullscreenPlayerControls = memo(
                     />
                 )}
                 <PlayerButton
+                    disabled={!canNext}
                     icon={<Icon fill="default" icon="mediaNext" size="xl" />}
                     onClick={mediaNext}
                     tooltip={{
@@ -148,6 +157,7 @@ export const MobileFullscreenPlayerControls = memo(
                     variant="secondary"
                 />
                 <PlayerButton
+                    disabled={!canRepeat}
                     icon={
                         repeat === PlayerRepeat.ONE ? (
                             <Icon fill="primary" icon="mediaRepeatOne" size="lg" />
