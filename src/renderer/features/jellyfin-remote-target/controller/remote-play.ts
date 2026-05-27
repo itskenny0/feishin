@@ -1,7 +1,8 @@
 import type { RemotePlayCommand } from '/@/renderer/features/jellyfin-remote-target/types';
 import type { AddToQueueType } from '/@/renderer/store';
 
-import { Play } from '/@/shared/types/types';
+import { isShuffleEnabled } from '/@/renderer/store/player.store';
+import { Play, PlayerShuffle } from '/@/shared/types/types';
 
 export interface RemotePlayPush {
     itemIds: string[];
@@ -33,4 +34,41 @@ export const computeRemotePlay = (
     }
 
     return { itemIds, playCommand, startIndex };
+};
+
+export interface RemoteTransfer {
+    itemIds: string[];
+    startIndex: number;
+    startPositionTicks: number;
+}
+
+type TransferState = {
+    player: { index: number; shuffle: PlayerShuffle };
+    queue: { default: string[]; shuffled: number[]; songs: Record<string, { id: string }> };
+};
+
+/**
+ * Capture the current local playback as a remote PlayNow push so selecting a
+ * device continues where local left off. `player.index` is the position in the
+ * playback-order queue in both shuffle states, so it maps directly onto the
+ * ordered itemIds. Returns null when there's nothing to transfer.
+ */
+export const computeTransfer = (
+    state: TransferState,
+    positionSec: number,
+): null | RemoteTransfer => {
+    const shuffled = isShuffleEnabled(state);
+    const orderedUids = shuffled
+        ? state.queue.shuffled.map((i) => state.queue.default[i]).filter(Boolean)
+        : state.queue.default;
+    const itemIds = orderedUids
+        .map((uid) => state.queue.songs[uid]?.id)
+        .filter((id): id is string => Boolean(id));
+    if (itemIds.length === 0) return null;
+    const startIndex = Math.min(Math.max(0, state.player.index), itemIds.length - 1);
+    return {
+        itemIds,
+        startIndex,
+        startPositionTicks: Math.max(0, Math.round(positionSec * 10_000_000)),
+    };
 };

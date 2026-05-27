@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { computeRemotePlay } from '/@/renderer/features/jellyfin-remote-target/controller/remote-play';
-import { Play } from '/@/shared/types/types';
+import {
+    computeRemotePlay,
+    computeTransfer,
+} from '/@/renderer/features/jellyfin-remote-target/controller/remote-play';
+import { Play, PlayerShuffle } from '/@/shared/types/types';
 
 const songs = (...ids: string[]) => ids.map((id) => ({ id }));
 
@@ -38,5 +41,58 @@ describe('computeRemotePlay', () => {
 
     it('returns null for reorder-edge AddToQueueType objects (local-only)', () => {
         expect(computeRemotePlay(songs('a'), { edge: 'top', uniqueId: 'x' } as never)).toBeNull();
+    });
+});
+
+const baseState = (over: any = {}) => ({
+    player: { index: 0, shuffle: PlayerShuffle.NONE, ...over.player },
+    queue: {
+        default: ['u1', 'u2', 'u3'],
+        shuffled: [],
+        songs: { u1: { id: 's1' }, u2: { id: 's2' }, u3: { id: 's3' } },
+        ...over.queue,
+    },
+});
+
+describe('computeTransfer', () => {
+    it('returns ordered itemIds, current index and ticks (no shuffle)', () => {
+        const t = computeTransfer(baseState({ player: { index: 1 } }) as never, 12.5);
+        expect(t).toEqual({
+            itemIds: ['s1', 's2', 's3'],
+            startIndex: 1,
+            startPositionTicks: 125_000_000,
+        });
+    });
+
+    it('uses shuffled playback order and treats index as shuffled position', () => {
+        const t = computeTransfer(
+            baseState({
+                player: { index: 0, shuffle: PlayerShuffle.TRACK },
+                queue: {
+                    default: ['u1', 'u2', 'u3'],
+                    shuffled: [2, 0, 1],
+                    songs: { u1: { id: 's1' }, u2: { id: 's2' }, u3: { id: 's3' } },
+                },
+            }) as never,
+            0,
+        );
+        expect(t).toEqual({
+            itemIds: ['s3', 's1', 's2'],
+            startIndex: 0,
+            startPositionTicks: 0,
+        });
+    });
+
+    it('clamps an out-of-range index', () => {
+        const t = computeTransfer(baseState({ player: { index: 99 } }) as never, 0);
+        expect(t?.startIndex).toBe(2);
+    });
+
+    it('returns null for an empty queue', () => {
+        const t = computeTransfer(
+            baseState({ queue: { default: [], shuffled: [], songs: {} } }) as never,
+            0,
+        );
+        expect(t).toBeNull();
     });
 });
