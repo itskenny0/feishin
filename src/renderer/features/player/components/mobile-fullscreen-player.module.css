@@ -1249,3 +1249,22 @@
         padding: 0.5rem 1.25rem 1.25rem;
     }
 }
+
+/*
+ * The fullscreen-player config popover only ever renders in the mobile shell —
+ * which includes landscape phones (800–1000px WIDE via the
+ * `orientation: landscape and max-height: 480px` clause) and the force-mobile
+ * override on large displays. The shared popover only goes viewport-width at
+ * `width <= 767px`, so in those wider mobile-shell cases the oversized config
+ * content (~15 options) overflowed both screen edges. Constrain this popover to
+ * the viewport unconditionally and wrap the side-by-side slider groups so they
+ * stack instead of overflowing.
+ */
+.config-dropdown {
+    width: min(480px, calc(100vw - 24px));
+}
+
+/* stylelint-disable-next-line selector-class-pattern */
+.config-dropdown :global(.mantine-Group-root) {
+    flex-wrap: wrap !important;
+}

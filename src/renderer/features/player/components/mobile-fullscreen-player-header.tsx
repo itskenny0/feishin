@@ -132,7 +132,7 @@ export const MobileFullscreenPlayerHeader = memo(
                             variant={isPageHovered ? 'default' : 'subtle'}
                         />
                     </Popover.Target>
-                    <Popover.Dropdown>
+                    <Popover.Dropdown className={styles.configDropdown}>
                         <Option>
                             <Option.Label>
                                 {t('page.fullscreenPlayer.config.dynamicBackground')}
