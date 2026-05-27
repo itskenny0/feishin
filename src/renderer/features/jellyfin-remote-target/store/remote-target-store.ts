@@ -47,7 +47,13 @@ interface RemoteTargetState {
 const emptyMirrored: RemoteMirrored = {
     capabilities: [],
     nowPlayingItem: null,
-    playState: { isPaused: true, positionMs: 0, repeatMode: 'RepeatNone', volume: 100 },
+    playState: {
+        isPaused: true,
+        positionMs: 0,
+        positionSampledAt: 0,
+        repeatMode: 'RepeatNone',
+        volume: 100,
+    },
     queue: [],
     queueIndex: -1,
 };

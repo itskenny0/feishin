@@ -1,5 +1,32 @@
 import '@testing-library/jest-dom/vitest';
 
+import { vi } from 'vitest';
+
+// jsdom doesn't implement IndexedDB, which `idb-keyval` (used by the persisted
+// zustand stores' autosave) requires. Importing any module that transitively
+// pulls in those stores would otherwise raise an unhandled rejection and fail
+// the whole run. Back it with an in-memory map so persistence is a harmless
+// no-op in tests.
+vi.mock('idb-keyval', () => {
+    const store = new Map<IDBValidKey, unknown>();
+    return {
+        clear: async () => store.clear(),
+        createStore: () => ({}),
+        del: async (key: IDBValidKey) => void store.delete(key),
+        delMany: async (keys: IDBValidKey[]) => keys.forEach((k) => store.delete(k)),
+        entries: async () => [...store.entries()],
+        get: async (key: IDBValidKey) => store.get(key),
+        getMany: async (keys: IDBValidKey[]) => keys.map((k) => store.get(k)),
+        keys: async () => [...store.keys()],
+        set: async (key: IDBValidKey, value: unknown) => void store.set(key, value),
+        setMany: async (entries: [IDBValidKey, unknown][]) =>
+            entries.forEach(([k, v]) => store.set(k, v)),
+        update: async (key: IDBValidKey, updater: (old: unknown) => unknown) =>
+            void store.set(key, updater(store.get(key))),
+        values: async () => [...store.values()],
+    };
+});
+
 // jsdom doesn't implement PointerEvent. useLongPress reads `pointerType`,
 // `clientX`, and `clientY` off the event, so provide a minimal shim built on
 // MouseEvent (which already carries clientX/clientY).

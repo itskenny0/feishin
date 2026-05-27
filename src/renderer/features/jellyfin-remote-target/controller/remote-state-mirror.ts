@@ -19,6 +19,7 @@ const ticksToMs = (ticks: number | undefined): number =>
 export const derivePlayState = (session: any): RemoteMirroredPlayState => ({
     isPaused: Boolean(session?.PlayState?.IsPaused),
     positionMs: ticksToMs(session?.PlayState?.PositionTicks),
+    positionSampledAt: Date.now(),
     repeatMode:
         typeof session?.PlayState?.RepeatMode === 'string'
             ? session.PlayState.RepeatMode

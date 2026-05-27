@@ -26,6 +26,8 @@ export interface RemoteMirrored {
 export interface RemoteMirroredPlayState {
     isPaused: boolean;
     positionMs: number;
+    /** `Date.now()` when positionMs was sampled — used to interpolate between polls. */
+    positionSampledAt: number;
     repeatMode: string; // 'RepeatNone' | 'RepeatAll' | 'RepeatOne'
     volume: number; // 0-100
 }
