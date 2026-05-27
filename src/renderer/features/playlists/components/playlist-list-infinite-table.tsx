@@ -81,6 +81,7 @@ export const PlaylistListInfiniteTable = ({
             columns={columns}
             data={loadedItems}
             enableAlternateRowColors={enableAlternateRowColors}
+            enableExpansion={false}
             enableHeader={enableHeader}
             enableHorizontalBorders={enableHorizontalBorders}
             enableRowHoverHighlight={enableRowHoverHighlight}

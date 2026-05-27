@@ -443,18 +443,23 @@ export const JellyfinController: InternalControllerEndpoint = {
             throw new Error('Failed to get album detail');
         }
 
-        // Defensive de-dup. ParentId-children responses don't normally
-        // duplicate, but keeping this is cheap insurance for any edge case
-        // where a song surfaces twice in the same album listing.
+        // Two filters in one pass:
+        //  1. Workaround for a Jellyfin bug that returns items from a different
+        //     album sharing the same name — keep only songs whose AlbumId
+        //     matches the requested album.
+        //  2. Defensive de-dup by song id for any edge case where a song
+        //     surfaces twice in the same listing.
+        const albumIdSet = new Set([query.id]);
         const seenSongIds = new Set<string>();
-        const uniqueSongs = songsRes.body.Items.filter((song) => {
-            if (seenSongIds.has(song.Id)) return false;
-            seenSongIds.add(song.Id);
+        const songs = songsRes.body.Items.filter((item) => {
+            if (!albumIdSet.has(item.AlbumId!)) return false;
+            if (seenSongIds.has(item.Id)) return false;
+            seenSongIds.add(item.Id);
             return true;
         });
 
         return jfNormalize.album(
-            { ...res.body, Songs: uniqueSongs },
+            { ...res.body, Songs: songs },
             apiClientProps.server,
             args.context?.pathReplace,
             args.context?.pathReplaceWith,
