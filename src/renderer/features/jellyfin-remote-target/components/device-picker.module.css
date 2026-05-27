@@ -1,0 +1,112 @@
+.list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 8px 8px;
+}
+
+.headerTitle {
+    font-size: 1rem;
+    font-weight: 700;
+}
+
+.row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 10px 10px;
+    border-radius: 8px;
+    text-align: left;
+    transition: background-color 0.12s ease;
+}
+
+.row:hover {
+    background-color: var(--theme-colors-surface);
+}
+
+.row:focus-visible {
+    outline: 2px solid var(--theme-colors-primary);
+    outline-offset: -2px;
+}
+
+.rowActive {
+    color: var(--theme-colors-primary);
+}
+
+.iconWrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    flex-shrink: 0;
+}
+
+.rowText {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+    flex: 1;
+}
+
+.rowTitle {
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.rowSubtitle {
+    font-size: 0.75rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Small animated "playing here" bars on the active remote row, à la Spotify. */
+.equalizer {
+    display: inline-flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 14px;
+    flex-shrink: 0;
+}
+
+.equalizer span {
+    width: 3px;
+    background-color: var(--theme-colors-primary);
+    border-radius: 1px;
+    animation: device-eq 0.9s ease-in-out infinite;
+}
+
+.equalizer span:nth-child(2) {
+    animation-delay: 0.25s;
+}
+
+.equalizer span:nth-child(3) {
+    animation-delay: 0.5s;
+}
+
+@keyframes device-eq {
+    0%,
+    100% {
+        height: 4px;
+    }
+    50% {
+        height: 14px;
+    }
+}
+
+.empty {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px 10px;
+}

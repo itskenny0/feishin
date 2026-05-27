@@ -1,5 +1,5 @@
 import { MantineProvider } from '@mantine/core';
-import { cleanup, fireEvent, render } from '@testing-library/react';
+import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { MobileDevicePickerButton } from '/@/renderer/features/jellyfin-remote-target/components/mobile-device-picker-button';
@@ -38,18 +38,12 @@ describe('MobileDevicePickerButton', () => {
         expect(button?.querySelector('svg')).not.toBeNull();
     });
 
-    it('toggles the picker open on click (controlled popover)', () => {
+    it('opens the device sheet (drawer dialog) on click', async () => {
         useAuthStore.setState({ currentServer: jellyfinServer });
         const { container } = renderButton();
-        const button = container.querySelector('button') as HTMLButtonElement;
-        // Mantine sets aria-expanded on the Popover.Target wrapper, not the button.
-        expect(container.querySelector('[aria-expanded]')?.getAttribute('aria-expanded')).toBe(
-            'false',
-        );
-        fireEvent.click(button);
-        expect(container.querySelector('[aria-expanded]')?.getAttribute('aria-expanded')).toBe(
-            'true',
-        );
+        expect(document.querySelector('[role="dialog"]')).toBeNull();
+        fireEvent.click(container.querySelector('button') as HTMLButtonElement);
+        await waitFor(() => expect(document.querySelector('[role="dialog"]')).not.toBeNull());
     });
 
     it('renders nothing when there is no current server', () => {

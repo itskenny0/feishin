@@ -259,6 +259,15 @@ const HomeRoute = () => {
                         pt={windowBarStyle === Platform.WEB ? '5rem' : '3rem'}
                         ref={containerQuery.ref}
                     >
+                        {/* Cold-start Jellyfin Connect entry. The page-header
+                            copy (above) only fades in on scroll, so — like the
+                            SyncChip — mount a visible one at the top of the
+                            content too. Self-gates to Jellyfin servers. */}
+                        {isMobileShell && (
+                            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                                <MobileDevicePickerButton iconSize="lg" variant="default" />
+                            </div>
+                        )}
                         <HydrationBanner />
                         {/* SyncChip is also mounted in the page-header chrome
                             above, but that chrome only fades in after the user
