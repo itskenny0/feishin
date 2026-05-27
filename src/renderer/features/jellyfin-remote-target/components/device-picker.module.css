@@ -11,19 +11,19 @@
     padding: 4px 8px 8px;
 }
 
-.headerTitle {
+.header-title {
     font-size: 1rem;
     font-weight: 700;
 }
 
 .row {
     display: flex;
-    align-items: center;
     gap: 12px;
+    align-items: center;
     width: 100%;
-    padding: 10px 10px;
-    border-radius: 8px;
+    padding: 10px;
     text-align: left;
+    border-radius: 8px;
     transition: background-color 0.12s ease;
 }
 
@@ -36,47 +36,47 @@
     outline-offset: -2px;
 }
 
-.rowActive {
+.row-active {
     color: var(--theme-colors-primary);
 }
 
-.iconWrap {
+.icon-wrap {
     display: flex;
+    flex-shrink: 0;
     align-items: center;
     justify-content: center;
     width: 24px;
-    flex-shrink: 0;
 }
 
-.rowText {
+.row-text {
     display: flex;
+    flex: 1;
     flex-direction: column;
     gap: 1px;
     min-width: 0;
-    flex: 1;
 }
 
-.rowTitle {
-    font-weight: 600;
+.row-title {
     overflow: hidden;
     text-overflow: ellipsis;
+    font-weight: 600;
     white-space: nowrap;
 }
 
-.rowSubtitle {
-    font-size: 0.75rem;
+.row-subtitle {
     overflow: hidden;
     text-overflow: ellipsis;
+    font-size: 0.75rem;
     white-space: nowrap;
 }
 
 /* Small animated "playing here" bars on the active remote row, à la Spotify. */
 .equalizer {
     display: inline-flex;
-    align-items: flex-end;
-    gap: 2px;
-    height: 14px;
     flex-shrink: 0;
+    gap: 2px;
+    align-items: flex-end;
+    height: 14px;
 }
 
 .equalizer span {
@@ -99,6 +99,7 @@
     100% {
         height: 4px;
     }
+
     50% {
         height: 14px;
     }
