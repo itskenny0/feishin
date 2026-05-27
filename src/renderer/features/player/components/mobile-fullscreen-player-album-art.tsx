@@ -14,6 +14,8 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import styles from './mobile-fullscreen-player.module.css';
 
 import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
+import { useActiveNowPlayingItem } from '/@/renderer/features/jellyfin-remote-target/hooks/use-active-player-source';
+import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
 import {
     useIsRadioActive,
@@ -108,6 +110,18 @@ export const MobileFullscreenPlayerAlbumArt = () => {
     const { isPlaying: isRadioPlaying } = useRadioPlayer();
     const currentSong = usePlayerSong();
     const { nextSong, previousSong } = usePlayerData();
+
+    // Remote (Jellyfin Connect) mode: mirror the remote device's cover. We
+    // render a simple static cover for it (below) and leave the local
+    // swipe/crossfade carousel untouched to avoid any local-playback regression.
+    const isRemote = useRemoteTargetStore((s) => s.targetDeviceId !== null);
+    const remoteSong = useActiveNowPlayingItem();
+    const remoteImageUrl = useItemImageUrl({
+        id: remoteSong?.imageId || undefined,
+        itemType: LibraryItem.SONG,
+        size: mainImageDimensions.idealSize,
+        type: 'fullScreenPlayer',
+    });
 
     const isPlayingRadio = isRadioActive && isRadioPlaying;
 
@@ -243,6 +257,29 @@ export const MobileFullscreenPlayerAlbumArt = () => {
      */
     const nextImageSrc = !isPlayingRadio && nextSong?._uniqueId ? nextImageUrl : null;
     const previousImageSrc = !isPlayingRadio && previousSong?._uniqueId ? previousImageUrl : null;
+
+    // Remote mode: static cover of the mirrored now-playing item. The local
+    // queue's prev/next aren't the remote's, so we skip the swipe-preview
+    // carousel here; the transport buttons still drive the remote device.
+    if (isRemote) {
+        return (
+            <div className={styles.imageContainer} ref={mainImageRef}>
+                <div
+                    className={clsx(styles.image, {
+                        [styles.imageNativeAspectRatio]: useImageAspectRatio,
+                    })}
+                >
+                    <ImageWithPlaceholder
+                        className={PlaybackSelectors.playerCoverArt}
+                        draggable={false}
+                        loading="eager"
+                        src={remoteImageUrl || ''}
+                        useImageAspectRatio={useImageAspectRatio}
+                    />
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className={styles.imageContainer} ref={mainImageRef}>

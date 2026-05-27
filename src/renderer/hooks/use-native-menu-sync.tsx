@@ -5,6 +5,10 @@ import { useTranslation } from 'react-i18next';
 
 import packageJson from '../../../package.json';
 
+import {
+    useActiveRepeat,
+    useActiveShuffle,
+} from '/@/renderer/features/jellyfin-remote-target/hooks/use-active-player-source';
 import { ServerList } from '/@/renderer/features/servers/components/server-list';
 import { openSettingsModal } from '/@/renderer/features/settings/utils/open-settings-modal';
 import { openReleaseNotesModal } from '/@/renderer/release-notes-modal';
@@ -13,8 +17,6 @@ import {
     useAppStoreActions,
     useCommandPalette,
     usePlayerHydrated,
-    usePlayerRepeat,
-    usePlayerShuffle,
     usePlayerStatus,
     useSidebarStore,
 } from '/@/renderer/store';
@@ -29,8 +31,10 @@ export const useNativeMenuSync = () => {
     const { setPrivateMode, setSideBar } = useAppStoreActions();
     const { open: openCommandPalette } = useCommandPalette();
     const playerHydrated = usePlayerHydrated();
-    const playerRepeat = usePlayerRepeat();
-    const playerShuffle = usePlayerShuffle();
+    // Active source: reflects the remote device's repeat/shuffle when a
+    // Jellyfin Connect target is selected (no-op for local playback).
+    const playerRepeat = useActiveRepeat();
+    const playerShuffle = useActiveShuffle();
     const playerStatus = usePlayerStatus();
 
     useEffect(() => {

@@ -104,6 +104,8 @@ export const useJellyfinRemoteControl = () => {
                     'Unmute',
                     'ToggleMute',
                     'SetVolume',
+                    'SetRepeatMode',
+                    'SetShuffleQueue',
                     'DisplayMessage',
                     // 'PlayMediaSource' is a Play command, not a
                     // GeneralCommand — advertising it caused Jellyfin to

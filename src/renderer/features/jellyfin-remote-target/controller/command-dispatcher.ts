@@ -110,6 +110,29 @@ export const commandDispatcher = {
         });
     }),
 
+    setRepeat: wrap('SetRepeatMode', async (ctx: DispatcherCtx, mode: string): Promise<void> => {
+        log('SetRepeatMode', { mode, sessionId: ctx.sessionId });
+        await remoteTargetApi.sendGeneralCommand({
+            arguments: { RepeatMode: mode },
+            name: 'SetRepeatMode',
+            server: ctx.server,
+            sessionId: ctx.sessionId,
+        });
+    }),
+
+    setShuffle: wrap(
+        'SetShuffleQueue',
+        async (ctx: DispatcherCtx, shuffle: boolean): Promise<void> => {
+            log('SetShuffleQueue', { sessionId: ctx.sessionId, shuffle });
+            await remoteTargetApi.sendGeneralCommand({
+                arguments: { ShuffleMode: shuffle ? 'Shuffle' : 'Sorted' },
+                name: 'SetShuffleQueue',
+                server: ctx.server,
+                sessionId: ctx.sessionId,
+            });
+        },
+    ),
+
     setVolume: wrap('SetVolume', async (ctx: DispatcherCtx, volume: number): Promise<void> => {
         const clamped = Math.max(0, Math.min(100, Math.round(volume)));
         log('SetVolume', { sessionId: ctx.sessionId, volume: clamped });

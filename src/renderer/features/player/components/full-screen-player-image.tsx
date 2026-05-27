@@ -7,6 +7,7 @@ import { generatePath, Link } from 'react-router';
 import styles from './full-screen-player-image.module.css';
 
 import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
+import { useActiveNowPlayingItem } from '/@/renderer/features/jellyfin-remote-target/hooks/use-active-player-source';
 import {
     useIsRadioActive,
     useRadioPlayer,
@@ -17,7 +18,6 @@ import {
     useNativeAspectRatio,
     usePlayerData,
     usePlayerItems,
-    usePlayerSong,
 } from '/@/renderer/store';
 import { useShowFilesystemNameForAlbums } from '/@/renderer/store/settings.store';
 import { Badge } from '/@/shared/components/badge/badge';
@@ -28,7 +28,7 @@ import { Icon } from '/@/shared/components/icon/icon';
 import { Stack } from '/@/shared/components/stack/stack';
 import { Text } from '/@/shared/components/text/text';
 import { useSetState } from '/@/shared/hooks/use-set-state';
-import { ExplicitStatus, LibraryItem } from '/@/shared/types/domain-types';
+import { ExplicitStatus, LibraryItem, QueueSong } from '/@/shared/types/domain-types';
 import { albumFolderFromSongPath } from '/@/shared/utils/album-folder-from-path';
 import { isPlausibleReleaseYear } from '/@/shared/utils/release-year';
 
@@ -104,7 +104,11 @@ export const FullScreenPlayerImage = () => {
     const isRadioActive = useIsRadioActive();
     const { isPlaying: isRadioPlaying, metadata: radioMetadata, stationName } = useRadioPlayer();
 
-    const currentSong = usePlayerSong();
+    // Active source: mirrors the remote device's now-playing when a Jellyfin
+    // Connect target is selected (identical to the local song otherwise). The
+    // mirrored Song has no _uniqueId, so the crossfade keys fall back to id.
+    const currentSong = useActiveNowPlayingItem();
+    const songKey = (currentSong as null | QueueSong)?._uniqueId ?? currentSong?.id;
     const { nextSong } = usePlayerData();
     const blurExplicitImages = useBlurExplicitImages();
     const playerItems = usePlayerItems();
@@ -137,7 +141,7 @@ export const FullScreenPlayerImage = () => {
     });
 
     // Track previous song to detect changes
-    const previousSongRef = useRef<string | undefined>(currentSong?._uniqueId);
+    const previousSongRef = useRef<string | undefined>(songKey);
     const imageStateRef = useRef(imageState);
 
     // Keep ref in sync
@@ -150,7 +154,7 @@ export const FullScreenPlayerImage = () => {
         if (isPlayingRadio) {
             return;
         }
-        if (currentSong?._uniqueId === previousSongRef.current) {
+        if (songKey === previousSongRef.current) {
             return;
         }
 
@@ -168,10 +172,10 @@ export const FullScreenPlayerImage = () => {
             topImage: isTop ? nextImageUrl : currentImageUrl,
         });
 
-        previousSongRef.current = currentSong?._uniqueId;
+        previousSongRef.current = songKey;
     }, [
         isPlayingRadio,
-        currentSong?._uniqueId,
+        songKey,
         currentImageUrl,
         nextSong?._uniqueId,
         nextImageUrl,
@@ -233,7 +237,7 @@ export const FullScreenPlayerImage = () => {
                             exit="closed"
                             explicit={blurExplicitImages && imageState.topExplicit}
                             initial="closed"
-                            key={`top-${currentSong?._uniqueId || 'none'}`}
+                            key={`top-${songKey || 'none'}`}
                             placeholder="var(--theme-colors-foreground-muted)"
                             src={imageState.topImage || ''}
                             variants={imageVariants}
@@ -249,7 +253,7 @@ export const FullScreenPlayerImage = () => {
                             exit="closed"
                             explicit={blurExplicitImages && imageState.bottomExplicit}
                             initial="closed"
-                            key={`bottom-${currentSong?._uniqueId || 'none'}`}
+                            key={`bottom-${songKey || 'none'}`}
                             placeholder="var(--theme-colors-foreground-muted)"
                             src={imageState.bottomImage || ''}
                             variants={imageVariants}

@@ -11,7 +11,7 @@ import {
 } from '/@/renderer/store/player.store';
 import { toast } from '/@/shared/components/toast/toast';
 import { Song } from '/@/shared/types/domain-types';
-import { Play } from '/@/shared/types/types';
+import { Play, PlayerRepeat, PlayerShuffle } from '/@/shared/types/types';
 
 const DEBUG =
     typeof import.meta !== 'undefined' && (import.meta as { env?: { DEV?: boolean } }).env?.DEV;
@@ -39,6 +39,8 @@ export interface DispatcherDeps {
         mediaStop: (args?: { reset?: boolean }) => void;
         mediaToggleMute: () => void;
         mediaTogglePlayPause: () => void;
+        setRepeat: (repeat: PlayerRepeat) => void;
+        setShuffle: (shuffle: PlayerShuffle) => void;
         setVolume: (volume: number) => void;
     };
 }
@@ -116,6 +118,23 @@ export async function dispatchJellyfinMessage(
             case 'Mute': {
                 const muted = usePlayerStoreBase.getState().player.muted;
                 if (!muted) playerActions.mediaToggleMute();
+                return;
+            }
+            case 'SetRepeatMode': {
+                const mode = args.RepeatMode;
+                playerActions.setRepeat(
+                    mode === 'RepeatAll'
+                        ? PlayerRepeat.ALL
+                        : mode === 'RepeatOne'
+                          ? PlayerRepeat.ONE
+                          : PlayerRepeat.NONE,
+                );
+                return;
+            }
+            case 'SetShuffleQueue': {
+                playerActions.setShuffle(
+                    args.ShuffleMode === 'Shuffle' ? PlayerShuffle.TRACK : PlayerShuffle.NONE,
+                );
                 return;
             }
             case 'SetVolume': {

@@ -24,6 +24,7 @@ export const derivePlayState = (session: any): RemoteMirroredPlayState => ({
         typeof session?.PlayState?.RepeatMode === 'string'
             ? session.PlayState.RepeatMode
             : 'RepeatNone',
+    shuffle: session?.PlayState?.PlaybackOrder === 'Shuffle',
     volume:
         typeof session?.PlayState?.VolumeLevel === 'number' ? session.PlayState.VolumeLevel : 100,
 });

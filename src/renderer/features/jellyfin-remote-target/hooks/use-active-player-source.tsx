@@ -3,11 +3,21 @@ import type { Song } from '/@/shared/types/domain-types';
 // src/renderer/features/jellyfin-remote-target/hooks/use-active-player-source.tsx
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { interpolatePositionMs } from '/@/renderer/features/jellyfin-remote-target/controller/remote-play';
+import {
+    interpolatePositionMs,
+    jellyfinToPlayerRepeat,
+    jellyfinToPlayerShuffle,
+} from '/@/renderer/features/jellyfin-remote-target/controller/remote-play';
 import { useRemoteTarget } from '/@/renderer/features/jellyfin-remote-target/hooks/use-remote-target';
 import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
-import { usePlayerSong, usePlayerStatus, usePlayerVolume } from '/@/renderer/store/player.store';
-import { PlayerStatus } from '/@/shared/types/types';
+import {
+    usePlayerRepeat,
+    usePlayerShuffle,
+    usePlayerSong,
+    usePlayerStatus,
+    usePlayerVolume,
+} from '/@/renderer/store/player.store';
+import { PlayerRepeat, PlayerShuffle, PlayerStatus } from '/@/shared/types/types';
 
 export interface ActivePlayerSource {
     capabilities: string[]; // empty in local mode
@@ -132,4 +142,27 @@ export const useRemoteInterpolatedPositionMs = (): number => {
     }, [isRemote, playState, durationMs]);
 
     return posMs;
+};
+
+/**
+ * Repeat mode of the active source — the remote device's mirrored RepeatMode
+ * when a Connect target is active, else the local player's. Primitive enum so
+ * the repeat button only re-renders on change.
+ */
+export const useActiveRepeat = (): PlayerRepeat => {
+    const localRepeat = usePlayerRepeat();
+    const isRemote = useRemoteTargetStore((s) => s.targetDeviceId !== null);
+    const remoteRepeat = useRemoteTargetStore((s) => s.mirrored.playState.repeatMode);
+    return isRemote ? jellyfinToPlayerRepeat(remoteRepeat) : localRepeat;
+};
+
+/**
+ * Shuffle state of the active source — the remote device's mirrored
+ * PlaybackOrder when a Connect target is active, else the local player's.
+ */
+export const useActiveShuffle = (): PlayerShuffle => {
+    const localShuffle = usePlayerShuffle();
+    const isRemote = useRemoteTargetStore((s) => s.targetDeviceId !== null);
+    const remoteShuffle = useRemoteTargetStore((s) => s.mirrored.playState.shuffle);
+    return isRemote ? jellyfinToPlayerShuffle(remoteShuffle) : localShuffle;
 };

@@ -5,7 +5,7 @@ import type {
 import type { AddToQueueType } from '/@/renderer/store';
 
 import { isShuffleEnabled } from '/@/renderer/store/player.store';
-import { Play, PlayerShuffle } from '/@/shared/types/types';
+import { Play, PlayerRepeat, PlayerShuffle } from '/@/shared/types/types';
 
 export interface RemotePlayPush {
     itemIds: string[];
@@ -95,3 +95,39 @@ export const interpolatePositionMs = (
     }
     return projected;
 };
+
+export type JellyfinRepeatMode = 'RepeatAll' | 'RepeatNone' | 'RepeatOne';
+
+const PLAYER_TO_JF_REPEAT: Record<PlayerRepeat, JellyfinRepeatMode> = {
+    [PlayerRepeat.ALL]: 'RepeatAll',
+    [PlayerRepeat.NONE]: 'RepeatNone',
+    [PlayerRepeat.ONE]: 'RepeatOne',
+};
+
+export const playerRepeatToJellyfin = (repeat: PlayerRepeat): JellyfinRepeatMode =>
+    PLAYER_TO_JF_REPEAT[repeat] ?? 'RepeatNone';
+
+export const jellyfinToPlayerRepeat = (mode: string): PlayerRepeat =>
+    mode === 'RepeatAll'
+        ? PlayerRepeat.ALL
+        : mode === 'RepeatOne'
+          ? PlayerRepeat.ONE
+          : PlayerRepeat.NONE;
+
+/**
+ * Next repeat mode in the local toggle cycle (None → One → All → None),
+ * expressed in Jellyfin terms so the controller can send SetRepeatMode.
+ */
+export const nextJellyfinRepeat = (current: string): JellyfinRepeatMode => {
+    const p = jellyfinToPlayerRepeat(current);
+    const next =
+        p === PlayerRepeat.NONE
+            ? PlayerRepeat.ONE
+            : p === PlayerRepeat.ONE
+              ? PlayerRepeat.ALL
+              : PlayerRepeat.NONE;
+    return playerRepeatToJellyfin(next);
+};
+
+export const jellyfinToPlayerShuffle = (shuffle: boolean): PlayerShuffle =>
+    shuffle ? PlayerShuffle.TRACK : PlayerShuffle.NONE;
