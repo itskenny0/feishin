@@ -3,6 +3,7 @@ import { memo, MouseEvent } from 'react';
 
 import styles from './mobile-fullscreen-player.module.css';
 
+import { MobileDevicePickerButton } from '/@/renderer/features/jellyfin-remote-target';
 import { usePlayerData } from '/@/renderer/store';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Group } from '/@/shared/components/group/group';
@@ -35,6 +36,7 @@ export const MobileFullscreenPlayerBottomControls = memo(
         return (
             <div className={styles.bottomControlsBar}>
                 <Group className={styles.bottomControlsGroup} gap={0}>
+                    <MobileDevicePickerButton iconSize="xl" variant="transparent" />
                     <div className={styles.queueButtonWrapper}>
                         <ActionIcon
                             aria-label={t('player.viewQueue')}

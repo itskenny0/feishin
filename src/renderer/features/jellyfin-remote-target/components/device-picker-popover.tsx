@@ -27,9 +27,17 @@ interface DevicePickerPopoverProps {
     children: React.ReactNode;
     onClose: () => void;
     opened: boolean;
+    /** Override the dropdown anchor. Mobile uses 'top' (centered) to avoid
+     *  clipping the 280px dropdown against a narrow viewport edge. */
+    position?: 'top' | 'top-end' | 'top-start';
 }
 
-export const DevicePickerPopover = ({ children, onClose, opened }: DevicePickerPopoverProps) => {
+export const DevicePickerPopover = ({
+    children,
+    onClose,
+    opened,
+    position = 'top-end',
+}: DevicePickerPopoverProps) => {
     const { t } = useTranslation();
     const devices = useRemoteDevices();
     const target = useRemoteTarget();
@@ -111,7 +119,7 @@ export const DevicePickerPopover = ({ children, onClose, opened }: DevicePickerP
     };
 
     return (
-        <Popover onClose={onClose} opened={opened} position="top-end" shadow="md" width={280}>
+        <Popover onClose={onClose} opened={opened} position={position} shadow="md" width={280}>
             <Popover.Target>{children}</Popover.Target>
             <Popover.Dropdown p="xs">
                 <Stack gap={4}>

@@ -10,6 +10,7 @@ import styles from './mobile-playerbar.module.css';
 
 import { ItemImage } from '/@/renderer/components/item-image/item-image';
 import { ContextMenuController } from '/@/renderer/features/context-menu/context-menu-controller';
+import { MobileDevicePickerButton } from '/@/renderer/features/jellyfin-remote-target';
 import { MainPlayButton, PlayerButton } from '/@/renderer/features/player/components/player-button';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
 import { ComponentErrorBoundary } from '/@/renderer/features/shared/components/component-error-boundary';
@@ -348,6 +349,7 @@ export const MobilePlayerbar = () => {
                 </LayoutGroup>
             </motion.div>
             <div className={styles.controlsWrapper}>
+                <MobileDevicePickerButton iconSize="md" variant="subtle" />
                 {showNavButtons && (
                     <PlayerButton
                         icon={<Icon fill="default" icon="mediaPrevious" size="md" />}
