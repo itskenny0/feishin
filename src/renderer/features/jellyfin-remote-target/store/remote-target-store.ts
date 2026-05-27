@@ -57,6 +57,7 @@ const emptyMirrored: RemoteMirrored = {
         positionMs: 0,
         positionSampledAt: 0,
         repeatMode: 'RepeatNone',
+        shuffle: false,
         volume: 100,
     },
     queue: [],

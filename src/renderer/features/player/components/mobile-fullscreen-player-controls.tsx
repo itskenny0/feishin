@@ -5,12 +5,14 @@ import styles from './mobile-fullscreen-player.module.css';
 
 import {
     useActiveIsPaused,
+    useActiveRepeat,
+    useActiveShuffle,
     useTransportEnabled,
 } from '/@/renderer/features/jellyfin-remote-target/hooks/use-active-player-source';
 import { MainPlayButton, PlayerButton } from '/@/renderer/features/player/components/player-button';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
 import { triggerHaptic } from '/@/renderer/hooks/use-haptic';
-import { usePlayerRepeat, usePlayerShuffle, useSkipButtons } from '/@/renderer/store';
+import { useSkipButtons } from '/@/renderer/store';
 import { Icon } from '/@/shared/components/icon/icon';
 import { Song } from '/@/shared/types/domain-types';
 import { PlayerRepeat, PlayerShuffle } from '/@/shared/types/types';
@@ -33,11 +35,11 @@ export const MobileFullscreenPlayerControls = memo(
         const currentSongId = currentSong?.id;
         const { t } = useTranslation();
         const isPaused = useActiveIsPaused();
-        const shuffle = usePlayerShuffle();
-        const repeat = usePlayerRepeat();
+        const shuffle = useActiveShuffle();
+        const repeat = useActiveRepeat();
         // Capability gating: in remote mode, disable transport the target
         // doesn't advertise. Always enabled in local mode.
-        const canShuffle = useTransportEnabled('Shuffle');
+        const canShuffle = useTransportEnabled('SetShuffleQueue');
         const canPrevious = useTransportEnabled('PreviousTrack');
         const canPlayPause = useTransportEnabled('PlayPause');
         const canNext = useTransportEnabled('NextTrack');

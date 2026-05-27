@@ -6,6 +6,8 @@ import styles from './center-controls.module.css';
 import {
     useActiveIsPaused,
     useActiveNowPlayingItem,
+    useActiveRepeat,
+    useActiveShuffle,
     useTransportEnabled,
 } from '/@/renderer/features/jellyfin-remote-target/hooks/use-active-player-source';
 import { MainPlayButton, PlayerButton } from '/@/renderer/features/player/components/player-button';
@@ -19,12 +21,7 @@ import {
     useRadioPlayer,
 } from '/@/renderer/features/radio/hooks/use-radio-player';
 import { useIsBigTablet } from '/@/renderer/hooks/use-breakpoint';
-import {
-    useButtonSize,
-    usePlayerRepeat,
-    usePlayerShuffle,
-    useSkipButtons,
-} from '/@/renderer/store';
+import { useButtonSize, useSkipButtons } from '/@/renderer/store';
 import { Icon } from '/@/shared/components/icon/icon';
 import { PlayerRepeat, PlayerShuffle } from '/@/shared/types/types';
 
@@ -154,9 +151,9 @@ const StopButton = ({ disabled }: { disabled?: boolean }) => {
 const ShuffleButton = ({ disabled }: { disabled?: boolean }) => {
     const { t } = useTranslation();
     const buttonSize = useButtonSize();
-    const shuffle = usePlayerShuffle();
+    const shuffle = useActiveShuffle();
     const { toggleShuffle } = usePlayer();
-    const canShuffle = useTransportEnabled('Shuffle');
+    const canShuffle = useTransportEnabled('SetShuffleQueue');
 
     return (
         <PlayerButton
@@ -297,7 +294,7 @@ const NextButton = ({ disabled }: { disabled?: boolean }) => {
 const RepeatButton = ({ disabled }: { disabled?: boolean }) => {
     const { t } = useTranslation();
     const buttonSize = useButtonSize();
-    const repeat = usePlayerRepeat();
+    const repeat = useActiveRepeat();
     const { toggleRepeat } = usePlayer();
     const canRepeat = useTransportEnabled('SetRepeatMode');
 

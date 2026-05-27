@@ -8,7 +8,11 @@ import { queryKeys } from '/@/renderer/api/query-keys';
 import { albumQueries } from '/@/renderer/features/albums/api/album-api';
 import { artistsQueries } from '/@/renderer/features/artists/api/artists-api';
 import { commandDispatcher } from '/@/renderer/features/jellyfin-remote-target/controller/command-dispatcher';
-import { computeRemotePlay } from '/@/renderer/features/jellyfin-remote-target/controller/remote-play';
+import {
+    computeRemotePlay,
+    nextJellyfinRepeat,
+    playerRepeatToJellyfin,
+} from '/@/renderer/features/jellyfin-remote-target/controller/remote-play';
 import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
 import {
     fetchPlaylistSongsBatch,
@@ -893,9 +897,14 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
                 meta: { repeat },
             });
 
+            const remote = getRemoteCtx();
+            if (remote) {
+                void commandDispatcher.setRepeat(remote, playerRepeatToJellyfin(repeat));
+                return;
+            }
             storeActions.setRepeat(repeat);
         },
-        [storeActions],
+        [getRemoteCtx, storeActions],
     );
 
     const setShuffle = useCallback(
@@ -905,9 +914,14 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
                 meta: { shuffle },
             });
 
+            const remote = getRemoteCtx();
+            if (remote) {
+                void commandDispatcher.setShuffle(remote, shuffle === PlayerShuffle.TRACK);
+                return;
+            }
             storeActions.setShuffle(shuffle);
         },
-        [storeActions],
+        [getRemoteCtx, storeActions],
     );
 
     const shuffle = useCallback(() => {
@@ -943,16 +957,28 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
             category: LogCategory.PLAYER,
         });
 
+        const remote = getRemoteCtx();
+        if (remote) {
+            const current = useRemoteTargetStore.getState().mirrored.playState.repeatMode;
+            void commandDispatcher.setRepeat(remote, nextJellyfinRepeat(current));
+            return;
+        }
         storeActions.toggleRepeat();
-    }, [storeActions]);
+    }, [getRemoteCtx, storeActions]);
 
     const toggleShuffle = useCallback(() => {
         logFn.debug(logMsg[LogCategory.PLAYER].toggleShuffle, {
             category: LogCategory.PLAYER,
         });
 
+        const remote = getRemoteCtx();
+        if (remote) {
+            const isShuffled = useRemoteTargetStore.getState().mirrored.playState.shuffle;
+            void commandDispatcher.setShuffle(remote, !isShuffled);
+            return;
+        }
         storeActions.toggleShuffle();
-    }, [storeActions]);
+    }, [getRemoteCtx, storeActions]);
 
     const contextValue: PlayerContext = useMemo(
         () => ({

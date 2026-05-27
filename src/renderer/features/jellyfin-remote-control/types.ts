@@ -11,6 +11,8 @@ export interface JellyfinGeneralCommandMessage {
 export type JellyfinGeneralCommandName =
     | 'DisplayMessage'
     | 'Mute'
+    | 'SetRepeatMode'
+    | 'SetShuffleQueue'
     | 'SetVolume'
     | 'ToggleMute'
     | 'Unmute'

@@ -29,6 +29,8 @@ export interface RemoteMirroredPlayState {
     /** `Date.now()` when positionMs was sampled — used to interpolate between polls. */
     positionSampledAt: number;
     repeatMode: string; // 'RepeatNone' | 'RepeatAll' | 'RepeatOne'
+    /** Derived from the session's PlayState.PlaybackOrder === 'Shuffle'. */
+    shuffle: boolean;
     volume: number; // 0-100
 }
 

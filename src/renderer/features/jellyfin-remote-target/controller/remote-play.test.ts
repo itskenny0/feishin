@@ -4,8 +4,12 @@ import {
     computeRemotePlay,
     computeTransfer,
     interpolatePositionMs,
+    jellyfinToPlayerRepeat,
+    jellyfinToPlayerShuffle,
+    nextJellyfinRepeat,
+    playerRepeatToJellyfin,
 } from '/@/renderer/features/jellyfin-remote-target/controller/remote-play';
-import { Play, PlayerShuffle } from '/@/shared/types/types';
+import { Play, PlayerRepeat, PlayerShuffle } from '/@/shared/types/types';
 
 const songs = (...ids: string[]) => ids.map((id) => ({ id }));
 
@@ -127,5 +131,33 @@ describe('interpolatePositionMs', () => {
 
     it('returns raw position when never sampled (sampledAt 0)', () => {
         expect(interpolatePositionMs(ps({ positionSampledAt: 0 }), 3_500, undefined)).toBe(5_000);
+    });
+});
+
+describe('repeat/shuffle mapping', () => {
+    it('maps Jellyfin repeat strings to PlayerRepeat', () => {
+        expect(jellyfinToPlayerRepeat('RepeatAll')).toBe(PlayerRepeat.ALL);
+        expect(jellyfinToPlayerRepeat('RepeatOne')).toBe(PlayerRepeat.ONE);
+        expect(jellyfinToPlayerRepeat('RepeatNone')).toBe(PlayerRepeat.NONE);
+        expect(jellyfinToPlayerRepeat('garbage')).toBe(PlayerRepeat.NONE);
+    });
+
+    it('maps PlayerRepeat to Jellyfin repeat strings', () => {
+        expect(playerRepeatToJellyfin(PlayerRepeat.ALL)).toBe('RepeatAll');
+        expect(playerRepeatToJellyfin(PlayerRepeat.ONE)).toBe('RepeatOne');
+        expect(playerRepeatToJellyfin(PlayerRepeat.NONE)).toBe('RepeatNone');
+    });
+
+    it('cycles repeat None -> One -> All -> None (matching the local toggle)', () => {
+        expect(nextJellyfinRepeat('RepeatNone')).toBe('RepeatOne');
+        expect(nextJellyfinRepeat('RepeatOne')).toBe('RepeatAll');
+        expect(nextJellyfinRepeat('RepeatAll')).toBe('RepeatNone');
+        // unknown current is treated as None -> One
+        expect(nextJellyfinRepeat('')).toBe('RepeatOne');
+    });
+
+    it('maps shuffle boolean to PlayerShuffle', () => {
+        expect(jellyfinToPlayerShuffle(true)).toBe(PlayerShuffle.TRACK);
+        expect(jellyfinToPlayerShuffle(false)).toBe(PlayerShuffle.NONE);
     });
 });

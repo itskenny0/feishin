@@ -8,6 +8,7 @@ describe('derivePlayState', () => {
         const ps = derivePlayState({
             PlayState: {
                 IsPaused: false,
+                PlaybackOrder: 'Shuffle',
                 PositionTicks: 50_000_000, // 5s
                 RepeatMode: 'RepeatAll',
                 VolumeLevel: 42,
@@ -18,6 +19,7 @@ describe('derivePlayState', () => {
             positionMs: 5_000,
             positionSampledAt: 1_000,
             repeatMode: 'RepeatAll',
+            shuffle: true,
             volume: 42,
         });
         vi.restoreAllMocks();
@@ -31,8 +33,14 @@ describe('derivePlayState', () => {
             positionMs: 0,
             positionSampledAt: 7,
             repeatMode: 'RepeatNone',
+            shuffle: false,
             volume: 100,
         });
         vi.restoreAllMocks();
+    });
+
+    it('treats PlaybackOrder Default (or absent) as not shuffled', () => {
+        expect(derivePlayState({ PlayState: { PlaybackOrder: 'Default' } }).shuffle).toBe(false);
+        expect(derivePlayState({ PlayState: {} }).shuffle).toBe(false);
     });
 });
