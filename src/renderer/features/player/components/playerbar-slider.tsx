@@ -5,7 +5,10 @@ import { ErrorBoundary } from 'react-error-boundary';
 import { PlayerbarSeekSlider } from './playerbar-seek-slider';
 import styles from './playerbar-slider.module.css';
 
-import { useActivePlayerSource } from '/@/renderer/features/jellyfin-remote-target/hooks/use-active-player-source';
+import {
+    useActivePlayerSource,
+    useRemoteInterpolatedPositionMs,
+} from '/@/renderer/features/jellyfin-remote-target/hooks/use-active-player-source';
 import { ScrobbleStatus } from '/@/renderer/features/player/components/scrobble-status';
 import { TrackmapCanvas } from '/@/renderer/features/trackmap';
 import { useAppStore, useAppStoreActions, usePlayerTimestamp } from '/@/renderer/store';
@@ -74,7 +77,8 @@ export const PlayerbarSlider = () => {
     // When the active player is a remote Jellyfin device, hand its
     // mirrored position to the readout. Local mode leaves it undefined so
     // DurationReadout falls back to its own usePlayerTimestamp subscription.
-    const remoteTimeSec = source.mode === 'remote' ? source.positionMs / 1000 : undefined;
+    const remotePositionMs = useRemoteInterpolatedPositionMs();
+    const remoteTimeSec = source.mode === 'remote' ? remotePositionMs / 1000 : undefined;
 
     const isWaveform = playerbarSlider?.type === PlayerbarSliderType.WAVEFORM;
     const trackmapEnabled = useTrackmapEnabled();

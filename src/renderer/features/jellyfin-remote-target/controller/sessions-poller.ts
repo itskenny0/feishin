@@ -113,9 +113,8 @@ export class SessionsPoller {
         this.offlineSince = 0;
 
         if (state.sessionId !== match.sessionId) {
-            actions.setTarget({
+            actions.reconcileSession({
                 capabilities: match.capabilities,
-                deviceId: match.deviceId,
                 deviceName: match.deviceName,
                 sessionId: match.sessionId,
             });

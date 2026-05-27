@@ -28,6 +28,11 @@ const debug = (...args: unknown[]) => {
     if (DEBUG) console.log('[jellyfin-remote]', ...args);
 };
 
+// Always-on lifecycle breadcrumbs so "Feishin won't connect / isn't
+// controllable" reports are diagnosable in the field. Never log tokens or
+// command payloads here — those stay behind the DEBUG gate via `debug`.
+const info = (...args: unknown[]) => console.info('[jellyfin-remote]', ...args);
+
 /**
  * Strip the query string from a URL before logging. Jellyfin's WS handshake
  * URL includes the user's api_key — we never want that in DevTools, log
@@ -150,7 +155,7 @@ export class JellyfinRemoteController {
                 }
                 return;
             }
-            debug('socket open');
+            info('socket open');
             this.lastSocketOpenedAt = Date.now();
             this.attempt = 0;
             if (this.keepaliveTimer) clearInterval(this.keepaliveTimer);
@@ -194,14 +199,7 @@ export class JellyfinRemoteController {
 
         socket.onclose = (event) => {
             if (this.generation !== gen) return;
-            debug(
-                'socket closed code=',
-                event.code,
-                'reason=',
-                event.reason,
-                'wasClean=',
-                event.wasClean,
-            );
+            info('socket closed', { code: event.code, wasClean: event.wasClean });
             if (this.keepaliveTimer) {
                 clearInterval(this.keepaliveTimer);
                 this.keepaliveTimer = null;
@@ -230,7 +228,7 @@ export class JellyfinRemoteController {
                 method: 'POST',
             });
             if (this.generation !== gen) return;
-            debug('capabilities POST →', res.status);
+            info('capabilities registered', { status: res.status });
             if (res.status === 401) {
                 console.warn(
                     '[jellyfin-remote] capabilities POST: 401 — disabling for this credential',
