@@ -8,6 +8,7 @@ import { queryKeys } from '/@/renderer/api/query-keys';
 import { albumQueries } from '/@/renderer/features/albums/api/album-api';
 import { artistsQueries } from '/@/renderer/features/artists/api/artists-api';
 import { commandDispatcher } from '/@/renderer/features/jellyfin-remote-target/controller/command-dispatcher';
+import { computeRemotePlay } from '/@/renderer/features/jellyfin-remote-target/controller/remote-play';
 import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
 import {
     fetchPlaylistSongsBatch,
@@ -161,6 +162,27 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
         return { server, sessionId: target.sessionId };
     }, []);
 
+    /**
+     * If a remote target is active and this intent can be expressed as a
+     * Jellyfin push, send it and return true. Used by every play path so
+     * album/playlist/song plays all land on the remote device, not locally.
+     */
+    const tryRemotePlay = useCallback(
+        (songs: { id: string }[], type: AddToQueueType, playSongId?: string): boolean => {
+            const remote = getRemoteCtx();
+            if (!remote) return false;
+            const push = computeRemotePlay(songs, type, playSongId);
+            if (!push) return false;
+            void commandDispatcher.play(remote, {
+                itemIds: push.itemIds,
+                playCommand: push.playCommand,
+                startIndex: push.startIndex,
+            });
+            return true;
+        },
+        [getRemoteCtx],
+    );
+
     const timeoutIds = useRef<null | Record<string, ReturnType<typeof setTimeout>>>({});
 
     const [doNotShowAgain, setDoNotShowAgain] = useLocalStorage({
@@ -208,32 +230,10 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
 
     const addToQueueByData = useCallback(
         (data: Song[], type: AddToQueueType, playSongId?: string) => {
+            if (tryRemotePlay(data, type, playSongId)) return;
+
             const filters = useSettingsStore.getState().playback.filters;
             const filteredData = filterSongsByPlayerFilters(data, filters);
-
-            const remote = getRemoteCtx();
-            if (remote && type === Play.NOW) {
-                const itemIds = data.map((s) => s.id);
-                void commandDispatcher.play(remote, {
-                    itemIds,
-                    playCommand: 'PlayNow',
-                });
-                return;
-            }
-            if (remote && type === Play.NEXT) {
-                void commandDispatcher.play(remote, {
-                    itemIds: data.map((s) => s.id),
-                    playCommand: 'PlayNext',
-                });
-                return;
-            }
-            if (remote && type === Play.LAST) {
-                void commandDispatcher.play(remote, {
-                    itemIds: data.map((s) => s.id),
-                    playCommand: 'PlayLast',
-                });
-                return;
-            }
 
             if (typeof type === 'object' && 'edge' in type && type.edge !== null) {
                 const edge = type.edge === 'top' ? 'top' : 'bottom';
@@ -259,7 +259,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
                 storeActions.addToQueueByType(filteredData, type as Play, playSongId);
             }
         },
-        [getRemoteCtx, storeActions],
+        [storeActions, tryRemotePlay],
     );
 
     const addToQueueByFetch = useCallback(
@@ -321,6 +321,10 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
 
                     const filters = useSettingsStore.getState().playback.filters;
                     const filteredFirst = filterSongsByPlayerFilters(firstBatch.items, filters);
+
+                    // Remote target active: push the batch to the device and stop;
+                    // Jellyfin owns the queue from here, so skip the local tail append.
+                    if (tryRemotePlay(filteredFirst, type)) return;
 
                     // Start playback immediately with batch 1.
                     storeActions.addToQueueByType(filteredFirst, Play.NOW);
@@ -391,6 +395,8 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
                 const filters = useSettingsStore.getState().playback.filters;
                 const filteredSongs = filterSongsByPlayerFilters(sortedSongs, filters);
 
+                if (tryRemotePlay(filteredSongs, type)) return;
+
                 if (typeof type === 'object' && 'edge' in type && type.edge !== null) {
                     const edge = type.edge === 'top' ? 'top' : 'bottom';
                     storeActions.addToQueueByUniqueId(filteredSongs, type.uniqueId, edge);
@@ -414,7 +420,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
                 });
             }
         },
-        [queryClient, storeActions, t],
+        [queryClient, storeActions, t, tryRemotePlay],
     );
 
     const addToQueueByListQuery = useCallback(
