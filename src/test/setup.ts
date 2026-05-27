@@ -1,5 +1,4 @@
 import '@testing-library/jest-dom/vitest';
-
 import { vi } from 'vitest';
 
 // jsdom doesn't implement IndexedDB, which `idb-keyval` (used by the persisted
