@@ -1,4 +1,7 @@
-import type { RemotePlayCommand } from '/@/renderer/features/jellyfin-remote-target/types';
+import type {
+    RemoteMirroredPlayState,
+    RemotePlayCommand,
+} from '/@/renderer/features/jellyfin-remote-target/types';
 import type { AddToQueueType } from '/@/renderer/store';
 
 import { isShuffleEnabled } from '/@/renderer/store/player.store';
@@ -71,4 +74,24 @@ export const computeTransfer = (
         startIndex,
         startPositionTicks: Math.max(0, Math.round(positionSec * 10_000_000)),
     };
+};
+
+/**
+ * Estimate the remote device's current position between 3s polls by advancing
+ * the last sampled position by wall-clock elapsed time. Paused / never-sampled
+ * states return the raw value. Clamped to `durationMs` when known.
+ */
+export const interpolatePositionMs = (
+    playState: RemoteMirroredPlayState,
+    now: number,
+    durationMs: number | undefined,
+): number => {
+    const { isPaused, positionMs, positionSampledAt } = playState;
+    if (isPaused || positionSampledAt === 0) return positionMs;
+    const elapsed = now - positionSampledAt;
+    const projected = elapsed > 0 ? positionMs + elapsed : positionMs;
+    if (typeof durationMs === 'number' && durationMs > 0) {
+        return Math.min(projected, durationMs);
+    }
+    return projected;
 };

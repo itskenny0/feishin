@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
     computeRemotePlay,
     computeTransfer,
+    interpolatePositionMs,
 } from '/@/renderer/features/jellyfin-remote-target/controller/remote-play';
 import { Play, PlayerShuffle } from '/@/shared/types/types';
 
@@ -94,5 +95,37 @@ describe('computeTransfer', () => {
             0,
         );
         expect(t).toBeNull();
+    });
+});
+
+describe('interpolatePositionMs', () => {
+    const ps = (over: any = {}) => ({
+        isPaused: false,
+        positionMs: 5_000,
+        positionSampledAt: 1_000,
+        repeatMode: 'RepeatNone',
+        volume: 100,
+        ...over,
+    });
+
+    it('returns the raw position when paused', () => {
+        expect(interpolatePositionMs(ps({ isPaused: true }), 9_999, undefined)).toBe(5_000);
+    });
+
+    it('advances by elapsed wall-clock when playing', () => {
+        // sampled at t=1000 with 5000ms; now t=3500 -> +2500ms
+        expect(interpolatePositionMs(ps(), 3_500, undefined)).toBe(7_500);
+    });
+
+    it('never goes backwards if the clock is behind the sample', () => {
+        expect(interpolatePositionMs(ps(), 500, undefined)).toBe(5_000);
+    });
+
+    it('clamps to duration when provided', () => {
+        expect(interpolatePositionMs(ps(), 100_000, 6_000)).toBe(6_000);
+    });
+
+    it('returns raw position when never sampled (sampledAt 0)', () => {
+        expect(interpolatePositionMs(ps({ positionSampledAt: 0 }), 3_500, undefined)).toBe(5_000);
     });
 });
