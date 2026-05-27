@@ -1,3 +1,4 @@
+import { Capacitor } from '@capacitor/core';
 import { initClient, initContract } from '@ts-rest/core';
 import axios, { AxiosError, AxiosResponse, isAxiosError, Method } from 'axios';
 import omitBy from 'lodash/omitBy';
@@ -447,7 +448,28 @@ const parsePath = (fullPath: string) => {
     };
 };
 
+/**
+ * Best-effort Android device model from the WebView user-agent, e.g.
+ * "Pixel 7" from "...; Android 13; Pixel 7 Build/...". Modern Chrome freezes
+ * the model to "K" for privacy — treated as unknown so we fall back to a
+ * generic label rather than showing a useless "K".
+ */
+const parseAndroidModel = (ua: string): null | string => {
+    const m = ua.match(/Android[^;]*;\s*([^;)]+?)(?:\s+Build\/|\))/i);
+    const model = m?.[1]?.trim();
+    if (!model || model.toLowerCase() === 'k' || /^wv$/i.test(model)) return null;
+    return model;
+};
+
 export const getDeviceLabel = (): string => {
+    // On the Android (Capacitor) client the WebView UA otherwise resolves to
+    // "Chrome", which is meaningless in the device picker. Surface the device
+    // model when we can read it, and always identify the app as Feishin.
+    if (Capacitor.getPlatform() === 'android') {
+        const model =
+            typeof navigator !== 'undefined' ? parseAndroidModel(navigator.userAgent) : null;
+        return model ? `Feishin (${model})` : 'Feishin (Android)';
+    }
     const base = getClientType();
     // In Electron, append the system hostname so the device shows up in
     // Jellyfin's "Play On" picker as e.g. "Desktop Client (laptop)".

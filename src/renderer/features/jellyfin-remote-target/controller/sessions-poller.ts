@@ -9,7 +9,11 @@ import {
 } from '/@/renderer/features/jellyfin-remote-target/controller/remote-state-mirror';
 import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
 
-const POLL_INTERVAL_MS = 3_000;
+// 1s keeps mirrored state (track changes, external control, position
+// re-anchoring) feeling responsive. Optimistic updates in player-context cover
+// the in-between for locally-initiated commands; this poll reconciles + catches
+// changes made from other clients / the device itself.
+const POLL_INTERVAL_MS = 1_000;
 const OFFLINE_CUTOFF_MS = 60_000;
 
 export interface PollerStartArgs {

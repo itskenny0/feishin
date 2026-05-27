@@ -68,16 +68,37 @@ export const useActivePlayerSource = (): ActivePlayerSource => {
 };
 
 /**
+ * Playstate transport commands. These travel over POST /Sessions/{id}/Playing/*
+ * and are available on ANY session that accepts media control — they are NOT
+ * listed in a session's `SupportedCommands` (that list only enumerates
+ * GeneralCommand types like SetVolume/SetRepeatMode). Gating these on
+ * SupportedCommands wrongly greys out play/pause/next/prev/seek for every
+ * remote target, so they're always enabled in remote mode.
+ */
+const PLAYSTATE_TRANSPORT = new Set([
+    'FastForward',
+    'NextTrack',
+    'PlayPause',
+    'PreviousTrack',
+    'Rewind',
+    'Seek',
+    'Stop',
+]);
+
+/**
  * Whether a given transport capability is available on the active player.
+ * Local mode: everything is enabled. Remote mode: Playstate transport is
+ * always available; GeneralCommand-backed controls (SetVolume, Mute,
+ * SetRepeatMode, SetShuffleQueue, …) are gated on the target's advertised
+ * `SupportedCommands`.
  *
  * Subscribes to a primitive only — the boolean answer itself — so this is
- * cheap to call from every transport button without dragging the full
- * useActivePlayerSource (now-playing item, queue, position, volume) into
- * each button's render path.
+ * cheap to call from every transport button.
  */
 export const useTransportEnabled = (capability: string): boolean => {
     return useRemoteTargetStore((s) => {
         if (s.targetDeviceId === null) return true;
+        if (PLAYSTATE_TRANSPORT.has(capability)) return true;
         return s.mirrored.capabilities.includes(capability);
     });
 };

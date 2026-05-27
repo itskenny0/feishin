@@ -673,6 +673,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
         const remote = getRemoteCtx();
         if (remote) {
             void commandDispatcher.pause(remote);
+            useRemoteTargetStore.getState().actions.setPaused(true);
             return;
         }
         storeActions.mediaPause();
@@ -688,6 +689,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
             const remote = getRemoteCtx();
             if (remote) {
                 void commandDispatcher.unpause(remote);
+                useRemoteTargetStore.getState().actions.setPaused(false);
                 return;
             }
             storeActions.mediaPlay(id);
@@ -820,7 +822,9 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
 
         const remote = getRemoteCtx();
         if (remote) {
+            const wasPaused = useRemoteTargetStore.getState().mirrored.playState.isPaused;
             void commandDispatcher.togglePause(remote);
+            useRemoteTargetStore.getState().actions.setPaused(!wasPaused);
             return;
         }
         storeActions.mediaTogglePlayPause();
@@ -883,6 +887,9 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
             const remote = getRemoteCtx();
             if (remote) {
                 void commandDispatcher.setVolume(remote, volume);
+                useRemoteTargetStore.getState().actions.patchPlayState({
+                    volume: Math.max(0, Math.min(100, Math.round(volume))),
+                });
                 return;
             }
             storeActions.setVolume(volume);
@@ -899,7 +906,9 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
 
             const remote = getRemoteCtx();
             if (remote) {
-                void commandDispatcher.setRepeat(remote, playerRepeatToJellyfin(repeat));
+                const jf = playerRepeatToJellyfin(repeat);
+                void commandDispatcher.setRepeat(remote, jf);
+                useRemoteTargetStore.getState().actions.patchPlayState({ repeatMode: jf });
                 return;
             }
             storeActions.setRepeat(repeat);
@@ -916,7 +925,9 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
 
             const remote = getRemoteCtx();
             if (remote) {
-                void commandDispatcher.setShuffle(remote, shuffle === PlayerShuffle.TRACK);
+                const on = shuffle === PlayerShuffle.TRACK;
+                void commandDispatcher.setShuffle(remote, on);
+                useRemoteTargetStore.getState().actions.patchPlayState({ shuffle: on });
                 return;
             }
             storeActions.setShuffle(shuffle);
@@ -960,7 +971,9 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
         const remote = getRemoteCtx();
         if (remote) {
             const current = useRemoteTargetStore.getState().mirrored.playState.repeatMode;
-            void commandDispatcher.setRepeat(remote, nextJellyfinRepeat(current));
+            const next = nextJellyfinRepeat(current);
+            void commandDispatcher.setRepeat(remote, next);
+            useRemoteTargetStore.getState().actions.patchPlayState({ repeatMode: next });
             return;
         }
         storeActions.toggleRepeat();
@@ -975,6 +988,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
         if (remote) {
             const isShuffled = useRemoteTargetStore.getState().mirrored.playState.shuffle;
             void commandDispatcher.setShuffle(remote, !isShuffled);
+            useRemoteTargetStore.getState().actions.patchPlayState({ shuffle: !isShuffled });
             return;
         }
         storeActions.toggleShuffle();

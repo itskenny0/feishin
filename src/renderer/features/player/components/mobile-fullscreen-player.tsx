@@ -557,10 +557,9 @@ export const MobileFullscreenPlayer = () => {
      * render. The Lyrics component itself uses the same TanStack key
      * so the fetch only fires once.
      */
-    // Lyrics still resolve against the local song (the Lyrics view is local-
-    // sourced); gating on the same song keeps the affordance and content
-    // consistent. Lyrics-while-remote is a known secondary gap.
-    const hasLyrics = useHasLyrics(currentSong);
+    // Lyrics now resolve against the active source (the Lyrics view does too),
+    // so the affordance and content stay consistent in remote mode.
+    const hasLyrics = useHasLyrics((displaySong ?? undefined) as typeof currentSong);
 
     /*
      * Manual pull-to-dismiss.

@@ -65,10 +65,16 @@ export const DevicePickerPopover = ({
     };
 
     const selectDevice = (d: RemoteDevice) => {
-        // Capture local position BEFORE pausing, then hand the queue off so the
-        // device continues where local left off (Spotify Connect-style).
+        // Only hand off the local queue when the target is IDLE. If the device
+        // is already playing something, adopt its state (just mirror) rather
+        // than overwriting what it's playing with our queue.
         const server = useAuthStore.getState().currentServer;
-        if (server && server.type === ServerType.JELLYFIN && server.credential) {
+        if (
+            !d.nowPlayingItemId &&
+            server &&
+            server.type === ServerType.JELLYFIN &&
+            server.credential
+        ) {
             const positionSec = useTimestampStoreBase.getState().timestamp;
             const transfer = computeTransfer(usePlayerStoreBase.getState(), positionSec);
             if (transfer) {

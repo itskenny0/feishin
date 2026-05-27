@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import styles from './lyrics.module.css';
 
 import { queryKeys } from '/@/renderer/api/query-keys';
+import { useActiveNowPlayingItem } from '/@/renderer/features/jellyfin-remote-target/hooks/use-active-player-source';
 import { translateLyrics } from '/@/renderer/features/lyrics/api/lyric-translate';
 import {
     computeSelectedFromResult,
@@ -29,7 +30,7 @@ import { usePlayerEvents } from '/@/renderer/features/player/audio-player/hooks/
 import { useIsRadioActive } from '/@/renderer/features/radio/hooks/use-radio-player';
 import { ComponentErrorBoundary } from '/@/renderer/features/shared/components/component-error-boundary';
 import { queryClient } from '/@/renderer/lib/react-query';
-import { useLyricsSettings, usePlayerSong } from '/@/renderer/store';
+import { useLyricsSettings } from '/@/renderer/store';
 import { useCurrentServerWithCredential } from '/@/renderer/store/auth.store';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Center } from '/@/shared/components/center/center';
@@ -37,7 +38,7 @@ import { Group } from '/@/shared/components/group/group';
 import { Spinner } from '/@/shared/components/spinner/spinner';
 import { Text } from '/@/shared/components/text/text';
 import { toast } from '/@/shared/components/toast/toast';
-import { LyricsOverride, ServerType } from '/@/shared/types/domain-types';
+import { LyricsOverride, QueueSong, ServerType } from '/@/shared/types/domain-types';
 
 type LyricsProps = {
     fadeOutNoLyricsMessage?: boolean;
@@ -45,7 +46,11 @@ type LyricsProps = {
 };
 
 export const Lyrics = ({ fadeOutNoLyricsMessage = true, settingsKey = 'default' }: LyricsProps) => {
-    const currentSong = usePlayerSong();
+    // Active source: the remote device's now-playing when a Jellyfin Connect
+    // target is selected, else the local song (no-op locally). The mirrored
+    // Song has no _uniqueId, but lyrics only key on id/_serverId, so the cast
+    // back to QueueSong is safe.
+    const currentSong = (useActiveNowPlayingItem() ?? undefined) as QueueSong | undefined;
     const isRadioActive = useIsRadioActive();
 
     const isLyricsDisabled = isRadioActive;

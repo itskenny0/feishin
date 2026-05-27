@@ -1,6 +1,7 @@
 import type {
     RemoteDevice,
     RemoteMirrored,
+    RemoteMirroredPlayState,
     RemoteTargetStatus,
 } from '/@/renderer/features/jellyfin-remote-target/types';
 
@@ -9,6 +10,9 @@ import { create } from 'zustand';
 interface RemoteTargetState {
     actions: {
         clearTarget: () => void;
+        /** Optimistically merge into mirrored.playState for instant UI feedback
+         *  before the next /Sessions poll reconciles. */
+        patchPlayState: (partial: Partial<RemoteMirroredPlayState>) => void;
         reconcileSession: (session: {
             capabilities: string[];
             deviceName: string;
@@ -16,6 +20,9 @@ interface RemoteTargetState {
         }) => void;
         setDeviceList: (devices: RemoteDevice[]) => void;
         setMirrored: (mirrored: Partial<RemoteMirrored>) => void;
+        /** Optimistic pause/resume that also re-anchors the interpolation
+         *  clock so the seek bar freezes/continues from the right spot. */
+        setPaused: (isPaused: boolean) => void;
         setPickerOpen: (open: boolean) => void;
         setPollerActive: (active: boolean) => void;
         setPollError: (error: null | string) => void;
@@ -74,6 +81,10 @@ export const useRemoteTargetStore = create<RemoteTargetState>((set) => ({
                 targetDeviceId: null,
                 targetDeviceName: null,
             }),
+        patchPlayState: (partial) =>
+            set((s) => ({
+                mirrored: { ...s.mirrored, playState: { ...s.mirrored.playState, ...partial } },
+            })),
         reconcileSession: ({ capabilities, deviceName, sessionId }) =>
             set((s) => ({
                 mirrored: { ...s.mirrored, capabilities },
@@ -83,6 +94,28 @@ export const useRemoteTargetStore = create<RemoteTargetState>((set) => ({
             })),
         setDeviceList: (devices) => set({ deviceList: devices, hasPolledOnce: true }),
         setMirrored: (partial) => set((s) => ({ mirrored: { ...s.mirrored, ...partial } })),
+        setPaused: (isPaused) =>
+            set((s) => {
+                const ps = s.mirrored.playState;
+                const now = Date.now();
+                // Re-anchor the interpolation clock: freeze at the current
+                // projected position (pause) or resume from it (play).
+                const current =
+                    ps.isPaused || ps.positionSampledAt === 0
+                        ? ps.positionMs
+                        : ps.positionMs + Math.max(0, now - ps.positionSampledAt);
+                return {
+                    mirrored: {
+                        ...s.mirrored,
+                        playState: {
+                            ...ps,
+                            isPaused,
+                            positionMs: current,
+                            positionSampledAt: now,
+                        },
+                    },
+                };
+            }),
         setPickerOpen: (open) => set({ pickerOpen: open }),
         setPollerActive: (active) => set(active ? {} : { hasPolledOnce: false, pollError: null }),
         setPollError: (error) => set({ pollError: error }),
