@@ -9,6 +9,11 @@ import { create } from 'zustand';
 interface RemoteTargetState {
     actions: {
         clearTarget: () => void;
+        reconcileSession: (session: {
+            capabilities: string[];
+            deviceName: string;
+            sessionId: string;
+        }) => void;
         setDeviceList: (devices: RemoteDevice[]) => void;
         setMirrored: (mirrored: Partial<RemoteMirrored>) => void;
         setPickerOpen: (open: boolean) => void;
@@ -68,6 +73,13 @@ export const useRemoteTargetStore = create<RemoteTargetState>((set) => ({
                 targetDeviceId: null,
                 targetDeviceName: null,
             }),
+        reconcileSession: ({ capabilities, deviceName, sessionId }) =>
+            set((s) => ({
+                mirrored: { ...s.mirrored, capabilities },
+                sessionId,
+                status: 'connected',
+                targetDeviceName: deviceName,
+            })),
         setDeviceList: (devices) => set({ deviceList: devices, hasPolledOnce: true }),
         setMirrored: (partial) => set((s) => ({ mirrored: { ...s.mirrored, ...partial } })),
         setPickerOpen: (open) => set({ pickerOpen: open }),
