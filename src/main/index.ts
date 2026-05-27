@@ -535,7 +535,14 @@ async function createWindow(first = true): Promise<void> {
             devTools: true,
             nodeIntegration: false,
             preload: join(__dirname, '../preload/index.js'),
-            sandbox: true,
+            // Must stay false: this fork's preload imports node-backed code
+            // (e.g. getHostname → main/utils → electron-log/main) and exposes
+            // node-using APIs over contextBridge. A sandboxed preload can't
+            // `require` those modules, so enabling sandbox makes the preload
+            // fail to load — window.api ends up undefined and the renderer
+            // black-screens (TypeError reading 'mpvPlayer'). contextIsolation
+            // + nodeIntegration:false still apply.
+            sandbox: false,
             webSecurity: !store.get('ignore_cors'),
         },
         width: 1440,
