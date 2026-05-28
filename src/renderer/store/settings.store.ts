@@ -871,6 +871,15 @@ const PeerSyncBrokerSettingsSchema = z.object({
     tlsKeyPath: z.string().optional(),
 });
 
+const PeerSyncUiVisibilitySchema = z.object({
+    /** The "Connect to a device" button in the player bar. */
+    connectButton: z.boolean().default(true),
+    /** Lane badge (MQTT / Jellyfin) next to each peer row in the picker. */
+    pickerBadges: z.boolean().default(true),
+    /** Compact transport pill near the player bar. */
+    statusPill: z.boolean().default(true),
+});
+
 const PeerSyncSettingsSchema = z.object({
     /** Embedded broker settings (desktop only). */
     broker: PeerSyncBrokerSettingsSchema.default({
@@ -888,12 +897,31 @@ const PeerSyncSettingsSchema = z.object({
      *  overrides the default Jellyfin-user-id-as-username used against the
      *  embedded broker. */
     brokerUsername: z.string().default(''),
-    /** Master toggle. Off = subsystem fully inert. */
+    /** Master toggle for the MQTT peer-sync transport. Off = MQTT lane
+     *  fully inert; Jellyfin Sessions polling continues per
+     *  `jellyfinRemoteEnabled`. */
     enabled: z.boolean().default(false),
+    /** Master toggle for Jellyfin Remote (device picker, controller,
+     *  receiver, Sessions polling). Off = no remote-play UI or background
+     *  polling whatsoever, regardless of `enabled`. Default true so
+     *  upgrading users keep the existing behavior; the wizard flips it on
+     *  explicitly. */
+    jellyfinRemoteEnabled: z.boolean().default(true),
+    /** True once the user has finished the Sync & Connect setup wizard.
+     *  All Connect-related UI chrome is hidden until this flips true so
+     *  fresh installs are uncluttered. */
+    onboarded: z.boolean().default(false),
     /** Stable per-install peer id — auto-generated on first read. */
     peerId: z.string().default(''),
     /** Shared room key — auto-generated on first opt-in. */
     roomKey: z.string().default(''),
+    /** Per-element visibility toggles. Power users who don't want a
+     *  particular Connect-related chrome can switch it off here. */
+    ui: PeerSyncUiVisibilitySchema.default({
+        connectButton: true,
+        pickerBadges: true,
+        statusPill: true,
+    }),
 });
 
 /**
@@ -2151,8 +2179,15 @@ const initialState: SettingsState = {
         brokerUrl: '',
         brokerUsername: '',
         enabled: false,
+        jellyfinRemoteEnabled: true,
+        onboarded: false,
         peerId: '',
         roomKey: '',
+        ui: {
+            connectButton: true,
+            pickerBadges: true,
+            statusPill: true,
+        },
     },
     playback: {
         audioDeviceId: undefined,
@@ -3084,10 +3119,43 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
+                if (version <= 48) {
+                    // Hide Connect-related UI chrome until the user has
+                    // finished the new Sync & Connect setup wizard, and
+                    // expose per-element visibility toggles. Existing
+                    // installs are NOT treated as "onboarded" because the
+                    // wizard introduces choices the previous UI didn't
+                    // surface (broker tier, etc.).
+                    if (state.peerSync && typeof state.peerSync === 'object') {
+                        if (typeof state.peerSync.onboarded !== 'boolean') {
+                            state.peerSync.onboarded = false;
+                        }
+                        if (!state.peerSync.ui || typeof state.peerSync.ui !== 'object') {
+                            state.peerSync.ui = {
+                                connectButton: true,
+                                pickerBadges: true,
+                                statusPill: true,
+                            };
+                        }
+                    }
+                }
+
+                if (version <= 49) {
+                    // Add the Jellyfin Remote master kill-switch. Default
+                    // true on upgrade so the picker + Sessions polling
+                    // continue to work; users who want a quiet install can
+                    // flip it off explicitly.
+                    if (state.peerSync && typeof state.peerSync === 'object') {
+                        if (typeof state.peerSync.jellyfinRemoteEnabled !== 'boolean') {
+                            state.peerSync.jellyfinRemoteEnabled = true;
+                        }
+                    }
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 48,
+            version: 50,
         },
     ),
 );

@@ -5,7 +5,25 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { useBottomSheetStore } from '/@/renderer/features/jellyfin-remote-target/components/bottom-sheet/bottom-sheet-store';
 import { MobileDevicePickerButton } from '/@/renderer/features/jellyfin-remote-target/components/mobile-device-picker-button';
 import { useAuthStore } from '/@/renderer/store/auth.store';
+import { useSettingsStore } from '/@/renderer/store/settings.store';
 import { ServerListItemWithCredential, ServerType } from '/@/shared/types/domain-types';
+
+/**
+ * Connect-related UI is hidden until the user has finished the Sync &
+ * Connect setup wizard. The tests need the button to render, so we
+ * pre-onboard before each test.
+ */
+const seedOnboarded = () => {
+    const prev = useSettingsStore.getState();
+    useSettingsStore.setState({
+        ...prev,
+        peerSync: {
+            ...prev.peerSync,
+            onboarded: true,
+            ui: { connectButton: true, pickerBadges: true, statusPill: true },
+        },
+    });
+};
 
 const jellyfinServer: ServerListItemWithCredential = {
     credential: 'cred',
@@ -42,6 +60,7 @@ afterEach(() => {
 describe('MobileDevicePickerButton', () => {
     it('renders a Connect trigger button when the current server is Jellyfin', () => {
         useAuthStore.setState({ currentServer: jellyfinServer });
+        seedOnboarded();
         const { container } = renderButton();
         const button = container.querySelector('button');
         expect(button).not.toBeNull();
@@ -51,6 +70,7 @@ describe('MobileDevicePickerButton', () => {
 
     it('opens the device sheet (drawer dialog) on click', async () => {
         useAuthStore.setState({ currentServer: jellyfinServer });
+        seedOnboarded();
         const { container } = renderButton();
         expect(document.querySelector('[role="dialog"]')).toBeNull();
         await openSheet(container);
@@ -72,6 +92,7 @@ describe('MobileDevicePickerButton', () => {
 
     it('closes the sheet when the explicit close button (X) is clicked', async () => {
         useAuthStore.setState({ currentServer: jellyfinServer });
+        seedOnboarded();
         const { container } = renderButton();
         await openSheet(container);
 
@@ -83,6 +104,7 @@ describe('MobileDevicePickerButton', () => {
 
     it('closes the sheet when the backdrop is tapped', async () => {
         useAuthStore.setState({ currentServer: jellyfinServer });
+        seedOnboarded();
         const { container } = renderButton();
         await openSheet(container);
 
@@ -94,6 +116,7 @@ describe('MobileDevicePickerButton', () => {
 
     it('closes the sheet on a downward swipe past the dismiss threshold', async () => {
         useAuthStore.setState({ currentServer: jellyfinServer });
+        seedOnboarded();
         const { container } = renderButton();
         await openSheet(container);
 
@@ -130,6 +153,7 @@ describe('MobileDevicePickerButton', () => {
 
     it('closes the sheet when the Android back gesture fires (via dismissTop)', async () => {
         useAuthStore.setState({ currentServer: jellyfinServer });
+        seedOnboarded();
         const { container } = renderButton();
         await openSheet(container);
 
@@ -146,6 +170,7 @@ describe('MobileDevicePickerButton', () => {
 
     it('closes the sheet when the Escape key is pressed', async () => {
         useAuthStore.setState({ currentServer: jellyfinServer });
+        seedOnboarded();
         const { container } = renderButton();
         await openSheet(container);
 

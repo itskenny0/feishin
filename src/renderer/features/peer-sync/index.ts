@@ -1,6 +1,7 @@
 export {
     isPeerClientConnected,
     publishOwnState,
+    publishPing,
     startPeerClient,
     stopPeerClient,
 } from '/@/renderer/features/peer-sync/controller/peer-client';

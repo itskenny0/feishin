@@ -403,7 +403,30 @@ export const PeerSyncSettings = memo(() => {
                     {
                         control: (
                             <Switch
+                                checked={settings.jellyfinRemoteEnabled}
+                                onChange={(e) =>
+                                    setSettings({
+                                        peerSync: {
+                                            jellyfinRemoteEnabled: e.currentTarget.checked,
+                                        },
+                                    })
+                                }
+                            />
+                        ),
+                        description: t('setting.enableJellyfinRemote', {
+                            context: 'description',
+                            defaultValue:
+                                'Master kill-switch for Jellyfin Remote. When off: no device picker, no Sessions polling, no remote-control receiver. MQTT is also paused since the picker is its entry point.',
+                        }),
+                        title: t('setting.enableJellyfinRemote', {
+                            defaultValue: 'Enable Jellyfin Remote',
+                        }),
+                    },
+                    {
+                        control: (
+                            <Switch
                                 checked={settings.enabled}
+                                disabled={!settings.jellyfinRemoteEnabled}
                                 onChange={(e) => handleEnable(e.currentTarget.checked)}
                             />
                         ),
@@ -413,7 +436,7 @@ export const PeerSyncSettings = memo(() => {
                                 'When two Feishins are reachable via MQTT, commands and state flow over MQTT instead of the polling lane.',
                         }),
                         title: t('setting.enablePeerSync', {
-                            defaultValue: 'Enable peer sync',
+                            defaultValue: 'Enable MQTT peer sync',
                         }),
                     },
                 ]}
@@ -426,6 +449,79 @@ export const PeerSyncSettings = memo(() => {
                             'Public brokers can see your playback state and commands. Use TLS and a strong room key, or run your own broker.',
                     })}
                 </Alert>
+            )}
+
+            {settings.enabled && settings.onboarded && (
+                <SettingsSection
+                    options={[
+                        {
+                            control: (
+                                <Switch
+                                    checked={settings.ui.connectButton}
+                                    onChange={(e) =>
+                                        setSettings({
+                                            peerSync: {
+                                                ui: { connectButton: e.currentTarget.checked },
+                                            },
+                                        })
+                                    }
+                                />
+                            ),
+                            description: t('setting.peerSyncShowConnectButton', {
+                                context: 'description',
+                                defaultValue:
+                                    'Hide the Connect button on the player bar to keep the UI tidy. The picker is still reachable from the device list.',
+                            }),
+                            title: t('setting.peerSyncShowConnectButton', {
+                                defaultValue: 'Show Connect button',
+                            }),
+                        },
+                        {
+                            control: (
+                                <Switch
+                                    checked={settings.ui.statusPill}
+                                    onChange={(e) =>
+                                        setSettings({
+                                            peerSync: {
+                                                ui: { statusPill: e.currentTarget.checked },
+                                            },
+                                        })
+                                    }
+                                />
+                            ),
+                            description: t('setting.peerSyncShowStatusPill', {
+                                context: 'description',
+                                defaultValue:
+                                    'Show the Local / Jellyfin / MQTT lane indicator next to the Connect button.',
+                            }),
+                            title: t('setting.peerSyncShowStatusPill', {
+                                defaultValue: 'Show transport pill',
+                            }),
+                        },
+                        {
+                            control: (
+                                <Switch
+                                    checked={settings.ui.pickerBadges}
+                                    onChange={(e) =>
+                                        setSettings({
+                                            peerSync: {
+                                                ui: { pickerBadges: e.currentTarget.checked },
+                                            },
+                                        })
+                                    }
+                                />
+                            ),
+                            description: t('setting.peerSyncShowPickerBadges', {
+                                context: 'description',
+                                defaultValue:
+                                    'Show the MQTT badge next to peers in the device picker when MQTT is the live lane.',
+                            }),
+                            title: t('setting.peerSyncShowPickerBadges', {
+                                defaultValue: 'Show MQTT lane badges',
+                            }),
+                        },
+                    ]}
+                />
             )}
 
             {settings.enabled && (

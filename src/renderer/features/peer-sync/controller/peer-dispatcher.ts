@@ -19,14 +19,22 @@ import type { ServerListItemWithCredential } from '/@/shared/types/domain-types'
 import { commandDispatcher } from '/@/renderer/features/jellyfin-remote-target/controller/command-dispatcher';
 import { publishCommand } from '/@/renderer/features/peer-sync/controller/peer-client';
 import { pickTransport } from '/@/renderer/features/peer-sync/controller/transport-selector';
+import { recordOutboundCommand } from '/@/renderer/features/peer-sync/diagnostics/diagnostics-store';
 import {
     buildCommand,
     peerToJellyfinRepeat,
 } from '/@/renderer/features/peer-sync/protocol/builders';
 import { PeerAddress } from '/@/renderer/features/peer-sync/protocol/topics';
-import { PeerRepeatMode } from '/@/renderer/features/peer-sync/types';
+import { PeerCommand, PeerRepeatMode } from '/@/renderer/features/peer-sync/types';
 
 const log = (...args: unknown[]) => console.info('[peer-sync]', ...args);
+
+/** Publish + record. Single seam so every MQTT outbound goes through one
+ *  helper, which the diagnostics store taps for the recent-commands list. */
+const fireMqtt = (peer: PeerAddress, cmd: PeerCommand): void => {
+    publishCommand(peer, cmd);
+    recordOutboundCommand(peer.peerId, cmd);
+};
 
 export interface PeerDispatcherCtx {
     /** Address of the remote peer. Required when the MQTT lane is alive. */
@@ -53,14 +61,14 @@ export const peerDispatcher = {
     next: (ctx: PeerDispatcherCtx): void =>
         route(
             ctx,
-            () => publishCommand(ctx.peer, buildCommand('next')),
+            () => fireMqtt(ctx.peer, buildCommand('next')),
             () => void commandDispatcher.next({ server: ctx.server, sessionId: ctx.sessionId }),
         ),
 
     pause: (ctx: PeerDispatcherCtx): void =>
         route(
             ctx,
-            () => publishCommand(ctx.peer, buildCommand('pause')),
+            () => fireMqtt(ctx.peer, buildCommand('pause')),
             () => void commandDispatcher.pause({ server: ctx.server, sessionId: ctx.sessionId }),
         ),
 
@@ -74,7 +82,7 @@ export const peerDispatcher = {
     ): void =>
         route(
             ctx,
-            () => publishCommand(ctx.peer, buildCommand('play', args)),
+            () => fireMqtt(ctx.peer, buildCommand('play', args)),
             () =>
                 void commandDispatcher.play({ server: ctx.server, sessionId: ctx.sessionId }, args),
         ),
@@ -82,7 +90,7 @@ export const peerDispatcher = {
     previous: (ctx: PeerDispatcherCtx): void =>
         route(
             ctx,
-            () => publishCommand(ctx.peer, buildCommand('prev')),
+            () => fireMqtt(ctx.peer, buildCommand('prev')),
             () =>
                 void commandDispatcher.previous({
                     server: ctx.server,
@@ -93,7 +101,7 @@ export const peerDispatcher = {
     seek: (ctx: PeerDispatcherCtx, positionMs: number): void =>
         route(
             ctx,
-            () => publishCommand(ctx.peer, buildCommand('seek', { positionMs })),
+            () => fireMqtt(ctx.peer, buildCommand('seek', { positionMs })),
             () =>
                 commandDispatcher.seek(
                     { server: ctx.server, sessionId: ctx.sessionId },
@@ -104,7 +112,7 @@ export const peerDispatcher = {
     setRepeat: (ctx: PeerDispatcherCtx, mode: PeerRepeatMode): void =>
         route(
             ctx,
-            () => publishCommand(ctx.peer, buildCommand('repeat', { mode })),
+            () => fireMqtt(ctx.peer, buildCommand('repeat', { mode })),
             () =>
                 void commandDispatcher.setRepeat(
                     { server: ctx.server, sessionId: ctx.sessionId },
@@ -115,7 +123,7 @@ export const peerDispatcher = {
     setShuffle: (ctx: PeerDispatcherCtx, shuffle: boolean): void =>
         route(
             ctx,
-            () => publishCommand(ctx.peer, buildCommand('shuffle', { shuffle })),
+            () => fireMqtt(ctx.peer, buildCommand('shuffle', { shuffle })),
             () =>
                 void commandDispatcher.setShuffle(
                     { server: ctx.server, sessionId: ctx.sessionId },
@@ -126,7 +134,7 @@ export const peerDispatcher = {
     setVolume: (ctx: PeerDispatcherCtx, volume: number): void =>
         route(
             ctx,
-            () => publishCommand(ctx.peer, buildCommand('volume', { volume })),
+            () => fireMqtt(ctx.peer, buildCommand('volume', { volume })),
             () =>
                 commandDispatcher.setVolume(
                     { server: ctx.server, sessionId: ctx.sessionId },

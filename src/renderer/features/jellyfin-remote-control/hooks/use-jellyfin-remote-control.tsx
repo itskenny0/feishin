@@ -13,7 +13,11 @@ import { JellyfinRemoteController } from '/@/renderer/features/jellyfin-remote-c
 import { sessionsSink } from '/@/renderer/features/jellyfin-remote-target/controller/sessions-sink';
 import { useAuthStore } from '/@/renderer/store/auth.store';
 import { usePlayerActions } from '/@/renderer/store/player.store';
-import { usePlaybackSettings, useVolumeWheelStep } from '/@/renderer/store/settings.store';
+import {
+    usePeerSyncSettings,
+    usePlaybackSettings,
+    useVolumeWheelStep,
+} from '/@/renderer/store/settings.store';
 import { getServerUrl } from '/@/renderer/utils/normalize-server-url';
 import { jfNormalize } from '/@/shared/api/jellyfin/jellyfin-normalize';
 import { ServerType, Song } from '/@/shared/types/domain-types';
@@ -30,6 +34,7 @@ export const useJellyfinRemoteControl = () => {
     volumeStepRef.current = volumeStep;
 
     const { jellyfinRemoteControl: enabled } = usePlaybackSettings();
+    const jellyfinRemoteEnabled = usePeerSyncSettings().jellyfinRemoteEnabled;
 
     const currentServer = useAuthStore((s) => s.currentServer, shallow);
     const deviceId = useAuthStore((s) => s.deviceId);
@@ -42,7 +47,7 @@ export const useJellyfinRemoteControl = () => {
     }, [currentServer]);
 
     useEffect(() => {
-        if (!enabled || !serverKey || !currentServer || !deviceId) {
+        if (!enabled || !jellyfinRemoteEnabled || !serverKey || !currentServer || !deviceId) {
             controller.stop();
             return;
         }
@@ -149,7 +154,7 @@ export const useJellyfinRemoteControl = () => {
         // Refs above carry the latest playerActions/volume step into the
         // dispatcher, so we deliberately do not re-run on those changes.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [enabled, serverKey, deviceId]);
+    }, [enabled, jellyfinRemoteEnabled, serverKey, deviceId]);
 };
 
 const JellyfinRemoteControlInner = () => {

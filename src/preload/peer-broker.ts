@@ -17,7 +17,12 @@ export interface PreloadPeerBrokerConfig {
 const setEnabled = (config: null | PreloadPeerBrokerConfig): Promise<null | string> =>
     ipcRenderer.invoke('peer-broker-enable', config);
 
-const status = (): Promise<boolean> => ipcRenderer.invoke('peer-broker-status');
+export interface PeerBrokerStatusResponse {
+    listenAddress?: string;
+    running: boolean;
+}
+
+const status = (): Promise<PeerBrokerStatusResponse> => ipcRenderer.invoke('peer-broker-status');
 
 export const peerBroker = {
     setEnabled,

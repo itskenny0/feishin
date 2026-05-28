@@ -39,7 +39,34 @@ export type PeerCommandKind =
     | 'shuffle'
     | 'volume';
 
-export type PeerFrame = PeerCommand | PeerPresence | PeerState;
+export type PeerFrame = PeerCommand | PeerPing | PeerPong | PeerPresence | PeerState;
+
+/**
+ * Liveness probe: the sender publishes a Ping, the addressed peer mirrors
+ * the `id` back in a Pong. Senders compute round-trip ms by subtracting the
+ * Ping's `ts` from the Pong's arrival time. Either side may originate.
+ */
+export interface PeerPing {
+    /** Opaque probe id. Receivers echo it verbatim. */
+    id: string;
+    /** Frame type discriminator. */
+    t: 'ping';
+    /** Publisher timestamp (epoch ms). */
+    ts: number;
+    /** Wire-format version. */
+    v: typeof PROTOCOL_VERSION;
+}
+
+/** Pong response to a Ping. `id` echoes the Ping's `id`. */
+export interface PeerPong {
+    id: string;
+    /** Frame type discriminator. */
+    t: 'pong';
+    /** Publisher timestamp (epoch ms). */
+    ts: number;
+    /** Wire-format version. */
+    v: typeof PROTOCOL_VERSION;
+}
 
 /** Retained presence frame. LWT publishes `{ online: false }` on disconnect. */
 export interface PeerPresence {

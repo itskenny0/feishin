@@ -259,4 +259,7 @@ ipcMain.handle('peer-broker-enable', async (_event, config: null | PeerBrokerCon
     }
 });
 
-ipcMain.handle('peer-broker-status', () => isPeerBrokerRunning());
+ipcMain.handle('peer-broker-status', () => ({
+    listenAddress: active ? `${active.config.host}:${active.config.port}` : undefined,
+    running: active !== null,
+}));

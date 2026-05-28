@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next';
 import {
     RiArrowLeftLine,
     RiArrowRightSLine,
+    RiBroadcastLine,
     RiEqualizerLine,
     RiKeyboardLine,
     RiSettings4Line,
@@ -41,7 +42,7 @@ interface CategoryDef {
     description: (t: TFunction) => string;
     /** Icon component imported from react-icons. */
     Icon: (props: { size?: string }) => ReactNode;
-    id: 'advanced' | 'general' | 'hotkeys' | 'playback' | 'window';
+    id: 'advanced' | 'connect' | 'general' | 'hotkeys' | 'playback' | 'window';
     label: (t: TFunction) => string;
     /**
      * Whether this category should be available in the current host
@@ -69,6 +70,17 @@ const CATEGORIES: CategoryDef[] = [
         Icon: RiEqualizerLine,
         id: 'playback',
         label: (t) => t('page.setting.playbackTab'),
+        visible: () => true,
+    },
+    {
+        description: (t) =>
+            t('page.setting.connectDescription', {
+                defaultValue:
+                    'Jellyfin Connect remote-play, peer MQTT sync, and the local library cache.',
+            }),
+        Icon: RiBroadcastLine,
+        id: 'connect',
+        label: (t) => t('page.setting.connectTab', { defaultValue: 'Sync & Connect' }),
         visible: () => true,
     },
     {

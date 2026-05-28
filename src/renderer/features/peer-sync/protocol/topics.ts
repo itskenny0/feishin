@@ -11,7 +11,7 @@
  */
 import { PROTOCOL_VERSION } from '/@/renderer/features/peer-sync/types';
 
-export type TopicLeaf = 'cmd' | 'presence' | 'state';
+export type TopicLeaf = 'cmd' | 'ping' | 'pong' | 'presence' | 'state';
 
 const ROOT = `feishin/v${PROTOCOL_VERSION}` as const;
 
@@ -44,7 +44,15 @@ export const parseTopic = (topic: string): null | { addr: PeerAddress; leaf: Top
     if (parts[0] !== 'feishin') return null;
     if (parts[1] !== `v${PROTOCOL_VERSION}`) return null;
     const leaf = parts[4];
-    if (leaf !== 'cmd' && leaf !== 'state' && leaf !== 'presence') return null;
+    if (
+        leaf !== 'cmd' &&
+        leaf !== 'state' &&
+        leaf !== 'presence' &&
+        leaf !== 'ping' &&
+        leaf !== 'pong'
+    ) {
+        return null;
+    }
     return {
         addr: { peerId: parts[3], userId: parts[2] },
         leaf,

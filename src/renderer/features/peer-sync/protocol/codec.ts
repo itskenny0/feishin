@@ -12,6 +12,8 @@
 import {
     PeerCommand,
     PeerFrame,
+    PeerPing,
+    PeerPong,
     PeerPresence,
     PeerState,
     PROTOCOL_VERSION,
@@ -57,6 +59,20 @@ const isValidPresence = (raw: Record<string, unknown>): boolean => {
     return true;
 };
 
+const isValidPing = (raw: Record<string, unknown>): boolean => {
+    if (raw.t !== 'ping') return false;
+    if (typeof raw.id !== 'string') return false;
+    if (typeof raw.ts !== 'number') return false;
+    return true;
+};
+
+const isValidPong = (raw: Record<string, unknown>): boolean => {
+    if (raw.t !== 'pong') return false;
+    if (typeof raw.id !== 'string') return false;
+    if (typeof raw.ts !== 'number') return false;
+    return true;
+};
+
 const jsonCodec: PeerCodec = {
     decode: (payload) => {
         try {
@@ -68,6 +84,8 @@ const jsonCodec: PeerCodec = {
             if (isValidCommand(parsed)) return parsed as unknown as PeerCommand;
             if (isValidState(parsed)) return parsed as unknown as PeerState;
             if (isValidPresence(parsed)) return parsed as unknown as PeerPresence;
+            if (isValidPing(parsed)) return parsed as unknown as PeerPing;
+            if (isValidPong(parsed)) return parsed as unknown as PeerPong;
             return null;
         } catch {
             return null;

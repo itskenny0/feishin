@@ -6,6 +6,7 @@ import { shallow } from 'zustand/shallow';
 import { sessionsPoller } from '/@/renderer/features/jellyfin-remote-target/controller/sessions-poller';
 import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
 import { useAuthStore } from '/@/renderer/store/auth.store';
+import { usePeerSyncSettings } from '/@/renderer/store/settings.store';
 import { toast } from '/@/shared/components/toast/toast';
 import { ServerType } from '/@/shared/types/domain-types';
 
@@ -25,8 +26,13 @@ export const useSessionsPoller = () => {
     const currentServer = useAuthStore((s) => s.currentServer, shallow);
     const targetDeviceId = useRemoteTargetStore((s) => s.targetDeviceId);
     const isPickerOpen = useRemoteTargetStore((s) => s.pickerOpen);
+    const jellyfinRemoteEnabled = usePeerSyncSettings().jellyfinRemoteEnabled;
 
     useEffect(() => {
+        if (!jellyfinRemoteEnabled) {
+            sessionsPoller.stop();
+            return;
+        }
         if (!currentServer || currentServer.type !== ServerType.JELLYFIN) {
             sessionsPoller.stop();
             return;
@@ -47,7 +53,7 @@ export const useSessionsPoller = () => {
             server: currentServer,
         });
         return () => sessionsPoller.stop();
-    }, [currentServer, isPickerOpen, targetDeviceId]);
+    }, [currentServer, isPickerOpen, jellyfinRemoteEnabled, targetDeviceId]);
 };
 
 export const SessionsPollerHook = () => {

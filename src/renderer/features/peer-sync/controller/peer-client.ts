@@ -26,6 +26,7 @@ import {
     forgetPeer,
     recordPresence,
 } from '/@/renderer/features/peer-sync/controller/transport-selector';
+import { recordOutboundState } from '/@/renderer/features/peer-sync/diagnostics/diagnostics-store';
 import { codec } from '/@/renderer/features/peer-sync/protocol/codec';
 import {
     parseTopic,
@@ -36,6 +37,7 @@ import {
 import {
     PeerCommand,
     PeerFrame,
+    PeerPong,
     PeerPresence,
     PeerState,
     PROTOCOL_VERSION,
@@ -68,6 +70,7 @@ export interface PeerClientStartArgs {
 export interface PeerEvents {
     onCommand?: (from: PeerAddress, cmd: PeerCommand) => void;
     onConnectionChange?: (status: 'connected' | 'disconnected') => void;
+    onPong?: (from: PeerAddress, pong: PeerPong) => void;
     onPresence?: (from: PeerAddress, presence: PeerPresence) => void;
     onState?: (from: PeerAddress, state: PeerState) => void;
 }
@@ -126,6 +129,26 @@ const handleMessage = (s: ActiveSession, topic: string, payload: Uint8Array): vo
     if (parsed.leaf === 'cmd' && frame.t === 'cmd') {
         log('command', { from: parsed.addr.peerId, k: frame.k });
         s.events.onCommand?.(parsed.addr, frame);
+        return;
+    }
+    if (parsed.leaf === 'ping' && frame.t === 'ping') {
+        // Echo it back as a pong on our own topic so the sender can measure
+        // RTT. The pong carries the original id so out-of-order probes are
+        // resolved by the sender's pending map.
+        const pong = {
+            id: frame.id,
+            t: 'pong' as const,
+            ts: Date.now(),
+            v: PROTOCOL_VERSION,
+        };
+        s.client.publish(topicFor(s.selfAddress, 'pong'), Buffer.from(codec.encode(pong)), {
+            qos: 0,
+            retain: false,
+        });
+        return;
+    }
+    if (parsed.leaf === 'pong' && frame.t === 'pong') {
+        s.events.onPong?.(parsed.addr, frame);
         return;
     }
 };
@@ -265,6 +288,23 @@ export const publishOwnState = (state: PeerState): void => {
         qos: 1,
         retain: true,
     });
+    recordOutboundState(session.selfAddress.peerId, state);
+};
+
+/**
+ * Send a liveness probe to a specific peer. The peer is expected to echo
+ * back a Pong on its own pong topic. Returns the ping id so the caller can
+ * match it against the subsequent onPong event.
+ */
+export const publishPing = (target: PeerAddress): null | string => {
+    if (!session) return null;
+    const id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    const ping = { id, t: 'ping' as const, ts: Date.now(), v: PROTOCOL_VERSION };
+    session.client.publish(topicFor(target, 'ping'), Buffer.from(codec.encode(ping)), {
+        qos: 0,
+        retain: false,
+    });
+    return id;
 };
 
 /** True when we're connected to the broker right now. */

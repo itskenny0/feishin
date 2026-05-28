@@ -25,6 +25,7 @@ import {
     RiHomeLine,
     RiKey2Line,
     RiLayoutLeftLine,
+    RiMagicLine,
     RiMicLine,
     RiMusicLine,
     RiPaletteLine,
@@ -195,6 +196,14 @@ const PeerSyncSubpage = lazyDefault(
     () => import('/@/renderer/features/settings/components/window/peer-sync-settings'),
     'PeerSyncSettings',
 );
+const ConnectDiagnosticsSubpage = lazyDefault(
+    () => import('/@/renderer/features/settings/components/connect/connect-diagnostics-settings'),
+    'ConnectDiagnosticsSettings',
+);
+const ConnectWizardSubpage = lazyDefault(
+    () => import('/@/renderer/features/settings/components/connect/connect-wizard'),
+    'ConnectWizard',
+);
 
 // Advanced
 const UpdateSubpage = lazyDefault(
@@ -321,27 +330,6 @@ export const SETTINGS_SUBPAGES: Record<string, SubpageDef[]> = {
             label: (t) => t('page.setting.logger', { defaultValue: 'Logs' }),
         },
         {
-            Component: LibrarySyncSubpage,
-            description: (t) =>
-                t('page.setting.librarySyncDescription', {
-                    defaultValue: 'Local-first cache for the Jellyfin library.',
-                }),
-            Icon: RiDatabase2Line,
-            id: 'library-sync',
-            label: (t) => t('page.setting.librarySync', { defaultValue: 'Library sync' }),
-            visible: (server) => server?.type === 'jellyfin',
-        },
-        {
-            Component: PeerSyncSubpage,
-            description: (t) =>
-                t('page.setting.peerSyncDescription', {
-                    defaultValue: 'Low-latency direct sync between Feishin instances over MQTT.',
-                }),
-            Icon: RiBroadcastLine,
-            id: 'peer-sync',
-            label: (t) => t('page.setting.peerSync', { defaultValue: 'Jellyfin Connect (MQTT)' }),
-        },
-        {
             Component: CacheSubpage,
             description: (t) =>
                 t('page.setting.cacheDescription', {
@@ -361,6 +349,62 @@ export const SETTINGS_SUBPAGES: Record<string, SubpageDef[]> = {
             id: 'touch-only-help',
             label: (t) => t('page.setting.touchOnlyHelp', { defaultValue: 'Touch-only help' }),
             visible: () => isTouchOnly(),
+        },
+    ],
+    connect: [
+        {
+            Component: ConnectWizardSubpage,
+            description: (t) =>
+                t('page.setting.connectWizardDescription', {
+                    defaultValue:
+                        'Step-by-step setup for Jellyfin Connect remote-play and peer MQTT sync.',
+                }),
+            Icon: RiMagicLine,
+            id: 'wizard',
+            label: (t) => t('page.setting.connectWizard', { defaultValue: 'Setup wizard' }),
+        },
+        {
+            Component: PeerSyncSubpage,
+            description: (t) =>
+                t('page.setting.peerSyncDescription', {
+                    defaultValue: 'Low-latency direct sync between Feishin instances over MQTT.',
+                }),
+            Icon: RiBroadcastLine,
+            id: 'peer-sync',
+            label: (t) => t('page.setting.peerSync', { defaultValue: 'Jellyfin Connect (MQTT)' }),
+        },
+        {
+            Component: LibrarySyncSubpage,
+            description: (t) =>
+                t('page.setting.librarySyncDescription', {
+                    defaultValue: 'Local-first cache for the Jellyfin library.',
+                }),
+            Icon: RiDatabase2Line,
+            id: 'library-sync',
+            label: (t) => t('page.setting.librarySync', { defaultValue: 'Library sync' }),
+            visible: (server) => server?.type === 'jellyfin',
+        },
+        {
+            Component: ConnectDiagnosticsSubpage,
+            description: (t) =>
+                t('page.setting.connectDiagnosticsDescription', {
+                    defaultValue:
+                        'Live transport, peer presence, recent commands, and round-trip latency.',
+                }),
+            Icon: RiPulseLine,
+            id: 'diagnostics',
+            label: (t) => t('page.setting.connectDiagnostics', { defaultValue: 'Diagnostics' }),
+        },
+        {
+            Component: RemoteSubpage,
+            description: (t) =>
+                t('page.setting.remoteDescription', {
+                    defaultValue: 'Companion web remote on the LAN.',
+                }),
+            Icon: RiRemoteControlLine,
+            id: 'remote',
+            label: (t) => t('page.setting.remote', { defaultValue: 'Remote control' }),
+            visible: () => isElectron(),
         },
     ],
     general: [
@@ -623,16 +667,6 @@ export const SETTINGS_SUBPAGES: Record<string, SubpageDef[]> = {
             Icon: RiDiscordLine,
             id: 'discord',
             label: (t) => t('page.setting.discord', { defaultValue: 'Discord' }),
-        },
-        {
-            Component: RemoteSubpage,
-            description: (t) =>
-                t('page.setting.remoteDescription', {
-                    defaultValue: 'Companion web remote on the LAN.',
-                }),
-            Icon: RiRemoteControlLine,
-            id: 'remote',
-            label: (t) => t('page.setting.remote', { defaultValue: 'Remote control' }),
         },
         {
             Component: PasswordSubpage,

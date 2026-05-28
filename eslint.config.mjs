@@ -10,7 +10,14 @@ export default tseslint.config(
     // gradle scripts, kotlin source. None of it is application TS/TSX, and
     // walking that tree slows the eslint cache by an order of magnitude.
     {
-        ignores: ['**/node_modules', '**/dist', '**/out', '**/android', 'scripts/cache-verify'],
+        ignores: [
+            '**/node_modules',
+            '**/dist',
+            '**/out',
+            '**/android',
+            'scripts/cache-verify',
+            '**/worktrees/**',
+        ],
     },
     tseslint.configs.recommended,
     perfectionist.configs['recommended-natural'],

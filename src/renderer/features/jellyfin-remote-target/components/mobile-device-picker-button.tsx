@@ -5,7 +5,7 @@ import { BottomSheet } from '/@/renderer/features/jellyfin-remote-target/compone
 import { DevicePickerList } from '/@/renderer/features/jellyfin-remote-target/components/device-picker-list';
 import { useRemoteStatus } from '/@/renderer/features/jellyfin-remote-target/hooks/use-remote-status';
 import { useRemoteTarget } from '/@/renderer/features/jellyfin-remote-target/hooks/use-remote-target';
-import { useCurrentServer } from '/@/renderer/store';
+import { useCurrentServer, usePeerSyncSettings } from '/@/renderer/store';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { ServerType } from '/@/shared/types/domain-types';
 
@@ -28,11 +28,15 @@ export const MobileDevicePickerButton = ({
     const server = useCurrentServer();
     const target = useRemoteTarget();
     const status = useRemoteStatus();
+    const peerSync = usePeerSyncSettings();
     const [opened, setOpened] = useState(false);
 
     const handleClose = useCallback(() => setOpened(false), []);
 
     if (!server || server.type !== ServerType.JELLYFIN) return null;
+    if (!peerSync.onboarded || !peerSync.jellyfinRemoteEnabled || !peerSync.ui.connectButton) {
+        return null;
+    }
 
     const color =
         status === 'reconnecting' || status === 'offline'

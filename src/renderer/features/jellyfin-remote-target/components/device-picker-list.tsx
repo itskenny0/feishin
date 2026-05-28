@@ -13,9 +13,10 @@ import { sessionsPoller } from '/@/renderer/features/jellyfin-remote-target/cont
 import { useRemoteDevices } from '/@/renderer/features/jellyfin-remote-target/hooks/use-remote-devices';
 import { useRemoteTarget } from '/@/renderer/features/jellyfin-remote-target/hooks/use-remote-target';
 import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
+import { pickTransport } from '/@/renderer/features/peer-sync/controller/transport-selector';
 import { useAuthStore } from '/@/renderer/store/auth.store';
 import { usePlayerActions, usePlayerStoreBase } from '/@/renderer/store/player.store';
-import { useSettingsStoreActions } from '/@/renderer/store/settings.store';
+import { usePeerSyncSettings, useSettingsStoreActions } from '/@/renderer/store/settings.store';
 import { useTimestampStoreBase } from '/@/renderer/store/timestamp.store';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { AppIcon, Icon } from '/@/shared/components/icon/icon';
@@ -68,6 +69,7 @@ export const DevicePickerList = ({ onClose, variant = 'desktop' }: DevicePickerL
     const { t } = useTranslation();
     const devices = useRemoteDevices();
     const target = useRemoteTarget();
+    const peerSync = usePeerSyncSettings();
     const hasPolledOnce = useRemoteTargetStore((s) => s.hasPolledOnce);
     const pollError = useRemoteTargetStore((s) => s.pollError);
     const setPickerOpen = useRemoteTargetStore((s) => s.actions.setPickerOpen);
@@ -244,6 +246,12 @@ export const DevicePickerList = ({ onClose, variant = 'desktop' }: DevicePickerL
                       : d.isPaused
                         ? t('player.paused', { defaultValue: 'Paused' })
                         : t('common.idle', { defaultValue: 'Idle' });
+                // Lane = whichever transport would be used to drive this peer
+                // right now. Only meaningful for Feishin peers; jellyfin-web
+                // sessions stay on the Jellyfin lane forever.
+                const lane = pickTransport(d.deviceId);
+                const showLaneBadge =
+                    peerSync.onboarded && peerSync.ui.pickerBadges && lane === 'mqtt';
                 return (
                     <UnstyledButton
                         className={`${styles.row} ${active ? styles.rowActive : ''}`}
@@ -258,7 +266,25 @@ export const DevicePickerList = ({ onClose, variant = 'desktop' }: DevicePickerL
                             />
                         </span>
                         <span className={styles.rowText}>
-                            <Text className={styles.rowTitle}>{d.deviceName}</Text>
+                            <Text className={styles.rowTitle}>
+                                {d.deviceName}
+                                {showLaneBadge && (
+                                    <span
+                                        style={{
+                                            background: 'var(--mantine-color-teal-9)',
+                                            borderRadius: 4,
+                                            color: 'var(--mantine-color-white)',
+                                            fontSize: 10,
+                                            fontWeight: 600,
+                                            letterSpacing: 0.5,
+                                            marginLeft: 6,
+                                            padding: '1px 5px',
+                                        }}
+                                    >
+                                        MQTT
+                                    </span>
+                                )}
+                            </Text>
                             <Text
                                 c={active ? 'var(--theme-colors-primary)' : 'dimmed'}
                                 className={styles.rowSubtitle}

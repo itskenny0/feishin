@@ -1,15 +1,17 @@
-// src/renderer/features/jellyfin-remote-target/components/remote-status-banner.tsx
 import { Loader } from '@mantine/core';
 import { useTranslation } from 'react-i18next';
 
 import { useRemoteStatus } from '/@/renderer/features/jellyfin-remote-target/hooks/use-remote-status';
 import { useRemoteTarget } from '/@/renderer/features/jellyfin-remote-target/hooks/use-remote-target';
+import { usePeerSyncSettings } from '/@/renderer/store';
 
 export const RemoteStatusBanner = () => {
     const { t } = useTranslation();
     const status = useRemoteStatus();
     const target = useRemoteTarget();
+    const peerSync = usePeerSyncSettings();
 
+    if (!peerSync.onboarded || !peerSync.jellyfinRemoteEnabled) return null;
     if (status !== 'reconnecting' || !target.deviceName) return null;
 
     return (
