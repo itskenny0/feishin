@@ -71,8 +71,12 @@ export const PeerSyncSettings = memo(() => {
     // empty strings stay empty without immediately re-validating).
     const [brokerUrlDraft, setBrokerUrlDraft] = useState(settings.brokerUrl);
     const [roomKeyDraft, setRoomKeyDraft] = useState(settings.roomKey);
+    const [brokerUsernameDraft, setBrokerUsernameDraft] = useState(settings.brokerUsername);
+    const [brokerPasswordDraft, setBrokerPasswordDraft] = useState(settings.brokerPassword);
     useEffect(() => setBrokerUrlDraft(settings.brokerUrl), [settings.brokerUrl]);
     useEffect(() => setRoomKeyDraft(settings.roomKey), [settings.roomKey]);
+    useEffect(() => setBrokerUsernameDraft(settings.brokerUsername), [settings.brokerUsername]);
+    useEffect(() => setBrokerPasswordDraft(settings.brokerPassword), [settings.brokerPassword]);
 
     const isPublicBroker = useMemo(() => isPublicBrokerUrl(brokerUrlDraft), [brokerUrlDraft]);
 
@@ -170,6 +174,60 @@ export const PeerSyncSettings = memo(() => {
                     </Text>
                 ),
                 title: t('setting.peerSyncBrokerUrl', { defaultValue: 'Broker URL' }),
+            },
+            {
+                control: (
+                    <TextInput
+                        autoComplete="off"
+                        onBlur={(e) => {
+                            const next = e.currentTarget.value;
+                            if (next === settings.brokerUsername) return;
+                            setSettings({ peerSync: { brokerUsername: next } });
+                        }}
+                        onChange={(e) => setBrokerUsernameDraft(e.currentTarget.value)}
+                        placeholder={t('setting.peerSyncBrokerUsername', {
+                            context: 'placeholder',
+                            defaultValue: 'Leave blank for embedded broker',
+                        })}
+                        value={brokerUsernameDraft}
+                    />
+                ),
+                description: (
+                    <Text isMuted isNoSelect size="sm">
+                        {t('setting.peerSyncBrokerUsername', {
+                            context: 'description',
+                            defaultValue:
+                                'Username for brokers that require authentication. Leave blank when using the embedded broker on the LAN.',
+                        })}
+                    </Text>
+                ),
+                title: t('setting.peerSyncBrokerUsername', { defaultValue: 'Broker username' }),
+            },
+            {
+                control: (
+                    <TextInput
+                        autoComplete="new-password"
+                        onBlur={(e) => {
+                            const next = e.currentTarget.value;
+                            if (next === settings.brokerPassword) return;
+                            setSettings({ peerSync: { brokerPassword: next } });
+                        }}
+                        onChange={(e) => setBrokerPasswordDraft(e.currentTarget.value)}
+                        placeholder=""
+                        type="password"
+                        value={brokerPasswordDraft}
+                    />
+                ),
+                description: (
+                    <Text isMuted isNoSelect size="sm">
+                        {t('setting.peerSyncBrokerPassword', {
+                            context: 'description',
+                            defaultValue:
+                                'Password for brokers that require authentication. Stored locally; treat it like any other saved password.',
+                        })}
+                    </Text>
+                ),
+                title: t('setting.peerSyncBrokerPassword', { defaultValue: 'Broker password' }),
             },
             ...(isElectron()
                 ? [
@@ -318,7 +376,9 @@ export const PeerSyncSettings = memo(() => {
             },
         ],
         [
+            brokerPasswordDraft,
             brokerUrlDraft,
+            brokerUsernameDraft,
             copyRoomKey,
             handleBrokerToggle,
             roomKeyDraft,
@@ -327,7 +387,9 @@ export const PeerSyncSettings = memo(() => {
             settings.broker.port,
             settings.broker.tlsCertPath,
             settings.broker.tlsKeyPath,
+            settings.brokerPassword,
             settings.brokerUrl,
+            settings.brokerUsername,
             settings.roomKey,
             setSettings,
             t,

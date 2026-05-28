@@ -878,8 +878,16 @@ const PeerSyncSettingsSchema = z.object({
         host: '0.0.0.0',
         port: 8083,
     }),
+    /** External broker password (when the broker requires auth). When set,
+     *  overrides the default room-key-as-password used against the embedded
+     *  broker. */
+    brokerPassword: z.string().default(''),
     /** Optional broker URL. Empty = auto-discover via mDNS on desktop. */
     brokerUrl: z.string().default(''),
+    /** External broker username (when the broker requires auth). When set,
+     *  overrides the default Jellyfin-user-id-as-username used against the
+     *  embedded broker. */
+    brokerUsername: z.string().default(''),
     /** Master toggle. Off = subsystem fully inert. */
     enabled: z.boolean().default(false),
     /** Stable per-install peer id — auto-generated on first read. */
@@ -2139,7 +2147,9 @@ const initialState: SettingsState = {
             tlsCertPath: undefined,
             tlsKeyPath: undefined,
         },
+        brokerPassword: '',
         brokerUrl: '',
+        brokerUsername: '',
         enabled: false,
         peerId: '',
         roomKey: '',
@@ -3059,10 +3069,25 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
+                if (version <= 47) {
+                    // Add the brokerUsername / brokerPassword fields for
+                    // external brokers that require auth. Empty strings
+                    // preserve the existing embedded-broker behavior
+                    // (userId-as-username, roomKey-as-password).
+                    if (state.peerSync && typeof state.peerSync === 'object') {
+                        if (typeof state.peerSync.brokerUsername !== 'string') {
+                            state.peerSync.brokerUsername = '';
+                        }
+                        if (typeof state.peerSync.brokerPassword !== 'string') {
+                            state.peerSync.brokerPassword = '';
+                        }
+                    }
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 47,
+            version: 48,
         },
     ),
 );

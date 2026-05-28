@@ -45,11 +45,18 @@ const log = (...args: unknown[]) => console.info('[peer-sync]', ...args);
 const warn = (...args: unknown[]) => console.warn('[peer-sync]', ...args);
 
 export interface PeerClientStartArgs {
+    /** External broker password — only used when non-empty. Overrides the
+     *  default room-key-as-password used against the embedded broker. */
+    brokerPassword?: string;
     /** Broker WS/WSS URL. */
     brokerUrl: string;
+    /** External broker username — only used when non-empty. Overrides the
+     *  default Jellyfin-user-id-as-username used against the embedded
+     *  broker. */
+    brokerUsername?: string;
     /** Our own peer identifier — published as our presence/state owner. */
     peerId: string;
-    /** Shared room key — derived into the MQTT username so an empty/typo'd
+    /** Shared room key — derived into the MQTT password so an empty/typo'd
      *  key cannot accidentally join another room. */
     roomKey: string;
     /** Optional TLS hint — used to set protocol / rejectUnauthorized. */
@@ -135,6 +142,8 @@ export const startPeerClient = (args: PeerClientStartArgs, events: PeerEvents = 
             session.args.userId === args.userId &&
             session.args.peerId === args.peerId &&
             session.args.roomKey === args.roomKey &&
+            session.args.brokerUsername === args.brokerUsername &&
+            session.args.brokerPassword === args.brokerPassword &&
             session.args.tls === args.tls;
         if (same) {
             session.events = events;
@@ -146,26 +155,35 @@ export const startPeerClient = (args: PeerClientStartArgs, events: PeerEvents = 
     const selfAddress: PeerAddress = { peerId: args.peerId, userId: args.userId };
     const presenceTopic = topicFor(selfAddress, 'presence');
 
+    // External brokers (HiveMQ Cloud, AWS IoT, a self-hosted mosquitto with
+    // `allow_anonymous false`, etc.) need their own credentials. When the
+    // user has supplied a brokerUsername we hand those through verbatim;
+    // otherwise we fall back to the embedded-broker scheme of
+    // userId-as-username + roomKey-as-password, which the aedes ACL relies
+    // on. We don't try to do both — most brokers won't tolerate a username
+    // they don't recognise even with the right credentials elsewhere.
+    const useExternalAuth = Boolean(args.brokerUsername);
     const opts: IClientOptions = {
         clean: true,
         clientId: `feishin-${args.peerId}-${Math.random().toString(36).slice(2, 8)}`,
         connectTimeout: 10_000,
         keepalive: 30,
-        // Use the shared room key as the password so an attacker who learns
-        // the topic namespace still cannot publish without the key. The
-        // username is the user id — used by the embedded broker's ACL.
-        password: args.roomKey,
+        password: useExternalAuth ? (args.brokerPassword ?? '') : args.roomKey,
         // aedes (our embedded broker) implements MQTT 3.1.1; pinning the
         // client to v4 avoids a CONNACK "Unacceptable protocol version"
         // bounce on the very first connect.
         protocolVersion: 4,
         reconnectPeriod: 4_000,
         rejectUnauthorized: args.tls !== false,
-        username: args.userId,
+        username: useExternalAuth ? args.brokerUsername : args.userId,
         will: buildLwt(selfAddress),
     };
 
-    log('connecting', { brokerUrl: args.brokerUrl, peerId: args.peerId });
+    log('connecting', {
+        auth: useExternalAuth ? 'external' : 'embedded',
+        brokerUrl: args.brokerUrl,
+        peerId: args.peerId,
+    });
 
     const client = mqtt.connect(args.brokerUrl, opts);
 

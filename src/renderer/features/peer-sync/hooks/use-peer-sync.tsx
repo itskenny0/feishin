@@ -70,7 +70,9 @@ export const usePeerSync = () => {
         });
         startPeerClient(
             {
+                brokerPassword: peerSync.brokerPassword,
                 brokerUrl: peerSync.brokerUrl,
+                brokerUsername: peerSync.brokerUsername,
                 peerId: peerSync.peerId,
                 roomKey: peerSync.roomKey,
                 tls,
@@ -89,7 +91,15 @@ export const usePeerSync = () => {
         return () => {
             if (isPeerClientConnected()) stopPeerClient();
         };
-    }, [currentServer, peerSync.brokerUrl, peerSync.enabled, peerSync.peerId, peerSync.roomKey]);
+    }, [
+        currentServer,
+        peerSync.brokerPassword,
+        peerSync.brokerUrl,
+        peerSync.brokerUsername,
+        peerSync.enabled,
+        peerSync.peerId,
+        peerSync.roomKey,
+    ]);
 
     // Presence sweeper — flips the transport selector back to Jellyfin
     // when a peer goes silent past the freshness window.
