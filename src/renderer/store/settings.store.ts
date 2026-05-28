@@ -858,6 +858,37 @@ const LocalCacheSettingsSchema = z.object({
 });
 
 /**
+ * Peer-sync (MQTT) settings slice. Disabled by default; existing installs
+ * behave identically to upstream until the user opts in from Settings →
+ * Jellyfin Connect → Peer sync. The `broker` sub-object is desktop-only;
+ * web and Android builds ignore it.
+ */
+const PeerSyncBrokerSettingsSchema = z.object({
+    enabled: z.boolean().default(false),
+    host: z.string().default('0.0.0.0'),
+    port: z.number().int().min(1).max(65_535).default(8083),
+    tlsCertPath: z.string().optional(),
+    tlsKeyPath: z.string().optional(),
+});
+
+const PeerSyncSettingsSchema = z.object({
+    /** Master toggle. Off = subsystem fully inert. */
+    enabled: z.boolean().default(false),
+    /** Optional broker URL. Empty = auto-discover via mDNS on desktop. */
+    brokerUrl: z.string().default(''),
+    /** Embedded broker settings (desktop only). */
+    broker: PeerSyncBrokerSettingsSchema.default({
+        enabled: false,
+        host: '0.0.0.0',
+        port: 8083,
+    }),
+    /** Stable per-install peer id — auto-generated on first read. */
+    peerId: z.string().default(''),
+    /** Shared room key — auto-generated on first opt-in. */
+    roomKey: z.string().default(''),
+});
+
+/**
  * This schema is used for validation of the imported settings json
  */
 export const ValidationSettingsStateSchema = z.object({
@@ -871,6 +902,7 @@ export const ValidationSettingsStateSchema = z.object({
     localCache: LocalCacheSettingsSchema,
     lyrics: LyricsSettingsSchema,
     lyricsDisplay: z.record(z.string(), LyricsDisplaySettingsSchema),
+    peerSync: PeerSyncSettingsSchema,
     playback: PlaybackSettingsSchema,
     queryBuilder: QueryBuilderSettingsSchema,
     remote: RemoteSettingsSchema,
@@ -2133,6 +2165,19 @@ const initialState: SettingsState = {
         type: PlayerType.WEB,
         webAudio: true,
     },
+    peerSync: {
+        broker: {
+            enabled: false,
+            host: '0.0.0.0',
+            port: 8083,
+            tlsCertPath: undefined,
+            tlsKeyPath: undefined,
+        },
+        brokerUrl: '',
+        enabled: false,
+        peerId: '',
+        roomKey: '',
+    },
     queryBuilder: {
         tag: [],
     },
@@ -3003,10 +3048,21 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
+                if (version <= 46) {
+                    // Seed the new peerSync slice for existing installs.
+                    // Disabled by default so behavior is identical to the
+                    // previous release until the user opts in. peerId and
+                    // roomKey are lazily generated on first toggle-on by
+                    // the settings UI, so we leave them empty here.
+                    if (!state.peerSync || typeof state.peerSync !== 'object') {
+                        state.peerSync = initialState.peerSync;
+                    }
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 46,
+            version: 47,
         },
     ),
 );
@@ -3065,6 +3121,8 @@ export const useLyricsDisplaySettings = (key: string = 'default') =>
     useSettingsStore((state) => state.lyricsDisplay[key] || state.lyricsDisplay.default, shallow);
 
 export const useRemoteSettings = () => useSettingsStore((state) => state.remote, shallow);
+
+export const usePeerSyncSettings = () => useSettingsStore((state) => state.peerSync, shallow);
 
 export const useFontSettings = () => useSettingsStore((state) => state.font, shallow);
 

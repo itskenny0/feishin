@@ -26,10 +26,15 @@ vi.mock('idb-keyval', () => {
     };
 });
 
+// A handful of test files run in the `node` environment (e.g. main-process
+// broker smoke tests) and have no `window`. Skip the jsdom polyfills below
+// when running in that mode — they exist purely to shore up jsdom gaps.
+const hasWindow = typeof globalThis !== 'undefined' && typeof (globalThis as { window?: unknown }).window !== 'undefined';
+
 // jsdom doesn't implement PointerEvent. useLongPress reads `pointerType`,
 // `clientX`, and `clientY` off the event, so provide a minimal shim built on
 // MouseEvent (which already carries clientX/clientY).
-if (typeof window.PointerEvent === 'undefined') {
+if (hasWindow && typeof window.PointerEvent === 'undefined') {
     class PointerEventShim extends MouseEvent {
         pointerType: string;
 
@@ -44,7 +49,7 @@ if (typeof window.PointerEvent === 'undefined') {
 
 // Mantine floating-ui (Popover/Tooltip positioning) needs ResizeObserver,
 // which jsdom doesn't implement.
-if (typeof window.ResizeObserver === 'undefined') {
+if (hasWindow && typeof window.ResizeObserver === 'undefined') {
     const noop = (): void => undefined;
     // @ts-expect-error — minimal stub
     window.ResizeObserver = class {
@@ -55,7 +60,7 @@ if (typeof window.ResizeObserver === 'undefined') {
 }
 
 // Some imported modules touch matchMedia at construction time.
-if (typeof window.matchMedia === 'undefined') {
+if (hasWindow && typeof window.matchMedia === 'undefined') {
     // @ts-expect-error — minimal stub
     window.matchMedia = (query: string) => ({
         addEventListener: () => {},

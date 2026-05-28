@@ -6,6 +6,7 @@ import { UserFavoriteEventPayload, UserRatingEventPayload } from '/@/renderer/ev
 import { DiscordRpcHook } from '/@/renderer/features/discord-rpc/use-discord-rpc';
 import { JellyfinRemoteControlHook } from '/@/renderer/features/jellyfin-remote-control';
 import { SessionsPollerHook } from '/@/renderer/features/jellyfin-remote-target/hooks/use-sessions-poller';
+import { PeerSyncHook } from '/@/renderer/features/peer-sync';
 import { UpcomingLyricsPrefetch } from '/@/renderer/features/lyrics/hooks/use-prefetch-upcoming-lyrics';
 import { CapacitorMediaSessionHook } from '/@/renderer/features/player/audio-player/hooks/use-capacitor-media-session';
 import { MainPlayerListenerHook } from '/@/renderer/features/player/audio-player/hooks/use-main-player-listener';
@@ -144,6 +145,7 @@ export const AudioPlayers = () => {
             <RemoteHook />
             <JellyfinRemoteControlHook />
             <SessionsPollerHook />
+            <PeerSyncHook />
             <AutoDJHook />
             <UpcomingLyricsPrefetch />
             <QueueRestoreTimestampHook />
