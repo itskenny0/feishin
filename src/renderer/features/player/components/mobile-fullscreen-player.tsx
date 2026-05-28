@@ -32,6 +32,7 @@ import { MobileFullscreenPlayerMetadata } from '/@/renderer/features/player/comp
 import { MobileFullscreenPlayerProgress } from '/@/renderer/features/player/components/mobile-fullscreen-player-progress';
 import { MobileFullscreenPlayerVolume } from '/@/renderer/features/player/components/mobile-fullscreen-player-volume';
 import { MobileFullscreenVisualizerCard } from '/@/renderer/features/player/components/mobile-fullscreen-visualizer-card';
+import { coverSwipeSignal } from '/@/renderer/features/player/utils/cover-swipe-signal';
 import {
     useIsRadioActive,
     useRadioPlayer,
@@ -646,6 +647,17 @@ export const MobileFullscreenPlayer = () => {
 
         const onTouchMove = (e: TouchEvent) => {
             if (!active) return;
+            // The cover's horizontal drag won the gesture (signalled in
+            // Motion's onDragStart on the album-art motion.div). Bail
+            // immediately so we don't accumulate any swipeY from the
+            // remainder of this touch — without this the parent's
+            // dismiss drag and the cover's x-axis drag race for the
+            // same finger and the cover visibly stops tracking it
+            // until the user lifts off.
+            if (coverSwipeSignal.isDragging()) {
+                active = false;
+                return;
+            }
             const touch = e.touches[0];
             if (!touch) return;
             const dy = touch.clientY - startY;

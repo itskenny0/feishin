@@ -17,6 +17,7 @@ import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { useActiveNowPlayingItem } from '/@/renderer/features/jellyfin-remote-target/hooks/use-active-player-source';
 import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
+import { coverSwipeSignal } from '/@/renderer/features/player/utils/cover-swipe-signal';
 import {
     useIsRadioActive,
     useRadioPlayer,
@@ -203,8 +204,41 @@ export const MobileFullscreenPlayerAlbumArt = () => {
     const { mediaNext, mediaPrevious } = usePlayer();
     const coverSwipeX = useMotionValue(0);
     const isSongDefined = Boolean(currentSong?.id);
+
+    // Track the in-flight snap-back animation so a second drag started
+    // before the spring settles doesn't fight a stale animate() call.
+    // Without this the motion value can end up driven by two animations
+    // at once after a rapid swipe → release → swipe sequence, which is
+    // what makes the cover stop following the finger until the user
+    // reloads. We stop any prior controls before kicking off the next.
+    const snapBackRef = useRef<null | ReturnType<typeof animate>>(null);
+    const stopSnapBack = useCallback(() => {
+        if (snapBackRef.current) {
+            snapBackRef.current.stop();
+            snapBackRef.current = null;
+        }
+    }, []);
+    useEffect(
+        () => () => {
+            stopSnapBack();
+            // Component is unmounting (radio mode flip, remote takeover,
+            // viewport teardown) — make sure the parent's dismiss listener
+            // isn't left thinking the cover still owns the gesture.
+            coverSwipeSignal.end();
+        },
+        [stopSnapBack],
+    );
+
+    const handleCoverDragStart = useCallback(() => {
+        coverSwipeSignal.start();
+        // A new drag has started; cancel any snap-back from the previous
+        // gesture so the finger is the sole driver of coverSwipeX.
+        stopSnapBack();
+    }, [stopSnapBack]);
+
     const handleCoverDragEnd = useCallback(
         (_event: unknown, info: PanInfo) => {
+            coverSwipeSignal.end();
             const width = mainImageRef.current?.offsetWidth ?? 320;
             const commitOffset = width * 0.25;
             const flickVelocity = 500;
@@ -213,26 +247,32 @@ export const MobileFullscreenPlayerAlbumArt = () => {
             const wantsNext = offset < -commitOffset || velocity < -flickVelocity;
             const wantsPrev = offset > commitOffset || velocity > flickVelocity;
 
+            // Always cancel a stale snap-back before starting a new one.
+            stopSnapBack();
+
             if (wantsNext && isSongDefined) {
+                console.info('[cover-swipe] commit next', { offset, velocity });
                 triggerHaptic('selection');
                 mediaNext();
-                animate(coverSwipeX, 0, {
+                snapBackRef.current = animate(coverSwipeX, 0, {
                     damping: 30,
                     stiffness: 220,
                     type: 'spring',
                     velocity,
                 });
             } else if (wantsPrev && isSongDefined) {
+                console.info('[cover-swipe] commit prev', { offset, velocity });
                 triggerHaptic('selection');
                 mediaPrevious();
-                animate(coverSwipeX, 0, {
+                snapBackRef.current = animate(coverSwipeX, 0, {
                     damping: 30,
                     stiffness: 220,
                     type: 'spring',
                     velocity,
                 });
             } else {
-                animate(coverSwipeX, 0, {
+                console.info('[cover-swipe] snap back', { offset, velocity });
+                snapBackRef.current = animate(coverSwipeX, 0, {
                     damping: 28,
                     stiffness: 360,
                     type: 'spring',
@@ -240,7 +280,7 @@ export const MobileFullscreenPlayerAlbumArt = () => {
                 });
             }
         },
-        [coverSwipeX, isSongDefined, mediaNext, mediaPrevious],
+        [coverSwipeX, isSongDefined, mediaNext, mediaPrevious, stopSnapBack],
     );
 
     /*
@@ -327,16 +367,19 @@ export const MobileFullscreenPlayerAlbumArt = () => {
                 className={clsx(styles.image, {
                     [styles.imageNativeAspectRatio]: useImageAspectRatio,
                 })}
-                // Marker the player-face onPointerDown handler looks for so
-                // it doesn't race the cover's horizontal swipe with the
-                // dismiss drag — without this both gestures fire at once
-                // and the cover stutters mid-drag.
+                // Marker the player-face touch listener looks for so the
+                // horizontal cover swipe doesn't race the dismiss drag.
+                // The native touch listener on .playerState also reads
+                // coverSwipeSignal.isDragging() — that's the realtime
+                // version of this static attribute, set the instant
+                // Motion claims the gesture in onDragStart below.
                 data-cover-swipe
                 drag={isSongDefined && !isPlayingRadio ? 'x' : false}
                 dragConstraints={{ left: 0, right: 0 }}
                 dragElastic={1}
                 dragMomentum={false}
                 onDragEnd={handleCoverDragEnd}
+                onDragStart={handleCoverDragStart}
                 style={{ x: coverSwipeX }}
             >
                 <AnimatePresence initial={false} mode="sync">
