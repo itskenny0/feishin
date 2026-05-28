@@ -1,17 +1,14 @@
 /**
- * Peer sync (MQTT) settings — desktop primary, web/mobile read-only on
- * broker controls. Renders as a single collapsible block, *collapsed by
- * default*, sitting under the Jellyfin Connect group.
+ * Peer sync (MQTT) settings subpage. Desktop hosts the optional embedded
+ * broker; web/mobile peers connect to whichever URL the user configures.
  *
- * Behavior contract:
- *
- *  - Top-level Enable switch flips the master toggle. Off = subsystem
- *    inert; existing Jellyfin Sessions polling continues unchanged.
+ *  - Top-level Enable switch flips the master toggle. Off = subsystem inert;
+ *    existing Jellyfin Sessions polling continues unchanged.
  *  - Advanced collapsible exposes broker URL, embedded broker on/off
  *    (desktop only), embedded host/port, TLS cert paths, and the shared
  *    room key. Hidden until the master is on.
- *  - A non-private broker URL triggers an undismissable Alert warning the
- *    user that public brokers can see playback state and commands.
+ *  - A non-private broker URL triggers an undismissable Alert warning that
+ *    public brokers can see playback state and commands.
  *  - peerId / roomKey are auto-generated on first opt-in if missing.
  */
 import { Alert, Collapse, Group, Stack, Switch } from '@mantine/core';
@@ -68,7 +65,6 @@ export const PeerSyncSettings = memo(() => {
     const settings = usePeerSyncSettings();
     const { setSettings } = useSettingsStoreActions();
     const [advancedOpen, advancedHandlers] = useDisclosure(false);
-    const [topOpen, topHandlers] = useDisclosure(false);
 
     // Mirror controlled inputs locally so typing in the URL field doesn't
     // round-trip through the persisted store on every keystroke (and so
@@ -339,83 +335,58 @@ export const PeerSyncSettings = memo(() => {
     );
 
     return (
-        <Stack gap="sm">
-            <Group justify="space-between">
-                <Stack gap={2}>
-                    <Text fw={600}>
-                        {t('page.setting.peerSync', { defaultValue: 'Peer sync (MQTT)' })}
-                    </Text>
-                    <Text isMuted size="sm">
-                        {t('page.setting.peerSyncDescription', {
+        <Stack gap="md">
+            <SettingsSection
+                options={[
+                    {
+                        control: (
+                            <Switch
+                                checked={settings.enabled}
+                                onChange={(e) => handleEnable(e.currentTarget.checked)}
+                            />
+                        ),
+                        description: t('setting.enablePeerSync', {
+                            context: 'description',
                             defaultValue:
-                                'Augment Jellyfin Connect with a low-latency direct sync between two Feishin instances.',
-                        })}
-                    </Text>
+                                'When two Feishins are reachable via MQTT, commands and state flow over MQTT instead of the polling lane.',
+                        }),
+                        title: t('setting.enablePeerSync', {
+                            defaultValue: 'Enable peer sync',
+                        }),
+                    },
+                ]}
+            />
+
+            {settings.enabled && isPublicBroker && (
+                <Alert color="yellow" variant="light">
+                    {t('setting.peerSyncPublicBrokerWarning', {
+                        defaultValue:
+                            'Public brokers can see your playback state and commands. Use TLS and a strong room key, or run your own broker.',
+                    })}
+                </Alert>
+            )}
+
+            {settings.enabled && (
+                <Stack gap="xs">
+                    <Group justify="space-between">
+                        <Text fw={500}>
+                            {t('setting.peerSyncAdvanced', { defaultValue: 'Advanced' })}
+                        </Text>
+                        <Button
+                            onClick={advancedHandlers.toggle}
+                            size="compact-sm"
+                            variant="default"
+                        >
+                            {advancedOpen
+                                ? t('common.hide', { defaultValue: 'Hide' })
+                                : t('common.show', { defaultValue: 'Show' })}
+                        </Button>
+                    </Group>
+                    <Collapse expanded={advancedOpen}>
+                        <SettingsSection options={advancedOptions} />
+                    </Collapse>
                 </Stack>
-                <Button onClick={topHandlers.toggle} size="compact-sm" variant="default">
-                    {topOpen
-                        ? t('common.hide', { defaultValue: 'Hide' })
-                        : t('common.show', { defaultValue: 'Show' })}
-                </Button>
-            </Group>
-
-            <Collapse expanded={topOpen}>
-                <Stack gap="md">
-                    <SettingsSection
-                        options={[
-                            {
-                                control: (
-                                    <Switch
-                                        checked={settings.enabled}
-                                        onChange={(e) => handleEnable(e.currentTarget.checked)}
-                                    />
-                                ),
-                                description: t('setting.enablePeerSync', {
-                                    context: 'description',
-                                    defaultValue:
-                                        'When two Feishins are reachable via MQTT, commands and state flow over MQTT instead of the polling lane.',
-                                }),
-                                title: t('setting.enablePeerSync', {
-                                    defaultValue: 'Enable peer sync',
-                                }),
-                            },
-                        ]}
-                    />
-
-                    {settings.enabled && isPublicBroker && (
-                        <Alert color="yellow" variant="light">
-                            {t('setting.peerSyncPublicBrokerWarning', {
-                                defaultValue:
-                                    'Public brokers can see your playback state and commands. Use TLS and a strong room key, or run your own broker.',
-                            })}
-                        </Alert>
-                    )}
-
-                    {settings.enabled && (
-                        <Stack gap="xs">
-                            <Group justify="space-between">
-                                <Text fw={500}>
-                                    {t('setting.peerSyncAdvanced', {
-                                        defaultValue: 'Advanced',
-                                    })}
-                                </Text>
-                                <Button
-                                    onClick={advancedHandlers.toggle}
-                                    size="compact-sm"
-                                    variant="default"
-                                >
-                                    {advancedOpen
-                                        ? t('common.hide', { defaultValue: 'Hide' })
-                                        : t('common.show', { defaultValue: 'Show' })}
-                                </Button>
-                            </Group>
-                            <Collapse expanded={advancedOpen}>
-                                <SettingsSection options={advancedOptions} />
-                            </Collapse>
-                        </Stack>
-                    )}
-                </Stack>
-            </Collapse>
+            )}
         </Stack>
     );
 });

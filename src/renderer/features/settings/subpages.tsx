@@ -9,6 +9,7 @@ import {
     RiAlertLine,
     RiArrowUpDownLine,
     RiBracesLine,
+    RiBroadcastLine,
     RiBugLine,
     RiCelsiusLine,
     RiCommandLine,
@@ -190,6 +191,10 @@ const PasswordSubpage = lazyDefault(
     () => import('/@/renderer/features/settings/components/window/password-settings'),
     'PasswordSettings',
 );
+const PeerSyncSubpage = lazyDefault(
+    () => import('/@/renderer/features/settings/components/window/peer-sync-settings'),
+    'PeerSyncSettings',
+);
 
 // Advanced
 const UpdateSubpage = lazyDefault(
@@ -325,6 +330,16 @@ export const SETTINGS_SUBPAGES: Record<string, SubpageDef[]> = {
             id: 'library-sync',
             label: (t) => t('page.setting.librarySync', { defaultValue: 'Library sync' }),
             visible: (server) => server?.type === 'jellyfin',
+        },
+        {
+            Component: PeerSyncSubpage,
+            description: (t) =>
+                t('page.setting.peerSyncDescription', {
+                    defaultValue: 'Low-latency direct sync between Feishin instances over MQTT.',
+                }),
+            Icon: RiBroadcastLine,
+            id: 'peer-sync',
+            label: (t) => t('page.setting.peerSync', { defaultValue: 'Jellyfin Connect (MQTT)' }),
         },
         {
             Component: CacheSubpage,
