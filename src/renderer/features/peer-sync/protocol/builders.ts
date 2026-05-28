@@ -24,26 +24,53 @@ export const buildCommand = (k: PeerCommandKind, a?: unknown): PeerCommand => ({
 
 export interface StateSnapshotInput {
     dur: number;
+    /** Optional — lyrics visible on the target. Pass undefined to omit from
+     *  the wire frame entirely so consumers can distinguish "unknown" from
+     *  "false". */
+    lyr?: boolean;
+    /** Optional — target mute state. Pass undefined to omit. */
+    mut?: boolean;
     paused: boolean;
     pos: number;
+    /** Optional — queue id list. Pass undefined or [] to omit. */
+    qIds?: string[];
+    /** Optional — index of the now-playing item in qIds. */
+    qIdx?: number;
+    /** Optional — playback rate (1.0 = normal). */
+    rate?: number;
     rep: PeerRepeatMode;
     shuf: boolean;
     track: null | PeerTrack;
     vol: number;
 }
 
-export const buildState = (input: StateSnapshotInput): PeerState => ({
-    dur: input.dur,
-    paused: input.paused,
-    pos: input.pos,
-    rep: input.rep,
-    shuf: input.shuf,
-    t: 'state',
-    track: input.track,
-    ts: Date.now(),
-    v: PROTOCOL_VERSION,
-    vol: input.vol,
-});
+const MAX_PEER_QUEUE_IDS = 200;
+
+export const buildState = (input: StateSnapshotInput): PeerState => {
+    const out: PeerState = {
+        dur: input.dur,
+        paused: input.paused,
+        pos: input.pos,
+        rep: input.rep,
+        shuf: input.shuf,
+        t: 'state',
+        track: input.track,
+        ts: Date.now(),
+        v: PROTOCOL_VERSION,
+        vol: input.vol,
+    };
+    // Only emit optional fields when the caller supplied them. Keeps wire
+    // frames small for v1 publishers and makes "absent" semantically distinct
+    // from "default" on the receiver.
+    if (typeof input.mut === 'boolean') out.mut = input.mut;
+    if (typeof input.lyr === 'boolean') out.lyr = input.lyr;
+    if (typeof input.rate === 'number' && Number.isFinite(input.rate)) out.rate = input.rate;
+    if (Array.isArray(input.qIds) && input.qIds.length > 0) {
+        out.qIds = input.qIds.slice(0, MAX_PEER_QUEUE_IDS);
+    }
+    if (typeof input.qIdx === 'number' && Number.isFinite(input.qIdx)) out.qIdx = input.qIdx;
+    return out;
+};
 
 export const buildPresence = (online: boolean): PeerPresence => ({
     online,

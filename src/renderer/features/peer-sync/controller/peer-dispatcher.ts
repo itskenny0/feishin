@@ -109,6 +109,17 @@ export const peerDispatcher = {
                 ),
         ),
 
+    setMute: (ctx: PeerDispatcherCtx, mute: boolean): void =>
+        route(
+            ctx,
+            () => publishCommand(ctx.peer, buildCommand('mute', { mute })),
+            () =>
+                void commandDispatcher.setMute(
+                    { server: ctx.server, sessionId: ctx.sessionId },
+                    mute,
+                ),
+        ),
+
     setRepeat: (ctx: PeerDispatcherCtx, mode: PeerRepeatMode): void =>
         route(
             ctx,
@@ -139,6 +150,21 @@ export const peerDispatcher = {
                 commandDispatcher.setVolume(
                     { server: ctx.server, sessionId: ctx.sessionId },
                     volume,
+                ),
+        ),
+
+    /**
+     * Jump to a specific queue index. Maps to JF's `PlaylistIndex` playstate
+     * command on the Jellyfin lane; the MQTT receiver applies it locally.
+     */
+    skipToIndex: (ctx: PeerDispatcherCtx, index: number): void =>
+        route(
+            ctx,
+            () => publishCommand(ctx.peer, buildCommand('playIndex', { index })),
+            () =>
+                void commandDispatcher.skipToIndex(
+                    { server: ctx.server, sessionId: ctx.sessionId },
+                    index,
                 ),
         ),
 };

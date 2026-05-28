@@ -24,6 +24,9 @@ export interface RemoteMirrored {
 }
 
 export interface RemoteMirroredPlayState {
+    /** Derived from the session's PlayState.IsMuted. Mute is independent of
+     *  volume — Jellyfin can report `IsMuted: true` while volume is non-zero. */
+    isMuted: boolean;
     isPaused: boolean;
     positionMs: number;
     /** `Date.now()` when positionMs was sampled — used to interpolate between polls. */

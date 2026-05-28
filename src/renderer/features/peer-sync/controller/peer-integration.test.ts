@@ -58,6 +58,10 @@ vi.mock('/@/renderer/features/jellyfin-remote-target/controller/command-dispatch
         seek: vi.fn(() => {
             jfCalls.push({ k: 'seek' });
         }),
+        setMute: vi.fn(() => {
+            jfCalls.push({ k: 'setMute' });
+            return Promise.resolve();
+        }),
         setRepeat: vi.fn(() => {
             jfCalls.push({ k: 'setRepeat' });
             return Promise.resolve();
@@ -68,6 +72,10 @@ vi.mock('/@/renderer/features/jellyfin-remote-target/controller/command-dispatch
         }),
         setVolume: vi.fn(() => {
             jfCalls.push({ k: 'setVolume' });
+        }),
+        skipToIndex: vi.fn(() => {
+            jfCalls.push({ k: 'skipToIndex' });
+            return Promise.resolve();
         }),
     },
 }));
@@ -89,6 +97,7 @@ beforeEach(() => {
             capabilities: [],
             nowPlayingItem: null,
             playState: {
+                isMuted: false,
                 isPaused: true,
                 positionMs: 0,
                 positionSampledAt: 0,
@@ -135,6 +144,41 @@ describe('peerDispatcher routing', () => {
         expect(published).toEqual([]);
         expect(jfCalls).toEqual([{ k: 'pause' }]);
     });
+
+    /**
+     * Regression for the audit: the protocol previously only carried the
+     * "obvious" verbs (play/pause/seek/volume/shuffle/repeat). `mute` and
+     * `playIndex` were the two glaring control-surface gaps — a controller
+     * driving an MQTT target could neither toggle mute nor jump to a
+     * specific queue index.
+     */
+    it('publishes mute via mqtt with an args payload', () => {
+        setSyncEnabled(true);
+        recordPresence('peer-target', true);
+
+        peerDispatcher.setMute(fakeCtx, true);
+        peerDispatcher.setMute(fakeCtx, false);
+
+        expect(published).toEqual([
+            { a: { mute: true }, k: 'mute', peerId: 'peer-target' },
+            { a: { mute: false }, k: 'mute', peerId: 'peer-target' },
+        ]);
+        expect(jfCalls).toEqual([]);
+    });
+
+    it('publishes playIndex via mqtt and falls back to skipToIndex on jellyfin', () => {
+        setSyncEnabled(true);
+        recordPresence('peer-target', true);
+
+        peerDispatcher.skipToIndex(fakeCtx, 7);
+        expect(published).toEqual([{ a: { index: 7 }, k: 'playIndex', peerId: 'peer-target' }]);
+
+        // Now drop presence — verify the jellyfin fallback is wired.
+        __resetForTests();
+        setSyncEnabled(true);
+        peerDispatcher.skipToIndex(fakeCtx, 2);
+        expect(jfCalls.map((c) => c.k)).toContain('skipToIndex');
+    });
 });
 
 describe('applyPeerStateToStore', () => {
@@ -173,6 +217,70 @@ describe('applyPeerStateToStore', () => {
         expect(state.mirrored.playState.volume).toBe(55);
         expect(state.mirrored.nowPlayingItem?.id).toBe('song-1');
         expect(state.mirrored.nowPlayingItem?.name).toBe('Paranoid Android');
+    });
+
+    /**
+     * Regression: mute and queue-index were added as optional v1+ wire
+     * fields. When the publisher includes them, the controller's mirror
+     * must surface them; when the publisher omits them, the controller's
+     * mirrored mute MUST NOT be flipped from its prior value — otherwise
+     * an older publisher would silently un-mute the controller every tick.
+     */
+    it('mirrors optional mute and queue-index fields when present', () => {
+        useRemoteTargetStore.setState({ targetDeviceId: 'peer-target' });
+
+        const frame = buildState({
+            dur: 240_000,
+            mut: true,
+            paused: false,
+            pos: 0,
+            qIds: ['a', 'b', 'c', 'd', 'e'],
+            qIdx: 4,
+            rep: 'off',
+            shuf: false,
+            track: { album: null, art: null, artist: null, id: 'song-x', title: 'x' },
+            vol: 50,
+        });
+        applyPeerStateToStore(frame);
+        const state = useRemoteTargetStore.getState();
+        expect(state.mirrored.playState.isMuted).toBe(true);
+        expect(state.mirrored.queueIndex).toBe(4);
+    });
+
+    it('does NOT overwrite isMuted when an older publisher omits the field', () => {
+        // Seed the store with isMuted=true so we can prove the absent field
+        // doesn't silently flip the mirror back to false.
+        useRemoteTargetStore.setState({
+            mirrored: {
+                capabilities: [],
+                nowPlayingItem: null,
+                playState: {
+                    isMuted: true,
+                    isPaused: true,
+                    positionMs: 0,
+                    positionSampledAt: 0,
+                    repeatMode: 'RepeatNone',
+                    shuffle: false,
+                    volume: 100,
+                },
+                queue: [],
+                queueIndex: -1,
+            },
+            targetDeviceId: 'peer-target',
+        });
+
+        // Frame from a publisher that doesn't emit `mut`.
+        const frame = buildState({
+            dur: 0,
+            paused: true,
+            pos: 0,
+            rep: 'off',
+            shuf: false,
+            track: null,
+            vol: 100,
+        });
+        applyPeerStateToStore(frame);
+        expect(useRemoteTargetStore.getState().mirrored.playState.isMuted).toBe(true);
     });
 
     it('is a no-op when no target is selected', () => {

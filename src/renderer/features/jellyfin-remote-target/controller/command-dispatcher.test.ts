@@ -79,6 +79,66 @@ describe('command-dispatcher coalescing', () => {
     );
 
     /**
+     * Audit regression: `setMute` was already wired but had no test coverage.
+     * Verify it posts a GeneralCommand with the right name and toggles
+     * cleanly between Mute and Unmute.
+     */
+    it('dispatches Mute / Unmute as a GeneralCommand', async () => {
+        const calls: Array<{ name: string; sessionId?: string }> = [];
+        vi.doMock('/@/renderer/features/jellyfin-remote-target/api/remote-target-api', () => ({
+            remoteTargetApi: {
+                sendGeneralCommand: vi.fn(async (args: { name: string; sessionId: string }) => {
+                    calls.push({ name: args.name, sessionId: args.sessionId });
+                }),
+                sendPlaystate: vi.fn(async () => {}),
+            },
+        }));
+
+        const { commandDispatcher } =
+            await import('/@/renderer/features/jellyfin-remote-target/controller/command-dispatcher');
+        const ctx = {
+            server: { credential: 't', id: 's', type: 'jellyfin', url: 'x', userId: 'u' } as never,
+            sessionId: 'sess',
+        };
+
+        await commandDispatcher.setMute(ctx, true);
+        await commandDispatcher.setMute(ctx, false);
+
+        expect(calls).toEqual([
+            { name: 'Mute', sessionId: 'sess' },
+            { name: 'Unmute', sessionId: 'sess' },
+        ]);
+    });
+
+    /**
+     * Audit regression: `skipToIndex` posts a PlayingCommand named
+     * `PlaylistIndex` carrying the target queue index. The peer-dispatcher's
+     * `skipToIndex` fallback delegates here, so coverage here covers both
+     * lanes.
+     */
+    it('dispatches skipToIndex as a PlaylistIndex Playstate command', async () => {
+        const calls: Array<{ command: string; playlistIndex?: number }> = [];
+        vi.doMock('/@/renderer/features/jellyfin-remote-target/api/remote-target-api', () => ({
+            remoteTargetApi: {
+                sendGeneralCommand: vi.fn(async () => {}),
+                sendPlaystate: vi.fn(async (args: { command: string; playlistIndex?: number }) => {
+                    calls.push({ command: args.command, playlistIndex: args.playlistIndex });
+                }),
+            },
+        }));
+
+        const { commandDispatcher } =
+            await import('/@/renderer/features/jellyfin-remote-target/controller/command-dispatcher');
+        const ctx = {
+            server: { credential: 't', id: 's', type: 'jellyfin', url: 'x', userId: 'u' } as never,
+            sessionId: 'sess',
+        };
+
+        await commandDispatcher.skipToIndex(ctx, 4);
+        expect(calls).toEqual([{ command: 'PlaylistIndex', playlistIndex: 4 }]);
+    });
+
+    /**
      * Regression: the coalesce helper used a module-level inFlight/pending
      * pair shared across every dispatcher invocation. If a slow setVolume
      * was in flight against device A and the user transferred to device B,

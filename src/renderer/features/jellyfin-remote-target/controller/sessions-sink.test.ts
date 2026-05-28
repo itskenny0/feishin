@@ -80,6 +80,24 @@ describe('sessionsSink truncated-queue caching', () => {
         expect(hydrateSpy.mock.calls.length).toBe(callsAfterFirst);
     });
 
+    /**
+     * Audit regression: `IsMuted` from a /Sessions snapshot must surface in
+     * the store's mirrored play-state. Before the fix, the controller's
+     * mute toggle silently disagreed with the target whenever the target
+     * was muted but non-zero volume.
+     */
+    it('mirrors IsMuted from the session payload into the store', async () => {
+        const sess = session('dev-1', ['only-track']);
+        // Override the PlayState the helper builds so we exercise mute.
+        sess.PlayState = { IsMuted: true, IsPaused: false, PositionTicks: 0 } as never;
+
+        sessionsSink.apply([sess], fakeServer);
+        await new Promise((res) => setTimeout(res, 0));
+
+        const state = useRemoteTargetStore.getState();
+        expect(state.mirrored.playState.isMuted).toBe(true);
+    });
+
     it('rolls back the queue cache when hydrate rejects so the next tick can retry', async () => {
         const queueIds = Array.from({ length: 250 }, (_, i) => `flaky-${i}`);
         const apiModule =

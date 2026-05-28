@@ -49,6 +49,17 @@ const isValidState = (raw: Record<string, unknown>): boolean => {
     if (raw.rep !== 'off' && raw.rep !== 'all' && raw.rep !== 'one') return false;
     if (typeof raw.ts !== 'number') return false;
     if (raw.track !== null && !isObject(raw.track)) return false;
+    // Optional v1+ fields — accept when absent, validate when present. A
+    // wrong type for any of these drops the whole frame rather than risk
+    // delivering garbage downstream.
+    if (raw.mut !== undefined && typeof raw.mut !== 'boolean') return false;
+    if (raw.lyr !== undefined && typeof raw.lyr !== 'boolean') return false;
+    if (raw.rate !== undefined && typeof raw.rate !== 'number') return false;
+    if (raw.qIdx !== undefined && typeof raw.qIdx !== 'number') return false;
+    if (raw.qIds !== undefined) {
+        if (!Array.isArray(raw.qIds)) return false;
+        if (raw.qIds.some((id) => typeof id !== 'string')) return false;
+    }
     return true;
 };
 

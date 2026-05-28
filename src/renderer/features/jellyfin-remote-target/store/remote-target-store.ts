@@ -24,6 +24,7 @@ export interface RemoteHold<T = unknown> {
 }
 
 export type RemoteHoldField =
+    | 'isMuted'
     | 'isPaused'
     | 'nowPlayingItemId'
     | 'positionMs'
@@ -32,6 +33,18 @@ export type RemoteHoldField =
     | 'volume';
 
 export type RemoteHolds = Partial<Record<RemoteHoldField, RemoteHold>>;
+
+/**
+ * Input shape accepted by `applyMirrorFromServer`. Deeper-partial than
+ * `Partial<RemoteMirrored>` so a server frame can carry just the subset of
+ * play-state fields it actually knows about (e.g. an older MQTT publisher
+ * with no `mut` field, or a Jellyfin session payload that omits
+ * VolumeLevel). The reducer merges field-by-field with the prior mirrored
+ * state, so a missing field means "unchanged" — never "reset to default".
+ */
+export type RemoteMirrorInput = Omit<Partial<RemoteMirrored>, 'playState'> & {
+    playState?: Partial<RemoteMirroredPlayState>;
+};
 
 /** Default hold window — 2s is enough for a poll RTT + receiver reaction. */
 export const DEFAULT_HOLD_MS = 2_000;
@@ -50,7 +63,7 @@ interface RemoteTargetState {
          * playState so an in-flight command's optimistic value isn't reverted
          * by a stale server frame.
          */
-        applyMirrorFromServer: (mirrored: Partial<RemoteMirrored>) => void;
+        applyMirrorFromServer: (mirrored: RemoteMirrorInput) => void;
         clearHold: (field: RemoteHoldField) => void;
         clearTarget: () => void;
         /**
@@ -127,6 +140,7 @@ const emptyMirrored: RemoteMirrored = {
     capabilities: [],
     nowPlayingItem: null,
     playState: {
+        isMuted: false,
         isPaused: true,
         positionMs: 0,
         positionSampledAt: 0,
@@ -156,7 +170,7 @@ const valuesAgree = (field: RemoteHoldField, expected: unknown, incoming: unknow
 
 const extractFieldValue = (
     field: RemoteHoldField,
-    mirrored: Partial<RemoteMirrored>,
+    mirrored: RemoteMirrorInput,
 ): { present: boolean; value: unknown } => {
     if (field === 'nowPlayingItemId') {
         if (!('nowPlayingItem' in mirrored)) return { present: false, value: undefined };
@@ -177,17 +191,24 @@ export const useRemoteTargetStore = create<RemoteTargetState>((set) => ({
             set((s) => {
                 const now = Date.now();
                 const holds = { ...s.holds };
-                let mirrored: RemoteMirrored = { ...s.mirrored, ...incoming };
+                // The incoming `playState` is a deep partial — merge it onto
+                // the current play-state instead of letting the outer spread
+                // replace the whole sub-object. Without this, a frame that
+                // omits e.g. `isMuted` would type-narrow `mirrored.playState`
+                // back to an incomplete shape.
+                const { playState: incomingPlayState, ...incomingTopLevel } = incoming;
+                let mirrored: RemoteMirrored = { ...s.mirrored, ...incomingTopLevel };
 
                 // Apply the playState merge then revert held fields that
                 // disagree with their optimistic expectation.
-                if (incoming.playState) {
+                if (incomingPlayState) {
                     const merged: RemoteMirroredPlayState = {
                         ...s.mirrored.playState,
-                        ...incoming.playState,
+                        ...incomingPlayState,
                     };
                     const fields: RemoteHoldField[] = [
                         'isPaused',
+                        'isMuted',
                         'positionMs',
                         'volume',
                         'repeatMode',
@@ -197,7 +218,7 @@ export const useRemoteTargetStore = create<RemoteTargetState>((set) => ({
                         const hold = holds[field];
                         if (!hold) continue;
                         const incomingValue = (
-                            incoming.playState as unknown as Record<string, unknown>
+                            incomingPlayState as unknown as Record<string, unknown>
                         )[field];
                         if (incomingValue === undefined) continue;
                         if (valuesAgree(field, hold.expected, incomingValue)) {
@@ -368,6 +389,8 @@ export const useRemoteTargetStore = create<RemoteTargetState>((set) => ({
                     if (key === 'positionSampledAt') continue;
                     if (key === 'isPaused' && partial.isPaused !== undefined) {
                         holds.isPaused = { expected: partial.isPaused, until };
+                    } else if (key === 'isMuted' && partial.isMuted !== undefined) {
+                        holds.isMuted = { expected: partial.isMuted, until };
                     } else if (key === 'volume' && partial.volume !== undefined) {
                         holds.volume = { expected: partial.volume, until };
                     } else if (key === 'positionMs' && partial.positionMs !== undefined) {

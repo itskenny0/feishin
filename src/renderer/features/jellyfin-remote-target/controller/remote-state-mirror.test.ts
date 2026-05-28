@@ -29,6 +29,7 @@ describe('derivePlayState', () => {
             },
         });
         expect(ps).toEqual({
+            isMuted: false,
             isPaused: false,
             positionMs: 5_000,
             positionSampledAt: 1_000,
@@ -43,6 +44,7 @@ describe('derivePlayState', () => {
         vi.spyOn(Date, 'now').mockReturnValue(7);
         const ps = derivePlayState({});
         expect(ps).toEqual({
+            isMuted: false,
             isPaused: false,
             positionMs: 0,
             positionSampledAt: 7,
@@ -51,6 +53,26 @@ describe('derivePlayState', () => {
             volume: 100,
         });
         vi.restoreAllMocks();
+    });
+
+    /**
+     * Regression: `IsMuted` was previously not mirrored into the play state,
+     * so the controller's mute toggle UI silently disagreed with the target
+     * whenever the target was mute-without-volume-zero. Verify both polarities
+     * round-trip through derivePlayState.
+     */
+    it('mirrors IsMuted independently from VolumeLevel', () => {
+        const muted = derivePlayState({
+            PlayState: { IsMuted: true, VolumeLevel: 60 },
+        });
+        expect(muted.isMuted).toBe(true);
+        expect(muted.volume).toBe(60);
+
+        const unmuted = derivePlayState({
+            PlayState: { IsMuted: false, VolumeLevel: 0 },
+        });
+        expect(unmuted.isMuted).toBe(false);
+        expect(unmuted.volume).toBe(0);
     });
 
     it('treats PlaybackOrder Default (or absent) as not shuffled', () => {

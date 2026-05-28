@@ -17,6 +17,10 @@ const ticksToMs = (ticks: number | undefined): number =>
  * Build the play-state slice from a raw Jellyfin session.
  */
 export const derivePlayState = (session: any): RemoteMirroredPlayState => ({
+    // Jellyfin reports `IsMuted` independently of `VolumeLevel`; a session can
+    // sit at volume 50 with IsMuted=true. We mirror the bool faithfully so the
+    // controller's mute button reflects what the target actually shows.
+    isMuted: Boolean(session?.PlayState?.IsMuted),
     isPaused: Boolean(session?.PlayState?.IsPaused),
     positionMs: ticksToMs(session?.PlayState?.PositionTicks),
     positionSampledAt: Date.now(),

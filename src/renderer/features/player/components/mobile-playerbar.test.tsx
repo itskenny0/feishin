@@ -43,6 +43,7 @@ describe('MobilePlayerbar remote mirroring', () => {
                 name: 'Remote Song',
             } as never,
             playState: {
+                isMuted: false,
                 isPaused: true,
                 positionMs: 0,
                 positionSampledAt: 0,
