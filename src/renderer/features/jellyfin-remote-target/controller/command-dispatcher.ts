@@ -56,35 +56,60 @@ const wrap =
  * - Trailing edge: while a call is in flight, additional invocations replace
  *   the queued "latest" arguments; once the in-flight one resolves, we fire
  *   one more call with the latest args (and only the latest).
+ *
+ * The in-flight / pending slots are KEYED per target sessionId via the
+ * supplied `keyFn` so a slow command against device A can never block a fresh
+ * command against device B after a transfer. A single shared slot used to
+ * silently drop the new device's commands if A's POST never resolved.
  */
+type Slot<Args extends unknown[]> = { inFlight: boolean; pending: Args | null };
+
 const coalesceTrailing = <Args extends unknown[]>(
     fn: (...args: Args) => Promise<void>,
+    keyFn: (...args: Args) => string,
 ): ((...args: Args) => void) => {
-    let inFlight = false;
-    let pending: Args | null = null;
+    const slots = new Map<string, Slot<Args>>();
 
-    const run = async (args: Args): Promise<void> => {
-        inFlight = true;
+    const slotFor = (key: string): Slot<Args> => {
+        let slot = slots.get(key);
+        if (!slot) {
+            slot = { inFlight: false, pending: null };
+            slots.set(key, slot);
+        }
+        return slot;
+    };
+
+    const run = async (key: string, args: Args): Promise<void> => {
+        const slot = slotFor(key);
+        slot.inFlight = true;
         try {
             await fn(...args);
         } finally {
-            inFlight = false;
-            if (pending) {
-                const next = pending;
-                pending = null;
-                void run(next);
+            slot.inFlight = false;
+            if (slot.pending) {
+                const next = slot.pending;
+                slot.pending = null;
+                void run(key, next);
+            } else if (!slot.inFlight) {
+                // Free the slot once it's truly idle so a long-lived process
+                // doesn't accumulate a per-sessionId map entry forever.
+                slots.delete(key);
             }
         }
     };
 
     return (...args: Args): void => {
-        if (inFlight) {
-            pending = args;
+        const key = keyFn(...args);
+        const slot = slotFor(key);
+        if (slot.inFlight) {
+            slot.pending = args;
             return;
         }
-        void run(args);
+        void run(key, args);
     };
 };
+
+const ctxKey = (ctx: DispatcherCtx, ..._rest: unknown[]): string => ctx.sessionId;
 
 export const commandDispatcher = {
     next: wrap('NextTrack', async (ctx: DispatcherCtx): Promise<void> => {
@@ -141,6 +166,7 @@ export const commandDispatcher = {
                 sessionId: ctx.sessionId,
             });
         }),
+        ctxKey,
     ),
 
     setMute: wrap('Mute', async (ctx: DispatcherCtx, mute: boolean): Promise<void> => {
@@ -186,6 +212,7 @@ export const commandDispatcher = {
                 sessionId: ctx.sessionId,
             });
         }),
+        ctxKey,
     ),
 
     skipToIndex: wrap('PlaylistIndex', async (ctx: DispatcherCtx, index: number): Promise<void> => {

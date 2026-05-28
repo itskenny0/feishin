@@ -136,4 +136,37 @@ describe('JellyfinRemoteController — keepalive contract', () => {
         expect(sock.sent).toEqual([]);
         ctl.stop();
     });
+
+    /**
+     * Regression: `lastSocketOpenedAt` was initialised to 0, so a sequence
+     * of sockets that closed BEFORE ever opening (the case for an
+     * unreachable / DNS-failed server) saw `Date.now() - 0` always exceed
+     * the success-uptime threshold and reset the retry counter on every
+     * close. The backoff then never escalated — the controller would hammer
+     * an unreachable server at the 1s base delay forever.
+     *
+     * Expected behavior: backoff escalates 1s → 2s → 5s → 10s → 30s when no
+     * socket has ever opened. We assert the 2nd reconnect is delayed by 2s
+     * (rung 1), proving the counter advanced rather than resetting to 0.
+     */
+    it('does NOT reset the retry counter when sockets never open (unreachable server)', async () => {
+        const ctl = await startCtl();
+        // First socket: close it immediately, *without* calling onopen.
+        const sock0 = FakeSocket.instances[0];
+        expect(sock0).toBeDefined();
+        sock0.onclose?.({ code: 1006, wasClean: false });
+        // First reconnect rung: 1s.
+        await vi.advanceTimersByTimeAsync(1_000);
+        expect(FakeSocket.instances.length).toBe(2);
+        const sock1 = FakeSocket.instances[1];
+        sock1.onclose?.({ code: 1006, wasClean: false });
+        // If counter was wrongly reset to 0 here, the 3rd socket would
+        // schedule at 1s (rung 0). With correct behavior it schedules at
+        // 2s (rung 1).
+        await vi.advanceTimersByTimeAsync(1_500);
+        expect(FakeSocket.instances.length).toBe(2);
+        await vi.advanceTimersByTimeAsync(700);
+        expect(FakeSocket.instances.length).toBe(3);
+        ctl.stop();
+    });
 });

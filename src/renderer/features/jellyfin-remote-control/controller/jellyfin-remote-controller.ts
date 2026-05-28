@@ -312,8 +312,14 @@ export class JellyfinRemoteController {
             }
             this.ws = null;
             // Sustained uptime resets the backoff so a server returning from
-            // a long outage doesn't get stuck at the 30s cap forever.
-            if (Date.now() - this.lastSocketOpenedAt > MIN_SUCCESS_UPTIME_MS) {
+            // a long outage doesn't get stuck at the 30s cap forever. Guard
+            // against `lastSocketOpenedAt === 0` (socket never opened) so a
+            // stream of pre-open failures doesn't masquerade as "we've been
+            // happily connected for ages, reset the counter".
+            if (
+                this.lastSocketOpenedAt > 0 &&
+                Date.now() - this.lastSocketOpenedAt > MIN_SUCCESS_UPTIME_MS
+            ) {
                 this.attempt = 0;
             }
             if (!this.isStopped) this.scheduleReconnect(gen);

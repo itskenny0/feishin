@@ -1,5 +1,5 @@
 // src/renderer/features/jellyfin-remote-target/hooks/use-sessions-poller.tsx
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { shallow } from 'zustand/shallow';
 
@@ -12,6 +12,13 @@ import { ServerType } from '/@/shared/types/domain-types';
 
 export const useSessionsPoller = () => {
     const { t } = useTranslation();
+    // Carry the latest `t` into the offline callback via a ref so the poller
+    // effect doesn't restart on language change — restarting wipes the
+    // optimistic-hold and hasPolledOnce flags, which makes the picker flash
+    // "Searching…" and lets a stale poll clobber a fresh optimistic update.
+    const tRef = useRef(t);
+    tRef.current = t;
+
     const currentServer = useAuthStore((s) => s.currentServer, shallow);
     const targetDeviceId = useRemoteTargetStore((s) => s.targetDeviceId);
     const isPickerOpen = useRemoteTargetStore((s) => s.pickerOpen);
@@ -49,12 +56,12 @@ export const useSessionsPoller = () => {
         sessionsPoller.start({
             onOffline: (deviceName) =>
                 toast.info({
-                    message: t('page.remoteTarget.wentOffline', { deviceName }),
+                    message: tRef.current('page.remoteTarget.wentOffline', { deviceName }),
                 }),
             server: currentServer,
         });
         return () => sessionsPoller.stop();
-    }, [currentServer, isPickerOpen, t, targetDeviceId]);
+    }, [currentServer, isPickerOpen, targetDeviceId]);
 };
 
 export const SessionsPollerHook = () => {

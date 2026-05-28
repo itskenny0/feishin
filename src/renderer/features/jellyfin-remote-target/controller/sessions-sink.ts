@@ -110,14 +110,23 @@ class SessionsSink {
         actions.applyMirrorFromServer(mirror.mirrored);
 
         if (mirror.hydrateQueue) {
+            // Cache the requested id set up-front so a hydrate that returns
+            // a shorter list (e.g. a few items 404'd) doesn't permanently
+            // disagree with subsequent identical /Sessions payloads and
+            // re-trigger hydration on every poll tick.
+            const requestedIds = mirror.queueIds ?? [];
+            this.prevQueueIdsByDevice[match.deviceId] = requestedIds;
             void mirror
                 .hydrateQueue()
                 .then((queue) => {
                     actions.setMirrored({ queue, queueIndex: mirror.queueIndex });
-                    this.prevQueueIdsByDevice[match.deviceId] = queue.map((s) => s.id);
                 })
                 .catch((err) => {
                     console.warn('[remote-target] queue hydrate failed', err);
+                    // Roll back the cache so the next tick retries — a
+                    // transient network failure shouldn't masquerade as
+                    // "queue successfully hydrated".
+                    delete this.prevQueueIdsByDevice[match.deviceId];
                 });
         } else if (mirror.queueIndex !== -1) {
             actions.setMirrored({ queueIndex: mirror.queueIndex });

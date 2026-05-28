@@ -45,6 +45,12 @@ interface MirrorResult {
     /** Run this *after* the synchronous mirror is applied, to fill in the queue. */
     hydrateQueue: (() => Promise<Song[]>) | null;
     mirrored: Partial<RemoteMirrored>;
+    /**
+     * The (truncated) id-set the sink should cache to detect a *real* queue
+     * change on the next tick. Always populated when hydrateQueue is set;
+     * undefined otherwise.
+     */
+    queueIds?: string[];
     /** Resolved index in the (post-hydrate) queue. -1 if not resolvable. */
     queueIndex: number;
 }
@@ -73,9 +79,18 @@ export const mirrorSession = (
         .map((q) => q?.Id)
         .filter((id): id is string => typeof id === 'string');
 
+    // Queues longer than MAX_QUEUE_HYDRATE are hydrated and cached truncated
+    // — so compare the truncated id-set against the cache to decide whether
+    // a re-hydrate is actually needed. Comparing the full queueIds vs the
+    // truncated cache made `queueChanged` always true for oversized queues
+    // and re-hydrated every poll tick. Fix: normalise both sides to the
+    // truncated window.
+    const compareIds =
+        queueIds.length > MAX_QUEUE_HYDRATE ? queueIds.slice(0, MAX_QUEUE_HYDRATE) : queueIds;
+
     const queueChanged =
-        queueIds.length !== previousQueueIds.length ||
-        queueIds.some((id, i) => previousQueueIds[i] !== id);
+        compareIds.length !== previousQueueIds.length ||
+        compareIds.some((id, i) => previousQueueIds[i] !== id);
 
     const result: MirrorResult = {
         hydrateQueue: null,
@@ -84,9 +99,10 @@ export const mirrorSession = (
     };
 
     if (queueChanged && queueIds.length > 0) {
-        const toFetch = queueIds.slice(0, MAX_QUEUE_HYDRATE);
+        const toFetch = compareIds;
         result.hydrateQueue = async () =>
             (await remoteTargetApi.hydrateSongs({ itemIds: toFetch, server })) as Song[];
+        result.queueIds = compareIds;
         const currentItemId: null | string = session?.NowPlayingItem?.Id ?? null;
         result.queueIndex = currentItemId ? queueIds.indexOf(currentItemId) : -1;
     } else if (queueIds.length > 0) {
