@@ -30,6 +30,8 @@ export const DevicePickerButton = () => {
         <DevicePickerPopover onClose={() => setOpened(false)} opened={opened}>
             <div style={{ alignItems: 'center', display: 'flex', gap: 4 }}>
                 <ActionIcon
+                    aria-label={t('page.remoteTarget.listenOn')}
+                    aria-pressed={target.isRemote}
                     icon="remoteDevice"
                     iconProps={{ size: 'lg', style: { color } }}
                     onClick={() => setOpened((v) => !v)}
