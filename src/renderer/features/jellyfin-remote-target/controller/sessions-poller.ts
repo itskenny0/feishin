@@ -13,7 +13,25 @@ import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-targe
 // off) the poll alone keeps things working — at lower fidelity than push,
 // but never broken.
 const POLL_INTERVAL_MS = 2_000;
+// After a command is dispatched we want truthful state back as soon as the
+// receiver has had a chance to publish PlaybackProgress. A short burst of
+// fast polls covers that gap without flooding the server during idle.
+const ACTIVE_POLL_INTERVAL_MS = 400;
+const ACTIVE_POLL_WINDOW_MS = 4_000;
 const OFFLINE_CUTOFF_MS = 60_000;
+
+const perfDebug = (): boolean => {
+    try {
+        return typeof localStorage !== 'undefined' && localStorage.getItem('perf.connect') === '1';
+    } catch {
+        return false;
+    }
+};
+
+const perfLog = (label: string, payload: Record<string, unknown>): void => {
+    if (!perfDebug()) return;
+    console.info('[perf.connect]', label, { ts: performance.now(), ...payload });
+};
 
 export interface PollerStartArgs {
     onOffline: (deviceName: string) => void; // toast + fallback to local
@@ -21,12 +39,34 @@ export interface PollerStartArgs {
 }
 
 export class SessionsPoller {
+    private activeUntil = 0;
     private isRunning = false;
+    private mode: 'active' | 'idle' = 'idle';
     private offlineSince = 0;
 
     private startArgs: null | PollerStartArgs = null;
 
-    private timer: null | ReturnType<typeof setInterval> = null;
+    private timer: null | ReturnType<typeof setTimeout> = null;
+
+    /**
+     * Caller signal: a controller command was just dispatched, so flip into
+     * fast-poll mode for ACTIVE_POLL_WINDOW_MS. Truthful state lands ~3s
+     * later (Jellyfin PlaybackProgress cadence); this lets the controller's
+     * mirror catch up without waiting for the next 2s idle tick.
+     */
+    notifyCommandDispatched(): void {
+        this.activeUntil = Date.now() + ACTIVE_POLL_WINDOW_MS;
+        perfLog('poller.active', { until: this.activeUntil });
+        if (this.mode !== 'active') {
+            this.mode = 'active';
+            this.rescheduleSoon();
+        }
+        // Burst a single tick after a brief gap so the receiver has a chance
+        // to write its state before we ask. Without the gap we just see our
+        // own pre-command snapshot replayed.
+        if (this.timer) clearTimeout(this.timer);
+        this.timer = setTimeout(() => void this.tick(), 150);
+    }
 
     /**
      * Trigger an immediate reconciliation tick. Used by the WS push path
@@ -45,18 +85,33 @@ export class SessionsPoller {
         // Tick immediately so the picker doesn't show 'No devices' for the
         // poll interval after open.
         void this.tick();
-        this.timer = setInterval(() => void this.tick(), POLL_INTERVAL_MS);
+        this.scheduleNext();
     }
 
     stop() {
         this.isRunning = false;
         this.startArgs = null;
         this.offlineSince = 0;
+        this.mode = 'idle';
+        this.activeUntil = 0;
         useRemoteTargetStore.getState().actions.setPollerActive(false);
         if (this.timer) {
-            clearInterval(this.timer);
+            clearTimeout(this.timer);
             this.timer = null;
         }
+    }
+
+    private currentInterval(): number {
+        const now = Date.now();
+        if (now < this.activeUntil) {
+            this.mode = 'active';
+            return ACTIVE_POLL_INTERVAL_MS;
+        }
+        if (this.mode === 'active') {
+            this.mode = 'idle';
+            perfLog('poller.idle', {});
+        }
+        return POLL_INTERVAL_MS;
     }
 
     private handleMissingTarget(onOffline: (name: string) => void) {
@@ -80,11 +135,23 @@ export class SessionsPoller {
         }
     }
 
+    private rescheduleSoon(): void {
+        if (this.timer) clearTimeout(this.timer);
+        this.timer = setTimeout(() => void this.tick(), this.currentInterval());
+    }
+
+    private scheduleNext(): void {
+        if (!this.isRunning) return;
+        if (this.timer) clearTimeout(this.timer);
+        this.timer = setTimeout(() => void this.tick(), this.currentInterval());
+    }
+
     private async tick(): Promise<void> {
         if (!this.isRunning || !this.startArgs) return;
         const { onOffline, server } = this.startArgs;
         const actions = useRemoteTargetStore.getState().actions;
 
+        const t0 = performance.now();
         let result: { devices: RemoteDevice[]; raws: Record<string, unknown> };
         try {
             result = await remoteTargetApi.listSessionsWithRaw({ server });
@@ -93,8 +160,13 @@ export class SessionsPoller {
             actions.setDeviceList([]);
             actions.setPollError(err instanceof Error ? err.message : String(err));
             this.handleMissingTarget(onOffline);
+            this.scheduleNext();
             return;
         }
+        perfLog('poller.tick', {
+            durMs: Math.round(performance.now() - t0),
+            mode: this.mode,
+        });
 
         // Hand off to the shared sink so push + poll produce structurally
         // identical store updates. The sink owns the per-device queue cache
@@ -105,16 +177,19 @@ export class SessionsPoller {
         const state = useRemoteTargetStore.getState();
         if (!state.targetDeviceId) {
             this.offlineSince = 0;
+            this.scheduleNext();
             return;
         }
 
         const match = findSessionForDevice(result.devices, state.targetDeviceId);
         if (!match) {
             this.handleMissingTarget(onOffline);
+            this.scheduleNext();
             return;
         }
         if (state.status !== 'connected') actions.setStatus('connected');
         this.offlineSince = 0;
+        this.scheduleNext();
     }
 }
 

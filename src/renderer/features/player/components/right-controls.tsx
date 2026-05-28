@@ -54,7 +54,6 @@ import { Switch } from '/@/shared/components/switch/switch';
 import { Text } from '/@/shared/components/text/text';
 import { useMediaQuery } from '/@/shared/hooks/use-media-query';
 import { useThrottledCallback } from '/@/shared/hooks/use-throttled-callback';
-import { useThrottledValue } from '/@/shared/hooks/use-throttled-value';
 import { LibraryItem, QueueSong, ServerType, Song } from '/@/shared/types/domain-types';
 
 const calculateVolumeUp = (volume: number, volumeWheelStep: number) => {
@@ -572,14 +571,8 @@ const VolumeButton = () => {
 
     const [sliderValue, setSliderValue] = useState(volume);
 
-    const throttledVolume = useThrottledValue(sliderValue, 100);
-
-    // Sync throttled value to actual volume
-    useEffect(() => {
-        setVolume(throttledVolume);
-    }, [throttledVolume, setVolume]);
-
-    // Sync external volume changes to local state
+    // Sync external volume changes to local state. Drops re-fires from our
+    // own optimistic mirror so we don't fight the slider mid-drag.
     useEffect(() => {
         setSliderValue(volume);
     }, [volume]);
@@ -592,9 +585,21 @@ const VolumeButton = () => {
         increaseVolume(volumeWheelStep);
     }, [increaseVolume, volumeWheelStep]);
 
-    const handleVolumeSlider = useCallback((e: number) => {
-        setSliderValue(e);
-    }, []);
+    // Drive the slider value AND the underlying engine in one step. The
+    // remote dispatcher already coalesces a burst into leading+trailing
+    // POSTs; the local engine is a cheap zustand set. The previous 100ms
+    // throttled-value indirection added a flat 100ms gate to every slider
+    // tick (and ~100ms of latency for the last value of a drag), so any
+    // remote target felt sluggish even when the wire was idle. Forwarding
+    // straight through keeps the UI in lock-step with the click. Logged so
+    // we can correlate against the dispatcher's publish trace.
+    const handleVolumeSlider = useCallback(
+        (e: number) => {
+            setSliderValue(e);
+            setVolume(e);
+        },
+        [setVolume],
+    );
 
     const handleMute = useCallback(() => {
         mediaToggleMute();

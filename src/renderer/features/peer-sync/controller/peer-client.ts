@@ -265,15 +265,48 @@ export const startPeerClient = (args: PeerClientStartArgs, events: PeerEvents = 
     });
 };
 
-/** Publish a command frame to `target`. No-op if the client is down. */
+const perfDebug = (): boolean => {
+    try {
+        return typeof localStorage !== 'undefined' && localStorage.getItem('perf.connect') === '1';
+    } catch {
+        return false;
+    }
+};
+
+const perfMark = (label: string, payload: Record<string, unknown>): void => {
+    if (!perfDebug()) return;
+    console.info('[perf.connect]', label, { ts: performance.now(), ...payload });
+};
+
+/**
+ * Publish a command frame to `target`. No-op if the client is down.
+ *
+ * QoS 0 on purpose. The previous QoS 1 added a PUBACK round trip that the
+ * mqtt.js client serialises through its outgoing-store — under bursts (drag
+ * the volume slider, mash play/pause) the queue head-of-line blocks the
+ * trailing values from leaving the socket until the broker has ack'd the
+ * head. Commands are idempotent at the application layer (the next state
+ * frame always carries truth), so dropping QoS to 0 turns the wire path
+ * into pure fire-and-forget and pegs the publish at <1ms LAN. Retain stays
+ * off so a stale command can't sit on the topic.
+ */
 export const publishCommand = (target: PeerAddress, command: PeerCommand): void => {
     if (!session) return;
     const topic = topicFor(target, 'cmd');
+    const t0 = performance.now();
     log('publish cmd', { k: command.k, topic });
-    session.client.publish(topic, Buffer.from(codec.encode(command)), {
-        qos: 1,
-        retain: false,
-    });
+    session.client.publish(
+        topic,
+        Buffer.from(codec.encode(command)),
+        { qos: 0, retain: false },
+        (err) => {
+            perfMark('mqtt.publish.cmd', {
+                durMs: Math.round(performance.now() - t0),
+                k: command.k,
+                ok: !err,
+            });
+        },
+    );
 };
 
 /**

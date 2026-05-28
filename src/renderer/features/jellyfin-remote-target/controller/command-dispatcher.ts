@@ -3,6 +3,7 @@ import type { ServerListItemWithCredential } from '/@/shared/types/domain-types'
 
 import i18n from '/@/i18n/i18n';
 import { remoteTargetApi } from '/@/renderer/features/jellyfin-remote-target/api/remote-target-api';
+import { sessionsPoller } from '/@/renderer/features/jellyfin-remote-target/controller/sessions-poller';
 import { toast } from '/@/shared/components/toast/toast';
 
 interface DispatcherCtx {
@@ -14,6 +15,35 @@ interface DispatcherCtx {
 // control silently does nothing. Cheap (one console.log per click).
 const log = (label: string, payload: unknown) => {
     console.log('[remote-target] →', label, payload);
+};
+
+const perfDebug = (): boolean => {
+    try {
+        return typeof localStorage !== 'undefined' && localStorage.getItem('perf.connect') === '1';
+    } catch {
+        return false;
+    }
+};
+
+let nextDispatchId = 0;
+
+/**
+ * Emit a perf trace tied to a single command. The dispatch id threads through
+ * dispatch start → publish complete so a burst can be untangled in DevTools.
+ * Behind localStorage['perf.connect']==='1' so it's free in normal runs.
+ */
+const perfMark = (label: string, payload: Record<string, unknown>): void => {
+    if (!perfDebug()) return;
+    console.info('[perf.connect]', label, { ts: performance.now(), ...payload });
+};
+
+const notifyDispatched = (): void => {
+    try {
+        sessionsPoller.notifyCommandDispatched();
+    } catch (err) {
+        // Defensive: the poller isn't always mounted (tests, headless flows).
+        console.warn('[remote-target] notifyCommandDispatched failed', err);
+    }
 };
 
 // Per-command toast throttling: when an offline device is targeted, every
@@ -39,9 +69,27 @@ const surfaceError = (label: string, err: unknown): void => {
 const wrap =
     <Args extends unknown[]>(label: string, fn: (...args: Args) => Promise<unknown>) =>
     async (...args: Args): Promise<void> => {
+        const id = ++nextDispatchId;
+        const t0 = performance.now();
+        perfMark('dispatch.start', { id, label });
+        // Tell the poller to flip into fast-poll mode immediately so the
+        // truthful state mirror lands well within the optimistic-hold
+        // window. We do this BEFORE the await so the bookkeeping is set
+        // even if the publish itself is slow.
+        notifyDispatched();
         try {
             await fn(...args);
+            perfMark('dispatch.done', {
+                durMs: Math.round(performance.now() - t0),
+                id,
+                label,
+            });
         } catch (err) {
+            perfMark('dispatch.error', {
+                durMs: Math.round(performance.now() - t0),
+                id,
+                label,
+            });
             surfaceError(label, err);
         }
     };

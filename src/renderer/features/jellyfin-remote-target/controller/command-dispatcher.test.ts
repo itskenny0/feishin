@@ -16,6 +16,7 @@ describe('command-dispatcher coalescing', () => {
 
     afterEach(() => {
         vi.doUnmock('/@/renderer/features/jellyfin-remote-target/api/remote-target-api');
+        vi.doUnmock('/@/renderer/features/jellyfin-remote-target/controller/sessions-poller');
         vi.unstubAllGlobals();
         vi.useRealTimers();
     });
@@ -221,4 +222,42 @@ describe('command-dispatcher coalescing', () => {
             await new Promise<void>((res) => setTimeout(res, 20));
         },
     );
+
+    /**
+     * Regression: the controller's mirror was visibly snapping back to the
+     * pre-command state because the poller waited up to 2s for its next
+     * tick. The dispatcher now nudges the poller into fast-poll mode the
+     * moment a command leaves the building, so truthful state lands well
+     * within the optimistic-hold window. The contract here is "every
+     * command notifies the poller, BEFORE the await".
+     */
+    it('notifies the sessions poller about every dispatched command', async () => {
+        const notifySpy = vi.fn();
+        vi.doMock('/@/renderer/features/jellyfin-remote-target/controller/sessions-poller', () => ({
+            sessionsPoller: { notifyCommandDispatched: notifySpy },
+        }));
+        vi.doMock('/@/renderer/features/jellyfin-remote-target/api/remote-target-api', () => ({
+            remoteTargetApi: {
+                sendGeneralCommand: vi.fn(async () => {}),
+                sendPlaystate: vi.fn(async () => {}),
+            },
+        }));
+
+        const { commandDispatcher } =
+            await import('/@/renderer/features/jellyfin-remote-target/controller/command-dispatcher');
+        const ctx = {
+            server: { credential: 't', id: 's', type: 'jellyfin', url: 'x', userId: 'u' } as never,
+            sessionId: 'sess',
+        };
+
+        await commandDispatcher.pause(ctx);
+        await commandDispatcher.unpause(ctx);
+        commandDispatcher.setVolume(ctx, 42);
+        commandDispatcher.seek(ctx, 12_345);
+
+        // The two coalesced calls fire notifyCommandDispatched on the
+        // leading invocation, so we expect 4 notifications: pause, unpause,
+        // setVolume, seek.
+        expect(notifySpy).toHaveBeenCalledTimes(4);
+    });
 });

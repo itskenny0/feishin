@@ -46,10 +46,24 @@ export type RemoteMirrorInput = Omit<Partial<RemoteMirrored>, 'playState'> & {
     playState?: Partial<RemoteMirroredPlayState>;
 };
 
-/** Default hold window — 2s is enough for a poll RTT + receiver reaction. */
-export const DEFAULT_HOLD_MS = 2_000;
-/** Seeks need a touch more headroom because the receiver may re-buffer. */
-export const SEEK_HOLD_MS = 3_000;
+/**
+ * Default hold window. Used to be 2s; raised because the receiver's
+ * PlaybackProgress push cadence is itself ~3s and the controller's poll
+ * default is 2s. The old window expired before either lane had pushed the
+ * truthful state, so the next poll would clobber the optimistic value with
+ * a stale frame and the UI would visibly flip back to the pre-command
+ * state. 6s sticks long enough for either lane to converge, while still
+ * being short enough that a truly dropped command surfaces a visible
+ * snap-back instead of staying optimistically lying forever.
+ */
+export const DEFAULT_HOLD_MS = 6_000;
+/**
+ * Seeks need the same headroom as everything else now — used to be 3s
+ * which still beat the 2s default. With the default lifted to 6s the
+ * seek-specific value is the floor; keep it identical so a seek doesn't
+ * accidentally clear before an isPaused hold from the same gesture.
+ */
+export const SEEK_HOLD_MS = 6_000;
 /** Position tolerance for hold-clear comparisons (ms). */
 export const POSITION_HOLD_TOLERANCE_MS = 1_500;
 /** Volume tolerance for hold-clear comparisons (0-100). */

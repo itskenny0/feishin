@@ -204,6 +204,17 @@ describe('optimistic holds — stale-poll guard', () => {
         expect(seekHold!.until - before).toBeGreaterThanOrEqual(SEEK_HOLD_MS - 50);
     });
 
+    it('hold horizon is at least 6s so a 2s/3s server convergence does not snap back (regression: flicker-back after hold expiry)', () => {
+        // Real bug: the old hold window was 2s, but a /Sessions poll fires
+        // every 2s AND the receiver only writes PlaybackProgress every 3s.
+        // The hold expired between the user's click and the truthful state
+        // landing, so the next stale poll would clobber the optimistic
+        // value with the pre-command snapshot. Pin the floor at 6s so the
+        // failure mode can't sneak back in via a constant tweak.
+        expect(DEFAULT_HOLD_MS).toBeGreaterThanOrEqual(6_000);
+        expect(SEEK_HOLD_MS).toBeGreaterThanOrEqual(6_000);
+    });
+
     it('patchPlayState installs holds for every patched field so optimistic updates stick', () => {
         connectTarget();
         useRemoteTargetStore.getState().actions.patchPlayState({

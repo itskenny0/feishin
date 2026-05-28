@@ -18,6 +18,19 @@ import { Song } from '/@/shared/types/domain-types';
 
 const log = (...args: unknown[]) => console.info('[peer-sync]', ...args);
 
+const perfDebug = (): boolean => {
+    try {
+        return typeof localStorage !== 'undefined' && localStorage.getItem('perf.connect') === '1';
+    } catch {
+        return false;
+    }
+};
+
+const perfMark = (label: string, payload: Record<string, unknown>): void => {
+    if (!perfDebug()) return;
+    console.info('[perf.connect]', label, { ts: performance.now(), ...payload });
+};
+
 /**
  * Convert a PeerState wire frame into a Partial<RemoteMirrored> suitable
  * for `applyMirrorFromServer`. The Song shape requires a lot of fields we
@@ -93,6 +106,14 @@ export const applyPeerStateToStore = (state: PeerState): void => {
         pos: state.pos,
         qIdx: state.qIdx,
         trackId: state.track?.id ?? null,
+    });
+    perfMark('mirror.apply.mqtt', {
+        paused: state.paused,
+        pos: state.pos,
+        // Wire-side timestamp from sender so a perfDebug viewer can compute
+        // end-to-end on its own clock when both peers have time sync.
+        senderTs: state.ts,
+        vol: state.vol,
     });
     actions.applyMirrorFromServer(mirrored);
 };

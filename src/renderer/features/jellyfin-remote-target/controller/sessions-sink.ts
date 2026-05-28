@@ -7,6 +7,19 @@ import {
 } from '/@/renderer/features/jellyfin-remote-target/controller/remote-state-mirror';
 import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
 
+const perfDebug = (): boolean => {
+    try {
+        return typeof localStorage !== 'undefined' && localStorage.getItem('perf.connect') === '1';
+    } catch {
+        return false;
+    }
+};
+
+const perfMark = (label: string, payload: Record<string, unknown>): void => {
+    if (!perfDebug()) return;
+    console.info('[perf.connect]', label, { ts: performance.now(), ...payload });
+};
+
 /**
  * Convert a raw `/Sessions` payload row to a `RemoteDevice`. Kept narrow and
  * defensive — any malformed row is dropped rather than allowed to poison the
@@ -114,6 +127,11 @@ class SessionsSink {
 
         const raw = rawsBySessionId[match.sessionId];
         const mirror = mirrorSession(raw, server, this.prevQueueIdsByDevice[match.deviceId] ?? []);
+        perfMark('mirror.apply.jellyfin', {
+            isPaused: mirror.mirrored.playState?.isPaused,
+            positionMs: mirror.mirrored.playState?.positionMs,
+            volume: mirror.mirrored.playState?.volume,
+        });
         actions.applyMirrorFromServer(mirror.mirrored);
 
         if (mirror.hydrateQueue) {
