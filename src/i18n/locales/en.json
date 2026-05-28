@@ -664,7 +664,9 @@
             "noLyrics": "No lyrics found"
         },
         "remoteTarget": {
+            "connectFailed": "Could not connect to {{deviceName}}",
             "connectTitle": "Connect to a device",
+            "connectingTo": "Connecting to {{deviceName}}…",
             "currentDevice": "Current device",
             "listenOn": "Listen on",
             "noDevices": "No other Jellyfin clients online",
@@ -673,6 +675,7 @@
             "reconnecting": "Reconnecting to {{deviceName}}…",
             "thisComputer": "This computer",
             "thisDevice": "This device",
+            "transferring": "Transferring playback to {{deviceName}}…",
             "wentOffline": "{{deviceName}} went offline — playback moved back to this computer"
         },
         "genreList": {

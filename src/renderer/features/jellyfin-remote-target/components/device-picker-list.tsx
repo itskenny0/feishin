@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next';
 
 import styles from './device-picker.module.css';
 
-import { remoteTargetApi } from '/@/renderer/features/jellyfin-remote-target/api/remote-target-api';
+import { startConnectLifecycle } from '/@/renderer/features/jellyfin-remote-target/controller/connect-lifecycle';
 import { computeTransfer } from '/@/renderer/features/jellyfin-remote-target/controller/remote-play';
 import { sessionsPoller } from '/@/renderer/features/jellyfin-remote-target/controller/sessions-poller';
 import { useRemoteDevices } from '/@/renderer/features/jellyfin-remote-target/hooks/use-remote-devices';
@@ -89,27 +89,15 @@ export const DevicePickerList = ({ onClose, variant = 'desktop' }: DevicePickerL
     };
 
     const selectDevice = (d: RemoteDevice) => {
+        const server = useAuthStore.getState().currentServer;
+        const isJellyfin = !!server && server.type === ServerType.JELLYFIN && !!server.credential;
+
         // Only hand off the local queue when the target is IDLE; if it's already
         // playing, adopt its state instead of overwriting it.
-        const server = useAuthStore.getState().currentServer;
-        if (
-            !d.nowPlayingItemId &&
-            server &&
-            server.type === ServerType.JELLYFIN &&
-            server.credential
-        ) {
+        let transfer: ReturnType<typeof computeTransfer> = null;
+        if (!d.nowPlayingItemId && isJellyfin) {
             const positionSec = useTimestampStoreBase.getState().timestamp;
-            const transfer = computeTransfer(usePlayerStoreBase.getState(), positionSec);
-            if (transfer) {
-                void remoteTargetApi.play({
-                    itemIds: transfer.itemIds,
-                    playCommand: 'PlayNow',
-                    server: server as ServerListItemWithCredential,
-                    sessionId: d.sessionId,
-                    startIndex: transfer.startIndex,
-                    startPositionTicks: transfer.startPositionTicks,
-                });
-            }
+            transfer = computeTransfer(usePlayerStoreBase.getState(), positionSec);
         }
 
         playerActions.mediaPause();
@@ -122,7 +110,28 @@ export const DevicePickerList = ({ onClose, variant = 'desktop' }: DevicePickerL
         setSettings({
             playback: { remoteTargetDeviceId: d.deviceId, remoteTargetDeviceName: d.deviceName },
         });
-        toast.info({ message: t('page.remoteTarget.nowPlayingOn', { deviceName: d.deviceName }) });
+
+        startConnectLifecycle({
+            deviceId: d.deviceId,
+            deviceName: d.deviceName,
+            onRevert: () => {
+                clearTarget();
+                setSettings({
+                    playback: { remoteTargetDeviceId: null, remoteTargetDeviceName: null },
+                });
+            },
+            sessionId: d.sessionId,
+            t,
+            transfer:
+                transfer && isJellyfin
+                    ? {
+                          itemIds: transfer.itemIds,
+                          server: server as ServerListItemWithCredential,
+                          startIndex: transfer.startIndex,
+                          startPositionTicks: transfer.startPositionTicks,
+                      }
+                    : null,
+        });
         onClose();
     };
 

@@ -103,6 +103,13 @@ class SessionsSink {
                 deviceName: match.deviceName,
                 sessionId: match.sessionId,
             });
+        } else if (state.status !== 'connected') {
+            // First-mirror signal: a /Sessions snapshot (push OR poll) found
+            // the target session for the first time after the user picked it,
+            // so we can flip 'connecting' / 'transferring' / 'reconnecting'
+            // to 'connected'. The picker's connect-toast listens for this.
+            console.info('[remote-target] connected', match.deviceName);
+            actions.setStatus('connected');
         }
 
         const raw = rawsBySessionId[match.sessionId];

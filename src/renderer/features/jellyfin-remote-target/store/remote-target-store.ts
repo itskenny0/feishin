@@ -431,7 +431,11 @@ export const useRemoteTargetStore = create<RemoteTargetState>((set) => ({
                 holds: {},
                 mirrored: { ...emptyMirrored, capabilities },
                 sessionId,
-                status: 'connected',
+                // Start in 'connecting' — the sessions sink/poller flips us to
+                // 'connected' as soon as the target session is found in the
+                // next /Sessions snapshot. This is the canonical first-mirror
+                // signal the picker's connect-toast listens for.
+                status: 'connecting',
                 targetDeviceId: deviceId,
                 targetDeviceName: deviceName,
             })),

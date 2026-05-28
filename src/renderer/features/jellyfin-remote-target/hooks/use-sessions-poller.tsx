@@ -6,10 +6,13 @@ import { shallow } from 'zustand/shallow';
 import { sessionsPoller } from '/@/renderer/features/jellyfin-remote-target/controller/sessions-poller';
 import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
 import { useAuthStore } from '/@/renderer/store/auth.store';
-import { useRemoteTargetSetting } from '/@/renderer/store/settings.store';
 import { toast } from '/@/shared/components/toast/toast';
 import { ServerType } from '/@/shared/types/domain-types';
 
+// Intentionally no auto-restore on mount: a fresh launch always lands on local
+// playback. The persisted `playback.remoteTargetDeviceId/Name` setting is kept
+// around as a "last connected" memory for the picker, but the user must
+// explicitly re-select a device before any remote-target side effect runs.
 export const useSessionsPoller = () => {
     const { t } = useTranslation();
     // Carry the latest `t` into the offline callback via a ref so the poller
@@ -22,23 +25,6 @@ export const useSessionsPoller = () => {
     const currentServer = useAuthStore((s) => s.currentServer, shallow);
     const targetDeviceId = useRemoteTargetStore((s) => s.targetDeviceId);
     const isPickerOpen = useRemoteTargetStore((s) => s.pickerOpen);
-
-    const persisted = useRemoteTargetSetting();
-    useEffect(() => {
-        if (!persisted.deviceId || !persisted.deviceName) return;
-        const state = useRemoteTargetStore.getState();
-        if (state.targetDeviceId) return;
-        // Set the target with a placeholder sessionId; the next poll tick will
-        // reconcile to the real sessionId or fall back to local if missing.
-        state.actions.setTarget({
-            capabilities: [],
-            deviceId: persisted.deviceId,
-            deviceName: persisted.deviceName,
-            sessionId: '__pending__',
-        });
-        state.actions.setStatus('reconnecting');
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
 
     useEffect(() => {
         if (!currentServer || currentServer.type !== ServerType.JELLYFIN) {

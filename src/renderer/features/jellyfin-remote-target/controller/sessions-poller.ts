@@ -63,6 +63,10 @@ export class SessionsPoller {
         const state = useRemoteTargetStore.getState();
         const actions = state.actions;
         if (!state.targetDeviceId) return;
+        // 'connecting' / 'transferring' are pre-mirror states owned by the
+        // picker's connect-toast lifecycle (with its own ~8s timeout). Don't
+        // touch them from here — leave the picker to roll back on failure.
+        if (state.status === 'connecting' || state.status === 'transferring') return;
         if (state.status === 'connected' || state.status === 'idle') {
             actions.setStatus('reconnecting');
             this.offlineSince = Date.now();

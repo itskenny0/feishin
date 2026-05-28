@@ -48,4 +48,10 @@ export type RemotePlaystateCommand =
     | 'Stop'
     | 'Unpause';
 
-export type RemoteTargetStatus = 'connected' | 'idle' | 'offline' | 'reconnecting';
+export type RemoteTargetStatus =
+    | 'connected'
+    | 'connecting'
+    | 'idle'
+    | 'offline'
+    | 'reconnecting'
+    | 'transferring';
