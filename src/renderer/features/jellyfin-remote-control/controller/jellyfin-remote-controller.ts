@@ -4,7 +4,15 @@ import {
 } from '/@/renderer/features/jellyfin-remote-control/controller/message-dispatcher';
 import { JellyfinIncomingMessage } from '/@/renderer/features/jellyfin-remote-control/types';
 
-const KEEPALIVE_INTERVAL_MS = 30_000;
+/**
+ * Default cadence we use until the server tells us its preferred interval
+ * via ForceKeepAlive. 30 s matches Jellyfin's default ForceKeepAlive=60s
+ * divided by two (server expects KeepAlive at half-cadence).
+ */
+const DEFAULT_KEEPALIVE_INTERVAL_MS = 30_000;
+/** Bound the keepalive interval to sane values regardless of server input. */
+const MIN_KEEPALIVE_INTERVAL_MS = 5_000;
+const MAX_KEEPALIVE_INTERVAL_MS = 120_000;
 // Capped at the longest backoff (30s) after RECONNECT_BACKOFF_MS.length - 1
 // attempts. We then keep retrying at the cap forever — but only after a
 // successful socket-open that lasted at least MIN_SUCCESS_UPTIME_MS resets
@@ -50,7 +58,20 @@ export interface ControllerStartArgs {
     device: string; // e.g. "Desktop Client"
     deviceId: string;
     dispatcherDeps: DispatcherDeps;
+    /**
+     * Called whenever the server pushes a `Sessions` snapshot. The controller
+     * subscribes via `SessionsStart` on socket open and feeds every snapshot
+     * to this callback. Wired up in the hook to the target-mirror logic so
+     * controller UIs update in real-time instead of waiting on the 2s poll.
+     */
+    onSessionsPayload?: (sessions: unknown[]) => void;
     serverUrl: string;
+    /**
+     * If true, send `SessionsStart` on socket open so the server pushes us
+     * `Sessions` snapshots. Cheap (one ping every 1500 ms server-side) and
+     * the whole point of the WS upgrade vs polling.
+     */
+    subscribeToSessions?: boolean;
     token: string;
     version: string; // e.g. "1.11.0"
 }
@@ -67,6 +88,12 @@ export class JellyfinRemoteController {
      */
     private generation = 0;
     private isStopped = true;
+    /**
+     * The effective KeepAlive cadence — defaults to the constant above and
+     * gets re-synced whenever the server sends a `ForceKeepAlive` carrying
+     * a different interval.
+     */
+    private keepaliveIntervalMs = DEFAULT_KEEPALIVE_INTERVAL_MS;
     private keepaliveTimer: null | ReturnType<typeof setInterval> = null;
     private lastSocketOpenedAt = 0;
     private reconnectTimer: null | ReturnType<typeof setTimeout> = null;
@@ -111,6 +138,24 @@ export class JellyfinRemoteController {
             }
             this.ws = null;
         }
+    }
+
+    /**
+     * (Re-)arm the keepalive ping at `keepaliveIntervalMs`. Idempotent —
+     * called on socket open and after every ForceKeepAlive so an updated
+     * cadence takes effect immediately without waiting out the old timer.
+     */
+    private armKeepalive(socket: WebSocket): void {
+        if (this.keepaliveTimer) clearInterval(this.keepaliveTimer);
+        this.keepaliveTimer = setInterval(() => {
+            if (socket.readyState === WebSocket.OPEN) {
+                try {
+                    socket.send(JSON.stringify({ MessageType: 'KeepAlive' }));
+                } catch (err) {
+                    console.warn('[jellyfin-remote] KeepAlive send failed', err);
+                }
+            }
+        }, this.keepaliveIntervalMs);
     }
 
     private buildSocketUrl(args: ControllerStartArgs): string {
@@ -158,12 +203,21 @@ export class JellyfinRemoteController {
             info('socket open');
             this.lastSocketOpenedAt = Date.now();
             this.attempt = 0;
-            if (this.keepaliveTimer) clearInterval(this.keepaliveTimer);
-            this.keepaliveTimer = setInterval(() => {
-                if (socket.readyState === WebSocket.OPEN) {
-                    socket.send(JSON.stringify({ MessageType: 'KeepAlive' }));
+            this.keepaliveIntervalMs = DEFAULT_KEEPALIVE_INTERVAL_MS;
+            this.armKeepalive(socket);
+
+            // Real-time session updates. With SessionsStart the server pushes
+            // us full `/Sessions` snapshots whenever any session changes — no
+            // more 2s polling lag on track changes, position updates, etc.
+            // Data CSV is "<initialDelayMs>,<periodMs>": fire immediately,
+            // then push deltas as they happen.
+            if (args.subscribeToSessions) {
+                try {
+                    socket.send(JSON.stringify({ Data: '0,1500', MessageType: 'SessionsStart' }));
+                } catch (err) {
+                    console.warn('[jellyfin-remote] SessionsStart send failed', err);
                 }
-            }, KEEPALIVE_INTERVAL_MS);
+            }
         };
 
         socket.onmessage = (event) => {
@@ -177,9 +231,61 @@ export class JellyfinRemoteController {
                 return;
             }
             if (!parsed || typeof parsed.MessageType !== 'string') return;
-            if (parsed.MessageType !== 'KeepAlive' && parsed.MessageType !== 'ForceKeepAlive') {
+
+            // KeepAlive housekeeping — must run BEFORE the dispatcher so the
+            // session stays healthy regardless of receiver/controller mode.
+            //
+            // ForceKeepAlive: server demands an immediate ACK and tells us
+            // the cadence it expects. Without this the server eventually
+            // decides the connection is half-dead, stops pushing messages,
+            // and queues them — until either the WS drops or a stray ACK
+            // wakes the server. That "wake up and burst" symptom is the
+            // single biggest reason commands appeared to stack up.
+            if (parsed.MessageType === 'ForceKeepAlive') {
+                const data = (parsed as { Data?: unknown }).Data;
+                // Jellyfin sends Data as seconds (server-side default 60).
+                const seconds = typeof data === 'number' ? data : 60;
+                this.keepaliveIntervalMs = Math.max(
+                    MIN_KEEPALIVE_INTERVAL_MS,
+                    Math.min(MAX_KEEPALIVE_INTERVAL_MS, seconds * 500),
+                );
+                info('ForceKeepAlive', { intervalMs: this.keepaliveIntervalMs, seconds });
+                try {
+                    if (socket.readyState === WebSocket.OPEN) {
+                        socket.send(JSON.stringify({ MessageType: 'KeepAlive' }));
+                    }
+                } catch (err) {
+                    console.warn('[jellyfin-remote] KeepAlive ACK send failed', err);
+                }
+                this.armKeepalive(socket);
+                return;
+            }
+            if (parsed.MessageType === 'KeepAlive') {
+                // Server's own response — nothing to do.
+                return;
+            }
+            if (parsed.MessageType !== 'ForceKeepAlive') {
                 debug('received', parsed.MessageType);
             }
+
+            // Sessions snapshot — route to the controller-mirror sink so
+            // device list + target mirror update without waiting for the
+            // 2s poll. Independent of receiver-mode dispatch.
+            if (parsed.MessageType === 'Sessions') {
+                const currentArgs = this.startArgs;
+                if (currentArgs?.onSessionsPayload) {
+                    const data = (parsed as { Data?: unknown }).Data;
+                    if (Array.isArray(data)) {
+                        try {
+                            currentArgs.onSessionsPayload(data as unknown[]);
+                        } catch (err) {
+                            console.error('[jellyfin-remote] sessions sink failed', err);
+                        }
+                    }
+                }
+                return;
+            }
+
             // Read dispatcherDeps fresh each call rather than from the
             // captured `args` so a setting change applied via start() with a
             // new generation never reaches a stale dispatcher.

@@ -46,6 +46,46 @@ const wrap =
         }
     };
 
+/**
+ * Coalesce a stream of rapid invocations into at most one in-flight call and
+ * a trailing call carrying the latest args. Used for volume / seek so a
+ * 60-event drag turns into 2 POSTs instead of 60 stacked POSTs that make the
+ * receiver "wake up and burst" minutes later.
+ *
+ * - Leading edge: the first call fires immediately for instant feedback.
+ * - Trailing edge: while a call is in flight, additional invocations replace
+ *   the queued "latest" arguments; once the in-flight one resolves, we fire
+ *   one more call with the latest args (and only the latest).
+ */
+const coalesceTrailing = <Args extends unknown[]>(
+    fn: (...args: Args) => Promise<void>,
+): ((...args: Args) => void) => {
+    let inFlight = false;
+    let pending: Args | null = null;
+
+    const run = async (args: Args): Promise<void> => {
+        inFlight = true;
+        try {
+            await fn(...args);
+        } finally {
+            inFlight = false;
+            if (pending) {
+                const next = pending;
+                pending = null;
+                void run(next);
+            }
+        }
+    };
+
+    return (...args: Args): void => {
+        if (inFlight) {
+            pending = args;
+            return;
+        }
+        void run(args);
+    };
+};
+
 export const commandDispatcher = {
     next: wrap('NextTrack', async (ctx: DispatcherCtx): Promise<void> => {
         log('NextTrack', { sessionId: ctx.sessionId });
@@ -91,15 +131,17 @@ export const commandDispatcher = {
         });
     }),
 
-    seek: wrap('Seek', async (ctx: DispatcherCtx, positionMs: number): Promise<void> => {
-        log('Seek', { positionMs, sessionId: ctx.sessionId });
-        await remoteTargetApi.sendPlaystate({
-            command: 'Seek',
-            seekPositionTicks: Math.round(positionMs * 10_000),
-            server: ctx.server,
-            sessionId: ctx.sessionId,
-        });
-    }),
+    seek: coalesceTrailing(
+        wrap('Seek', async (ctx: DispatcherCtx, positionMs: number): Promise<void> => {
+            log('Seek', { positionMs, sessionId: ctx.sessionId });
+            await remoteTargetApi.sendPlaystate({
+                command: 'Seek',
+                seekPositionTicks: Math.round(positionMs * 10_000),
+                server: ctx.server,
+                sessionId: ctx.sessionId,
+            });
+        }),
+    ),
 
     setMute: wrap('Mute', async (ctx: DispatcherCtx, mute: boolean): Promise<void> => {
         log(mute ? 'Mute' : 'Unmute', { sessionId: ctx.sessionId });
@@ -133,16 +175,18 @@ export const commandDispatcher = {
         },
     ),
 
-    setVolume: wrap('SetVolume', async (ctx: DispatcherCtx, volume: number): Promise<void> => {
-        const clamped = Math.max(0, Math.min(100, Math.round(volume)));
-        log('SetVolume', { sessionId: ctx.sessionId, volume: clamped });
-        await remoteTargetApi.sendGeneralCommand({
-            arguments: { Volume: String(clamped) },
-            name: 'SetVolume',
-            server: ctx.server,
-            sessionId: ctx.sessionId,
-        });
-    }),
+    setVolume: coalesceTrailing(
+        wrap('SetVolume', async (ctx: DispatcherCtx, volume: number): Promise<void> => {
+            const clamped = Math.max(0, Math.min(100, Math.round(volume)));
+            log('SetVolume', { sessionId: ctx.sessionId, volume: clamped });
+            await remoteTargetApi.sendGeneralCommand({
+                arguments: { Volume: String(clamped) },
+                name: 'SetVolume',
+                server: ctx.server,
+                sessionId: ctx.sessionId,
+            });
+        }),
+    ),
 
     skipToIndex: wrap('PlaylistIndex', async (ctx: DispatcherCtx, index: number): Promise<void> => {
         log('PlaylistIndex', { index, sessionId: ctx.sessionId });

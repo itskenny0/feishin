@@ -660,6 +660,9 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
         const remote = getRemoteCtx();
         if (remote) {
             void commandDispatcher.next(remote);
+            // Optimistic local mirror flip + hold so a stale poll can't snap
+            // us back to the just-finished song.
+            useRemoteTargetStore.getState().actions.optimisticNext();
             return;
         }
         storeActions.mediaNext();
@@ -707,6 +710,24 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
             const remote = getRemoteCtx();
             if (remote) {
                 void commandDispatcher.skipToIndex(remote, index);
+                // Move the mirror to the target index immediately so the now-
+                // playing card / queue highlight don't lag the click.
+                const s = useRemoteTargetStore.getState();
+                const queue = s.mirrored.queue;
+                if (index >= 0 && index < queue.length) {
+                    const item = queue[index];
+                    const now = Date.now();
+                    useRemoteTargetStore.getState().actions.applyMirrorFromServer({
+                        nowPlayingItem: item,
+                        queueIndex: index,
+                    });
+                    useRemoteTargetStore.getState().actions.hold('nowPlayingItemId', item.id, 2000);
+                    useRemoteTargetStore.getState().actions.patchPlayState({
+                        isPaused: false,
+                        positionMs: 0,
+                        positionSampledAt: now,
+                    });
+                }
                 return;
             }
             storeActions.mediaPlayByIndex(index);
@@ -721,6 +742,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
         const remote = getRemoteCtx();
         if (remote) {
             void commandDispatcher.previous(remote);
+            useRemoteTargetStore.getState().actions.optimisticPrevious();
             return;
         }
         storeActions.mediaPrevious();
@@ -750,7 +772,9 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
             });
             const remote = getRemoteCtx();
             if (remote) {
-                void commandDispatcher.seek(remote, timestamp * 1000);
+                const positionMs = Math.max(0, Math.round(timestamp * 1000));
+                void commandDispatcher.seek(remote, positionMs);
+                useRemoteTargetStore.getState().actions.optimisticSeek(positionMs);
                 return;
             }
             storeActions.mediaSeekToTimestamp(timestamp);

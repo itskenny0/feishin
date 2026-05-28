@@ -3,17 +3,16 @@ import type { ServerListItemWithCredential } from '/@/shared/types/domain-types'
 
 // src/renderer/features/jellyfin-remote-target/controller/sessions-poller.ts
 import { remoteTargetApi } from '/@/renderer/features/jellyfin-remote-target/api/remote-target-api';
-import {
-    findSessionForDevice,
-    mirrorSession,
-} from '/@/renderer/features/jellyfin-remote-target/controller/remote-state-mirror';
+import { findSessionForDevice } from '/@/renderer/features/jellyfin-remote-target/controller/remote-state-mirror';
+import { sessionsSink } from '/@/renderer/features/jellyfin-remote-target/controller/sessions-sink';
 import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
 
-// 1s keeps mirrored state (track changes, external control, position
-// re-anchoring) feeling responsive. Optimistic updates in player-context cover
-// the in-between for locally-initiated commands; this poll reconciles + catches
-// changes made from other clients / the device itself.
-const POLL_INTERVAL_MS = 1_000;
+// Safety-net cadence. When the WS push path is healthy the store updates
+// happen in real time and this poll lands on already-fresh state. When push
+// is broken (server doesn't support SessionsStart, NAT'd WS, receiver mode
+// off) the poll alone keeps things working — at lower fidelity than push,
+// but never broken.
+const POLL_INTERVAL_MS = 2_000;
 const OFFLINE_CUTOFF_MS = 60_000;
 
 export interface PollerStartArgs {
@@ -24,21 +23,27 @@ export interface PollerStartArgs {
 export class SessionsPoller {
     private isRunning = false;
     private offlineSince = 0;
-    /** Track previous queue ids per device to avoid redundant hydrate fetches. */
-    private prevQueueIdsByDevice: Record<string, string[]> = {};
-    /** Raw session payloads indexed by deviceId, populated each tick. */
-    private rawByDeviceId: Record<string, unknown> = {};
 
     private startArgs: null | PollerStartArgs = null;
 
     private timer: null | ReturnType<typeof setInterval> = null;
+
+    /**
+     * Trigger an immediate reconciliation tick. Used by the WS push path
+     * after a device joins or disappears so we don't wait up to
+     * POLL_INTERVAL_MS for the picker to update.
+     */
+    pokeNow(): void {
+        void this.tick();
+    }
 
     start(args: PollerStartArgs) {
         this.stop();
         this.isRunning = true;
         this.startArgs = args;
         useRemoteTargetStore.getState().actions.setPollerActive(true);
-        // Tick immediately so the picker doesn't show 'No devices' for 3 s.
+        // Tick immediately so the picker doesn't show 'No devices' for the
+        // poll interval after open.
         void this.tick();
         this.timer = setInterval(() => void this.tick(), POLL_INTERVAL_MS);
     }
@@ -47,8 +52,6 @@ export class SessionsPoller {
         this.isRunning = false;
         this.startArgs = null;
         this.offlineSince = 0;
-        this.prevQueueIdsByDevice = {};
-        this.rawByDeviceId = {};
         useRemoteTargetStore.getState().actions.setPollerActive(false);
         if (this.timer) {
             clearInterval(this.timer);
@@ -83,23 +86,17 @@ export class SessionsPoller {
             result = await remoteTargetApi.listSessionsWithRaw({ server });
         } catch (err) {
             console.warn('[remote-target] poll failed', err);
-            // Empty the device list on poll failure and record the error so
-            // the picker can show *why* it's empty (auth issue, network down,
-            // bad URL, etc.) instead of pretending there are simply no other
-            // clients online.
             actions.setDeviceList([]);
             actions.setPollError(err instanceof Error ? err.message : String(err));
             this.handleMissingTarget(onOffline);
             return;
         }
 
-        // Successful poll — clear any prior error.
-        actions.setPollError(null);
-        actions.setDeviceList(result.devices);
-        this.rawByDeviceId = {};
-        for (const d of result.devices) {
-            this.rawByDeviceId[d.deviceId] = result.raws[d.sessionId];
-        }
+        // Hand off to the shared sink so push + poll produce structurally
+        // identical store updates. The sink owns the per-device queue cache
+        // so the poll doesn't redundantly re-hydrate after a push tick.
+        const rawSessions = Object.values(result.raws);
+        sessionsSink.apply(rawSessions, server);
 
         const state = useRemoteTargetStore.getState();
         if (!state.targetDeviceId) {
@@ -112,33 +109,8 @@ export class SessionsPoller {
             this.handleMissingTarget(onOffline);
             return;
         }
-
         if (state.status !== 'connected') actions.setStatus('connected');
         this.offlineSince = 0;
-
-        if (state.sessionId !== match.sessionId) {
-            actions.reconcileSession({
-                capabilities: match.capabilities,
-                deviceName: match.deviceName,
-                sessionId: match.sessionId,
-            });
-        }
-
-        const raw = this.rawByDeviceId[match.deviceId];
-        const mirror = mirrorSession(raw, server, this.prevQueueIdsByDevice[match.deviceId] ?? []);
-        actions.setMirrored(mirror.mirrored);
-
-        if (mirror.hydrateQueue) {
-            try {
-                const queue = await mirror.hydrateQueue();
-                actions.setMirrored({ queue, queueIndex: mirror.queueIndex });
-                this.prevQueueIdsByDevice[match.deviceId] = queue.map((s) => s.id);
-            } catch (err) {
-                console.warn('[remote-target] queue hydrate failed', err);
-            }
-        } else if (mirror.queueIndex !== -1) {
-            actions.setMirrored({ queueIndex: mirror.queueIndex });
-        }
     }
 }
 

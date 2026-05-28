@@ -10,6 +10,7 @@ import {
 } from '/@/renderer/api/jellyfin/jellyfin-api';
 import { JF_FIELDS } from '/@/renderer/api/jellyfin/jellyfin-controller';
 import { JellyfinRemoteController } from '/@/renderer/features/jellyfin-remote-control/controller/jellyfin-remote-controller';
+import { sessionsSink } from '/@/renderer/features/jellyfin-remote-target/controller/sessions-sink';
 import { useAuthStore } from '/@/renderer/store/auth.store';
 import { usePlayerActions } from '/@/renderer/store/player.store';
 import { usePlaybackSettings, useVolumeWheelStep } from '/@/renderer/store/settings.store';
@@ -89,6 +90,10 @@ export const useJellyfinRemoteControl = () => {
             },
         });
 
+        // Reset the per-device queue cache on every server switch so the
+        // sink can't carry stale ids over to a new library.
+        sessionsSink.reset();
+
         controller.start({
             authHeader,
             capabilitiesPayload: {
@@ -127,7 +132,13 @@ export const useJellyfinRemoteControl = () => {
                 fetchSongsByIds,
                 playerActions: liveActionsProxy,
             },
+            // Push-side: every `Sessions` snapshot the server sends over the
+            // WS lands here and feeds the controller's mirror in ~real time.
+            // Without this the controller UI lags the receiver by up to the
+            // poll cadence; with this it lags by the WS RTT (~tens of ms).
+            onSessionsPayload: (sessions) => sessionsSink.apply(sessions, currentServer),
             serverUrl,
+            subscribeToSessions: true,
             token,
             version: packageJson.version,
         });
