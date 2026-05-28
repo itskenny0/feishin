@@ -50,6 +50,13 @@ const Equalizer = () => (
 
 interface DevicePickerListProps {
     onClose: () => void;
+    /**
+     * Presentation variant. The desktop popover renders the built-in
+     * header (title + refresh button); the mobile bottom sheet owns the
+     * header itself (title + close button) and only wants the refresh
+     * affordance, so it asks for `variant: 'mobile'`.
+     */
+    variant?: 'desktop' | 'mobile';
 }
 
 /**
@@ -57,7 +64,7 @@ interface DevicePickerListProps {
  * desktop popover or the mobile bottom sheet. Owns selection, transfer and
  * refresh.
  */
-export const DevicePickerList = ({ onClose }: DevicePickerListProps) => {
+export const DevicePickerList = ({ onClose, variant = 'desktop' }: DevicePickerListProps) => {
     const { t } = useTranslation();
     const devices = useRemoteDevices();
     const target = useRemoteTarget();
@@ -133,20 +140,35 @@ export const DevicePickerList = ({ onClose }: DevicePickerListProps) => {
 
     return (
         <div className={styles.list}>
-            <div className={styles.header}>
-                <Text className={styles.headerTitle}>
-                    {t('page.remoteTarget.connectTitle', { defaultValue: 'Connect to a device' })}
-                </Text>
-                <ActionIcon
-                    aria-label={t('common.refresh')}
-                    icon="refresh"
-                    iconProps={{ size: 'sm' }}
-                    onClick={handleRefresh}
-                    size="sm"
-                    tooltip={{ label: t('common.refresh'), openDelay: 400 }}
-                    variant="subtle"
-                />
-            </div>
+            {variant === 'desktop' ? (
+                <div className={styles.header}>
+                    <Text className={styles.headerTitle}>
+                        {t('page.remoteTarget.connectTitle', {
+                            defaultValue: 'Connect to a device',
+                        })}
+                    </Text>
+                    <ActionIcon
+                        aria-label={t('common.refresh')}
+                        icon="refresh"
+                        iconProps={{ size: 'sm' }}
+                        onClick={handleRefresh}
+                        size="sm"
+                        tooltip={{ label: t('common.refresh'), openDelay: 400 }}
+                        variant="subtle"
+                    />
+                </div>
+            ) : (
+                <div className={styles.mobileToolbar}>
+                    <ActionIcon
+                        aria-label={t('common.refresh')}
+                        icon="refresh"
+                        iconProps={{ size: 'sm' }}
+                        onClick={handleRefresh}
+                        size="sm"
+                        variant="subtle"
+                    />
+                </div>
+            )}
 
             <UnstyledButton
                 className={`${styles.row} ${target.isRemote ? '' : styles.rowActive}`}

@@ -1,0 +1,100 @@
+/*
+ * Mobile bottom sheet: backdrop + sheet that sizes to its content and
+ * sits at the bottom of the viewport. Matches the look the mobile
+ * fullscreen player uses (drag handle, safe-area padding) so the two
+ * surfaces feel like the same family.
+ */
+
+.backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    background: rgb(0 0 0 / 50%);
+    -webkit-tap-highlight-color: transparent;
+}
+
+.sheet {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 1001;
+    display: flex;
+    flex-direction: column;
+    max-height: 75vh;
+
+    /*
+     * Pad the bottom by the device safe area so the last row clears
+     * the gesture-nav pill on Android phones. The top safe-area is
+     * absorbed by .header below — we don't want the whole sheet to
+     * slide UNDER the notch.
+     */
+    padding-bottom: max(env(safe-area-inset-bottom, 0px), var(--android-safe-bottom, 0px));
+    overflow: hidden;
+    touch-action: none;
+    background: var(--theme-colors-background);
+    border-radius: 16px 16px 0 0;
+    box-shadow: 0 -8px 24px rgb(0 0 0 / 35%);
+}
+
+/*
+ * Header strip — pad the TOP by env(safe-area-inset-top) so the
+ * Android / iOS status bar never overlaps the title. The mobile
+ * fullscreen player applies the same pattern.
+ */
+.header {
+    display: flex;
+    flex-shrink: 0;
+    flex-direction: column;
+    padding-top: max(env(safe-area-inset-top, 0px), var(--android-safe-top, 0px));
+}
+
+.drag-handle {
+    display: flex;
+    flex-shrink: 0;
+    justify-content: center;
+    width: 100%;
+    padding: 10px 0 6px;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.drag-handle-pill {
+    width: 44px;
+    height: 4px;
+    background: rgb(255 255 255 / 45%);
+    border-radius: 4px;
+    transition: background 160ms ease;
+}
+
+.title-row {
+    display: flex;
+    flex-shrink: 0;
+    gap: 8px;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 16px 8px;
+}
+
+.title {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 1rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.body {
+    flex: 1 1 auto;
+
+    /*
+     * Allow vertical scroll inside the body without the surrounding
+     * sheet's pan listener grabbing the gesture. We only claim
+     * pull-to-dismiss when scrollTop === 0 on the body.
+     */
+    padding: 0 12px 12px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    touch-action: pan-y;
+    -webkit-overflow-scrolling: touch;
+}

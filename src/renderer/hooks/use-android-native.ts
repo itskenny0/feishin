@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 
+import { useBottomSheetStore } from '/@/renderer/features/jellyfin-remote-target/components/bottom-sheet/bottom-sheet-store';
 import {
     useAppStore,
     useFullScreenPlayerStore,
@@ -212,6 +213,18 @@ export const useAndroidBackButton = () => {
                         // Something popped. Consume the back press.
                         return;
                     }
+
+                    // 1b. Custom bottom sheets (e.g. the mobile Jellyfin
+                    //     "Connect to a device" picker). These render
+                    //     outside the Radix popper tree, so the Escape
+                    //     dispatch above doesn't reach them — they
+                    //     register a dismiss callback in
+                    //     useBottomSheetStore and we walk the stack
+                    //     here. Without this, the back gesture used to
+                    //     fall through to window.history.back() while
+                    //     the sheet was open, which the Capacitor
+                    //     WebView interpreted as "leave the app".
+                    if (useBottomSheetStore.getState().dismissTop()) return;
 
                     // 2-4. Stored overlays. Read via getState() (not the
                     //      hook factories) so we can call from outside a

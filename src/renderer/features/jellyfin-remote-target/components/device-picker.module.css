@@ -11,6 +11,17 @@
     padding: 4px 8px 8px;
 }
 
+/*
+ * On mobile the BottomSheet owns the title + close button, so the
+ * list only carries the refresh affordance. Aligned right so it sits
+ * roughly under the BottomSheet's X button.
+ */
+.mobile-toolbar {
+    display: flex;
+    justify-content: flex-end;
+    padding: 0 4px 4px;
+}
+
 .header-title {
     font-size: 1rem;
     font-weight: 700;

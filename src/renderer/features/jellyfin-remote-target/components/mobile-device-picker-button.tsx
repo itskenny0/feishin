@@ -1,12 +1,12 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { BottomSheet } from '/@/renderer/features/jellyfin-remote-target/components/bottom-sheet/bottom-sheet';
 import { DevicePickerList } from '/@/renderer/features/jellyfin-remote-target/components/device-picker-list';
 import { useRemoteStatus } from '/@/renderer/features/jellyfin-remote-target/hooks/use-remote-status';
 import { useRemoteTarget } from '/@/renderer/features/jellyfin-remote-target/hooks/use-remote-target';
 import { useCurrentServer } from '/@/renderer/store';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
-import { Drawer } from '/@/shared/components/drawer/drawer';
 import { ServerType } from '/@/shared/types/domain-types';
 
 interface MobileDevicePickerButtonProps {
@@ -17,7 +17,8 @@ interface MobileDevicePickerButtonProps {
 /**
  * Mobile Jellyfin Connect entry point — the cast icon (mini-player, fullscreen
  * bottom bar, home header). Opens the device list as a Spotify-style bottom
- * sheet. Renders nothing unless the current server is Jellyfin.
+ * sheet rendered by the shared `BottomSheet` component. Renders nothing unless
+ * the current server is Jellyfin.
  */
 export const MobileDevicePickerButton = ({
     iconSize = 'lg',
@@ -28,6 +29,8 @@ export const MobileDevicePickerButton = ({
     const target = useRemoteTarget();
     const status = useRemoteStatus();
     const [opened, setOpened] = useState(false);
+
+    const handleClose = useCallback(() => setOpened(false), []);
 
     if (!server || server.type !== ServerType.JELLYFIN) return null;
 
@@ -54,19 +57,13 @@ export const MobileDevicePickerButton = ({
                 tooltip={{ label: t('page.remoteTarget.listenOn'), openDelay: 400 }}
                 variant={variant}
             />
-            <Drawer
-                onClose={() => setOpened(false)}
+            <BottomSheet
+                onClose={handleClose}
                 opened={opened}
-                padding="md"
-                position="bottom"
-                radius="lg"
-                size="auto"
-                styles={{ content: { borderRadius: '16px 16px 0 0' } }}
-                title={null}
-                withCloseButton={false}
+                title={t('page.remoteTarget.connectTitle', { defaultValue: 'Connect to a device' })}
             >
-                <DevicePickerList onClose={() => setOpened(false)} />
-            </Drawer>
+                <DevicePickerList onClose={handleClose} variant="mobile" />
+            </BottomSheet>
         </>
     );
 };

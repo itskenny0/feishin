@@ -1,7 +1,8 @@
 import { MantineProvider } from '@mantine/core';
-import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { useBottomSheetStore } from '/@/renderer/features/jellyfin-remote-target/components/bottom-sheet/bottom-sheet-store';
 import { MobileDevicePickerButton } from '/@/renderer/features/jellyfin-remote-target/components/mobile-device-picker-button';
 import { useAuthStore } from '/@/renderer/store/auth.store';
 import { ServerListItemWithCredential, ServerType } from '/@/shared/types/domain-types';
@@ -23,9 +24,19 @@ const renderButton = () =>
         </MantineProvider>,
     );
 
+const openSheet = async (container: HTMLElement) => {
+    fireEvent.click(container.querySelector('button') as HTMLButtonElement);
+    await waitFor(() => expect(document.querySelector('[role="dialog"]')).not.toBeNull());
+};
+
 afterEach(() => {
     cleanup();
     useAuthStore.setState({ currentServer: null });
+    // Drain any leftover bottom-sheet entries between tests.
+    const sheetState = useBottomSheetStore.getState();
+    for (const entry of [...sheetState.dismissStack]) {
+        sheetState.remove(entry.id);
+    }
 });
 
 describe('MobileDevicePickerButton', () => {
@@ -42,8 +53,7 @@ describe('MobileDevicePickerButton', () => {
         useAuthStore.setState({ currentServer: jellyfinServer });
         const { container } = renderButton();
         expect(document.querySelector('[role="dialog"]')).toBeNull();
-        fireEvent.click(container.querySelector('button') as HTMLButtonElement);
-        await waitFor(() => expect(document.querySelector('[role="dialog"]')).not.toBeNull());
+        await openSheet(container);
     });
 
     it('renders nothing when there is no current server', () => {
@@ -58,5 +68,89 @@ describe('MobileDevicePickerButton', () => {
         });
         const { container } = renderButton();
         expect(container.querySelector('button')).toBeNull();
+    });
+
+    it('closes the sheet when the explicit close button (X) is clicked', async () => {
+        useAuthStore.setState({ currentServer: jellyfinServer });
+        const { container } = renderButton();
+        await openSheet(container);
+
+        const closeBtn = await screen.findByTestId('bottom-sheet-close');
+        fireEvent.click(closeBtn);
+
+        await waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
+    });
+
+    it('closes the sheet when the backdrop is tapped', async () => {
+        useAuthStore.setState({ currentServer: jellyfinServer });
+        const { container } = renderButton();
+        await openSheet(container);
+
+        const backdrop = await screen.findByTestId('bottom-sheet-backdrop');
+        fireEvent.click(backdrop);
+
+        await waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
+    });
+
+    it('closes the sheet on a downward swipe past the dismiss threshold', async () => {
+        useAuthStore.setState({ currentServer: jellyfinServer });
+        const { container } = renderButton();
+        await openSheet(container);
+
+        const sheet = await screen.findByTestId('bottom-sheet');
+
+        // Simulate a strong downward pull starting at the sheet's top
+        // edge. The component listens via native addEventListener so
+        // dispatch a real TouchEvent rather than React's synthetic.
+        const touchAt = (clientY: number, type: string) => {
+            const evt = new Event(type, { bubbles: true, cancelable: true }) as TouchEvent & {
+                touches: Array<{ clientX: number; clientY: number }>;
+            };
+            (evt as unknown as { touches: unknown }).touches = [{ clientX: 100, clientY }];
+            sheet.dispatchEvent(evt);
+        };
+
+        act(() => {
+            touchAt(100, 'touchstart');
+        });
+        act(() => {
+            touchAt(400, 'touchmove');
+        });
+        act(() => {
+            touchAt(450, 'touchend');
+        });
+
+        await waitFor(
+            () => {
+                expect(document.querySelector('[role="dialog"]')).toBeNull();
+            },
+            { timeout: 1500 },
+        );
+    });
+
+    it('closes the sheet when the Android back gesture fires (via dismissTop)', async () => {
+        useAuthStore.setState({ currentServer: jellyfinServer });
+        const { container } = renderButton();
+        await openSheet(container);
+
+        // The Android back handler calls dismissTop() on the
+        // bottom-sheet store before walking the router history.
+        let consumed = false;
+        act(() => {
+            consumed = useBottomSheetStore.getState().dismissTop();
+        });
+        expect(consumed).toBe(true);
+
+        await waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
+    });
+
+    it('closes the sheet when the Escape key is pressed', async () => {
+        useAuthStore.setState({ currentServer: jellyfinServer });
+        const { container } = renderButton();
+        await openSheet(container);
+
+        fireEvent.keyDown(document, { code: 'Escape', key: 'Escape' });
+
+        await waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
     });
 });
