@@ -119,3 +119,143 @@ describe('sessionsSink truncated-queue caching', () => {
         expect(hydrateSpy.mock.calls.length).toBe(2);
     });
 });
+
+/**
+ * The sessions-sink is the shared seam between the poll path and the WS push
+ * path — both feed `apply()` and rely on it to produce structurally identical
+ * store updates. Regressions in this seam have shipped as "the picker shows
+ * the device but the now-playing UI is empty" / "selecting a device works on
+ * the next poll but not when the push lands first". These tests lock in the
+ * invariants that matter for end-to-end Connect behaviour.
+ */
+
+const server: ServerListItemWithCredential = {
+    credential: 'cred',
+    id: 'srv-1',
+    name: 'Demo',
+    type: ServerType.JELLYFIN,
+    url: 'https://example.test',
+    userId: 'user-1',
+    username: 'demo',
+};
+
+const sessionRow = (over: Partial<Record<string, unknown>> = {}): Record<string, unknown> => ({
+    Capabilities: { SupportsMediaControl: true },
+    Client: 'Jellyfin Web',
+    DeviceId: 'dev-living-room',
+    DeviceName: 'Living Room',
+    Id: 'sess-1',
+    LastActivityDate: '2024-01-01T00:00:00Z',
+    NowPlayingItem: null,
+    PlayState: { IsPaused: false, PositionTicks: 0, RepeatMode: 'RepeatNone', VolumeLevel: 60 },
+    SupportedCommands: ['SetVolume', 'SetRepeatMode'],
+    SupportsMediaControl: true,
+    SupportsRemoteControl: true,
+    ...over,
+});
+
+beforeEach(() => {
+    sessionsSink.reset();
+    useRemoteTargetStore.getState().actions.clearTarget();
+    useRemoteTargetStore.setState({ deviceList: [], hasPolledOnce: false, pollError: 'previous' });
+});
+
+afterEach(() => {
+    vi.restoreAllMocks();
+});
+
+describe('sessionsSink.apply — device list', () => {
+    it('populates deviceList from valid rows and clears any prior pollError', () => {
+        sessionsSink.apply([sessionRow()], server);
+        const state = useRemoteTargetStore.getState();
+        expect(state.deviceList).toHaveLength(1);
+        expect(state.deviceList[0].deviceId).toBe('dev-living-room');
+        expect(state.deviceList[0].sessionId).toBe('sess-1');
+        expect(state.pollError).toBeNull();
+        expect(state.hasPolledOnce).toBe(true);
+    });
+
+    it('drops malformed rows instead of poisoning the list', () => {
+        sessionsSink.apply(
+            [
+                null,
+                'nope',
+                { DeviceId: 'no-session-id' },
+                { Id: 'no-device-id' },
+                sessionRow({ DeviceId: 'd2', Id: 's2' }),
+            ],
+            server,
+        );
+        const list = useRemoteTargetStore.getState().deviceList;
+        expect(list).toHaveLength(1);
+        expect(list[0].deviceId).toBe('d2');
+    });
+});
+
+describe('sessionsSink.apply — target reconciliation', () => {
+    it('does no target work when there is no target selected', () => {
+        sessionsSink.apply([sessionRow()], server);
+        const state = useRemoteTargetStore.getState();
+        expect(state.sessionId).toBeNull();
+        expect(state.status).toBe('idle');
+    });
+
+    it('updates sessionId via reconcileSession when the target reappears with a new session', () => {
+        useRemoteTargetStore.getState().actions.setTarget({
+            capabilities: [],
+            deviceId: 'dev-living-room',
+            deviceName: 'Living Room',
+            sessionId: '__pending__',
+        });
+        sessionsSink.apply([sessionRow({ Id: 'sess-fresh' })], server);
+        const state = useRemoteTargetStore.getState();
+        expect(state.sessionId).toBe('sess-fresh');
+        expect(state.targetDeviceId).toBe('dev-living-room');
+        // reconcileSession should not wipe the user-visible name.
+        expect(state.targetDeviceName).toBe('Living Room');
+        expect(state.mirrored.capabilities).toEqual(['SetVolume', 'SetRepeatMode']);
+    });
+
+    it('leaves status untouched when the target device is missing from the snapshot — only the poller decides reconnecting→offline', () => {
+        useRemoteTargetStore.getState().actions.setTarget({
+            capabilities: [],
+            deviceId: 'dev-living-room',
+            deviceName: 'Living Room',
+            sessionId: 'sess-1',
+        });
+        // setTarget moves us to 'connected'. A push that doesn't include this
+        // device must NOT downgrade to 'reconnecting' — that's the poller's
+        // responsibility because the poller alone knows about time.
+        sessionsSink.apply([sessionRow({ DeviceId: 'other-dev', Id: 'sess-other' })], server);
+        expect(useRemoteTargetStore.getState().status).toBe('connected');
+    });
+
+    it('mirrors playState from the matching session without disturbing optimistic holds', () => {
+        useRemoteTargetStore.getState().actions.setTarget({
+            capabilities: [],
+            deviceId: 'dev-living-room',
+            deviceName: 'Living Room',
+            sessionId: 'sess-1',
+        });
+        // User just locally bumped the volume optimistically.
+        useRemoteTargetStore.getState().actions.patchPlayState({ volume: 88 });
+
+        // A stale push lands with the pre-bump volume.
+        sessionsSink.apply(
+            [
+                sessionRow({
+                    PlayState: {
+                        IsPaused: false,
+                        PositionTicks: 0,
+                        RepeatMode: 'RepeatNone',
+                        VolumeLevel: 60,
+                    },
+                }),
+            ],
+            server,
+        );
+
+        // Hold protects the optimistic value.
+        expect(useRemoteTargetStore.getState().mirrored.playState.volume).toBe(88);
+    });
+});

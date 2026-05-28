@@ -38,13 +38,40 @@ const assertOk = (endpoint: string, res: { body: unknown; status: number | undef
     }
 };
 
+interface RawSession {
+    Capabilities?: { SupportsMediaControl?: boolean };
+    Client?: unknown;
+    DeviceId?: unknown;
+    DeviceName?: unknown;
+    Id?: unknown;
+    LastActivityDate?: unknown;
+    NowPlayingItem?: null | {
+        AlbumArtist?: null | string;
+        Artists?: string[];
+        Id?: string;
+        Name?: string;
+    };
+    PlayState?: { IsPaused?: boolean };
+    SupportedCommands?: unknown;
+    SupportsMediaControl?: boolean;
+    SupportsRemoteControl?: boolean;
+}
+
 type ServerArg = { server: ServerListItemWithCredential };
 
-const safeSessionToDevice = (s: any): null | RemoteDevice => {
-    if (!s || typeof s.Id !== 'string' || typeof s.DeviceId !== 'string') return null;
+/**
+ * Convert a raw `/Sessions` payload row to a `RemoteDevice`. Narrow and
+ * defensive — any malformed row is dropped rather than allowed to poison the
+ * device list. Shared by the poller path (this module) and the WS push path
+ * (sessions-sink) so both produce structurally identical devices.
+ */
+export const safeSessionToDevice = (raw: unknown): null | RemoteDevice => {
+    if (!raw || typeof raw !== 'object') return null;
+    const s = raw as RawSession;
+    if (typeof s.Id !== 'string' || typeof s.DeviceId !== 'string') return null;
     const np = s.NowPlayingItem ?? null;
     return {
-        capabilities: Array.isArray(s.SupportedCommands) ? s.SupportedCommands : [],
+        capabilities: Array.isArray(s.SupportedCommands) ? (s.SupportedCommands as string[]) : [],
         client: typeof s.Client === 'string' ? s.Client : '',
         deviceId: s.DeviceId,
         deviceName: typeof s.DeviceName === 'string' ? s.DeviceName : 'Unknown device',

@@ -68,15 +68,6 @@ export class SessionsPoller {
         this.timer = setTimeout(() => void this.tick(), 150);
     }
 
-    /**
-     * Trigger an immediate reconciliation tick. Used by the WS push path
-     * after a device joins or disappears so we don't wait up to
-     * POLL_INTERVAL_MS for the picker to update.
-     */
-    pokeNow(): void {
-        void this.tick();
-    }
-
     start(args: PollerStartArgs) {
         this.stop();
         this.isRunning = true;

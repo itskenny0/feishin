@@ -78,7 +78,6 @@ interface RemoteTargetState {
          * by a stale server frame.
          */
         applyMirrorFromServer: (mirrored: RemoteMirrorInput) => void;
-        clearHold: (field: RemoteHoldField) => void;
         clearTarget: () => void;
         /**
          * Record an optimistic expectation for `field`. Subsequent server
@@ -182,23 +181,6 @@ const valuesAgree = (field: RemoteHoldField, expected: unknown, incoming: unknow
     return expected === incoming;
 };
 
-const extractFieldValue = (
-    field: RemoteHoldField,
-    mirrored: RemoteMirrorInput,
-): { present: boolean; value: unknown } => {
-    if (field === 'nowPlayingItemId') {
-        if (!('nowPlayingItem' in mirrored)) return { present: false, value: undefined };
-        return { present: true, value: mirrored.nowPlayingItem?.id ?? null };
-    }
-    if (!mirrored.playState || !(field in mirrored.playState)) {
-        return { present: false, value: undefined };
-    }
-    return {
-        present: true,
-        value: (mirrored.playState as unknown as Record<string, unknown>)[field],
-    };
-};
-
 export const useRemoteTargetStore = create<RemoteTargetState>((set) => ({
     actions: {
         applyMirrorFromServer: (incoming) =>
@@ -265,13 +247,6 @@ export const useRemoteTargetStore = create<RemoteTargetState>((set) => ({
                 }
 
                 return { holds, mirrored };
-            }),
-        clearHold: (field) =>
-            set((s) => {
-                if (!s.holds[field]) return {};
-                const holds = { ...s.holds };
-                delete holds[field];
-                return { holds };
             }),
         clearTarget: () =>
             set({
@@ -489,7 +464,5 @@ export const useRemoteTargetStore = create<RemoteTargetState>((set) => ({
     targetDeviceName: null,
 }));
 
-export const useRemoteTargetActions = () => useRemoteTargetStore((s) => s.actions);
-
 // Re-export for tests / instrumentation.
-export { extractFieldValue, valuesAgree };
+export { valuesAgree };
