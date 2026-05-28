@@ -16,14 +16,14 @@ import { useEffect } from 'react';
 import { shallow } from 'zustand/shallow';
 
 import {
-    applyPeerStateToStore,
-    peerStateToMirrored,
-} from '/@/renderer/features/peer-sync/controller/peer-state-mirror';
-import {
     isPeerClientConnected,
     startPeerClient,
     stopPeerClient,
 } from '/@/renderer/features/peer-sync/controller/peer-client';
+import {
+    applyPeerStateToStore,
+    peerStateToMirrored,
+} from '/@/renderer/features/peer-sync/controller/peer-state-mirror';
 import {
     setSyncEnabled,
     sweepStalePresence,
@@ -77,8 +77,7 @@ export const usePeerSync = () => {
                 userId: currentServer.userId,
             },
             {
-                onConnectionChange: (status) =>
-                    log('connection', { status }),
+                onConnectionChange: (status) => log('connection', { status }),
                 onState: (_from, state) => {
                     // Forward into the existing remote-target store via the
                     // mirror seam — the same path the Jellyfin sessions-sink
@@ -90,13 +89,7 @@ export const usePeerSync = () => {
         return () => {
             if (isPeerClientConnected()) stopPeerClient();
         };
-    }, [
-        currentServer,
-        peerSync.brokerUrl,
-        peerSync.enabled,
-        peerSync.peerId,
-        peerSync.roomKey,
-    ]);
+    }, [currentServer, peerSync.brokerUrl, peerSync.enabled, peerSync.peerId, peerSync.roomKey]);
 
     // Presence sweeper — flips the transport selector back to Jellyfin
     // when a peer goes silent past the freshness window.

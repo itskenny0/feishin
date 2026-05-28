@@ -13,16 +13,16 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { applyPeerStateToStore } from '/@/renderer/features/peer-sync/controller/peer-state-mirror';
+import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
 import { peerDispatcher } from '/@/renderer/features/peer-sync/controller/peer-dispatcher';
+import { applyPeerStateToStore } from '/@/renderer/features/peer-sync/controller/peer-state-mirror';
 import {
     __resetForTests,
     recordPresence,
     setSyncEnabled,
 } from '/@/renderer/features/peer-sync/controller/transport-selector';
-import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
-import { codec } from '/@/renderer/features/peer-sync/protocol/codec';
 import { buildState } from '/@/renderer/features/peer-sync/protocol/builders';
+import { codec } from '/@/renderer/features/peer-sync/protocol/codec';
 
 // Spy on the publish path. Capture every command attempt for assertion.
 const published: Array<{ a?: unknown; k: string; peerId: string }> = [];

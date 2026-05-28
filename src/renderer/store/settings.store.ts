@@ -872,16 +872,16 @@ const PeerSyncBrokerSettingsSchema = z.object({
 });
 
 const PeerSyncSettingsSchema = z.object({
-    /** Master toggle. Off = subsystem fully inert. */
-    enabled: z.boolean().default(false),
-    /** Optional broker URL. Empty = auto-discover via mDNS on desktop. */
-    brokerUrl: z.string().default(''),
     /** Embedded broker settings (desktop only). */
     broker: PeerSyncBrokerSettingsSchema.default({
         enabled: false,
         host: '0.0.0.0',
         port: 8083,
     }),
+    /** Optional broker URL. Empty = auto-discover via mDNS on desktop. */
+    brokerUrl: z.string().default(''),
+    /** Master toggle. Off = subsystem fully inert. */
+    enabled: z.boolean().default(false),
     /** Stable per-install peer id — auto-generated on first read. */
     peerId: z.string().default(''),
     /** Shared room key — auto-generated on first opt-in. */
@@ -2131,6 +2131,19 @@ const initialState: SettingsState = {
             scaleNonActive: 0.95,
         },
     },
+    peerSync: {
+        broker: {
+            enabled: false,
+            host: '0.0.0.0',
+            port: 8083,
+            tlsCertPath: undefined,
+            tlsKeyPath: undefined,
+        },
+        brokerUrl: '',
+        enabled: false,
+        peerId: '',
+        roomKey: '',
+    },
     playback: {
         audioDeviceId: undefined,
         audioFadeOnStatusChange: true,
@@ -2164,19 +2177,6 @@ const initialState: SettingsState = {
         },
         type: PlayerType.WEB,
         webAudio: true,
-    },
-    peerSync: {
-        broker: {
-            enabled: false,
-            host: '0.0.0.0',
-            port: 8083,
-            tlsCertPath: undefined,
-            tlsKeyPath: undefined,
-        },
-        brokerUrl: '',
-        enabled: false,
-        peerId: '',
-        roomKey: '',
     },
     queryBuilder: {
         tag: [],

@@ -22,6 +22,10 @@ import type { IClientOptions, MqttClient } from 'mqtt';
 
 import mqtt from 'mqtt';
 
+import {
+    forgetPeer,
+    recordPresence,
+} from '/@/renderer/features/peer-sync/controller/transport-selector';
 import { codec } from '/@/renderer/features/peer-sync/protocol/codec';
 import {
     parseTopic,
@@ -29,10 +33,6 @@ import {
     topicFor,
     userPeersWildcard,
 } from '/@/renderer/features/peer-sync/protocol/topics';
-import {
-    forgetPeer,
-    recordPresence,
-} from '/@/renderer/features/peer-sync/controller/transport-selector';
 import {
     PeerCommand,
     PeerFrame,
@@ -69,9 +69,9 @@ interface ActiveSession {
     args: PeerClientStartArgs;
     client: MqttClient;
     events: PeerEvents;
-    selfAddress: PeerAddress;
     /** Most recent retained snapshot we've published — used to clear on stop. */
     publishedStateTopic: null | string;
+    selfAddress: PeerAddress;
 }
 
 let session: ActiveSession | null = null;
@@ -128,10 +128,7 @@ const handleMessage = (s: ActiveSession, topic: string, payload: Uint8Array): vo
  * connected to the same broker is a no-op; differing args restart the
  * client.
  */
-export const startPeerClient = (
-    args: PeerClientStartArgs,
-    events: PeerEvents = {},
-): void => {
+export const startPeerClient = (args: PeerClientStartArgs, events: PeerEvents = {}): void => {
     if (session) {
         const same =
             session.args.brokerUrl === args.brokerUrl &&
@@ -253,8 +250,7 @@ export const publishOwnState = (state: PeerState): void => {
 };
 
 /** True when we're connected to the broker right now. */
-export const isPeerClientConnected = (): boolean =>
-    Boolean(session?.client?.connected);
+export const isPeerClientConnected = (): boolean => Boolean(session?.client?.connected);
 
 /** Tear the session down. Clears our retained presence + state. */
 export const stopPeerClient = (): void => {

@@ -20,16 +20,14 @@ export interface PeerAddress {
     userId: string;
 }
 
-const sanitize = (segment: string): string =>
-    segment.replace(/[\s/+#]/g, '_').slice(0, 64) || '_';
+const sanitize = (segment: string): string => segment.replace(/[\s/+#]/g, '_').slice(0, 64) || '_';
 
 /** Build the full topic for a given peer + leaf. */
 export const topicFor = (addr: PeerAddress, leaf: TopicLeaf): string =>
     `${ROOT}/${sanitize(addr.userId)}/${sanitize(addr.peerId)}/${leaf}`;
 
 /** Build the subscription wildcard that matches every peer under a user. */
-export const userPeersWildcard = (userId: string): string =>
-    `${ROOT}/${sanitize(userId)}/+/+`;
+export const userPeersWildcard = (userId: string): string => `${ROOT}/${sanitize(userId)}/+/+`;
 
 /** Build the subscription wildcard for a single peer. */
 export const peerWildcard = (addr: PeerAddress): string =>
@@ -39,9 +37,7 @@ export const peerWildcard = (addr: PeerAddress): string =>
  * Parse a topic into its parts. Returns null if the topic is not under our
  * namespace or has the wrong shape — callers MUST drop messages with null.
  */
-export const parseTopic = (
-    topic: string,
-): { addr: PeerAddress; leaf: TopicLeaf } | null => {
+export const parseTopic = (topic: string): null | { addr: PeerAddress; leaf: TopicLeaf } => {
     const parts = topic.split('/');
     // root has a `/` in it, so split gives us: feishin, v1, userId, peerId, leaf
     if (parts.length !== 5) return null;

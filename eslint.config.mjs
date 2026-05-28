@@ -35,7 +35,10 @@ export default tseslint.config(
             '@typescript-eslint/explicit-function-return-type': 'off',
             '@typescript-eslint/no-duplicate-enum-values': 'off',
             '@typescript-eslint/no-explicit-any': 'off',
-            '@typescript-eslint/no-unused-vars': 'warn',
+            '@typescript-eslint/no-unused-vars': [
+                'warn',
+                { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+            ],
             curly: ['error', 'all'],
             indent: [
                 'error',

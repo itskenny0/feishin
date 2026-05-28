@@ -29,7 +29,9 @@ vi.mock('idb-keyval', () => {
 // A handful of test files run in the `node` environment (e.g. main-process
 // broker smoke tests) and have no `window`. Skip the jsdom polyfills below
 // when running in that mode — they exist purely to shore up jsdom gaps.
-const hasWindow = typeof globalThis !== 'undefined' && typeof (globalThis as { window?: unknown }).window !== 'undefined';
+const hasWindow =
+    typeof globalThis !== 'undefined' &&
+    typeof (globalThis as { window?: unknown }).window !== 'undefined';
 
 // jsdom doesn't implement PointerEvent. useLongPress reads `pointerType`,
 // `clientX`, and `clientY` off the event, so provide a minimal shim built on

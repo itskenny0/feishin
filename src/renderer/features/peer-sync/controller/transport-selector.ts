@@ -20,6 +20,8 @@ import type { TransportKind } from '/@/renderer/features/peer-sync/types';
 /** Window in which a peer's presence frame counts as "fresh". */
 export const MQTT_PRESENCE_TTL_MS = 12_000;
 
+type Listener = (peerId: string, kind: TransportKind) => void;
+
 interface PeerPresenceRecord {
     /** epoch ms when we last saw this peer announce online. */
     lastSeenAt: number;
@@ -33,8 +35,6 @@ interface TransportSelectorState {
     /** True when the user has flipped the master Peer Sync toggle on. */
     syncEnabled: boolean;
 }
-
-type Listener = (peerId: string, kind: TransportKind) => void;
 
 const log = (...args: unknown[]) => console.info('[peer-sync]', ...args);
 

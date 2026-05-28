@@ -84,7 +84,6 @@ function mapNode(
 }
 
 export const FolderPlaylistMigrationModal = (
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     _props: ContextModalProps<FolderPlaylistMigrationModalProps>,
 ) => {
     const { t } = useTranslation();

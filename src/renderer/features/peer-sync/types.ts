@@ -10,6 +10,20 @@
 /** Supported wire-format protocol version. Bump on any breaking change. */
 export const PROTOCOL_VERSION = 1 as const;
 
+/** Controller → target command frame. */
+export interface PeerCommand {
+    /** Optional payload — shape depends on `k`. e.g. seek carries `{ positionMs }`. */
+    a?: unknown;
+    /** Command verb. */
+    k: PeerCommandKind;
+    /** Frame type discriminator. */
+    t: 'cmd';
+    /** Publisher timestamp (epoch ms). Receivers MAY ignore drift > 5s. */
+    ts: number;
+    /** Wire-format version. */
+    v: typeof PROTOCOL_VERSION;
+}
+
 /**
  * Command verbs that flow controller → target. Mirrors the existing Jellyfin
  * command set 1:1 so the transport selector can swap lanes transparently.
@@ -25,31 +39,21 @@ export type PeerCommandKind =
     | 'shuffle'
     | 'volume';
 
-/** Repeat-mode wire enum. Distinct from Jellyfin's strings — codec maps both ways. */
-export type PeerRepeatMode = 'all' | 'off' | 'one';
+export type PeerFrame = PeerCommand | PeerPresence | PeerState;
 
-/** Compact track snapshot embedded in state frames. Optional cover-art URL. */
-export interface PeerTrack {
-    album: null | string;
-    art?: null | string;
-    artist: null | string;
-    id: string;
-    title: null | string;
-}
-
-/** Controller → target command frame. */
-export interface PeerCommand {
-    /** Optional payload — shape depends on `k`. e.g. seek carries `{ positionMs }`. */
-    a?: unknown;
-    /** Command verb. */
-    k: PeerCommandKind;
+/** Retained presence frame. LWT publishes `{ online: false }` on disconnect. */
+export interface PeerPresence {
+    online: boolean;
     /** Frame type discriminator. */
-    t: 'cmd';
-    /** Publisher timestamp (epoch ms). Receivers MAY ignore drift > 5s. */
+    t: 'presence';
+    /** Publisher timestamp (epoch ms). */
     ts: number;
     /** Wire-format version. */
     v: typeof PROTOCOL_VERSION;
 }
+
+/** Repeat-mode wire enum. Distinct from Jellyfin's strings — codec maps both ways. */
+export type PeerRepeatMode = 'all' | 'off' | 'one';
 
 /** Retained target → controller state snapshot. Late joiners get the latest. */
 export interface PeerState {
@@ -75,18 +79,14 @@ export interface PeerState {
     vol: number;
 }
 
-/** Retained presence frame. LWT publishes `{ online: false }` on disconnect. */
-export interface PeerPresence {
-    online: boolean;
-    /** Frame type discriminator. */
-    t: 'presence';
-    /** Publisher timestamp (epoch ms). */
-    ts: number;
-    /** Wire-format version. */
-    v: typeof PROTOCOL_VERSION;
+/** Compact track snapshot embedded in state frames. Optional cover-art URL. */
+export interface PeerTrack {
+    album: null | string;
+    art?: null | string;
+    artist: null | string;
+    id: string;
+    title: null | string;
 }
-
-export type PeerFrame = PeerCommand | PeerPresence | PeerState;
 
 /**
  * A transport is the runtime abstraction the dispatcher publishes through.

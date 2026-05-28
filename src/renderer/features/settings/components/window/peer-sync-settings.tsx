@@ -25,8 +25,8 @@ import { SettingsSection } from '/@/renderer/features/settings/components/settin
 import { usePeerSyncSettings, useSettingsStoreActions } from '/@/renderer/store';
 import { Button } from '/@/shared/components/button/button';
 import { NumberInput } from '/@/shared/components/number-input/number-input';
-import { Text } from '/@/shared/components/text/text';
 import { TextInput } from '/@/shared/components/text-input/text-input';
+import { Text } from '/@/shared/components/text/text';
 import { toast } from '/@/shared/components/toast/toast';
 
 const peerBrokerApi = isElectron() ? window.api.peerBroker : null;
@@ -78,10 +78,7 @@ export const PeerSyncSettings = memo(() => {
     useEffect(() => setBrokerUrlDraft(settings.brokerUrl), [settings.brokerUrl]);
     useEffect(() => setRoomKeyDraft(settings.roomKey), [settings.roomKey]);
 
-    const isPublicBroker = useMemo(
-        () => isPublicBrokerUrl(brokerUrlDraft),
-        [brokerUrlDraft],
-    );
+    const isPublicBroker = useMemo(() => isPublicBrokerUrl(brokerUrlDraft), [brokerUrlDraft]);
 
     const ensureIdentity = useCallback(() => {
         if (settings.peerId && settings.roomKey) return;
@@ -106,9 +103,11 @@ export const PeerSyncSettings = memo(() => {
     const handleBrokerToggle = useCallback(
         async (enabled: boolean) => {
             if (!peerBrokerApi) {
-                toast.warn({ message: t('error.embeddedBrokerNeedsElectron', {
-                    defaultValue: 'The embedded broker is only available in the desktop app.',
-                }) });
+                toast.warn({
+                    message: t('error.embeddedBrokerNeedsElectron', {
+                        defaultValue: 'The embedded broker is only available in the desktop app.',
+                    }),
+                });
                 return;
             }
             const errorMsg = enabled
@@ -291,9 +290,11 @@ export const PeerSyncSettings = memo(() => {
                                 setSettings({ peerSync: { roomKey: next } });
                             }}
                             onChange={(e) => setRoomKeyDraft(e.currentTarget.value)}
-                            placeholder={t('setting.peerSyncRoomKey', {
-                                defaultValue: 'Shared room key',
-                            }) as string}
+                            placeholder={
+                                t('setting.peerSyncRoomKey', {
+                                    defaultValue: 'Shared room key',
+                                }) as string
+                            }
                             value={roomKeyDraft}
                         />
                         <Button
@@ -307,11 +308,7 @@ export const PeerSyncSettings = memo(() => {
                         >
                             {t('common.regenerate', { defaultValue: 'Regenerate' })}
                         </Button>
-                        <Button
-                            onClick={copyRoomKey}
-                            size="compact-sm"
-                            variant="default"
-                        >
+                        <Button onClick={copyRoomKey} size="compact-sm" variant="default">
                             {t('common.copy', { defaultValue: 'Copy' })}
                         </Button>
                     </Group>

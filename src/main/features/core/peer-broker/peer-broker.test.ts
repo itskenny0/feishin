@@ -12,17 +12,18 @@
  * available loopback port falls back gracefully).
  */
 import type { AuthErrorCode } from 'aedes';
+
 import { Aedes } from 'aedes';
+import { createServer } from 'http';
 import mqtt from 'mqtt';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { WebSocketServer, createWebSocketStream } from 'ws';
-import { createServer } from 'http';
+import { createWebSocketStream, WebSocketServer } from 'ws';
 
 // Inline-copy of the topic helper from the renderer protocol module. The
 // renderer alias isn't on the node tsconfig path map, and cross-process
 // reuse here doesn't justify lifting topics into shared/ — these strings
 // are the wire format and are short enough to duplicate in the smoke test.
-const topicFor = (addr: { peerId: string; userId: string }, leaf: 'cmd' | 'state' | 'presence') =>
+const topicFor = (addr: { peerId: string; userId: string }, leaf: 'cmd' | 'presence' | 'state') =>
     `feishin/v1/${addr.userId}/${addr.peerId}/${leaf}`;
 
 interface Harness {
@@ -209,7 +210,7 @@ describe('peer-broker smoke', () => {
             reconnectPeriod: 0,
             username: 'user-1',
         });
-        const outcome = await new Promise<'error' | 'connect'>((resolve) => {
+        const outcome = await new Promise<'connect' | 'error'>((resolve) => {
             const t = setTimeout(() => resolve('error'), 2_000);
             client.once('connect', () => {
                 clearTimeout(t);

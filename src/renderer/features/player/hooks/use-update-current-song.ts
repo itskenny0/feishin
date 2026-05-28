@@ -57,7 +57,6 @@ export const useUpdateCurrentSong = () => {
                 });
 
                 if (updatedSong) {
-                    // eslint-disable-next-line @typescript-eslint/no-unused-vars
                     const { _uniqueId, ...currentSongData } = currentSong;
 
                     if (!isEqual(currentSongData, updatedSong)) {

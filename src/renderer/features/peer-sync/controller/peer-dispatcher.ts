@@ -19,7 +19,10 @@ import type { ServerListItemWithCredential } from '/@/shared/types/domain-types'
 import { commandDispatcher } from '/@/renderer/features/jellyfin-remote-target/controller/command-dispatcher';
 import { publishCommand } from '/@/renderer/features/peer-sync/controller/peer-client';
 import { pickTransport } from '/@/renderer/features/peer-sync/controller/transport-selector';
-import { buildCommand, peerToJellyfinRepeat } from '/@/renderer/features/peer-sync/protocol/builders';
+import {
+    buildCommand,
+    peerToJellyfinRepeat,
+} from '/@/renderer/features/peer-sync/protocol/builders';
 import { PeerAddress } from '/@/renderer/features/peer-sync/protocol/topics';
 import { PeerRepeatMode } from '/@/renderer/features/peer-sync/types';
 
@@ -63,16 +66,17 @@ export const peerDispatcher = {
 
     play: (
         ctx: PeerDispatcherCtx,
-        args: { itemIds: string[]; playCommand?: 'PlayLast' | 'PlayNext' | 'PlayNow'; startIndex?: number },
+        args: {
+            itemIds: string[];
+            playCommand?: 'PlayLast' | 'PlayNext' | 'PlayNow';
+            startIndex?: number;
+        },
     ): void =>
         route(
             ctx,
             () => publishCommand(ctx.peer, buildCommand('play', args)),
             () =>
-                void commandDispatcher.play(
-                    { server: ctx.server, sessionId: ctx.sessionId },
-                    args,
-                ),
+                void commandDispatcher.play({ server: ctx.server, sessionId: ctx.sessionId }, args),
         ),
 
     previous: (ctx: PeerDispatcherCtx): void =>

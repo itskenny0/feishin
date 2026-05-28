@@ -63,9 +63,8 @@ describe('sessionsSink truncated-queue caching', () => {
 
     it('hydrates once and stays quiet on the next tick when an oversized queue is unchanged', async () => {
         const queueIds = Array.from({ length: 250 }, (_, i) => `item-${i}`);
-        const apiModule = await import(
-            '/@/renderer/features/jellyfin-remote-target/api/remote-target-api'
-        );
+        const apiModule =
+            await import('/@/renderer/features/jellyfin-remote-target/api/remote-target-api');
         const hydrateSpy = apiModule.remoteTargetApi.hydrateSongs as ReturnType<typeof vi.fn>;
 
         sessionsSink.apply([session('dev-1', queueIds)], fakeServer);
@@ -83,9 +82,8 @@ describe('sessionsSink truncated-queue caching', () => {
 
     it('rolls back the queue cache when hydrate rejects so the next tick can retry', async () => {
         const queueIds = Array.from({ length: 250 }, (_, i) => `flaky-${i}`);
-        const apiModule = await import(
-            '/@/renderer/features/jellyfin-remote-target/api/remote-target-api'
-        );
+        const apiModule =
+            await import('/@/renderer/features/jellyfin-remote-target/api/remote-target-api');
         const hydrateSpy = apiModule.remoteTargetApi.hydrateSongs as ReturnType<typeof vi.fn>;
 
         hydrateSpy.mockImplementationOnce(async () => {

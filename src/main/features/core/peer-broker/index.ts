@@ -1,3 +1,5 @@
+import type { AuthErrorCode } from 'aedes';
+
 /**
  * Embedded MQTT broker for peer-sync.
  *
@@ -22,7 +24,6 @@
  *     generating one on first opt-in.
  */
 import { Aedes } from 'aedes';
-import type { AuthErrorCode } from 'aedes';
 import Bonjour from 'bonjour-service';
 
 // MQTT CONNACK return code for "Bad username or password". Mirrors aedes'
@@ -71,7 +72,7 @@ let active: ActiveBroker | null = null;
  * baked into the namespace; a client connecting as user A cannot publish or
  * subscribe under user B's prefix.
  */
-const allowedRoot = (username: string | undefined): string | null => {
+const allowedRoot = (username: string | undefined): null | string => {
     if (!username) return null;
     return `feishin/v1/${username}/`;
 };
@@ -244,7 +245,7 @@ export const isPeerBrokerRunning = (): boolean => active !== null;
 // IPC contract used by the renderer Settings UI. Returns null on success
 // or an error message string on failure — mirrors the existing `remote-*`
 // IPC channels for symmetry.
-ipcMain.handle('peer-broker-enable', async (_event, config: PeerBrokerConfig | null) => {
+ipcMain.handle('peer-broker-enable', async (_event, config: null | PeerBrokerConfig) => {
     try {
         if (config) {
             await startPeerBroker(config);
