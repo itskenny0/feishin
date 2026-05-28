@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { coverSwipeSignal } from '/@/renderer/features/player/utils/cover-swipe-signal';
+import {
+    COVER_SWIPE_COMMIT_FRACTION,
+    COVER_SWIPE_FLICK_VELOCITY_PX_PER_SEC,
+    coverSwipeSignal,
+    decideCoverSwipeCommit,
+    type CoverSwipeCommitInput,
+} from '/@/renderer/features/player/utils/cover-swipe-signal';
 
 /**
  * Regression coverage for the mobile fullscreen player cover swipe.

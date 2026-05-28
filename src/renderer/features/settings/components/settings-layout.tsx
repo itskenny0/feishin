@@ -21,7 +21,11 @@ import styles from './settings-layout.module.css';
 import { SETTINGS_SUBPAGES, SubpageDef } from '/@/renderer/features/settings/subpages';
 import { useIsMobileShell } from '/@/renderer/hooks/use-breakpoint';
 import { useCurrentServer } from '/@/renderer/store/auth.store';
-import { useSettingsStore, useSettingsStoreActions } from '/@/renderer/store/settings.store';
+import {
+    usePeerSyncSettings,
+    useSettingsStore,
+    useSettingsStoreActions,
+} from '/@/renderer/store/settings.store';
 import { Spinner } from '/@/shared/components/spinner/spinner';
 
 /*
@@ -260,11 +264,91 @@ export const SettingsLayout = () => {
                                 <selectedSubpage.Component />
                             </Suspense>
                         ) : (
-                            <SubpageList onSelect={handleSelectSubpage} subpages={subpagesForTab} />
+                            <>
+                                {currentTab === 'connect' && (
+                                    <ConnectCategoryPrelude
+                                        onLaunchWizard={() => handleSelectSubpage('wizard')}
+                                    />
+                                )}
+                                <SubpageList
+                                    onSelect={handleSelectSubpage}
+                                    subpages={subpagesForTab}
+                                />
+                            </>
                         )}
                     </div>
                 </section>
             )}
+        </div>
+    );
+};
+
+interface ConnectCategoryPreludeProps {
+    onLaunchWizard: () => void;
+}
+
+/**
+ * Top-of-page banner for the Sync & Connect category. Until the user has
+ * finished the setup wizard the banner is a prominent call-to-action; once
+ * onboarded it's a compact reassurance with a re-run shortcut.
+ */
+const ConnectCategoryPrelude = ({ onLaunchWizard }: ConnectCategoryPreludeProps) => {
+    const { t } = useTranslation();
+    const peerSync = usePeerSyncSettings();
+
+    if (!peerSync.onboarded) {
+        return (
+            <div className={styles.preludeCallout} data-tone="primary">
+                <div className={styles.preludeText}>
+                    <p className={styles.preludeTitle}>
+                        {t('page.setting.connectGetStartedTitle', {
+                            defaultValue: 'Set up Sync & Connect',
+                        })}
+                    </p>
+                    <p className={styles.preludeBody}>
+                        {t('page.setting.connectGetStartedBody', {
+                            defaultValue:
+                                'Tell Feishin how to talk to other devices and the rest of this category becomes useful.',
+                        })}
+                    </p>
+                </div>
+                <button
+                    className={styles.preludeAction}
+                    onClick={onLaunchWizard}
+                    type="button"
+                >
+                    {t('page.setting.connectGetStartedCta', {
+                        defaultValue: 'Open setup wizard',
+                    })}
+                </button>
+            </div>
+        );
+    }
+
+    return (
+        <div className={styles.preludeCallout} data-tone="muted">
+            <div className={styles.preludeText}>
+                <p className={styles.preludeBody}>
+                    {peerSync.jellyfinRemoteEnabled
+                        ? t('page.setting.connectOnboardedBody', {
+                              defaultValue:
+                                  'Sync & Connect is on. Disable it from the page below or fine-tune what shows up in the player UI.',
+                          })
+                        : t('page.setting.connectOnboardedDisabledBody', {
+                              defaultValue:
+                                  'Sync & Connect is set up but turned off. Re-enable it from the page below.',
+                          })}
+                </p>
+            </div>
+            <button
+                className={styles.preludeActionMuted}
+                onClick={onLaunchWizard}
+                type="button"
+            >
+                {t('page.setting.connectReRunWizard', {
+                    defaultValue: 'Re-run setup',
+                })}
+            </button>
         </div>
     );
 };

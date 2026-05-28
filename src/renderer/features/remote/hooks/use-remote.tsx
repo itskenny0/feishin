@@ -7,7 +7,8 @@ import { usePlayerEvents } from '/@/renderer/features/player/audio-player/hooks/
 import { useSetRating } from '/@/renderer/features/shared/hooks/use-set-rating';
 import { useCreateFavorite } from '/@/renderer/features/shared/mutations/create-favorite-mutation';
 import { useDeleteFavorite } from '/@/renderer/features/shared/mutations/delete-favorite-mutation';
-import { usePlayerActions, usePlayerStore, useRemoteSettings } from '/@/renderer/store';
+import { usePlayerActions, useRemoteSettings } from '/@/renderer/store';
+import { usePlayerStoreBase } from '/@/renderer/store/player.store';
 import { LogCategory, logFn } from '/@/renderer/utils/logger';
 import { logMsg } from '/@/renderer/utils/logger-message';
 import { toast } from '/@/shared/components/toast/toast';
@@ -18,8 +19,11 @@ const remote = isElectron() ? window.api.remote : null;
 const ipc = isElectron() ? window.api.ipc : null;
 
 export const useRemote = () => {
-    const { mediaSkipForward, setVolume } = usePlayerActions();
-    const player = usePlayerStore();
+    // Leaf subscription: pull the action handles directly instead of the
+    // whole player slice. The previous bare `usePlayerStore()` re-rendered
+    // this hook on every timestamp tick, queue mutation, and volume change,
+    // which tore down and re-bound all the IPC listeners below.
+    const { mediaSeekToTimestamp, mediaSkipForward, setVolume } = usePlayerActions();
 
     const remoteSettings = useRemoteSettings();
     const setRating = useSetRating();
@@ -74,7 +78,7 @@ export const useRemote = () => {
                 meta: { position: data.position },
             });
             const newTime = data.position;
-            player.mediaSeekToTimestamp(newTime);
+            mediaSeekToTimestamp(newTime);
         });
 
         remote.requestSeek((data: { offset: number }) => {
@@ -126,8 +130,8 @@ export const useRemote = () => {
     }, [
         addToFavoritesMutation,
         isRemoteEnabled,
+        mediaSeekToTimestamp,
         mediaSkipForward,
-        player,
         removeFromFavoritesMutation,
         setVolume,
         setRating,
@@ -142,7 +146,10 @@ export const useRemote = () => {
 
         isInitializedRef.current = true;
 
-        const currentSong = player.getCurrentSong();
+        // One-shot init: pull the current song imperatively so this effect
+        // doesn't subscribe to player-state changes that would re-fire it
+        // each time the queue / index / status mutates.
+        const currentSong = usePlayerStoreBase.getState().getCurrentSong();
 
         if (currentSong) {
             logFn.debug(logMsg[LogCategory.REMOTE].sendingInitialSong, {
@@ -166,7 +173,7 @@ export const useRemote = () => {
 
             remote.updateSong(currentSong, imageUrl);
         }
-    }, [isRemoteEnabled, player]);
+    }, [isRemoteEnabled]);
 
     usePlayerEvents(
         {

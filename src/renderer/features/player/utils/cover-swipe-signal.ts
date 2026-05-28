@@ -42,3 +42,70 @@ export const coverSwipeSignal = {
         console.info('[cover-swipe] start — parent dismiss suspended');
     },
 };
+
+/**
+ * Result of the cover-swipe commit decision. The album-art component
+ * uses this to pick between firing mediaNext/mediaPrevious and
+ * snapping the cover back to centre.
+ *
+ * Exposed as a pure helper rather than buried inside the component so
+ * the gating rules (radio active, queue boundary, simultaneous
+ * left/right signal at high velocity) get direct unit-test coverage
+ * — the component itself is too dependency-heavy to render in tests.
+ */
+export type CoverSwipeCommit = 'next' | 'previous' | 'snap-back';
+
+export interface CoverSwipeCommitInput {
+    /** Width of the cover element. Commit threshold is 25% of this. */
+    coverWidth: number;
+    /** True iff there is a previousSong in the queue. */
+    hasPrevious: boolean;
+    /** True iff there is a nextSong in the queue. */
+    hasNext: boolean;
+    /** True if a radio stream is loaded (any state). Cover swipe is off. */
+    isRadioActive: boolean;
+    /** True iff the player has a current song. */
+    isSongDefined: boolean;
+    /** Horizontal offset (px) from drag start to release. */
+    offsetX: number;
+    /** Horizontal velocity (px/s) at release. */
+    velocityX: number;
+}
+
+/** Minimum px/s flick that triggers commit even with tiny displacement. */
+export const COVER_SWIPE_FLICK_VELOCITY_PX_PER_SEC = 500;
+/** Fraction of cover width past which a slow drag commits. */
+export const COVER_SWIPE_COMMIT_FRACTION = 0.25;
+
+export const decideCoverSwipeCommit = (input: CoverSwipeCommitInput): CoverSwipeCommit => {
+    const {
+        coverWidth,
+        hasNext,
+        hasPrevious,
+        isRadioActive,
+        isSongDefined,
+        offsetX,
+        velocityX,
+    } = input;
+
+    if (!isSongDefined || isRadioActive) {
+        return 'snap-back';
+    }
+
+    const commitOffset = coverWidth * COVER_SWIPE_COMMIT_FRACTION;
+    const wantsNextRaw =
+        offsetX < -commitOffset || velocityX < -COVER_SWIPE_FLICK_VELOCITY_PX_PER_SEC;
+    const wantsPrevRaw =
+        offsetX > commitOffset || velocityX > COVER_SWIPE_FLICK_VELOCITY_PX_PER_SEC;
+
+    // Conflict resolution: if both directions look committed (big left
+    // offset but finger reversing at high right velocity on release),
+    // the offset wins because that's what the user can see; velocity
+    // is just a one-frame derivative at the release point.
+    const wantsNext = wantsNextRaw && !(wantsPrevRaw && offsetX > 0);
+    const wantsPrev = wantsPrevRaw && !(wantsNextRaw && offsetX < 0);
+
+    if (wantsNext && hasNext) return 'next';
+    if (wantsPrev && hasPrevious) return 'previous';
+    return 'snap-back';
+};

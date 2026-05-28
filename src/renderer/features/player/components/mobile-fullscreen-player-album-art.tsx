@@ -17,7 +17,10 @@ import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { useActiveNowPlayingItem } from '/@/renderer/features/jellyfin-remote-target/hooks/use-active-player-source';
 import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
-import { coverSwipeSignal } from '/@/renderer/features/player/utils/cover-swipe-signal';
+import {
+    coverSwipeSignal,
+    decideCoverSwipeCommit,
+} from '/@/renderer/features/player/utils/cover-swipe-signal';
 import {
     useIsRadioActive,
     useRadioPlayer,
@@ -236,21 +239,38 @@ export const MobileFullscreenPlayerAlbumArt = () => {
         stopSnapBack();
     }, [stopSnapBack]);
 
+    /*
+     * Queue-boundary gating. nextSong / previousSong reflect repeat +
+     * shuffle, so at end-of-queue with repeat=NONE nextSong is undefined
+     * — and the peek cover for that side is already hidden. We mirror
+     * that here so a commit-magnitude swipe at the boundary snaps back
+     * instead of firing a mediaNext() that the store would no-op,
+     * which would visibly slide the cover off and back with no
+     * track change.
+     */
+    const hasNext = Boolean(nextSong?._uniqueId);
+    const hasPrevious = Boolean(previousSong?._uniqueId);
+
     const handleCoverDragEnd = useCallback(
         (_event: unknown, info: PanInfo) => {
             coverSwipeSignal.end();
             const width = mainImageRef.current?.offsetWidth ?? 320;
-            const commitOffset = width * 0.25;
-            const flickVelocity = 500;
             const offset = info.offset.x;
             const velocity = info.velocity.x;
-            const wantsNext = offset < -commitOffset || velocity < -flickVelocity;
-            const wantsPrev = offset > commitOffset || velocity > flickVelocity;
+            const decision = decideCoverSwipeCommit({
+                coverWidth: width,
+                hasNext,
+                hasPrevious,
+                isRadioActive,
+                isSongDefined,
+                offsetX: offset,
+                velocityX: velocity,
+            });
 
             // Always cancel a stale snap-back before starting a new one.
             stopSnapBack();
 
-            if (wantsNext && isSongDefined) {
+            if (decision === 'next') {
                 console.info('[cover-swipe] commit next', { offset, velocity });
                 triggerHaptic('selection');
                 mediaNext();
@@ -260,7 +280,7 @@ export const MobileFullscreenPlayerAlbumArt = () => {
                     type: 'spring',
                     velocity,
                 });
-            } else if (wantsPrev && isSongDefined) {
+            } else if (decision === 'previous') {
                 console.info('[cover-swipe] commit prev', { offset, velocity });
                 triggerHaptic('selection');
                 mediaPrevious();
@@ -271,7 +291,14 @@ export const MobileFullscreenPlayerAlbumArt = () => {
                     velocity,
                 });
             } else {
-                console.info('[cover-swipe] snap back', { offset, velocity });
+                console.info('[cover-swipe] snap back', {
+                    hasNext,
+                    hasPrevious,
+                    isRadioActive,
+                    isSongDefined,
+                    offset,
+                    velocity,
+                });
                 snapBackRef.current = animate(coverSwipeX, 0, {
                     damping: 28,
                     stiffness: 360,
@@ -280,7 +307,16 @@ export const MobileFullscreenPlayerAlbumArt = () => {
                 });
             }
         },
-        [coverSwipeX, isSongDefined, mediaNext, mediaPrevious, stopSnapBack],
+        [
+            coverSwipeX,
+            hasNext,
+            hasPrevious,
+            isRadioActive,
+            isSongDefined,
+            mediaNext,
+            mediaPrevious,
+            stopSnapBack,
+        ],
     );
 
     /*
@@ -295,8 +331,12 @@ export const MobileFullscreenPlayerAlbumArt = () => {
      * Both are hidden when the corresponding side has no song (or in
      * radio mode), so the gesture still feels clean at queue boundaries.
      */
-    const nextImageSrc = !isPlayingRadio && nextSong?._uniqueId ? nextImageUrl : null;
-    const previousImageSrc = !isPlayingRadio && previousSong?._uniqueId ? previousImageUrl : null;
+    // Peek covers are gated on isRadioActive (not isPlayingRadio): a
+    // radio stream that's loaded but paused still has no meaningful
+    // prev/next, and we don't want a swipe on it to fire mediaNext().
+    const nextImageSrc = !isRadioActive && nextSong?._uniqueId ? nextImageUrl : null;
+    const previousImageSrc =
+        !isRadioActive && previousSong?._uniqueId ? previousImageUrl : null;
 
     // Remote mode: static cover of the mirrored now-playing item. The local
     // queue's prev/next aren't the remote's, so we skip the swipe-preview
@@ -374,7 +414,7 @@ export const MobileFullscreenPlayerAlbumArt = () => {
                 // version of this static attribute, set the instant
                 // Motion claims the gesture in onDragStart below.
                 data-cover-swipe
-                drag={isSongDefined && !isPlayingRadio ? 'x' : false}
+                drag={isSongDefined && !isRadioActive ? 'x' : false}
                 dragConstraints={{ left: 0, right: 0 }}
                 dragElastic={1}
                 dragMomentum={false}

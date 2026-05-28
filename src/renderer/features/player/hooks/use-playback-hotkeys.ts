@@ -1,11 +1,15 @@
 import { useMemo } from 'react';
 
 import { HotkeyItem, useHotkeys } from '/@/renderer/hooks/use-hotkeys';
-import { useHotkeySettings, usePlayerStore } from '/@/renderer/store';
+import { useHotkeySettings, usePlayerActions } from '/@/renderer/store';
 
 export const usePlaybackHotkeys = () => {
     const { bindings } = useHotkeySettings();
-    const player = usePlayerStore();
+    // Leaf subscription: only the action references matter. Previously this
+    // hook subscribed to the *entire* player store, so every timestamp tick
+    // / queue mutation / volume change rebuilt the hotkey items array and
+    // re-registered the global keydown handler.
+    const player = usePlayerActions();
 
     const playbackHotkeysItems = useMemo(() => {
         const hotkeyItems: HotkeyItem[] = [];

@@ -7,7 +7,7 @@ import {
     useIsRadioActive,
     useRadioPlayer,
 } from '/@/renderer/features/radio/hooks/use-radio-player';
-import { usePlayerSong, usePlayerStore } from '/@/renderer/store';
+import { usePlayerActions, usePlayerSong } from '/@/renderer/store';
 import { LibraryItem, QueueSong } from '/@/shared/types/domain-types';
 import { PlayerShuffle, ServerType } from '/@/shared/types/types';
 
@@ -16,7 +16,12 @@ const utils = isElectron() ? window.api.utils : null;
 const mpris = isElectron() && (utils?.isLinux() || utils?.isMacOS()) ? window.api.mpris : null;
 
 export const useMPRIS = () => {
-    const player = usePlayerStore();
+    // Leaf subscription: only re-render when the action *references* change
+    // (effectively never, since they're stable across the lifetime of the
+    // store). Previously this hook subscribed to the entire player store,
+    // so every position-tick / volume tweak / queue mutation re-ran the
+    // useEffect cleanup-and-rebind cycle below.
+    const player = usePlayerActions();
     const currentSong = usePlayerSong();
     const isRadioActive = useIsRadioActive();
     const { isPlaying: isRadioPlaying, metadata: radioMetadata, stationName } = useRadioPlayer();
