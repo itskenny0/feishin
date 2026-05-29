@@ -12,12 +12,14 @@ import { Alert, Badge, Group, ScrollArea, Stack, Table } from '@mantine/core';
 import { memo, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { laneLabel } from '/@/renderer/features/jellyfin-remote-target/components/transport-pill';
 import {
     type BrokerConnectionStatus,
     useDiagnostics,
 } from '/@/renderer/features/peer-sync/diagnostics/diagnostics-store';
 import { resetDiagnostics } from '/@/renderer/features/peer-sync/diagnostics/diagnostics-store';
 import { SettingsSection } from '/@/renderer/features/settings/components/settings-section';
+import { useCurrentServer } from '/@/renderer/store/auth.store';
 import { usePeerSyncSettings, useSettingsStoreActions } from '/@/renderer/store/settings.store';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Button } from '/@/shared/components/button/button';
@@ -31,6 +33,20 @@ const statusColor: Record<BrokerConnectionStatus, string> = {
     disconnected: 'gray',
     errored: 'red',
     idle: 'gray',
+};
+
+/**
+ * Capitalized fallbacks for the MQTT-client status badge. Rendered through
+ * `t('page.setting.diagBrokerStatus.<status>', { defaultValue })` so the
+ * label is translatable and presented consistently with the other badges
+ * rather than as a raw lowercase enum token.
+ */
+const brokerStatusLabel: Record<BrokerConnectionStatus, string> = {
+    connected: 'Connected',
+    connecting: 'Connecting',
+    disconnected: 'Disconnected',
+    errored: 'Errored',
+    idle: 'Idle',
 };
 
 const formatRelative = (ts: number | undefined, now: number): string => {
@@ -65,7 +81,12 @@ const CopyValue = ({ label, value }: { label: string; value: string }): React.JS
 export const ConnectDiagnosticsSettings = memo(() => {
     const { t } = useTranslation();
     const settings = usePeerSyncSettings();
+    const currentServer = useCurrentServer();
     const { setSettings } = useSettingsStoreActions();
+    // The room key (== broker auth password) is the Jellyfin username, derived
+    // at runtime rather than stored, so show that here instead of the (now
+    // vestigial) persisted settings.roomKey.
+    const roomKey = currentServer?.username ?? '';
 
     const broker = useDiagnostics((s) => s.broker);
     const embedded = useDiagnostics((s) => s.embeddedBroker);
@@ -140,7 +161,9 @@ export const ConnectDiagnosticsSettings = memo(() => {
                                     size="lg"
                                     variant="filled"
                                 >
-                                    {broker.clientStatus}
+                                    {t(`page.setting.diagBrokerStatus.${broker.clientStatus}`, {
+                                        defaultValue: brokerStatusLabel[broker.clientStatus],
+                                    })}
                                 </Badge>
                                 <Text isMuted size="sm">
                                     {formatRelative(broker.lastTransitionAt, now)}
@@ -182,10 +205,16 @@ export const ConnectDiagnosticsSettings = memo(() => {
                                 variant={embedded.running ? 'filled' : 'outline'}
                             >
                                 {embedded.running
-                                    ? 'running'
+                                    ? t('page.setting.diagEmbeddedRunning', {
+                                          defaultValue: 'Running',
+                                      })
                                     : embedded.enabled
-                                      ? 'stopped'
-                                      : 'off'}
+                                      ? t('page.setting.diagEmbeddedStopped', {
+                                            defaultValue: 'Stopped',
+                                        })
+                                      : t('page.setting.diagEmbeddedOff', {
+                                            defaultValue: 'Off',
+                                        })}
                             </Badge>
                         ),
                         description: (
@@ -203,7 +232,7 @@ export const ConnectDiagnosticsSettings = memo(() => {
                 ]}
             />
 
-            {(settings.peerId || settings.roomKey) && (
+            {(settings.peerId || roomKey) && (
                 <Stack gap="xs">
                     <Text fw={600}>
                         {t('page.setting.diagnosticsIdentity', { defaultValue: 'Identity' })}
@@ -222,18 +251,14 @@ export const ConnectDiagnosticsSettings = memo(() => {
                             />
                         </Group>
                     )}
-                    {settings.roomKey && (
+                    {roomKey && (
                         <Group gap={6} wrap="nowrap">
                             <Text isMuted size="sm">
-                                {t('page.setting.diagnosticsRoomKey', { defaultValue: 'Room key' })}
-                            </Text>
-                            <Text size="sm">{peerLabel(settings.roomKey)}</Text>
-                            <CopyValue
-                                label={t('page.setting.diagnosticsCopyRoomKey', {
-                                    defaultValue: 'Copy room key',
+                                {t('page.setting.diagnosticsRoomKey', {
+                                    defaultValue: 'Room (account)',
                                 })}
-                                value={settings.roomKey}
-                            />
+                            </Text>
+                            <Text size="sm">{roomKey}</Text>
                         </Group>
                     )}
                 </Stack>
@@ -462,12 +487,12 @@ export const ConnectDiagnosticsSettings = memo(() => {
                                         <Table.Td>{peerLabel(f.peerId)}</Table.Td>
                                         <Table.Td>
                                             <Text isMuted size="sm">
-                                                {f.from}
+                                                {laneLabel(f.from, t)}
                                             </Text>
                                         </Table.Td>
                                         <Table.Td>→</Table.Td>
                                         <Table.Td>
-                                            <Text size="sm">{f.to}</Text>
+                                            <Text size="sm">{laneLabel(f.to, t)}</Text>
                                         </Table.Td>
                                         <Table.Td style={{ textAlign: 'right', width: 80 }}>
                                             {formatRelative(f.ts, now)}

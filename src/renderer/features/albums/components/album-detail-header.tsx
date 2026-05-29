@@ -361,6 +361,18 @@ export const AlbumDetailHeader = forwardRef<HTMLDivElement>((_props, ref) => {
                     </Group>
                     <LibraryHeaderMenu
                         favorite={detailQuery?.data?.userFavorite}
+                        offlineSource={
+                            album
+                                ? {
+                                      entity: {
+                                          entityType: 'album',
+                                          id: album.id,
+                                          name: album.name,
+                                      },
+                                      type: 'entity',
+                                  }
+                                : undefined
+                        }
                         onAlbumRadio={handleAlbumRadio}
                         onFavorite={handleFavorite}
                         onMore={handleMoreOptions}

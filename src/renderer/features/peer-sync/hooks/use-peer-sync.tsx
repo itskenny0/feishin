@@ -68,14 +68,22 @@ export const usePeerSync = () => {
         // explicitly completed onboarding, regardless of how `enabled` flipped
         // true (settings restore, migration, etc).
         if (!peerSync.enabled || !peerSync.jellyfinRemoteEnabled || !peerSync.onboarded) {
-            if (isPeerClientConnected()) stopPeerClient();
+            // Tear down unconditionally — stopPeerClient is idempotent (no-ops
+            // when there is no session) and must run even mid-handshake. Gating
+            // on isPeerClientConnected() leaked a still-connecting client past
+            // the kill switch: it would fire 'connect' and publish presence
+            // after we were told to stop. See C3.
+            stopPeerClient();
             return;
         }
-        if (!peerSync.brokerUrl || !peerSync.peerId || !peerSync.roomKey) {
+        if (!peerSync.brokerUrl || !peerSync.peerId) {
             // The user has flipped the toggle on but the wizard hasn't yet
-            // generated a peerId / roomKey, or no broker URL was provided
-            // and we have no embedded broker URL to fall back to. Stay
-            // silent — the settings UI will surface the missing values.
+            // generated a peerId, or no broker URL was provided and we have
+            // no embedded broker URL to fall back to. Stay silent — the
+            // settings UI will surface the missing values. (We no longer
+            // require a stored roomKey: it is derived from the Jellyfin
+            // username below so a user's own devices auto-authenticate to
+            // each other's broker.)
             return;
         }
         if (!currentServer || currentServer.type !== ServerType.JELLYFIN) {
@@ -83,7 +91,7 @@ export const usePeerSync = () => {
             // signed-in Jellyfin user we have nothing meaningful to do.
             return;
         }
-        if (!currentServer.userId) return;
+        if (!currentServer.userId || !currentServer.username) return;
         const tls = peerSync.brokerUrl.startsWith('wss://');
         log('booting client', {
             brokerUrl: peerSync.brokerUrl,
@@ -100,9 +108,15 @@ export const usePeerSync = () => {
         // the selector first reports a peer.
         const prevTransport = new Map<string, ReturnType<typeof pickTransport>>();
         const unsubscribeTransport = subscribeTransport((peerId, kind) => {
-            const prev = prevTransport.get(peerId) ?? 'jellyfin';
+            // Match the selector's first-observation convention
+            // (transport-selector.ts: `if (prev !== undefined) log('transport
+            // flip', ...)`). An unseen peer's first notification is NOT a flip,
+            // so don't seed a fake 'jellyfin' prior — that inflated the
+            // diagnostics flip count with a phantom jellyfin->mqtt entry the
+            // console never logged. See B6.
+            const prev = prevTransport.get(peerId);
             prevTransport.set(peerId, kind);
-            recordTransportFlip(peerId, prev, kind);
+            if (prev !== undefined) recordTransportFlip(peerId, prev, kind);
         });
         const userIdForPings = currentServer.userId;
 
@@ -113,8 +127,15 @@ export const usePeerSync = () => {
                 brokerUsername: peerSync.brokerUsername,
                 jellyfinDeviceId,
                 peerId: peerSync.peerId,
-                roomKey: peerSync.roomKey,
+                // The room key (== broker auth password against the embedded
+                // broker) is deterministically the Jellyfin username. A random
+                // per-install key would stop a user's own devices from
+                // authenticating to each other's broker; deriving it from the
+                // username means every device the same account signs into
+                // shares the room automatically.
+                roomKey: currentServer.username,
                 tls,
+                transport: peerSync.transport,
                 userId: currentServer.userId,
             },
             {
@@ -178,7 +199,10 @@ export const usePeerSync = () => {
             knownPeers.clear();
             prevTransport.clear();
             recordBrokerStatus('disconnected');
-            if (isPeerClientConnected()) stopPeerClient();
+            // Unconditional — a client that is still mid-handshake (connect
+            // event not yet fired) must also be torn down so it can't go live
+            // after cleanup. stopPeerClient is null-guarded/idempotent. See C3.
+            stopPeerClient();
         };
     }, [
         currentServer,
@@ -190,16 +214,19 @@ export const usePeerSync = () => {
         peerSync.jellyfinRemoteEnabled,
         peerSync.onboarded,
         peerSync.peerId,
-        peerSync.roomKey,
+        peerSync.transport,
     ]);
 
     // Presence sweeper — flips the transport selector back to Jellyfin
-    // when a peer goes silent past the freshness window.
+    // when a peer goes silent past the freshness window. Gated/deps aligned
+    // with the master switch (enabled && jellyfinRemoteEnabled && onboarded)
+    // so the no-op timer stops firing when the kill switch or onboarding flips
+    // off and the client is torn down. See C5.
     useEffect(() => {
-        if (!peerSync.enabled) return;
+        if (!(peerSync.enabled && peerSync.jellyfinRemoteEnabled && peerSync.onboarded)) return;
         const t = setInterval(() => sweepStalePresence(), PRESENCE_SWEEP_MS);
         return () => clearInterval(t);
-    }, [peerSync.enabled]);
+    }, [peerSync.enabled, peerSync.jellyfinRemoteEnabled, peerSync.onboarded]);
 
     // Poll the main-process embedded broker for status. Cheap IPC; runs at a
     // slower cadence than the renderer pings since the value rarely changes.

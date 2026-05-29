@@ -214,8 +214,14 @@ export class SessionsPoller {
     }
 
     private async tick(): Promise<void> {
-        if (!this.isRunning || !this.startArgs) return;
-        const { onOffline, server } = this.startArgs;
+        // Snapshot the generation identity at entry. start() always assigns a
+        // brand-new startArgs object (the hook passes a fresh literal each
+        // effect run), so comparing identity after the await reliably detects
+        // a stop()/restart that happened while we were in flight — even if
+        // isRunning flipped back to true for a new server.
+        const args = this.startArgs;
+        if (!this.isRunning || !args) return;
+        const { onOffline, server } = args;
         const actions = useRemoteTargetStore.getState().actions;
         const targetIdBefore = useRemoteTargetStore.getState().targetDeviceId;
 
@@ -224,6 +230,10 @@ export class SessionsPoller {
         try {
             result = await remoteTargetApi.listSessionsWithRaw({ server });
         } catch (err) {
+            // Drop a failed-poll result that belongs to a stopped/restarted
+            // generation so a stale server-A error can't set pollError or
+            // wipe server-B's freshly-fetched device list.
+            if (!this.isRunning || this.startArgs !== args) return;
             console.warn('[remote-target] poll failed', err);
             actions.setPollError(err instanceof Error ? err.message : String(err));
             // A failed poll is NOT a confirmed miss of the target session —
@@ -238,6 +248,13 @@ export class SessionsPoller {
             this.scheduleNext();
             return;
         }
+        // Drop a result that belongs to a poller generation that has since
+        // been stopped or restarted (e.g. a server A→B switch landed while
+        // this poll awaited server A's /Sessions). Without this guard the
+        // stale server-A response would overwrite server-B's device list and
+        // could mark a server-A device as the connected target.
+        if (!this.isRunning || this.startArgs !== args) return;
+
         perfLog('poller.tick', {
             durMs: Math.round(performance.now() - t0),
             mode: this.mode,

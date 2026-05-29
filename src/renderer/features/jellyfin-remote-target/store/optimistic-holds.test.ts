@@ -28,6 +28,7 @@ const connectTarget = (capabilities: string[] = []) =>
         capabilities,
         deviceId: 'dev-1',
         deviceName: 'Living Room',
+        ownerServerId: 'srv-1',
         sessionId: 'sess-1',
     });
 
@@ -150,6 +151,32 @@ describe('optimistic holds — stale-poll guard', () => {
             },
         });
         expect(useRemoteTargetStore.getState().mirrored.playState.positionMs).toBe(120_000);
+    });
+
+    it('preserves the interpolation anchor (positionSampledAt) when reverting a held positionMs, so the playhead does not snap back each poll (A5)', () => {
+        connectTarget();
+        useRemoteTargetStore.getState().actions.optimisticSeek(120_000);
+        const anchorAfterSeek =
+            useRemoteTargetStore.getState().mirrored.playState.positionSampledAt;
+
+        // A stale poll lands with the pre-seek position AND a fresh, much later
+        // sample time. Without A5 the held positionMs reverts to 120_000 but
+        // positionSampledAt keeps the incoming (fresh) time, so an interpolating
+        // playhead restarts from the seek target every poll. The anchor must be
+        // re-pinned to the seek instant instead.
+        useRemoteTargetStore.getState().actions.applyMirrorFromServer({
+            playState: {
+                isPaused: false,
+                positionMs: 58_000,
+                positionSampledAt: anchorAfterSeek + 5_000,
+                repeatMode: 'RepeatNone',
+                shuffle: false,
+                volume: 50,
+            },
+        });
+        const ps = useRemoteTargetStore.getState().mirrored.playState;
+        expect(ps.positionMs).toBe(120_000);
+        expect(ps.positionSampledAt).toBe(anchorAfterSeek);
     });
 
     it("optimisticNext flips nowPlayingItem and rejects a stale poll showing the old song (regression: jumps back to a song that isn't running)", () => {

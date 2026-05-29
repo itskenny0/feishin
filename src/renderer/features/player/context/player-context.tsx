@@ -171,6 +171,13 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
         }
         const server = useAuthStore.getState().currentServer;
         if (!server?.credential) return null;
+        // E1: refuse to act when the live server no longer owns this target. A
+        // server switch leaves the old target's deviceId/sessionId in the store
+        // for up to ~60s (the offline ladder); without this guard a pause/seek/
+        // volume tap would POST to the NEW server using the OLD session id.
+        // Compare by id (not object identity) so a token/musicFolder refresh
+        // that keeps the same server id doesn't drop a healthy session.
+        if (target.ownerServerId && target.ownerServerId !== server.id) return null;
         return {
             peer: {
                 peerId: getPeerIdForJellyfinDeviceId(target.targetDeviceId) ?? '',
@@ -725,27 +732,27 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
             const remote = getRemoteCtx();
             if (remote) {
                 peerDispatcher.skipToIndex(remote, index);
-                // Move the mirror to the target index immediately so the now-
-                // playing card / queue highlight don't lag the click.
+                // Optimistically move the mirror so the now-playing card / queue
+                // highlight don't lag the click. D6: the position/pause/index
+                // patch must NOT depend on a hydrated queue — on the MQTT lane
+                // mirrored.queue is often empty, which previously left an MQTT
+                // skip with no feedback while a Jellyfin skip updated instantly.
                 const s = useRemoteTargetStore.getState();
+                const actions = s.actions;
                 const queue = s.mirrored.queue;
-                if (index >= 0 && index < queue.length) {
-                    const item = queue[index];
-                    const now = Date.now();
-                    useRemoteTargetStore.getState().actions.applyMirrorFromServer({
-                        nowPlayingItem: item,
-                        queueIndex: index,
-                    });
-                    // No third-arg override — the receiver's DEFAULT_HOLD_MS
-                    // (~6s) covers the next PlaybackProgress frame's cadence.
-                    // A shorter hold expired before truthful state arrived and
-                    // snapped the queue highlight back to the previous index.
-                    useRemoteTargetStore.getState().actions.hold('nowPlayingItemId', item.id);
-                    useRemoteTargetStore.getState().actions.patchPlayState({
-                        isPaused: false,
-                        positionMs: 0,
-                        positionSampledAt: now,
-                    });
+                const now = Date.now();
+                const item = index >= 0 && index < queue.length ? queue[index] : undefined;
+                actions.applyMirrorFromServer({
+                    // Only swap the track when the queue actually holds it.
+                    ...(item ? { nowPlayingItem: item } : {}),
+                    queueIndex: index,
+                });
+                actions.patchPlayState({ isPaused: false, positionMs: 0, positionSampledAt: now });
+                if (item) {
+                    // Track-identity hold (DEFAULT_HOLD_MS ~6s, covering the next
+                    // PlaybackProgress frame) so a stale frame can't snap the
+                    // highlight back to the previous index.
+                    actions.hold('nowPlayingItemId', item.id);
                 }
                 return;
             }
@@ -871,7 +878,14 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
         const remote = getRemoteCtx();
         if (remote) {
             const wasPaused = useRemoteTargetStore.getState().mirrored.playState.isPaused;
-            peerDispatcher.togglePause(remote);
+            // D4: send an ABSOLUTE pause/resume rather than the relative
+            // `togglePause` verb. On the QoS-0 MQTT lane a duplicate/replayed
+            // frame would double-toggle a relative verb back to the original
+            // state while our optimistic mirror (patched once, absolutely)
+            // disagrees. pause()/unpause() are idempotent on both lanes, so a
+            // dup is a no-op and controller + target stay in sync.
+            if (wasPaused) peerDispatcher.unpause(remote);
+            else peerDispatcher.pause(remote);
             useRemoteTargetStore.getState().actions.setPaused(!wasPaused);
             return;
         }

@@ -1,9 +1,19 @@
+import { createRequire } from 'module';
 import path from 'path';
 import { defineConfig, normalizePath } from 'vite';
 import { ViteEjsPlugin } from 'vite-plugin-ejs';
 import { VitePWA } from 'vite-plugin-pwa';
 
 import { createReactPlugin } from './vite.react-plugin';
+
+// peer-sync's native-tcp transport (Android) builds its Duplex on mqtt.js's
+// own bundled `readable-stream`. pnpm installs it under mqtt's scope but does
+// not hoist it, so alias the bare specifier to mqtt's copy. Vite still honours
+// the package's `browser` field because we point at the package directory.
+// Version-agnostic and adds no npm dependency.
+const readableStreamDir = path.dirname(
+    createRequire(require.resolve('mqtt/package.json')).resolve('readable-stream/package.json'),
+);
 
 export default defineConfig({
     base: './',
@@ -150,6 +160,7 @@ export default defineConfig({
             '/@/remote': path.resolve(__dirname, './src/remote'),
             '/@/renderer': path.resolve(__dirname, './src/renderer'),
             '/@/shared': path.resolve(__dirname, './src/shared'),
+            'readable-stream': readableStreamDir,
         },
     },
     root: path.resolve(__dirname, './src/renderer'),

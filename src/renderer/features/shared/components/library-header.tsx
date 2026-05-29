@@ -12,6 +12,10 @@ import { getItemImageUrl, ItemImage } from '/@/renderer/components/item-image/it
 import { useIsPlayerFetching } from '/@/renderer/features/player/context/player-context';
 import { useDominantColor } from '/@/renderer/features/player/hooks/use-dominant-color';
 import {
+    LibraryHeaderBar,
+    type OfflineSource,
+} from '/@/renderer/features/shared/components/library-header-bar';
+import {
     PlayLastTextButton,
     PlayNextTextButton,
     PlayTextButton,
@@ -349,6 +353,7 @@ export const calculateTitleSize = (title: string) => {
 
 interface LibraryHeaderMenuProps {
     favorite?: boolean;
+    offlineSource?: OfflineSource;
     onAlbumRadio?: () => void;
     onArtistRadio?: () => void;
     onFavorite?: (e: React.MouseEvent<HTMLButtonElement>) => void;
@@ -361,6 +366,7 @@ interface LibraryHeaderMenuProps {
 
 export const LibraryHeaderMenu = ({
     favorite,
+    offlineSource,
     onAlbumRadio,
     onArtistRadio,
     onFavorite,
@@ -475,6 +481,7 @@ export const LibraryHeaderMenu = ({
                         variant="transparent"
                     />
                 )}
+                {offlineSource && <LibraryHeaderBar.OfflineButton source={offlineSource} />}
                 {onMore && (
                     <ActionIcon
                         aria-label={t('common.menu')}

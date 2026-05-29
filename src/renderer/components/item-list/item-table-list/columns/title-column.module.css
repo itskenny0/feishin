@@ -1,11 +1,30 @@
 .name-container {
     display: -webkit-inline-box;
     align-self: flex-start;
+
+    /* min-width:0 lets the flex/box child actually shrink below its
+       content width so the ellipsis can engage; without it a long
+       unbroken genre title (e.g. several concatenated genre names with
+       no spaces) overflows the cell on narrow phones instead of
+       clipping. overflow-wrap lets the line-clamp break such tokens. */
+    min-width: 0;
     max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
     -webkit-line-clamp: 2;
+    overflow-wrap: anywhere;
     -webkit-box-orient: vertical;
+}
+
+/*
+ * Small-phone tier: clamp the title to a single line so a long genre /
+ * track title can't push the row-count/duration columns off-screen on a
+ * ≤390px viewport. Mirrors the Tracks list's tight single-line title.
+ */
+@media (width <= 390px) {
+    .name-container {
+        -webkit-line-clamp: 1;
+    }
 }
 
 a.name-container {

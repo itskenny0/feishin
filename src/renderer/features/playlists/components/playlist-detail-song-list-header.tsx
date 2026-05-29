@@ -15,7 +15,10 @@ import {
     LibraryHeader,
     LibraryHeaderMenu,
 } from '/@/renderer/features/shared/components/library-header';
-import { LibraryHeaderBar } from '/@/renderer/features/shared/components/library-header-bar';
+import {
+    LibraryHeaderBar,
+    type OfflineSource,
+} from '/@/renderer/features/shared/components/library-header-bar';
 import { ListSearchInput } from '/@/renderer/features/shared/components/list-search-input';
 import { AppRoute } from '/@/renderer/router/routes';
 import { useCurrentServer } from '/@/renderer/store';
@@ -167,6 +170,20 @@ export const PlaylistDetailSongListHeader = ({
         type: 'header',
     });
 
+    // Only non-smart playlists resolve to a stable set of songs the offline
+    // engine can enumerate by id; smart playlists are skipped.
+    const offlineSource: OfflineSource | undefined =
+        !isSmartPlaylist && detailQuery?.data
+            ? {
+                  entity: {
+                      entityType: 'playlist',
+                      id: detailQuery.data.id,
+                      name: detailQuery.data.name,
+                  },
+                  type: 'entity',
+              }
+            : undefined;
+
     return (
         <Stack gap={0}>
             {collapsed ? (
@@ -192,6 +209,7 @@ export const PlaylistDetailSongListHeader = ({
                         >
                             {itemCount}
                         </LibraryHeaderBar.Badge>
+                        {offlineSource && <LibraryHeaderBar.OfflineButton source={offlineSource} />}
                     </LibraryHeaderBar>
                     <ListSearchInput />
                 </PageHeader>
@@ -237,6 +255,7 @@ export const PlaylistDetailSongListHeader = ({
                             </Spoiler>
                         ) : null}
                         <LibraryHeaderMenu
+                            offlineSource={offlineSource}
                             onPlay={(type) => handlePlay(type)}
                             onShuffle={() => handlePlay(Play.SHUFFLE)}
                         />

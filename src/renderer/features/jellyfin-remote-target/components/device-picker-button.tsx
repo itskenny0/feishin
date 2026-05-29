@@ -28,22 +28,32 @@ export const DevicePickerButton = () => {
     }
 
     const color =
-        status === 'reconnecting' || status === 'offline'
+        status === 'reconnecting'
             ? 'var(--mantine-color-yellow-5)'
             : target.isRemote
               ? 'var(--theme-colors-primary)'
               : undefined;
 
+    // Dynamic accessible name so the connected device is announced, not just
+    // the static "Listen on" verb — reflects the visible device-name label.
+    const ariaLabel =
+        target.isRemote && target.deviceName
+            ? t('page.remoteTarget.listenOnDevice', {
+                  defaultValue: 'Listen on {{deviceName}}',
+                  deviceName: target.deviceName,
+              })
+            : t('page.remoteTarget.listenOn');
+
     return (
         <DevicePickerPopover onClose={() => setOpened(false)} opened={opened}>
             <div style={{ alignItems: 'center', display: 'flex', gap: 4 }}>
                 <ActionIcon
-                    aria-label={t('page.remoteTarget.listenOn')}
+                    aria-label={ariaLabel}
                     aria-pressed={target.isRemote}
                     icon="remoteDevice"
                     iconProps={{ size: 'lg', style: { color } }}
                     onClick={() => setOpened((v) => !v)}
-                    tooltip={{ label: t('page.remoteTarget.listenOn') }}
+                    tooltip={{ label: ariaLabel }}
                     variant="default"
                 />
                 {target.isRemote && target.deviceName && (

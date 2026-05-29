@@ -7,6 +7,7 @@ import {
     mirrorSession,
 } from '/@/renderer/features/jellyfin-remote-target/controller/remote-state-mirror';
 import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
+import { pickTransportByJellyfinDeviceId } from '/@/renderer/features/peer-sync/controller/transport-selector';
 
 const perfDebug = (): boolean => {
     try {
@@ -91,7 +92,17 @@ class SessionsSink {
             positionMs: mirror.mirrored.playState?.positionMs,
             volume: mirror.mirrored.playState?.volume,
         });
-        actions.applyMirrorFromServer(mirror.mirrored);
+        // B4: when the live lane for this target is MQTT, a Jellyfin poll that
+        // was already in flight (or the slow fallback heartbeat) must NOT
+        // overwrite the fresher MQTT play-state. Strip the playState slice but
+        // still apply capabilities / queue / queueIndex so the WS keeps
+        // hydrating the queue list while MQTT drives position/pause/volume.
+        if (pickTransportByJellyfinDeviceId(state.targetDeviceId) === 'mqtt') {
+            const { playState: _droppedPlayState, ...withoutPlayState } = mirror.mirrored;
+            actions.applyMirrorFromServer(withoutPlayState);
+        } else {
+            actions.applyMirrorFromServer(mirror.mirrored);
+        }
 
         if (mirror.hydrateQueue) {
             const now = Date.now();
@@ -145,6 +156,12 @@ class SessionsSink {
                         nextAttempt: Date.now() + delay,
                     };
                 });
+        } else if (mirror.queueIds && mirror.queueIds.length === 0) {
+            // A2: the target emptied its queue. Push the empty list + reset the
+            // index, and sync the per-device cache to [] so `queueChanged`
+            // settles on the next tick (no churn while the queue stays empty).
+            this.prevQueueIdsByDevice[match.deviceId] = [];
+            actions.setMirrored({ queue: [], queueIndex: -1 });
         } else if (mirror.queueIndex !== -1) {
             actions.setMirrored({ queueIndex: mirror.queueIndex });
         }

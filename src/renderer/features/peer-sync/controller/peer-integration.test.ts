@@ -319,6 +319,10 @@ describe('applyPeerStateToStore', () => {
         // Pretend the user picked a target — otherwise applyPeerStateToStore
         // intentionally no-ops to avoid polluting an idle UI.
         useRemoteTargetStore.setState({ targetDeviceId: 'peer-target' });
+        // Establish the live MQTT lane + bridge so the frame passes the gates:
+        // sync on, sender 'peer-1' fresh and bound to the picked deviceId.
+        setSyncEnabled(true);
+        recordPresence('peer-1', true, Date.now(), 'peer-target');
 
         const frame = buildState({
             dur: 240_000,
@@ -359,8 +363,10 @@ describe('applyPeerStateToStore', () => {
      * mirrored mute MUST NOT be flipped from its prior value — otherwise
      * an older publisher would silently un-mute the controller every tick.
      */
-    it('mirrors optional mute and queue-index fields when present', () => {
+    it('mirrors optional mute and queue-index fields, and builds the queue from qIds', () => {
         useRemoteTargetStore.setState({ targetDeviceId: 'peer-target' });
+        setSyncEnabled(true);
+        recordPresence('peer-1', true, Date.now(), 'peer-target');
 
         const frame = buildState({
             dur: 240_000,
@@ -378,6 +384,10 @@ describe('applyPeerStateToStore', () => {
         const state = useRemoteTargetStore.getState();
         expect(state.mirrored.playState.isMuted).toBe(true);
         expect(state.mirrored.queueIndex).toBe(4);
+        // A4: queue is built from qIds (so qIdx never indexes a stale/foreign
+        // array), with the now-playing stub at the current slot.
+        expect(state.mirrored.queue.length).toBe(5);
+        expect(state.mirrored.queue[4]?.id).toBe('song-x');
     });
 
     it('does NOT overwrite isMuted when an older publisher omits the field', () => {
@@ -401,6 +411,8 @@ describe('applyPeerStateToStore', () => {
             },
             targetDeviceId: 'peer-target',
         });
+        setSyncEnabled(true);
+        recordPresence('peer-1', true, Date.now(), 'peer-target');
 
         // Frame from a publisher that doesn't emit `mut`.
         const frame = buildState({

@@ -2,13 +2,13 @@ import type { Song } from '/@/shared/types/domain-types';
 
 // src/renderer/features/jellyfin-remote-target/hooks/use-active-player-source.tsx
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 
 import {
     interpolatePositionMs,
     jellyfinToPlayerRepeat,
     jellyfinToPlayerShuffle,
 } from '/@/renderer/features/jellyfin-remote-target/controller/remote-play';
-import { useRemoteTarget } from '/@/renderer/features/jellyfin-remote-target/hooks/use-remote-target';
 import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
 import {
     usePlayerRepeat,
@@ -34,7 +34,25 @@ export interface ActivePlayerSource {
 export type PlayerSourceMode = 'local' | 'remote';
 
 export const useActivePlayerSource = (): ActivePlayerSource => {
-    const remote = useRemoteTarget();
+    // Subscribe to the specific mirrored leaves this hook surfaces (via a
+    // shallow-equality selection) rather than the whole `mirrored` object.
+    // applyMirrorFromServer only re-spreads `playState` and the outer object,
+    // so leaf references (capabilities/nowPlayingItem/queue) stay stable
+    // across polls that don't touch them — the shallow compare then holds and
+    // the memo below doesn't invalidate every ~3s tick.
+    const remote = useRemoteTargetStore(
+        useShallow((s) => ({
+            capabilities: s.mirrored.capabilities,
+            deviceName: s.targetDeviceName,
+            isPaused: s.mirrored.playState.isPaused,
+            isRemote: s.targetDeviceId !== null,
+            nowPlayingItem: s.mirrored.nowPlayingItem,
+            positionMs: s.mirrored.playState.positionMs,
+            queue: s.mirrored.queue,
+            queueIndex: s.mirrored.queueIndex,
+            volume: s.mirrored.playState.volume,
+        })),
+    );
     const localSong = usePlayerSong();
     const localStatus = usePlayerStatus();
     const localVolume = usePlayerVolume();
@@ -42,15 +60,15 @@ export const useActivePlayerSource = (): ActivePlayerSource => {
     return useMemo<ActivePlayerSource>(() => {
         if (remote.isRemote) {
             return {
-                capabilities: remote.mirrored.capabilities,
+                capabilities: remote.capabilities,
                 deviceName: remote.deviceName,
-                isPaused: remote.mirrored.playState.isPaused,
+                isPaused: remote.isPaused,
                 mode: 'remote',
-                nowPlayingItem: remote.mirrored.nowPlayingItem,
-                positionMs: remote.mirrored.playState.positionMs,
-                queue: remote.mirrored.queue,
-                queueIndex: remote.mirrored.queueIndex,
-                volume: remote.mirrored.playState.volume,
+                nowPlayingItem: remote.nowPlayingItem,
+                positionMs: remote.positionMs,
+                queue: remote.queue,
+                queueIndex: remote.queueIndex,
+                volume: remote.volume,
             };
         }
         return {
@@ -133,9 +151,20 @@ export const useActiveIsPaused = (): boolean => {
 };
 
 /**
+ * Minimum interval between React state writes from the rAF interpolation
+ * loop. ~20fps (50ms) is smooth enough for a seek bar whose minimum visible
+ * step is one second, while cutting the per-frame setState pressure (and the
+ * downstream reconciliation of every position consumer) by ~3x versus the
+ * native ~60Hz rAF cadence.
+ */
+const POSITION_EMIT_INTERVAL_MS = 50;
+
+/**
  * Remote playback position in ms, interpolated at animation framerate so the
- * seek bar advances smoothly between the 3s /Sessions polls. Returns 0 when no
- * remote target is active.
+ * seek bar advances smoothly between the 3s /Sessions polls — but the React
+ * state write is throttled to ~20fps (see POSITION_EMIT_INTERVAL_MS) so the
+ * consuming subtrees don't reconcile on every animation frame. Returns 0 when
+ * no remote target is active.
  */
 export const useRemoteInterpolatedPositionMs = (): number => {
     const isRemote = useRemoteTargetStore((s) => s.targetDeviceId !== null);
@@ -143,19 +172,45 @@ export const useRemoteInterpolatedPositionMs = (): number => {
     const durationMs = useRemoteTargetStore((s) => s.mirrored.nowPlayingItem?.duration);
     const [posMs, setPosMs] = useState(0);
     const frame = useRef<null | number>(null);
+    const lastEmit = useRef(0);
+    const lastValue = useRef<null | number>(null);
 
     useEffect(() => {
         if (!isRemote) {
             setPosMs(0);
+            lastEmit.current = 0;
+            lastValue.current = null;
             return;
         }
+        const emit = (now: number, force: boolean) => {
+            const next = interpolatePositionMs(playState, now, durationMs ?? undefined);
+            // Gate to ~20fps AND to a changed integer ms so sub-pixel no-op
+            // updates don't re-render the (heavy) position subtrees. `force`
+            // bypasses the throttle for the immediate first paint after a
+            // mirror change so the readout never lags a frame behind a seek.
+            const rounded = Math.round(next);
+            if (
+                force ||
+                (now - lastEmit.current >= POSITION_EMIT_INTERVAL_MS &&
+                    rounded !== lastValue.current)
+            ) {
+                lastEmit.current = now;
+                lastValue.current = rounded;
+                setPosMs(next);
+            }
+        };
         const tick = () => {
-            setPosMs(interpolatePositionMs(playState, Date.now(), durationMs ?? undefined));
+            emit(Date.now(), false);
             if (!playState.isPaused) {
                 frame.current = requestAnimationFrame(tick);
             }
         };
-        tick();
+        // First paint after a mirror change is forced so a pause/seek snaps
+        // immediately; subsequent frames are throttled.
+        emit(Date.now(), true);
+        if (!playState.isPaused) {
+            frame.current = requestAnimationFrame(tick);
+        }
         return () => {
             if (frame.current !== null) cancelAnimationFrame(frame.current);
             frame.current = null;

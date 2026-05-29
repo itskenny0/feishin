@@ -173,6 +173,12 @@ export class SessionsSocket {
         this.socket = null;
         if (sock) {
             try {
+                // Detach handlers BEFORE close() so an in-flight buffered
+                // frame can't reach handleMessage() and poison the store with
+                // a stale server's sessions or re-arm a dead liveness timer.
+                // close() is async and per-spec can still dispatch buffered
+                // messages while readyState is CLOSING.
+                this.detach(sock);
                 // Best-effort unsubscribe so the server stops queueing
                 // Sessions frames for a deviceId that's about to disappear.
                 if (sock.readyState === WebSocket.OPEN) {
@@ -187,6 +193,9 @@ export class SessionsSocket {
     }
 
     private armLiveness(): void {
+        // A frame can slip in after stop() while the socket is CLOSING; never
+        // arm a 30s timer on a socket we no longer own.
+        if (this.stopped) return;
         if (this.livenessTimer) clearTimeout(this.livenessTimer);
         this.livenessTimer = setTimeout(() => {
             console.warn('[remote-target] socket liveness timeout — forcing reconnect');
@@ -234,7 +243,7 @@ export class SessionsSocket {
             }
         };
 
-        sock.onmessage = (ev) => this.handleMessage(ev.data);
+        sock.onmessage = (ev) => this.handleMessage(sock, ev.data);
 
         sock.onerror = (ev) => {
             // The browser doesn't expose any detail on `Event`; log shape only.
@@ -260,11 +269,28 @@ export class SessionsSocket {
         };
     }
 
+    /**
+     * Drop every event handler on a socket we no longer own. close() is
+     * asynchronous and buffered frames can still dispatch during CLOSING, so
+     * a still-bound onmessage would otherwise call back into `this` after
+     * teardown. Mirrors jellyfin-remote-controller.ts's teardown.
+     */
+    private detach(sock: WebSocket): void {
+        sock.onopen = null;
+        sock.onmessage = null;
+        sock.onerror = null;
+        sock.onclose = null;
+    }
+
     private forceReconnect(): void {
         const sock = this.socket;
         this.socket = null;
         if (sock) {
             try {
+                // Detach before close so a buffered frame from the dead
+                // connection can't fire handleMessage() against the
+                // soon-to-be-replaced socket during the reconnect window.
+                this.detach(sock);
                 sock.close();
             } catch {
                 // ignored
@@ -273,7 +299,12 @@ export class SessionsSocket {
         if (!this.stopped) this.scheduleReconnect();
     }
 
-    private handleMessage(data: unknown): void {
+    private handleMessage(sock: WebSocket, data: unknown): void {
+        // Bail on any frame that arrives after teardown, or on a frame from a
+        // previous socket while a new connection is in flight — neither must
+        // arm a timer or write the (possibly stale-server) sessions to the
+        // store. close() is async, so this is the load-bearing guard.
+        if (this.stopped || sock !== this.socket) return;
         this.armLiveness();
         const envelope = parseEnvelope(data);
         if (!envelope) return;

@@ -20,8 +20,10 @@
  */
 import type { IClientOptions, MqttClient } from 'mqtt';
 
+import isElectron from 'is-electron';
 import mqtt from 'mqtt';
 
+import { isInboundApplyActive } from '/@/renderer/features/peer-sync/controller/peer-loop-guard';
 import {
     forgetPeer,
     recordPresence,
@@ -106,11 +108,165 @@ export const redactBrokerUrl = (url: string): string => {
     }
 };
 
+/** Transport preference for the MQTT lane. 'auto' resolves to the existing
+ *  WebSocket path on web/Electron and anywhere the native TCP plugin isn't
+ *  present; on Android it upgrades to raw TCP when the broker URL carries an
+ *  `mqtt://`/`mqtts://` scheme. 'ws' forces WebSocket; 'tcp' forces raw TCP
+ *  (Android only — falls back to WS if the plugin is unavailable). */
+export type PeerSyncTransport = 'auto' | 'tcp' | 'ws';
+
+/**
+ * Minimal view of the Capacitor global the runtime injects on native
+ * platforms. We read it off `globalThis` rather than statically importing
+ * `@capacitor/core` so the peer-client stays decoupled and unit-testable, and
+ * so the web/Electron bundles don't change their behaviour at all (the global
+ * is simply absent there → every check returns the WS path). `registerPlugin`
+ * is present whenever Capacitor's runtime is loaded.
+ */
+interface CapacitorGlobal {
+    getPlatform?: () => string;
+    isPluginAvailable?: (name: string) => boolean;
+    registerPlugin?: <T>(name: string) => T;
+}
+
+const getCapacitor = (): CapacitorGlobal | undefined => {
+    try {
+        return (globalThis as { Capacitor?: CapacitorGlobal }).Capacitor;
+    } catch {
+        return undefined;
+    }
+};
+
+const isAndroidPlatform = (): boolean => {
+    const cap = getCapacitor();
+    try {
+        return cap?.getPlatform?.() === 'android';
+    } catch {
+        return false;
+    }
+};
+
+const isTcpPluginAvailable = (): boolean => {
+    const cap = getCapacitor();
+    try {
+        return Boolean(cap?.isPluginAvailable?.('TcpSocket'));
+    } catch {
+        return false;
+    }
+};
+
+/**
+ * Minimal view of the Electron preload bridge the desktop app injects. We read
+ * it off `window.api.tcpSocket` rather than statically importing preload types
+ * so the renderer module stays portable to the web bundle (where `window.api`
+ * is absent). Present iff the main-process TCP socket feature is registered.
+ */
+interface ElectronApiGlobal {
+    tcpSocket?: import('/@/renderer/features/peer-sync/transport/native-tcp-stream').ElectronTcpSocketBridge;
+}
+
+const getElectronTcpBridge = ():
+    | import('/@/renderer/features/peer-sync/transport/native-tcp-stream').ElectronTcpSocketBridge
+    | undefined => {
+    try {
+        if (!isElectron()) return undefined;
+        return (globalThis as { api?: ElectronApiGlobal }).api?.tcpSocket;
+    } catch {
+        return undefined;
+    }
+};
+
+const isElectronTcpBridgeAvailable = (): boolean => Boolean(getElectronTcpBridge());
+
+/** Runtime environment for transport resolution. Injected in tests; defaults
+ *  probe the live globals. `pluginAvailable` is the Android Capacitor
+ *  `TcpSocket` plugin; `bridgeAvailable` is the Electron `window.api.tcpSocket`
+ *  IPC bridge. Either one (on its respective platform) enables raw TCP. */
+export interface TransportEnv {
+    android: boolean;
+    /** Electron main-process TCP socket bridge present (`window.api.tcpSocket`). */
+    bridgeAvailable: boolean;
+    electron: boolean;
+    /** Android Capacitor `TcpSocket` plugin registered. */
+    pluginAvailable: boolean;
+}
+
+const defaultTransportEnv = (): TransportEnv => ({
+    android: isAndroidPlatform(),
+    bridgeAvailable: isElectronTcpBridgeAvailable(),
+    electron: isElectron(),
+    pluginAvailable: isTcpPluginAvailable(),
+});
+
+/**
+ * Resolve the effective transport given the user preference, the broker URL,
+ * and the runtime environment. The native TCP path is selected ONLY when both
+ * a transport is wanted AND the platform can provide a raw socket:
+ *   - a transport is "wanted" when the user explicitly chose 'tcp', OR they
+ *     left it on 'auto' and the broker URL carries an `mqtt://`/`mqtts://`
+ *     scheme; AND
+ *   - raw TCP is reachable when EITHER (Android && Capacitor TcpSocket plugin
+ *     available) OR (Electron && the main-process IPC bridge present).
+ * In every other case — web/PWA (no raw-socket API), missing plugin/bridge,
+ * 'ws', or 'auto' with a ws/bare URL — we return 'ws', byte-for-byte the
+ * existing behaviour. Web/PWA can NEVER reach raw TCP and always uses WS.
+ */
+export const resolveEffectiveTransport = (
+    pref: PeerSyncTransport | undefined,
+    brokerUrl: string,
+    env: TransportEnv = defaultTransportEnv(),
+): 'tcp' | 'ws' => {
+    const transport = pref ?? 'auto';
+    if (transport === 'ws') return 'ws';
+    const isMqttScheme = /^mqtts?:\/\//i.test((brokerUrl ?? '').trim());
+    const wantTcp = transport === 'tcp' || (transport === 'auto' && isMqttScheme);
+    if (!wantTcp) return 'ws';
+    // wantTcp — honour it only where a raw socket is actually available.
+    const androidTcp = env.android && env.pluginAvailable;
+    const electronTcp = env.electron && env.bridgeAvailable;
+    if (androidTcp || electronTcp) return 'tcp';
+    if (!env.android && !env.electron) {
+        // Web/PWA: no raw-socket API exists in the browser. Always WS.
+        warn('tcp transport requested in browser/PWA; falling back to ws (no raw-socket API)', {
+            brokerUrl,
+        });
+        return 'ws';
+    }
+    warn('tcp transport requested but no raw-socket provider available; falling back to ws', {
+        brokerUrl,
+    });
+    return 'ws';
+};
+
+/**
+ * Parse a broker URL into the host/port/tls a raw TCP socket needs. Defaults
+ * the port to 1883 (mqtt) / 8883 (mqtts) when absent, matching the standard
+ * MQTT listener ports brokers expose on raw TCP.
+ */
+export const parseTcpTarget = (
+    brokerUrl: string,
+): null | { host: string; port: number; tls: boolean } => {
+    const trimmed = (brokerUrl ?? '').trim();
+    if (!trimmed) return null;
+    const withScheme = /^[a-z]+:\/\//i.test(trimmed) ? trimmed : `mqtt://${trimmed}`;
+    try {
+        const url = new URL(withScheme);
+        const tls = /^(mqtts|wss|ssl|tls)$/i.test(url.protocol.replace(/:$/, ''));
+        const host = url.hostname.replace(/^\[|\]$/g, '');
+        if (!host) return null;
+        const port = url.port ? Number(url.port) : tls ? 8883 : 1883;
+        if (!Number.isFinite(port) || port <= 0) return null;
+        return { host, port, tls };
+    } catch {
+        return null;
+    }
+};
+
 export interface PeerClientStartArgs {
     /** External broker password — only used when non-empty. Overrides the
      *  default room-key-as-password used against the embedded broker. */
     brokerPassword?: string;
-    /** Broker WS/WSS URL. */
+    /** Broker WS/WSS/MQTT/MQTTS URL. */
     brokerUrl: string;
     /** External broker username — only used when non-empty. Overrides the
      *  default Jellyfin-user-id-as-username used against the embedded
@@ -127,6 +283,8 @@ export interface PeerClientStartArgs {
     roomKey: string;
     /** Optional TLS hint — used to set protocol / rejectUnauthorized. */
     tls?: boolean;
+    /** Transport preference. Defaults to 'auto'. */
+    transport?: PeerSyncTransport;
     /** Jellyfin user id we scope the namespace to. */
     userId: string;
 }
@@ -240,6 +398,92 @@ const handleMessage = (s: ActiveSession, topic: string, payload: Uint8Array): vo
     }
 };
 
+/** Lazily-resolved native TcpSocket plugin proxy, cached after first use.
+ *  Sourced from the Android Capacitor plugin OR the Electron IPC bridge —
+ *  whichever the platform provides. */
+let cachedTcpPlugin:
+    | import('/@/renderer/features/peer-sync/transport/native-tcp-stream').TcpSocketPlugin
+    | null = null;
+
+/**
+ * Resolve a `TcpSocketPlugin` from whichever raw-socket provider this platform
+ * offers, or null if none. Android → Capacitor `registerPlugin('TcpSocket')`;
+ * Electron → an adapter over `window.api.tcpSocket`; web/PWA → null (WS only).
+ * The Capacitor path takes precedence so a hybrid build prefers the native
+ * plugin. Never throws.
+ */
+const resolveTcpPlugin = async (): Promise<
+    import('/@/renderer/features/peer-sync/transport/native-tcp-stream').TcpSocketPlugin | null
+> => {
+    if (cachedTcpPlugin) return cachedTcpPlugin;
+    // Android (Capacitor) first.
+    try {
+        const cap = getCapacitor();
+        if (cap?.registerPlugin && isTcpPluginAvailable()) {
+            cachedTcpPlugin =
+                cap.registerPlugin<
+                    import('/@/renderer/features/peer-sync/transport/native-tcp-stream').TcpSocketPlugin
+                >('TcpSocket');
+            if (cachedTcpPlugin) return cachedTcpPlugin;
+        }
+    } catch (err) {
+        warn('capacitor TcpSocket registration failed', { err: (err as Error).message });
+    }
+    // Electron (IPC bridge) fallback.
+    const bridge = getElectronTcpBridge();
+    if (bridge) {
+        const { createElectronTcpSocketPlugin } =
+            await import('/@/renderer/features/peer-sync/transport/native-tcp-stream');
+        cachedTcpPlugin = createElectronTcpSocketPlugin(bridge);
+        return cachedTcpPlugin;
+    }
+    return null;
+};
+
+/**
+ * Build an mqtt.js streamBuilder backed by the native TCP socket, or return
+ * null if no provider is available (caller then falls back to WS). Never
+ * throws — any failure logs + returns null so a missing provider can't crash.
+ */
+const buildNativeTcpStreamBuilder = async (
+    brokerUrl: string,
+    tls: boolean | undefined,
+): Promise<(() => unknown) | null> => {
+    const target = parseTcpTarget(brokerUrl);
+    if (!target) {
+        warn('tcp transport selected but broker URL did not parse; falling back to ws', {
+            brokerUrl: redactBrokerUrl(brokerUrl),
+        });
+        return null;
+    }
+    try {
+        const plugin = await resolveTcpPlugin();
+        if (!plugin) return null;
+        const { createNativeTcpStreamBuilder } =
+            await import('/@/renderer/features/peer-sync/transport/native-tcp-stream');
+        // `tls` on the URL scheme wins; the explicit tls hint is a fallback.
+        const useTls = target.tls || tls === true;
+        log('native-tcp transport selected', {
+            host: target.host,
+            port: target.port,
+            tls: useTls,
+        });
+        return createNativeTcpStreamBuilder(plugin, {
+            host: target.host,
+            port: target.port,
+            // rejectUnauthorized mirrors the WS path: strict unless tls hint
+            // explicitly says otherwise (args.tls === false).
+            rejectUnauthorized: tls !== false,
+            tls: useTls,
+        });
+    } catch (err) {
+        warn('failed to build native tcp transport; falling back to ws', {
+            err: (err as Error).message,
+        });
+        return null;
+    }
+};
+
 /**
  * Boot the peer-sync client. Idempotent — calling start while already
  * connected to the same broker is a no-op; differing args restart the
@@ -255,6 +499,7 @@ export const startPeerClient = (args: PeerClientStartArgs, events: PeerEvents = 
             session.args.brokerUsername === args.brokerUsername &&
             session.args.brokerPassword === args.brokerPassword &&
             session.args.jellyfinDeviceId === args.jellyfinDeviceId &&
+            session.args.transport === args.transport &&
             session.args.tls === args.tls;
         if (same) {
             session.events = events;
@@ -298,17 +543,101 @@ export const startPeerClient = (args: PeerClientStartArgs, events: PeerEvents = 
 
     const resolvedUrl = normalizeBrokerUrl(args.brokerUrl);
     const loggedUrl = redactBrokerUrl(args.brokerUrl);
+    const effectiveTransport = resolveEffectiveTransport(args.transport, args.brokerUrl);
     log('connecting', {
         auth: useExternalAuth ? 'external' : 'embedded',
         brokerUrl: loggedUrl,
         peerId: args.peerId,
+        transport: effectiveTransport,
     });
 
-    // Guard mqtt.connect — a malformed URL throws synchronously and the
-    // previous code let that bubble up through the React effect, crashing
-    // the renderer to a blackscreen. Surface the failure as a normal
-    // disconnected event instead so the diagnostics page + UI banner can
-    // show it without taking the whole app down.
+    // Attach all listeners + bookkeeping once the MqttClient exists. Shared by
+    // the synchronous WS path and the async native-TCP path so the lifecycle
+    // (C3 stale-session guard, presence publish, message routing) is identical
+    // regardless of transport.
+    const wire = (client: MqttClient): void => {
+        const newSession: ActiveSession = {
+            args,
+            client,
+            events,
+            selfAddress,
+        };
+        session = newSession;
+
+        wireClient(client, newSession, {
+            args,
+            events,
+            loggedUrl,
+            presenceTopic,
+            selfAddress,
+        });
+    };
+
+    if (effectiveTransport === 'tcp') {
+        // Native TCP path (Android only). Build the streamBuilder asynchronously
+        // (dynamic import keeps the native-stream code out of the WS bundles),
+        // then construct the client with it. On ANY failure we fall back to the
+        // synchronous WS path so a missing/broken plugin never strands the user.
+        void buildNativeTcpStreamBuilder(args.brokerUrl, args.tls)
+            .then((streamBuilder) => {
+                // The session might have been torn down / superseded while we
+                // were awaiting the dynamic import. Bail if so.
+                if (session && session.args !== args) {
+                    log('native-tcp build superseded before connect; dropping');
+                    return;
+                }
+                if (!streamBuilder) {
+                    log('native-tcp unavailable; using ws transport');
+                    connectWsAndWire(resolvedUrl, opts, loggedUrl, events, wire);
+                    return;
+                }
+                try {
+                    // mqtt's MqttClient takes (streamBuilder, options). The
+                    // published types only type `connect(url, opts)`, so cast.
+                    const MqttClientCtor = (
+                        mqtt as unknown as {
+                            MqttClient: new (sb: unknown, o: IClientOptions) => MqttClient;
+                        }
+                    ).MqttClient;
+                    const client = new MqttClientCtor(streamBuilder, opts);
+                    wire(client);
+                } catch (err) {
+                    warn('native-tcp client construct failed; falling back to ws', {
+                        brokerUrl: loggedUrl,
+                        err: (err as Error).message,
+                    });
+                    connectWsAndWire(resolvedUrl, opts, loggedUrl, events, wire);
+                }
+            })
+            .catch((err) => {
+                warn('native-tcp transport setup failed; falling back to ws', {
+                    brokerUrl: loggedUrl,
+                    err: (err as Error).message,
+                });
+                connectWsAndWire(resolvedUrl, opts, loggedUrl, events, wire);
+            });
+        return;
+    }
+
+    // WebSocket path — unchanged from before. Synchronous; the existing tests
+    // assert mqtt.connect is called immediately here.
+    connectWsAndWire(resolvedUrl, opts, loggedUrl, events, wire);
+};
+
+/**
+ * Connect over WebSocket and hand the client to `wire`. Guards mqtt.connect —
+ * a malformed URL throws synchronously and the previous code let that bubble
+ * up through the React effect, crashing the renderer to a blackscreen. Surface
+ * the failure as a normal disconnected event instead so the diagnostics page +
+ * UI banner can show it without taking the whole app down.
+ */
+const connectWsAndWire = (
+    resolvedUrl: string,
+    opts: IClientOptions,
+    loggedUrl: string,
+    events: PeerEvents,
+    wire: (client: MqttClient) => void,
+): void => {
     let client: MqttClient;
     try {
         client = mqtt.connect(resolvedUrl, opts);
@@ -317,16 +646,32 @@ export const startPeerClient = (args: PeerClientStartArgs, events: PeerEvents = 
         events.onConnectionChange?.('disconnected');
         return;
     }
+    wire(client);
+};
 
-    const newSession: ActiveSession = {
-        args,
-        client,
-        events,
-        selfAddress,
-    };
-    session = newSession;
+interface WireContext {
+    args: PeerClientStartArgs;
+    events: PeerEvents;
+    loggedUrl: string;
+    presenceTopic: string;
+    selfAddress: PeerAddress;
+}
+
+/** Attach the MqttClient event handlers. Behaviour is transport-agnostic. */
+const wireClient = (client: MqttClient, newSession: ActiveSession, ctx: WireContext): void => {
+    const { args, events, loggedUrl, presenceTopic } = ctx;
 
     client.on('connect', () => {
+        // A late CONNACK can fire after stopPeerClient() tore us down (kill
+        // switch flipped mid-handshake) or after a fresh startPeerClient
+        // replaced the session. removeAllListeners() in stopPeerClient should
+        // detach this handler, but guard anyway so a torn-down/superseded
+        // session can never resurrect itself by subscribing + publishing
+        // presence. See C3.
+        if (session !== newSession) {
+            warn('ignoring connect on stale/torn-down session', { brokerUrl: loggedUrl });
+            return;
+        }
         log('connected', { brokerUrl: loggedUrl });
         events.onConnectionChange?.('connected');
         const sub = userPeersWildcard(args.userId);
@@ -433,6 +778,17 @@ export const publishCommand = (target: PeerAddress, command: PeerCommand): void 
  */
 export const publishOwnState = (state: PeerState): void => {
     if (!session) return;
+    // Consult the loop guard at the single publish chokepoint. The receiver
+    // opens the inbound-apply window (markInboundApply) whenever it applies a
+    // peer command; suppressing our own-state publish during that window stops
+    // the echo loop the guard was built to prevent (peer-loop-guard.ts). No
+    // live publisher subscribes the player store to this path yet, so this is
+    // currently latent — but it makes the guard correct the moment one is
+    // wired. See D1.
+    if (isInboundApplyActive()) {
+        log('skip state publish: inbound-apply window');
+        return;
+    }
     const topic = topicFor(session.selfAddress, 'state');
     publishWithErrorLog(
         session.client,
@@ -507,5 +863,128 @@ export const stopPeerClient = (): void => {
     }
     s.client.end(true, undefined, () => {
         log('stopped');
+    });
+};
+
+export interface TestBrokerConnectionOptions {
+    /** Broker auth password (own-broker tier). */
+    password?: string;
+    /** Connection timeout in ms. Defaults to ~8s. */
+    timeoutMs?: number;
+    /** TLS hint — falls back to the URL scheme when undefined. */
+    tls?: boolean;
+    /** Transport preference; resolved exactly like the live connect path. */
+    transport?: PeerSyncTransport;
+    /** Broker auth username (own-broker tier). */
+    username?: string;
+}
+
+/**
+ * Probe a broker the same way the live client connects, but tear the probe
+ * down immediately after the first CONNACK / error / timeout. Mirrors the
+ * real path: resolveEffectiveTransport → native-TCP streamBuilder when 'tcp',
+ * else mqtt.connect(normalizeBrokerUrl(url)). Uses reconnectPeriod:0 so a
+ * refused broker fails fast instead of looping, and an external timer so a
+ * broker that accepts the TCP/WS handshake but never sends CONNACK still
+ * resolves. NEVER throws — always resolves `{ ok, error? }` and always tears
+ * the client down (client.end(true)) and clears the timer.
+ */
+export const testBrokerConnection = async (
+    brokerUrl: string,
+    options: TestBrokerConnectionOptions = {},
+): Promise<{ error?: string; ok: boolean }> => {
+    const url = (brokerUrl ?? '').trim();
+    if (!url) return { error: 'Broker URL is empty', ok: false };
+
+    const timeoutMs = options.timeoutMs ?? 8_000;
+    const loggedUrl = redactBrokerUrl(url);
+    const useExternalAuth = Boolean(options.username);
+    const opts: IClientOptions = {
+        clean: true,
+        clientId: `feishin-test-${Math.random().toString(36).slice(2, 10)}`,
+        connectTimeout: timeoutMs,
+        keepalive: 30,
+        password: useExternalAuth ? (options.password ?? '') : undefined,
+        protocolVersion: 4,
+        // No reconnect loop — a one-shot probe.
+        reconnectPeriod: 0,
+        rejectUnauthorized: options.tls !== false,
+        username: useExternalAuth ? options.username : undefined,
+    };
+
+    const effectiveTransport = resolveEffectiveTransport(options.transport, url);
+    log('test connecting', { brokerUrl: loggedUrl, transport: effectiveTransport });
+
+    return new Promise<{ error?: string; ok: boolean }>((resolve) => {
+        let settled = false;
+        let client: MqttClient | null = null;
+        let timer: null | ReturnType<typeof setTimeout> = null;
+
+        const cleanup = () => {
+            if (timer) {
+                clearTimeout(timer);
+                timer = null;
+            }
+            try {
+                client?.removeAllListeners();
+                client?.end(true);
+            } catch {
+                // best-effort teardown — the probe is one-shot.
+            }
+        };
+
+        const finish = (result: { error?: string; ok: boolean }) => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            if (result.ok) log('test ok', { brokerUrl: loggedUrl });
+            else warn('test failed', { brokerUrl: loggedUrl, error: result.error });
+            resolve(result);
+        };
+
+        timer = setTimeout(() => {
+            finish({ error: `Timed out after ${Math.round(timeoutMs / 1000)}s`, ok: false });
+        }, timeoutMs);
+
+        const wireProbe = (c: MqttClient): void => {
+            client = c;
+            c.on('connect', () => finish({ ok: true }));
+            c.on('error', (err) => finish({ error: err.message, ok: false }));
+        };
+
+        if (effectiveTransport === 'tcp') {
+            void buildNativeTcpStreamBuilder(url, options.tls)
+                .then((streamBuilder) => {
+                    if (settled) return;
+                    if (!streamBuilder) {
+                        // Plugin unavailable — fall back to a WS probe, mirroring
+                        // the live connect fallback chain.
+                        try {
+                            wireProbe(mqtt.connect(normalizeBrokerUrl(url), opts));
+                        } catch (err) {
+                            finish({ error: (err as Error).message, ok: false });
+                        }
+                        return;
+                    }
+                    try {
+                        const MqttClientCtor = (
+                            mqtt as unknown as {
+                                MqttClient: new (sb: unknown, o: IClientOptions) => MqttClient;
+                            }
+                        ).MqttClient;
+                        wireProbe(new MqttClientCtor(streamBuilder, opts));
+                    } catch (err) {
+                        finish({ error: (err as Error).message, ok: false });
+                    }
+                })
+                .catch((err) => finish({ error: (err as Error).message, ok: false }));
+            return;
+        }
+
+        try {
+            wireProbe(mqtt.connect(normalizeBrokerUrl(url), opts));
+        } catch (err) {
+            finish({ error: (err as Error).message, ok: false });
+        }
     });
 };

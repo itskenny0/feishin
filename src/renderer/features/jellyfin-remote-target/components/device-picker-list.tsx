@@ -2,7 +2,7 @@ import type { RemoteDevice } from '/@/renderer/features/jellyfin-remote-target/t
 
 import { UnstyledButton } from '@mantine/core';
 import isElectron from 'is-electron';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import styles from './device-picker.module.css';
@@ -118,7 +118,7 @@ export const DevicePickerList = ({ onClose, variant = 'desktop' }: DevicePickerL
      * hide-non-MQTT filter below) stays current as retained MQTT presence
      * frames arrive after the picker opens.
      */
-    const [, setTransportRev] = useState(0);
+    const [transportRev, setTransportRev] = useState(0);
     useEffect(() => {
         return subscribeTransport(() => setTransportRev((r) => r + 1));
     }, []);
@@ -146,6 +146,9 @@ export const DevicePickerList = ({ onClose, variant = 'desktop' }: DevicePickerL
             capabilities: d.capabilities,
             deviceId: d.deviceId,
             deviceName: d.deviceName,
+            // E1: bind the target to the server that established it so commands
+            // can't leak to a different server after a switch.
+            ownerServerId: server?.id ?? '',
             sessionId: d.sessionId,
         });
         setSettings({
@@ -193,8 +196,51 @@ export const DevicePickerList = ({ onClose, variant = 'desktop' }: DevicePickerL
 
     const thisDeviceIcon = isElectron() ? 'deviceComputer' : 'devicePhone';
 
+    /**
+     * Derive the per-device view (lane + icon) ONCE per render and filter it
+     * down to what's actually shown. Without this, an unrelated peer's
+     * transport flip (which bumps `transportRev` and force-re-renders the
+     * whole list) would re-run `pickTransportByJellyfinDeviceId` twice and the
+     * `deviceTypeIcon` regex once for every device, inline, on every flip.
+     * Keyed on `transportRev` so the lane badge / hide-non-MQTT filter still
+     * react to flips — drop that dep and the badge goes stale after a flip.
+     */
+    const visibleRows = useMemo(
+        () =>
+            devices
+                .map((d) => ({
+                    device: d,
+                    icon: deviceTypeIcon(d),
+                    lane: pickTransportByJellyfinDeviceId(d.deviceId),
+                }))
+                // "Hide devices without MQTT" — opt-in filter that removes
+                // Jellyfin-only rows (jellyfin-web, jellyfin-android-tv,
+                // other Feishins that haven't published presence yet) from
+                // the picker. The currently-selected target always stays
+                // visible so the user doesn't lose it mid-toggle.
+                .filter(({ device, lane }) => {
+                    if (!peerSync.ui.hideNonMqttDevices) return true;
+                    if (target.deviceId === device.deviceId) return true;
+                    return lane === 'mqtt';
+                }),
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [devices, peerSync.ui.hideNonMqttDevices, target.deviceId, transportRev],
+    );
+
+    // The unfiltered list was non-empty but the MQTT filter zeroed it — drive
+    // a distinct empty-state so the picker doesn't silently look broken after
+    // the user toggles "Hide devices without MQTT".
+    const filteredToZero =
+        devices.length > 0 && visibleRows.length === 0 && peerSync.ui.hideNonMqttDevices;
+
     return (
-        <div className={styles.list}>
+        <div
+            aria-label={t('page.remoteTarget.connectTitle', {
+                defaultValue: 'Connect to a device',
+            })}
+            className={styles.list}
+            role="listbox"
+        >
             {variant === 'desktop' ? (
                 <div className={styles.header}>
                     <Text className={styles.headerTitle}>
@@ -237,8 +283,10 @@ export const DevicePickerList = ({ onClose, variant = 'desktop' }: DevicePickerL
             )}
 
             <UnstyledButton
+                aria-selected={!target.isRemote}
                 className={`${styles.row} ${target.isRemote ? '' : styles.rowActive}`}
                 onClick={selectLocal}
+                role="option"
             >
                 <span className={styles.iconWrap}>
                     <Icon icon={thisDeviceIcon} size="lg" />
@@ -271,6 +319,23 @@ export const DevicePickerList = ({ onClose, variant = 'desktop' }: DevicePickerL
                         {pollError}
                     </Text>
                 </div>
+            ) : filteredToZero ? (
+                // Unfiltered list non-empty but the MQTT filter removed every
+                // row — explain WHY the list went blank after the toggle so the
+                // picker doesn't read as broken.
+                <div className={styles.empty}>
+                    <Text c="dimmed" size="sm">
+                        {t('page.remoteTarget.noMqttPeers', {
+                            defaultValue: 'No MQTT peers found',
+                        })}
+                    </Text>
+                    <Text c="dimmed" size="xs">
+                        {t('page.remoteTarget.noMqttPeersHint', {
+                            defaultValue:
+                                "Turn off 'Hide devices without MQTT' to see all Jellyfin clients.",
+                        })}
+                    </Text>
+                </div>
             ) : devices.length === 0 ? (
                 hasPolledOnce ? (
                     <div className={styles.empty}>
@@ -295,80 +360,69 @@ export const DevicePickerList = ({ onClose, variant = 'desktop' }: DevicePickerL
                 )
             ) : null}
 
-            {devices
-                .filter((d) => {
-                    // "Hide devices without MQTT" — opt-in filter that removes
-                    // Jellyfin-only rows (jellyfin-web, jellyfin-android-tv,
-                    // other Feishins that haven't published presence yet)
-                    // from the picker. The currently-selected target always
-                    // stays visible so the user doesn't lose it mid-toggle.
-                    if (!peerSync.ui.hideNonMqttDevices) return true;
-                    if (target.deviceId === d.deviceId) return true;
-                    return pickTransportByJellyfinDeviceId(d.deviceId) === 'mqtt';
-                })
-                .map((d) => {
-                    const active = target.deviceId === d.deviceId;
-                    const subtitle = d.nowPlayingTitle
-                        ? `${d.nowPlayingTitle}${d.nowPlayingArtist ? ` — ${d.nowPlayingArtist}` : ''}`
-                        : active
-                          ? t('page.remoteTarget.currentDevice', { defaultValue: 'Current device' })
-                          : d.isPaused
-                            ? t('player.paused', { defaultValue: 'Paused' })
-                            : t('common.idle', { defaultValue: 'Idle' });
-                    // Lane = whichever transport would be used to drive this
-                    // device right now. Bridges via the Jellyfin deviceId so a
-                    // Feishin peer that's published its `dev` in MQTT presence
-                    // lights up the MQTT badge; jellyfin-web and other clients
-                    // that don't publish stay on Jellyfin.
-                    const lane = pickTransportByJellyfinDeviceId(d.deviceId);
-                    const showLaneBadge =
-                        peerSync.onboarded &&
-                        peerSync.jellyfinRemoteEnabled &&
-                        peerSync.ui.pickerBadges &&
-                        lane === 'mqtt';
-                    return (
-                        <UnstyledButton
-                            className={`${styles.row} ${active ? styles.rowActive : ''}`}
-                            key={d.deviceId}
-                            onClick={() => selectDevice(d)}
-                        >
-                            <span className={styles.iconWrap}>
-                                <Icon
-                                    fill={active ? 'primary' : undefined}
-                                    icon={deviceTypeIcon(d)}
-                                    size="lg"
-                                />
+            {visibleRows.map(({ device: d, icon, lane }) => {
+                const active = target.deviceId === d.deviceId;
+                const subtitle = d.nowPlayingTitle
+                    ? `${d.nowPlayingTitle}${d.nowPlayingArtist ? ` — ${d.nowPlayingArtist}` : ''}`
+                    : active
+                      ? t('page.remoteTarget.currentDevice', { defaultValue: 'Current device' })
+                      : d.isPaused
+                        ? t('player.paused', { defaultValue: 'Paused' })
+                        : t('common.idle', { defaultValue: 'Idle' });
+                // Lane = whichever transport would be used to drive this device
+                // right now (resolved once in `visibleRows`). Bridges via the
+                // Jellyfin deviceId so a Feishin peer that's published its `dev`
+                // in MQTT presence lights up the MQTT badge; jellyfin-web and
+                // other clients that don't publish stay on Jellyfin. Keep the
+                // badge on the active row too so the lane stays legible — the
+                // selected affordance is carried by aria-selected + the
+                // equalizer/check, not by hiding the badge (audit F8).
+                const showLaneBadge =
+                    peerSync.onboarded &&
+                    peerSync.jellyfinRemoteEnabled &&
+                    peerSync.ui.pickerBadges &&
+                    lane === 'mqtt';
+                return (
+                    <UnstyledButton
+                        aria-selected={active}
+                        className={`${styles.row} ${active ? styles.rowActive : ''}`}
+                        key={d.deviceId}
+                        onClick={() => selectDevice(d)}
+                        role="option"
+                    >
+                        <span className={styles.iconWrap}>
+                            <Icon fill={active ? 'primary' : undefined} icon={icon} size="lg" />
+                        </span>
+                        <span className={styles.rowText}>
+                            <span className={styles.titleLine}>
+                                <Text className={styles.rowTitle}>{d.deviceName}</Text>
+                                {showLaneBadge && (
+                                    <span
+                                        aria-label={t('page.remoteTarget.laneBadgeAriaLabel', {
+                                            defaultValue: 'MQTT lane active',
+                                        })}
+                                        className={styles.laneBadge}
+                                    >
+                                        {t('common.transportMqtt', { defaultValue: 'MQTT' })}
+                                    </span>
+                                )}
                             </span>
-                            <span className={styles.rowText}>
-                                <span className={styles.titleLine}>
-                                    <Text className={styles.rowTitle}>{d.deviceName}</Text>
-                                    {showLaneBadge && (
-                                        <span
-                                            aria-label={t('page.remoteTarget.laneBadgeAriaLabel', {
-                                                defaultValue: 'MQTT lane active',
-                                            })}
-                                            className={styles.laneBadge}
-                                        >
-                                            {t('common.transportMqtt', { defaultValue: 'MQTT' })}
-                                        </span>
-                                    )}
-                                </span>
-                                <Text
-                                    c={active ? 'var(--theme-colors-primary)' : 'dimmed'}
-                                    className={styles.rowSubtitle}
-                                >
-                                    {subtitle}
-                                </Text>
-                            </span>
-                            {active &&
-                                (d.nowPlayingItemId && !d.isPaused ? (
-                                    <Equalizer />
-                                ) : (
-                                    <Icon fill="primary" icon="check" />
-                                ))}
-                        </UnstyledButton>
-                    );
-                })}
+                            <Text
+                                c={active ? 'var(--theme-colors-primary)' : 'dimmed'}
+                                className={styles.rowSubtitle}
+                            >
+                                {subtitle}
+                            </Text>
+                        </span>
+                        {active &&
+                            (d.nowPlayingItemId && !d.isPaused ? (
+                                <Equalizer />
+                            ) : (
+                                <Icon fill="primary" icon="check" />
+                            ))}
+                    </UnstyledButton>
+                );
+            })}
         </div>
     );
 };

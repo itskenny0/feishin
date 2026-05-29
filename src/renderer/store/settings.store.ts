@@ -845,10 +845,22 @@ const LocalCacheThumbnailSizeSchema = z.enum([
     'table',
 ]);
 
+/**
+ * Per-entity offline-media (audio download) config. Gated behind the
+ * localCache opt-in — offline playback requires the metadata cache. Default
+ * cap is 2 GiB; `downloadOriginal` true means we download the untranscoded
+ * source file (smaller transcodes can be opted into later).
+ */
+const OfflineMediaSettingsSchema = z.object({
+    downloadOriginal: z.boolean().default(true),
+    maxBytes: z.number().default(2 * 1024 * 1024 * 1024),
+});
+
 const LocalCacheSettingsSchema = z.object({
     capacityBytes: z.number().optional(),
     enabled: z.boolean().optional(),
     entities: LocalCacheEntitiesSchema.optional(),
+    offlineMedia: OfflineMediaSettingsSchema.optional(),
     sweepProgressSmoothing: z.boolean().default(true),
     // Worker count for the thumbnail pre-cache sweep. Higher = faster but
     // more concurrent fetches / IndexedDB writes. 24 is the default on
@@ -921,6 +933,13 @@ const PeerSyncSettingsSchema = z.object({
     peerId: z.string().default(''),
     /** Shared room key — auto-generated on first opt-in. */
     roomKey: z.string().default(''),
+    /** MQTT transport selection. 'auto' (default) uses WebSocket on
+     *  web/Electron and upgrades to raw TCP on Android when the broker URL
+     *  carries an mqtt://(s) scheme; 'ws' forces WebSocket; 'tcp' forces raw
+     *  TCP (Android only — falls back to WS when the native socket plugin is
+     *  unavailable). Lets Android users reach brokers that expose only raw
+     *  TCP on 1883/8883 and no WebSocket listener. */
+    transport: z.enum(['auto', 'ws', 'tcp']).default('auto'),
     /** Per-element visibility toggles. Power users who don't want a
      *  particular Connect-related chrome can switch it off here. */
     ui: PeerSyncUiVisibilitySchema.default({
@@ -1142,6 +1161,8 @@ export type ItemListSettings = {
 };
 
 export type LocalCacheSettings = z.infer<typeof LocalCacheSettingsSchema>;
+
+export type OfflineMediaSettings = z.infer<typeof OfflineMediaSettingsSchema>;
 
 export type PlayerFilter = z.infer<typeof PlayerFilterSchema>;
 
@@ -2146,6 +2167,10 @@ const initialState: SettingsState = {
             playlists: true,
             songs: true,
         },
+        offlineMedia: {
+            downloadOriginal: true,
+            maxBytes: 2 * 1024 * 1024 * 1024,
+        },
         sweepProgressSmoothing: true,
         thumbnailSizes: [],
     },
@@ -2191,6 +2216,7 @@ const initialState: SettingsState = {
         onboarded: false,
         peerId: '',
         roomKey: '',
+        transport: 'auto',
         ui: {
             connectButton: true,
             hideNonMqttDevices: false,
@@ -3170,10 +3196,55 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
+                if (version <= 50) {
+                    // Seed the new offline-media (per-entity audio download)
+                    // config under the existing localCache slice. The feature
+                    // is gated behind localCache.enabled, so this is inert
+                    // until the user has opted into the metadata cache. 2 GiB
+                    // default cap; original (untranscoded) downloads.
+                    if (state.localCache && typeof state.localCache === 'object') {
+                        if (
+                            !state.localCache.offlineMedia ||
+                            typeof state.localCache.offlineMedia !== 'object'
+                        ) {
+                            state.localCache.offlineMedia = {
+                                downloadOriginal: true,
+                                maxBytes: 2 * 1024 * 1024 * 1024,
+                            };
+                        }
+                    }
+                }
+
+                if (version <= 51) {
+                    // Add the MQTT transport selector. 'auto' preserves the
+                    // existing WebSocket behaviour everywhere except Android
+                    // with an mqtt://(s) broker URL, so upgraders see no change
+                    // until they opt into raw TCP.
+                    if (state.peerSync && typeof state.peerSync === 'object') {
+                        const t = (state.peerSync as { transport?: unknown }).transport;
+                        if (t !== 'auto' && t !== 'ws' && t !== 'tcp') {
+                            (state.peerSync as { transport: string }).transport = 'auto';
+                        }
+                    }
+                }
+
+                if (version <= 52) {
+                    // The room key (== broker auth password) is no longer a
+                    // user-editable random value: it is derived deterministically
+                    // from the Jellyfin username at connect time so a user's own
+                    // devices authenticate to each other's broker. Clear any stale
+                    // random key left over from the old editor so the diagnostics
+                    // display doesn't show a value the live client never uses. The
+                    // field is kept (vestigial) for backwards-compatible shape.
+                    if (state.peerSync && typeof state.peerSync === 'object') {
+                        (state.peerSync as { roomKey?: unknown }).roomKey = '';
+                    }
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 50,
+            version: 53,
         },
     ),
 );

@@ -12,7 +12,21 @@ export const RemoteStatusBanner = () => {
     const peerSync = usePeerSyncSettings();
 
     if (!peerSync.onboarded || !peerSync.jellyfinRemoteEnabled) return null;
-    if (status !== 'reconnecting' || !target.deviceName) return null;
+    // Render for the two degraded/in-flight states that have real producers:
+    // 'reconnecting' (sessions-poller missing-target ladder) and 'transferring'
+    // (connect-lifecycle handoff). 'offline' is intentionally not handled — it
+    // has no producer (see audit F4); the picker buttons no longer tint for it.
+    if ((status !== 'reconnecting' && status !== 'transferring') || !target.deviceName) {
+        return null;
+    }
+
+    const message =
+        status === 'transferring'
+            ? t('page.remoteTarget.transferring', {
+                  defaultValue: 'Transferring playback to {{deviceName}}…',
+                  deviceName: target.deviceName,
+              })
+            : t('page.remoteTarget.reconnecting', { deviceName: target.deviceName });
 
     return (
         <div
@@ -28,7 +42,7 @@ export const RemoteStatusBanner = () => {
             }}
         >
             <Loader color="white" size="xs" />
-            <span>{t('page.remoteTarget.reconnecting', { deviceName: target.deviceName })}</span>
+            <span>{message}</span>
         </div>
     );
 };

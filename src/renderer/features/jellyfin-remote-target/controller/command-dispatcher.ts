@@ -52,10 +52,18 @@ const notifyDispatched = (): void => {
 
 // Per-command toast throttling: when an offline device is targeted, every
 // click would otherwise spam a stack of identical error toasts. Limit each
-// unique (label, sessionId) tuple to one toast every 5 seconds — keying on
-// sessionId stops a hot error from device A masking a real, distinct error
-// from device B right after a transfer.
+// unique (label, sessionId) tuple to one toast every TOAST_THROTTLE_MS —
+// keying on sessionId stops a hot error from device A masking a real, distinct
+// error from device B right after a transfer.
+const TOAST_THROTTLE_MS = 5_000;
 const lastToastByKey: Record<string, number> = {};
+
+/**
+ * Test-only probe for the throttle-map size so a regression test can assert
+ * the map self-bounds rather than growing one entry per historical sessionId.
+ * Not part of the runtime contract.
+ */
+export const __getToastThrottleSize = (): number => Object.keys(lastToastByKey).length;
 
 const errorStatus = (err: unknown): number | undefined => {
     if (err instanceof RemoteCommandError) return err.status;
@@ -81,7 +89,17 @@ const surfaceError = (label: string, sessionId: string, err: unknown): void => {
         }
     }
 
-    if (now - last < 5_000) return;
+    if (now - last < TOAST_THROTTLE_MS) return;
+    // Prune entries past the throttle window before recording the new one so
+    // the map self-bounds to keys active within the last TOAST_THROTTLE_MS.
+    // sessionIds rotate on every device re-pick / re-login, so without this
+    // the map accumulates one permanent entry per (label, historical
+    // sessionId) for the app's lifetime. Pruned entries are already stale
+    // (their now - last would exceed the window and not suppress a toast
+    // anyway), so this never changes live throttling behavior.
+    for (const [k, ts] of Object.entries(lastToastByKey)) {
+        if (now - ts >= TOAST_THROTTLE_MS) delete lastToastByKey[k];
+    }
     lastToastByKey[key] = now;
     const message = err instanceof Error ? err.message : String(err);
     toast.error({

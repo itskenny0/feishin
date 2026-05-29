@@ -1,5 +1,5 @@
 import formatDuration from 'format-duration';
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 
 import { CustomPlayerbarSlider } from './playerbar-slider';
 
@@ -16,7 +16,11 @@ interface PlayerbarSeekSliderProps {
     min: number;
 }
 
-export const PlayerbarSeekSlider = ({ max, min }: PlayerbarSeekSliderProps) => {
+// Wrapped in React.memo so a parent re-render (e.g. PlayerbarSlider
+// reconciling on a song/source change) doesn't reconcile this comparatively
+// expensive Mantine slider — it only re-renders when its own max/min props
+// change or its own (now ~20fps-gated) position subscription emits.
+const PlayerbarSeekSliderBase = ({ max, min }: PlayerbarSeekSliderProps) => {
     const [isSeeking, setIsSeeking] = useState(false);
     const [seekValue, setSeekValue] = useState(0);
     const source = useActivePlayerSource();
@@ -113,3 +117,6 @@ export const PlayerbarSeekSlider = ({ max, min }: PlayerbarSeekSliderProps) => {
         />
     );
 };
+
+export const PlayerbarSeekSlider = memo(PlayerbarSeekSliderBase);
+PlayerbarSeekSlider.displayName = 'PlayerbarSeekSlider';

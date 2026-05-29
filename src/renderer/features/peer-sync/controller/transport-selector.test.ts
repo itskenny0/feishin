@@ -132,13 +132,16 @@ describe('jellyfin-deviceId bridge', () => {
         expect(getPeerIdForJellyfinDeviceId('jf-device-1')).toBe('peer-1');
     });
 
-    it('LWT offline keeps the bridge entry but the lane resolves to jellyfin', () => {
+    it('LWT offline RELEASES the bridge entry so a dead peer cannot hold a deviceId (B2)', () => {
         setSyncEnabled(true);
         recordPresence('peer-1', true, Date.now(), 'jf-device-1');
         recordPresence('peer-1', false, Date.now(), 'jf-device-1');
-        // Bridge still knows the mapping — useful for "last known" diagnostics
-        // — but the lane is jellyfin.
-        expect(getPeerIdForJellyfinDeviceId('jf-device-1')).toBe('peer-1');
+        // B2: an explicit offline releases LIVE routing ownership — otherwise a
+        // departed peer keeps routing commands to a dead peer and makes the
+        // mirror's gate reject a legitimate new owner's frames. The lane also
+        // resolves to jellyfin (presence not fresh). Last-known dev for
+        // diagnostics is still readable from presence.get(peerId).
+        expect(getPeerIdForJellyfinDeviceId('jf-device-1')).toBeUndefined();
         expect(pickTransportByJellyfinDeviceId('jf-device-1')).toBe('jellyfin');
     });
 

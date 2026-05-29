@@ -6,6 +6,7 @@ import { useIsFetchingItemListCount } from '/@/renderer/components/item-list/hel
 import { PageHeader } from '/@/renderer/components/page-header/page-header';
 import { useListContext } from '/@/renderer/context/list-context';
 import { artistsQueries } from '/@/renderer/features/artists/api/artists-api';
+import { useOfflineListSource } from '/@/renderer/features/context-menu/hooks/use-offline-download';
 import { useGenreList } from '/@/renderer/features/genres/api/genres-api';
 import { FilterBar } from '/@/renderer/features/shared/components/filter-bar';
 import { LibraryHeaderBar } from '/@/renderer/features/shared/components/library-header-bar';
@@ -33,6 +34,7 @@ export const SongListHeader = ({ title }: SongListHeaderProps) => {
                         <PlayButton />
                         <PageTitle title={title} />
                         <SongListHeaderBadge />
+                        <OfflineButton />
                     </LibraryHeaderBar>
                     <Group>
                         <ListSearchInput />
@@ -56,18 +58,32 @@ const SongListHeaderBadge = () => {
     return <LibraryHeaderBar.Badge isLoading={isFetching}>{itemCount}</LibraryHeaderBar.Badge>;
 };
 
-const PlayButton = () => {
+const useMergedQuery = () => {
     const { customFilters } = useListContext();
     const { query } = useSongListFilters();
 
-    const mergedQuery = useMemo(() => {
+    return useMemo(() => {
         return {
             ...query,
             ...(customFilters ?? {}),
         };
     }, [query, customFilters]);
+};
+
+const PlayButton = () => {
+    const mergedQuery = useMergedQuery();
 
     return <LibraryHeaderBar.PlayButton itemType={LibraryItem.SONG} listQuery={mergedQuery} />;
+};
+
+const OfflineButton = () => {
+    const mergedQuery = useMergedQuery();
+    const { itemCount } = useListContext();
+    const { available, getEntities } = useOfflineListSource(LibraryItem.SONG, mergedQuery);
+
+    if (!available) return null;
+
+    return <LibraryHeaderBar.OfflineButton source={{ getEntities, itemCount, type: 'list' }} />;
 };
 
 const PageTitle = ({ title }: { title?: string }) => {

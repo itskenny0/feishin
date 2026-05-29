@@ -5,6 +5,7 @@ import { PageHeader } from '/@/renderer/components/page-header/page-header';
 import { useListContext } from '/@/renderer/context/list-context';
 import { ArtistListHeaderFilters } from '/@/renderer/features/artists/components/artist-list-header-filters';
 import { useArtistListFilters } from '/@/renderer/features/artists/hooks/use-artist-list-filters';
+import { useOfflineListSource } from '/@/renderer/features/context-menu/hooks/use-offline-download';
 import { FilterBar } from '/@/renderer/features/shared/components/filter-bar';
 import { LibraryHeaderBar } from '/@/renderer/features/shared/components/library-header-bar';
 import { ListSearchInput } from '/@/renderer/features/shared/components/list-search-input';
@@ -28,6 +29,7 @@ export const ArtistListHeader = ({ title }: ArtistListHeaderProps) => {
                     <PlayButton />
                     <LibraryHeaderBar.Title>{pageTitle}</LibraryHeaderBar.Title>
                     <ArtistListHeaderBadge />
+                    <OfflineButton />
                 </LibraryHeaderBar>
                 <Group>
                     <ListSearchInput />
@@ -54,4 +56,14 @@ const PlayButton = () => {
     const { query } = useArtistListFilters();
 
     return <LibraryHeaderBar.PlayButton itemType={LibraryItem.ARTIST} listQuery={query} />;
+};
+
+const OfflineButton = () => {
+    const { query } = useArtistListFilters();
+    const { itemCount } = useListContext();
+    const { available, getEntities } = useOfflineListSource(LibraryItem.ARTIST, query);
+
+    if (!available) return null;
+
+    return <LibraryHeaderBar.OfflineButton source={{ getEntities, itemCount, type: 'list' }} />;
 };

@@ -1,5 +1,6 @@
 import { externalizeDepsPlugin, UserConfig } from 'electron-vite';
-import { resolve } from 'path';
+import { createRequire } from 'module';
+import { dirname, resolve } from 'path';
 import conditionalImportPlugin from 'vite-plugin-conditional-import';
 import dynamicImportPlugin from 'vite-plugin-dynamic-import';
 import { ViteEjsPlugin } from 'vite-plugin-ejs';
@@ -8,6 +9,21 @@ import { createReactPlugin } from './vite.react-plugin';
 
 const currentOSEnv = process.platform;
 const electronRendererTarget = 'chrome87';
+
+// peer-sync's native-tcp transport builds its Duplex on mqtt.js's own bundled
+// `readable-stream`. pnpm installs it under mqtt's scope but does not hoist it,
+// so alias the bare specifier to mqtt's copy. The Electron renderer never runs
+// the native path (Android-only), but the module is imported transitively, so
+// the alias must resolve here too. Version-agnostic; no new npm dependency.
+// Use createRequire(import.meta.url) for the inner resolve: electron-vite
+// bundles this config to ESM, where the ambient `require` becomes a shim whose
+// `.resolve` is not a function (`__require.resolve is not a function`). vite's
+// own loader tolerates the bare `require.resolve` (so web.vite.config.ts works),
+// but electron-vite does not — resolve through a real Node require instead.
+const nodeRequire = createRequire(import.meta.url);
+const readableStreamDir = dirname(
+    createRequire(nodeRequire.resolve('mqtt/package.json')).resolve('readable-stream/package.json'),
+);
 
 const config: UserConfig = {
     main: {
@@ -72,6 +88,7 @@ const config: UserConfig = {
                 '/@/remote': resolve('src/remote'),
                 '/@/renderer': resolve('src/renderer'),
                 '/@/shared': resolve('src/shared'),
+                'readable-stream': readableStreamDir,
             },
         },
     },

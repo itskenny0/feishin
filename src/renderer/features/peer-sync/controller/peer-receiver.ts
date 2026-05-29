@@ -200,7 +200,12 @@ export const applyPeerCommand = (from: PeerAddress, cmd: PeerCommand): ApplyResu
             return { reason: 'applied' };
         }
         case 'playIndex': {
-            if (!cmd.a || !('index' in cmd.a) || typeof cmd.a.index !== 'number') {
+            if (
+                !cmd.a ||
+                !('index' in cmd.a) ||
+                typeof cmd.a.index !== 'number' ||
+                !Number.isFinite(cmd.a.index)
+            ) {
                 return { reason: 'dropped-validation' };
             }
             actions.mediaPlayByIndex(cmd.a.index);
@@ -280,7 +285,12 @@ export const applyPeerCommand = (from: PeerAddress, cmd: PeerCommand): ApplyResu
             return { reason: 'applied' };
         }
         case 'seek': {
-            if (!cmd.a || !('positionMs' in cmd.a) || typeof cmd.a.positionMs !== 'number') {
+            if (
+                !cmd.a ||
+                !('positionMs' in cmd.a) ||
+                typeof cmd.a.positionMs !== 'number' ||
+                !Number.isFinite(cmd.a.positionMs)
+            ) {
                 return { reason: 'dropped-validation' };
             }
             // The store action takes seconds (everything else in the
@@ -308,7 +318,12 @@ export const applyPeerCommand = (from: PeerAddress, cmd: PeerCommand): ApplyResu
             return { reason: 'applied' };
         }
         case 'volume': {
-            if (!cmd.a || !('volume' in cmd.a) || typeof cmd.a.volume !== 'number') {
+            if (
+                !cmd.a ||
+                !('volume' in cmd.a) ||
+                typeof cmd.a.volume !== 'number' ||
+                !Number.isFinite(cmd.a.volume)
+            ) {
                 return { reason: 'dropped-validation' };
             }
             // Clamp to the wire's documented 0-100 range so a buggy
@@ -374,14 +389,35 @@ const applyQueueReplace = (
                     warn('dropped cmd: hydrate returned empty', { from: from.peerId });
                     return;
                 }
-                const startIndex = typeof args.startIndex === 'number' ? args.startIndex : 0;
+                const pc = args.playCommand;
                 markInboundApply();
-                usePlayerStoreBase.getState().setQueue(songs, startIndex, 0);
-                log('apply cmd queue', {
-                    count: songs.length,
-                    peerId: from.peerId,
-                    startIndex,
-                });
+                const store = usePlayerStoreBase.getState();
+                if (pc === 'PlayNext' || pc === 'PlayLast') {
+                    // PlayNext/PlayLast must APPEND (mirroring the Jellyfin
+                    // lane's PlayCommand + applyQueueInsert's cold-queue path).
+                    // Only PlayNow/undefined performs a full replace.
+                    const order = store.getQueueOrder().items;
+                    if (order.length === 0) {
+                        // Cold queue: nothing to insert after, so fall back to
+                        // setQueue (same as applyQueueInsert's cold-queue path).
+                        store.setQueue(songs, 0, 0);
+                    } else {
+                        store.addToQueueByType(songs, pc === 'PlayNext' ? Play.NEXT : Play.LAST);
+                    }
+                    log('apply cmd queue (append)', {
+                        count: songs.length,
+                        mode: pc,
+                        peerId: from.peerId,
+                    });
+                } else {
+                    const startIndex = typeof args.startIndex === 'number' ? args.startIndex : 0;
+                    store.setQueue(songs, startIndex, 0);
+                    log('apply cmd queue', {
+                        count: songs.length,
+                        peerId: from.peerId,
+                        startIndex,
+                    });
+                }
             } catch (err) {
                 warn('dropped cmd: hydrate failed', {
                     err: (err as Error).message,
@@ -502,9 +538,11 @@ const applyQueueRemove = (indices: number[], from: PeerAddress): ApplyResult => 
 /**
  * Queue-reorder path. Resolves `from` to a QueueSong in the default queue
  * order, then calls `moveSelectedTo` against the song currently at the
- * desired destination index. We use 'top' edge so the moved item lands
- * AT the destination index (not after it). When `to` is past the end we
- * fall through to `moveSelectedToBottom`.
+ * desired destination index. The edge is direction-aware: a backward move
+ * (toIdx < fromIdx) uses the 'top' edge, while a forward move (toIdx >
+ * fromIdx) uses the 'bottom' edge to compensate for moveSelectedTo's
+ * post-filter left-shift — both cases land the moved item AT the destination
+ * index. When `to` is past the end we fall through to `moveSelectedToBottom`.
  */
 const applyQueueReorder = (fromIdx: number, toIdx: number, from: PeerAddress): ApplyResult => {
     if (
@@ -531,11 +569,17 @@ const applyQueueReorder = (fromIdx: number, toIdx: number, from: PeerAddress): A
         store.moveSelectedToBottom([moving]);
     } else {
         const anchor = order[toIdx];
-        // 'top' = before anchor when toIdx < fromIdx (shift right), 'top'
-        // when toIdx > fromIdx still lands the item AT anchor's slot —
-        // moveSelectedTo filters the moving id out first so the offset
-        // math handles the gap automatically.
-        store.moveSelectedTo([moving], anchor._uniqueId, 'top');
+        // moveSelectedTo filters the moving id out of the queue FIRST, then
+        // splices the item back in relative to the anchor. That filter
+        // left-shifts every element after the moved one by one slot.
+        //   - Backward (toIdx < fromIdx): the anchor sits before the moved
+        //     item, so the filter doesn't move it. Edge 'top' lands the item
+        //     AT the anchor's slot (toIdx).
+        //   - Forward (toIdx > fromIdx): the anchor sits after the moved item,
+        //     so the filter shifts the anchor left by one. Edge 'bottom'
+        //     (insert AFTER the anchor) compensates for that left-shift so the
+        //     item lands AT toIdx rather than one slot early.
+        store.moveSelectedTo([moving], anchor._uniqueId, toIdx > fromIdx ? 'bottom' : 'top');
     }
     log('apply cmd queueReorder', {
         from: from.peerId,

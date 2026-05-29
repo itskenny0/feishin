@@ -28,6 +28,10 @@ export interface RemoteMirroredPlayState {
      *  volume — Jellyfin can report `IsMuted: true` while volume is non-zero. */
     isMuted: boolean;
     isPaused: boolean;
+    /** Target playback speed (1.0 = normal), mirrored for display only when a
+     *  peer reports `rate` over the MQTT lane. Optional — absent on the
+     *  Jellyfin lane and from publishers that don't carry it. (D3) */
+    playbackRate?: number;
     positionMs: number;
     /** `Date.now()` when positionMs was sampled — used to interpolate between polls. */
     positionSampledAt: number;

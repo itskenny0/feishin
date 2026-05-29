@@ -4,12 +4,15 @@
  *
  *  - Top-level Enable switch flips the master toggle. Off = subsystem inert;
  *    existing Jellyfin Sessions polling continues unchanged.
- *  - Advanced collapsible exposes broker URL, embedded broker on/off
- *    (desktop only), embedded host/port, TLS cert paths, and the shared
- *    room key. Hidden until the master is on.
+ *  - Advanced collapsible exposes broker URL, transport, broker
+ *    username/password, embedded broker on/off (desktop only), embedded
+ *    host/port, and TLS cert paths. Hidden until the master is on.
+ *  - The room (broker auth) is the Jellyfin username, shown read-only — not
+ *    user-editable — so a user's own devices auto-authenticate to each
+ *    other's broker.
  *  - A non-private broker URL triggers an undismissable Alert warning that
  *    public brokers can see playback state and commands.
- *  - peerId / roomKey are auto-generated on first opt-in if missing.
+ *  - peerId is auto-generated on first opt-in if missing.
  */
 import { Alert, Collapse, Group, Stack, Switch } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
@@ -21,9 +24,11 @@ import { useTranslation } from 'react-i18next';
 import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
 import { SettingsSection } from '/@/renderer/features/settings/components/settings-section';
 import { usePeerSyncSettings, useSettingsStoreActions } from '/@/renderer/store';
+import { useCurrentServer } from '/@/renderer/store/auth.store';
 import { Button } from '/@/shared/components/button/button';
 import { NumberInput } from '/@/shared/components/number-input/number-input';
 import { PasswordInput } from '/@/shared/components/password-input/password-input';
+import { Select } from '/@/shared/components/select/select';
 import { TextInput } from '/@/shared/components/text-input/text-input';
 import { Text } from '/@/shared/components/text/text';
 import { toast } from '/@/shared/components/toast/toast';
@@ -65,37 +70,41 @@ export const isPublicBrokerUrl = (raw: string): boolean => {
 export const PeerSyncSettings = memo(() => {
     const { t } = useTranslation();
     const settings = usePeerSyncSettings();
+    const currentServer = useCurrentServer();
     const { setSettings } = useSettingsStoreActions();
     const [advancedOpen, advancedHandlers] = useDisclosure(false);
+
+    // The room key is the Jellyfin username (shared automatically across the
+    // same account's devices). It is the broker auth password the embedded
+    // broker must be started with so the live client can authenticate.
+    const roomKey = currentServer?.username ?? '';
 
     // Mirror controlled inputs locally so typing in the URL field doesn't
     // round-trip through the persisted store on every keystroke (and so
     // empty strings stay empty without immediately re-validating).
     const [brokerUrlDraft, setBrokerUrlDraft] = useState(settings.brokerUrl);
-    const [roomKeyDraft, setRoomKeyDraft] = useState(settings.roomKey);
     const [brokerUsernameDraft, setBrokerUsernameDraft] = useState(settings.brokerUsername);
     const [brokerPasswordDraft, setBrokerPasswordDraft] = useState(settings.brokerPassword);
     useEffect(() => setBrokerUrlDraft(settings.brokerUrl), [settings.brokerUrl]);
-    useEffect(() => setRoomKeyDraft(settings.roomKey), [settings.roomKey]);
     useEffect(() => setBrokerUsernameDraft(settings.brokerUsername), [settings.brokerUsername]);
     useEffect(() => setBrokerPasswordDraft(settings.brokerPassword), [settings.brokerPassword]);
 
     const isPublicBroker = useMemo(() => isPublicBrokerUrl(brokerUrlDraft), [brokerUrlDraft]);
 
+    // Seed only the install-stable peerId. The room key (== broker auth
+    // password) is no longer a user-editable random value — it is derived
+    // deterministically from the Jellyfin username at connect time so a
+    // user's own devices authenticate to each other's broker.
     const ensureIdentity = useCallback(() => {
-        if (settings.peerId && settings.roomKey) return;
-        setSettings({
-            peerSync: {
-                peerId: settings.peerId || nanoid(),
-                roomKey: settings.roomKey || nanoid(24),
-            },
-        });
-    }, [settings.peerId, settings.roomKey, setSettings]);
+        if (settings.peerId) return;
+        setSettings({ peerSync: { peerId: settings.peerId || nanoid() } });
+    }, [settings.peerId, setSettings]);
 
     const handleEnable = useCallback(
         (enabled: boolean) => {
-            // Auto-seed peerId + roomKey on first opt-in so the user never
-            // has to think about either to get the happy path working.
+            // Auto-seed the install-stable peerId on first opt-in so the user
+            // never has to think about it to get the happy path working. The
+            // room key derives from the Jellyfin username at connect time.
             if (enabled) ensureIdentity();
             // Flipping the MQTT lane off while the embedded broker is still
             // running would leave a zombie listener with no client behind it.
@@ -148,11 +157,20 @@ export const PeerSyncSettings = memo(() => {
                 });
                 return;
             }
+            if (enabled && !roomKey) {
+                toast.warn({
+                    message: t('error.embeddedBrokerNeedsServer', {
+                        defaultValue:
+                            'Sign in to a Jellyfin server before starting the embedded broker — the room key is derived from your username.',
+                    }),
+                });
+                return;
+            }
             const errorMsg = enabled
                 ? await peerBrokerApi.setEnabled({
                       host: settings.broker.host,
                       port: settings.broker.port,
-                      roomKey: settings.roomKey || roomKeyDraft || nanoid(24),
+                      roomKey,
                       tlsCertPath: settings.broker.tlsCertPath || undefined,
                       tlsKeyPath: settings.broker.tlsKeyPath || undefined,
                   })
@@ -168,24 +186,11 @@ export const PeerSyncSettings = memo(() => {
             settings.broker.port,
             settings.broker.tlsCertPath,
             settings.broker.tlsKeyPath,
-            settings.roomKey,
-            roomKeyDraft,
+            roomKey,
             setSettings,
             t,
         ],
     );
-
-    const copyRoomKey = useCallback(async () => {
-        const key = settings.roomKey || roomKeyDraft;
-        if (!key) return;
-        try {
-            await navigator.clipboard.writeText(key);
-            toast.info({ message: t('common.copied', { defaultValue: 'Copied' }) });
-        } catch {
-            // clipboard API may be unavailable in some sandboxed contexts;
-            // fall through silently — the value is visible in the field.
-        }
-    }, [settings.roomKey, roomKeyDraft, t]);
 
     const advancedOptions = useMemo(
         () => [
@@ -212,6 +217,54 @@ export const PeerSyncSettings = memo(() => {
                     </Text>
                 ),
                 title: t('setting.peerSyncBrokerUrl', { defaultValue: 'Broker URL' }),
+            },
+            {
+                control: (
+                    <Select
+                        aria-label={t('setting.peerSyncTransport', {
+                            defaultValue: 'Connection',
+                        })}
+                        clearable={false}
+                        data={[
+                            {
+                                label: t('setting.peerSyncTransport', {
+                                    context: 'auto',
+                                    defaultValue: 'Automatic',
+                                }),
+                                value: 'auto',
+                            },
+                            {
+                                label: t('setting.peerSyncTransport', {
+                                    context: 'ws',
+                                    defaultValue: 'WebSocket',
+                                }),
+                                value: 'ws',
+                            },
+                            {
+                                label: t('setting.peerSyncTransport', {
+                                    context: 'tcp',
+                                    defaultValue: 'TCP (raw socket)',
+                                }),
+                                value: 'tcp',
+                            },
+                        ]}
+                        onChange={(v) => {
+                            if (v !== 'auto' && v !== 'ws' && v !== 'tcp') return;
+                            setSettings({ peerSync: { transport: v } });
+                        }}
+                        value={settings.transport}
+                    />
+                ),
+                description: (
+                    <Text isMuted isNoSelect size="sm">
+                        {t('setting.peerSyncTransport', {
+                            context: 'description',
+                            defaultValue:
+                                'How to reach the broker. Automatic uses WebSocket, and on Android or the desktop app upgrades to raw TCP for mqtt:// / mqtts:// URLs. Pick TCP to force a raw socket (needed for brokers that only expose port 1883/8883 without a WebSocket listener). The browser/PWA build always uses WebSocket.',
+                        })}
+                    </Text>
+                ),
+                title: t('setting.peerSyncTransport', { defaultValue: 'Connection' }),
             },
             {
                 control: (
@@ -380,52 +433,28 @@ export const PeerSyncSettings = memo(() => {
                 : []),
             {
                 control: (
-                    <Group gap="sm" wrap="nowrap">
-                        <TextInput
-                            onBlur={(e) => {
-                                const next = e.currentTarget.value.trim();
-                                if (!next || next === settings.roomKey) return;
-                                setSettings({ peerSync: { roomKey: next } });
-                            }}
-                            onChange={(e) => setRoomKeyDraft(e.currentTarget.value)}
-                            placeholder={
-                                t('setting.peerSyncRoomKey', {
-                                    defaultValue: 'Shared room key',
-                                }) as string
-                            }
-                            value={roomKeyDraft}
-                        />
-                        <Button
-                            onClick={() => {
-                                const next = nanoid(24);
-                                setRoomKeyDraft(next);
-                                setSettings({ peerSync: { roomKey: next } });
-                            }}
-                            size="compact-sm"
-                            variant="default"
-                        >
-                            {t('common.regenerate', { defaultValue: 'Regenerate' })}
-                        </Button>
-                        <Button onClick={copyRoomKey} size="compact-sm" variant="default">
-                            {t('common.copy', { defaultValue: 'Copy' })}
-                        </Button>
-                    </Group>
+                    <Text isNoSelect size="sm">
+                        {roomKey ||
+                            t('setting.peerSyncRoomKey', {
+                                context: 'empty',
+                                defaultValue: 'Sign in to a Jellyfin server',
+                            })}
+                    </Text>
                 ),
                 description: t('setting.peerSyncRoomKey', {
                     context: 'description',
                     defaultValue:
-                        'Every Feishin that joins the same broker with this key is treated as a peer. Keep it secret.',
+                        'Your Jellyfin username. Every device you sign into on this server shares this room automatically — there is nothing to copy or configure.',
                 }),
-                title: t('setting.peerSyncRoomKey', { defaultValue: 'Room key' }),
+                title: t('setting.peerSyncRoomKey', { defaultValue: 'Room' }),
             },
         ],
         [
             brokerPasswordDraft,
             brokerUrlDraft,
             brokerUsernameDraft,
-            copyRoomKey,
             handleBrokerToggle,
-            roomKeyDraft,
+            roomKey,
             settings.broker.enabled,
             settings.broker.host,
             settings.broker.port,
@@ -434,7 +463,7 @@ export const PeerSyncSettings = memo(() => {
             settings.brokerPassword,
             settings.brokerUrl,
             settings.brokerUsername,
-            settings.roomKey,
+            settings.transport,
             setSettings,
             t,
         ],

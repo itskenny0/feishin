@@ -5,4 +5,5 @@ import './peer-broker';
 import './remote';
 import './settings';
 import './discord-rpc';
+import './tcp-socket';
 import './visualizer';

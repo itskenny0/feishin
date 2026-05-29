@@ -8,11 +8,13 @@ import type {
     CachedFavorite,
     CachedGenre,
     CachedLyrics,
+    CachedMediaBlob,
     CachedPlaylist,
     CachedPlaylistSong,
     CachedSong,
     CachedThumbnail,
     MutationRow,
+    OfflineTargetRow,
     SyncMetaRow,
 } from './types';
 
@@ -30,7 +32,13 @@ export class LibraryCacheDb extends Dexie {
     favorites!: Table<CachedFavorite, [string, string]>;
     genres!: EntityTable<CachedGenre, 'Id'>;
     lyrics!: EntityTable<CachedLyrics, 'SongId'>;
+    // Offline-media audio blob store. Keyed by `${serverId}:${songId}` so a
+    // single Dexie DB (already per server+user) can still namespace cleanly.
+    mediaBlobs!: EntityTable<CachedMediaBlob, 'Key'>;
     mutationQueue!: EntityTable<MutationRow, 'id'>;
+    // Entities the user has marked for offline download (albums / playlists /
+    // artists / genres / individual songs).
+    offlineTargets!: EntityTable<OfflineTargetRow, 'Key'>;
     playlists!: EntityTable<CachedPlaylist, 'Id'>;
     playlistSongs!: Table<CachedPlaylistSong, [string, number]>;
     songs!: EntityTable<CachedSong, 'Id'>;
@@ -216,6 +224,39 @@ export class LibraryCacheDb extends Dexie {
             genres: 'Id, SortName, Name, __cachedAt',
             lyrics: 'SongId, __cachedAt',
             mutationQueue: 'id, status, createdAt, idempotencyKey',
+            playlists: 'Id, SortName, DateLastSaved, __cachedAt',
+            playlistSongs: '[PlaylistId+ListOrder], PlaylistId, SongId, __cachedAt',
+            songs: 'Id, AlbumId, [AlbumId+ParentIndexNumber+IndexNumber], AlbumArtistId, DateLastSaved, [AlbumId+IndexNumber], __cachedAt',
+            syncMeta: 'EntityType',
+            thumbnails: 'ItemId, LastUsed, ByteSize, MissAt, __cachedAt',
+        });
+
+        // v9: additive — adds the offline-media audio layer. Two new stores:
+        //
+        //  - `mediaBlobs`: the downloaded audio blobs. Primary key `Key` is
+        //    `${serverId}:${songId}`. `SongId` is indexed for a direct
+        //    has()/get() by song id (the playback substitution path), the
+        //    multi-entry `*EntityKeys` index lets us list/evict every blob
+        //    belonging to an offline target (an album / playlist / artist /
+        //    genre may share songs, so a blob can belong to several targets),
+        //    and `ByteSize` is indexed so totalBytes() can sum without a full
+        //    structured-clone of every blob row.
+        //  - `offlineTargets`: the user's offline wishlist. Primary key `Key`
+        //    is `${serverId}:${entityType}:${entityId}`. `EntityType` and
+        //    `Status` are indexed for the settings list.
+        //
+        // Every existing v8 store is re-declared identically so Dexie performs
+        // zero row-copy work; the two new tables start empty.
+        this.version(9).stores({
+            albums: 'Id, AlbumArtistId, [AlbumArtistId+SortName], DateLastSaved, SortName, ProductionYear, *GenreIds, __cachedAt',
+            artists: 'Id, SortName, Name, DateLastSaved, Kind, __cachedAt',
+            favorites:
+                '[ItemId+ItemType], ItemType, IsFavorite, Rating, LastPlayedDate, PlayCount, __cachedAt',
+            genres: 'Id, SortName, Name, __cachedAt',
+            lyrics: 'SongId, __cachedAt',
+            mediaBlobs: 'Key, SongId, *EntityKeys, ByteSize, DownloadedAt',
+            mutationQueue: 'id, status, createdAt, idempotencyKey',
+            offlineTargets: 'Key, EntityType, Status, AddedAt',
             playlists: 'Id, SortName, DateLastSaved, __cachedAt',
             playlistSongs: '[PlaylistId+ListOrder], PlaylistId, SongId, __cachedAt',
             songs: 'Id, AlbumId, [AlbumId+ParentIndexNumber+IndexNumber], AlbumArtistId, DateLastSaved, [AlbumId+IndexNumber], __cachedAt',

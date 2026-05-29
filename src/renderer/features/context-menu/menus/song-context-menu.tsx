@@ -5,6 +5,7 @@ import { DownloadAction } from '/@/renderer/features/context-menu/actions/downlo
 import { GetInfoAction } from '/@/renderer/features/context-menu/actions/get-info-action';
 import { GoToAction } from '/@/renderer/features/context-menu/actions/go-to-action';
 import { MarkPlayedAction } from '/@/renderer/features/context-menu/actions/mark-played-action';
+import { OfflineDownloadAction } from '/@/renderer/features/context-menu/actions/offline-download-action';
 import { PlayAction } from '/@/renderer/features/context-menu/actions/play-action';
 import { PlayTrackRadioAction } from '/@/renderer/features/context-menu/actions/play-track-radio-action';
 import { RefreshMetadataAction } from '/@/renderer/features/context-menu/actions/refresh-metadata-action';
@@ -40,6 +41,7 @@ export const SongContextMenu = ({ items, type }: SongContextMenuProps) => {
             <SetRatingAction ids={ids} itemType={LibraryItem.SONG} />
             <MarkPlayedAction disabled={items.length === 0} ids={ids} />
             <ContextMenu.Divider />
+            <OfflineDownloadAction items={items} itemType={LibraryItem.SONG} />
             <DownloadAction ids={ids} />
             <ShareAction ids={ids} itemType={LibraryItem.SONG} />
             <ContextMenu.Divider />

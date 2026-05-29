@@ -313,6 +313,18 @@ export const AlbumArtistDetailHeader = forwardRef<HTMLDivElement, AlbumArtistDet
                     </Group>
                     <LibraryHeaderMenu
                         favorite={detailQuery.data?.userFavorite}
+                        offlineSource={
+                            detailQuery.data
+                                ? {
+                                      entity: {
+                                          entityType: 'artist',
+                                          id: detailQuery.data.id,
+                                          name: detailQuery.data.name,
+                                      },
+                                      type: 'entity',
+                                  }
+                                : undefined
+                        }
                         onFavorite={handleFavorite}
                         onMore={handleMoreOptions}
                         onPlay={(type) => handlePlay(type)}

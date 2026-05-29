@@ -245,6 +245,12 @@
 .header-content {
     display: flex;
     align-items: center;
+
+    /* min-width:0 lets the flex item shrink below its intrinsic content
+       width; without it the label can't clip and instead overflows /
+       gets centre-clipped (e.g. "TRACKS" rendering as "RACKS" on a
+       320px viewport). */
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     font-size: var(--theme-font-size-sm);
@@ -264,6 +270,26 @@
 .header-content.right {
     justify-content: flex-end;
     text-align: right;
+}
+
+/*
+ * Small-phone tier: a centred header that overflows gets clipped on
+ * BOTH sides (the middle of the word survives — "TRACKS" → "RACKS").
+ * Anchor the label to the start so the readable beginning of the word
+ * survives the clip instead of its tail, and shrink the font a touch to
+ * buy a few more characters on 320px. Placed after the base alignment
+ * rules so this override wins on small viewports (same specificity, so
+ * source order decides).
+ */
+@media (width <= 360px) {
+    .header-content {
+        font-size: var(--theme-font-size-xs);
+    }
+
+    .header-content.center {
+        justify-content: flex-start;
+        text-align: left;
+    }
 }
 
 .header-icon-wrapper {

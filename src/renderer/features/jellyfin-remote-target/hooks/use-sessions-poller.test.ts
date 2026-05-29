@@ -2,6 +2,7 @@ import { renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { sessionsPoller } from '/@/renderer/features/jellyfin-remote-target/controller/sessions-poller';
+import { sessionsSink } from '/@/renderer/features/jellyfin-remote-target/controller/sessions-sink';
 import { useSessionsPoller } from '/@/renderer/features/jellyfin-remote-target/hooks/use-sessions-poller';
 import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
 import { useAuthStore } from '/@/renderer/store/auth.store';
@@ -22,15 +23,18 @@ const jellyfinServer: ServerListItemWithCredential = {
 // without hitting the real /Sessions endpoint.
 let startSpy: ReturnType<typeof vi.spyOn>;
 let stopSpy: ReturnType<typeof vi.spyOn>;
+let resetSpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
     startSpy = vi.spyOn(sessionsPoller, 'start').mockImplementation(() => {});
     stopSpy = vi.spyOn(sessionsPoller, 'stop').mockImplementation(() => {});
+    resetSpy = vi.spyOn(sessionsSink, 'reset');
 });
 
 afterEach(() => {
     startSpy.mockRestore();
     stopSpy.mockRestore();
+    resetSpy.mockRestore();
     useRemoteTargetStore.getState().actions.clearTarget();
     useRemoteTargetStore.setState({ pickerOpen: false });
     useAuthStore.setState({ currentServer: null });
@@ -103,5 +107,54 @@ describe('useSessionsPoller — bug 1: no auto-restore on launch', () => {
         renderHook(() => useSessionsPoller());
         expect(stopSpy).toHaveBeenCalled();
         expect(startSpy).not.toHaveBeenCalled();
+    });
+});
+
+describe('useSessionsPoller — C4: sessions sink cache reset on server switch', () => {
+    const serverA = jellyfinServer;
+    const serverB: ServerListItemWithCredential = {
+        ...jellyfinServer,
+        id: 'srv-2',
+        url: 'http://other',
+    };
+
+    it('resets the sink when the bound server id actually changes (A → B)', () => {
+        useAuthStore.setState({ currentServer: serverA });
+        useRemoteTargetStore.getState().actions.setPickerOpen(true);
+        const { rerender } = renderHook(() => useSessionsPoller());
+        // First mount binds server A — one reset for the initial bind.
+        expect(resetSpy).toHaveBeenCalledTimes(1);
+
+        // Switch to server B.
+        useAuthStore.setState({ currentServer: serverB });
+        rerender();
+        // A real id change clears the per-device queue cache + backoff.
+        expect(resetSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it('does NOT reset on a same-id server object refresh (token / musicFolder update)', () => {
+        useAuthStore.setState({ currentServer: serverA });
+        useRemoteTargetStore.getState().actions.setPickerOpen(true);
+        const { rerender } = renderHook(() => useSessionsPoller());
+        expect(resetSpy).toHaveBeenCalledTimes(1);
+
+        // updateServer replaces the currentServer object reference but keeps
+        // the same id (e.g. a credential refresh). The cache must survive.
+        useAuthStore.setState({
+            currentServer: { ...serverA, credential: 'rotated-token' },
+        });
+        rerender();
+        expect(resetSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('resets on sign-out (server → null)', () => {
+        useAuthStore.setState({ currentServer: serverA });
+        useRemoteTargetStore.getState().actions.setPickerOpen(true);
+        const { rerender } = renderHook(() => useSessionsPoller());
+        expect(resetSpy).toHaveBeenCalledTimes(1);
+
+        useAuthStore.setState({ currentServer: null });
+        rerender();
+        expect(resetSpy).toHaveBeenCalledTimes(2);
     });
 });

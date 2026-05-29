@@ -18,7 +18,7 @@
  * indirectly. We don't mock those — we drive their real Zustand stores
  * with `setState`, which is the same path the app uses at runtime.
  */
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
     __resetInboundApply,
@@ -43,6 +43,37 @@ import { ServerType, Song } from '/@/shared/types/domain-types';
 import { PlayerRepeat, PlayerShuffle, PlayerStatus } from '/@/shared/types/types';
 
 const SENDER: PeerAddress = { peerId: 'peer-from', userId: 'user-abc' };
+
+// The async queue-replace path lazy-imports remote-target-api.hydrateSongs
+// (JF-only network call). Mock it so the receiver's append/replace branches
+// can be driven end-to-end: hydrateSongs echoes the requested itemIds as
+// minimal Song objects (toQueueSong inside the store adds the _uniqueId).
+vi.mock('/@/renderer/features/jellyfin-remote-target/api/remote-target-api', async () => {
+    const actual = await vi.importActual<
+        typeof import('/@/renderer/features/jellyfin-remote-target/api/remote-target-api')
+    >('/@/renderer/features/jellyfin-remote-target/api/remote-target-api');
+    return {
+        ...actual,
+        remoteTargetApi: {
+            ...actual.remoteTargetApi,
+            hydrateSongs: vi.fn(async ({ itemIds }: { itemIds: string[] }) =>
+                itemIds.map(
+                    (id) =>
+                        ({
+                            album: 'A',
+                            albumArtists: [],
+                            artists: [],
+                            container: null,
+                            duration: 1000,
+                            id,
+                            itemType: 'song',
+                            name: id,
+                        }) as unknown as Song,
+                ),
+            ),
+        },
+    };
+});
 
 const enableSync = () => {
     useSettingsStore.setState((state) => ({
@@ -72,7 +103,12 @@ const seedAuth = () => {
     });
 };
 
-beforeEach(() => {
+beforeEach(async () => {
+    // Drain any fire-and-forget hydrate kicked off by a prior test's queue
+    // verb (the receiver returns synchronously while hydrateSongs resolves on
+    // a later tick) so a late insert can't leak into the next assertion.
+    await import('/@/renderer/features/jellyfin-remote-target/api/remote-target-api');
+    await new Promise((res) => setTimeout(res, 20));
     __resetForTests();
     __resetInboundApply();
     // Reset relevant slices of the player store between tests so a
@@ -85,6 +121,8 @@ beforeEach(() => {
         state.player.shuffle = PlayerShuffle.NONE;
         state.player.index = 0;
     });
+    // Clear any queue left behind by a previous test's hydrate.
+    usePlayerStoreBase.getState().setQueue([], 0, 0);
     seedAuth();
     enableSync();
 });
@@ -274,6 +312,45 @@ describe('applyPeerCommand verb mapping', () => {
         expect(r.reason).toBe('dropped-validation');
     });
 
+    it('drops playIndex / seek / volume with non-finite numbers (NaN / Infinity)', () => {
+        // Spy the three store actions so we can assert they are never invoked
+        // for a non-finite payload (the JSON codec masks this today, but a
+        // future binary codec could carry NaN/Infinity).
+        const calls = { playIndex: 0, seek: 0, volume: 0 };
+        const originals = {
+            mediaPlayByIndex: usePlayerStoreBase.getState().mediaPlayByIndex,
+            mediaSeekToTimestamp: usePlayerStoreBase.getState().mediaSeekToTimestamp,
+            setVolume: usePlayerStoreBase.getState().setVolume,
+        };
+        usePlayerStoreBase.setState({
+            mediaPlayByIndex: () => {
+                calls.playIndex += 1;
+            },
+            mediaSeekToTimestamp: () => {
+                calls.seek += 1;
+            },
+            setVolume: () => {
+                calls.volume += 1;
+            },
+        });
+        try {
+            for (const bad of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+                expect(
+                    applyPeerCommand(SENDER, buildCommand('playIndex', { index: bad })).reason,
+                ).toBe('dropped-validation');
+                expect(
+                    applyPeerCommand(SENDER, buildCommand('seek', { positionMs: bad })).reason,
+                ).toBe('dropped-validation');
+                expect(
+                    applyPeerCommand(SENDER, buildCommand('volume', { volume: bad })).reason,
+                ).toBe('dropped-validation');
+            }
+            expect(calls).toEqual({ playIndex: 0, seek: 0, volume: 0 });
+        } finally {
+            usePlayerStoreBase.setState(originals);
+        }
+    });
+
     it('drops a repeat with an unknown mode as validation', () => {
         const bad = {
             ...buildCommand('repeat', { mode: 'all' }),
@@ -436,6 +513,30 @@ describe('applyPeerCommand queueReorder', () => {
         expect(ids).toEqual(['song-0', 'song-3', 'song-1', 'song-2', 'song-4']);
     });
 
+    it('moves an item forward from index 1 to index 3 (lands AT index 3)', () => {
+        seedQueue(5);
+        const r = applyPeerCommand(SENDER, buildCommand('queueReorder', { from: 1, to: 3 }));
+        expect(r.reason).toBe('applied');
+        const ids = usePlayerStoreBase
+            .getState()
+            .getQueueOrder()
+            .items.map((s) => s.id);
+        // Forward move uses the 'bottom' edge to compensate for the
+        // post-filter left-shift; song-1 must land exactly at index 3.
+        expect(ids).toEqual(['song-0', 'song-2', 'song-3', 'song-1', 'song-4']);
+    });
+
+    it('moves an item forward to the adjacent slot (from 1 to 2)', () => {
+        seedQueue(5);
+        const r = applyPeerCommand(SENDER, buildCommand('queueReorder', { from: 1, to: 2 }));
+        expect(r.reason).toBe('applied');
+        const ids = usePlayerStoreBase
+            .getState()
+            .getQueueOrder()
+            .items.map((s) => s.id);
+        expect(ids).toEqual(['song-0', 'song-2', 'song-1', 'song-3', 'song-4']);
+    });
+
     it('moves an item past the end via moveSelectedToBottom', () => {
         seedQueue(4);
         const r = applyPeerCommand(SENDER, buildCommand('queueReorder', { from: 1, to: 99 }));
@@ -498,6 +599,122 @@ describe('applyPeerCommand queueInsert', () => {
             buildCommand('queueInsert', { index: 0, itemIds: ['song-x'] }),
         );
         expect(r.reason).toBe('applied');
+    });
+});
+
+/**
+ * Queue-replace / append path (`play` verb carrying itemIds).
+ *
+ * The wire's playCommand decides the disposition: PlayNext/PlayLast APPEND
+ * (mirroring the Jellyfin lane + the cold-queue handling in queueInsert),
+ * while PlayNow/undefined fully REPLACE the queue via setQueue. These tests
+ * await the async hydrate microtask before asserting on the queue.
+ */
+// The receiver lazy-imports remote-target-api the first time a queue verb
+// fires; that first dynamic import resolves a tick later than a plain
+// microtask. Warm the module here and give the await chain a real timer.
+const flushHydrate = async () => {
+    await import('/@/renderer/features/jellyfin-remote-target/api/remote-target-api');
+    await new Promise((res) => setTimeout(res, 20));
+};
+
+describe('applyPeerCommand play (queue replace/append)', () => {
+    it('PlayLast appends to a non-empty queue, leaving existing tracks + index intact', async () => {
+        seedQueue(3); // song-0, song-1, song-2 — index 0
+        const r = applyPeerCommand(
+            SENDER,
+            buildCommand('play', {
+                itemIds: ['song-x', 'song-y'],
+                playCommand: 'PlayLast',
+            }),
+        );
+        expect(r.reason).toBe('applied');
+        await flushHydrate();
+
+        const ids = usePlayerStoreBase
+            .getState()
+            .getQueueOrder()
+            .items.map((s) => s.id);
+        expect(ids).toEqual(['song-0', 'song-1', 'song-2', 'song-x', 'song-y']);
+        // Now-playing position is preserved (no replace).
+        expect(usePlayerStoreBase.getState().player.index).toBe(0);
+    });
+
+    it('PlayNext inserts after the current track (player.index)', async () => {
+        seedQueue(3); // song-0, song-1, song-2 — index 0
+        const r = applyPeerCommand(
+            SENDER,
+            buildCommand('play', {
+                itemIds: ['song-x', 'song-y'],
+                playCommand: 'PlayNext',
+            }),
+        );
+        expect(r.reason).toBe('applied');
+        await flushHydrate();
+
+        const ids = usePlayerStoreBase
+            .getState()
+            .getQueueOrder()
+            .items.map((s) => s.id);
+        // New tracks land directly after index 0 (song-0).
+        expect(ids).toEqual(['song-0', 'song-x', 'song-y', 'song-1', 'song-2']);
+        expect(usePlayerStoreBase.getState().player.index).toBe(0);
+    });
+
+    it('PlayNow replaces the whole queue and resets the index', async () => {
+        seedQueue(3); // song-0, song-1, song-2 — index 2
+        usePlayerStoreBase.setState((state) => {
+            state.player.index = 2;
+        });
+        const r = applyPeerCommand(
+            SENDER,
+            buildCommand('play', {
+                itemIds: ['song-x', 'song-y'],
+                playCommand: 'PlayNow',
+            }),
+        );
+        expect(r.reason).toBe('applied');
+        await flushHydrate();
+
+        const ids = usePlayerStoreBase
+            .getState()
+            .getQueueOrder()
+            .items.map((s) => s.id);
+        expect(ids).toEqual(['song-x', 'song-y']);
+        expect(usePlayerStoreBase.getState().player.index).toBe(0);
+    });
+
+    it('an undefined playCommand still replaces (default PlayNow semantics)', async () => {
+        seedQueue(3);
+        const r = applyPeerCommand(SENDER, buildCommand('play', { itemIds: ['song-x'] }));
+        expect(r.reason).toBe('applied');
+        await flushHydrate();
+
+        const ids = usePlayerStoreBase
+            .getState()
+            .getQueueOrder()
+            .items.map((s) => s.id);
+        expect(ids).toEqual(['song-x']);
+    });
+
+    it('PlayLast on a cold (empty) queue falls back to setQueue', async () => {
+        // Empty the queue first.
+        usePlayerStoreBase.getState().setQueue([], 0, 0);
+        const r = applyPeerCommand(
+            SENDER,
+            buildCommand('play', {
+                itemIds: ['song-x', 'song-y'],
+                playCommand: 'PlayLast',
+            }),
+        );
+        expect(r.reason).toBe('applied');
+        await flushHydrate();
+
+        const ids = usePlayerStoreBase
+            .getState()
+            .getQueueOrder()
+            .items.map((s) => s.id);
+        expect(ids).toEqual(['song-x', 'song-y']);
     });
 });
 

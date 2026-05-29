@@ -1,0 +1,48 @@
+/*
+ * Mobile "My Library" entry list rendered inside the shared BottomSheet.
+ * Row styling mirrors the Jellyfin Connect device picker so the two
+ * bottom-sheet surfaces feel like the same family.
+ */
+
+.list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.row {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    width: 100%;
+    padding: 12px 10px;
+    text-align: left;
+    border-radius: 8px;
+    transition: background-color 0.12s ease;
+}
+
+.row:hover {
+    background-color: var(--theme-colors-surface);
+}
+
+.row:focus-visible {
+    outline: 2px solid var(--theme-colors-primary);
+    outline-offset: -2px;
+}
+
+.icon-wrap {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+}
+
+.row-label {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: 500;
+    white-space: nowrap;
+}

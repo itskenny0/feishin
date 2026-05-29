@@ -10,6 +10,7 @@ import { mpris } from './mpris';
 import { mpvPlayer, mpvPlayerListener } from './mpv-player';
 import { peerBroker } from './peer-broker';
 import { remote } from './remote';
+import { tcpSocket } from './tcp-socket';
 import { utils } from './utils';
 import { visualizer } from './visualizer';
 
@@ -27,6 +28,7 @@ const api = {
     mpvPlayerListener,
     peerBroker,
     remote,
+    tcpSocket,
     utils,
     visualizer,
 };

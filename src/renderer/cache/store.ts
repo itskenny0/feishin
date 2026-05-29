@@ -12,6 +12,8 @@ export interface CacheStoreActions {
         setCacheAvailable: (v: boolean) => void;
         setEntityCount: (e: EntityType, n: number) => void;
         setHydrationState: (e: EntityType, s: HydrationState) => void;
+        setOfflineMedia: (s: Partial<OfflineMediaStats>) => void;
+        setOfflineSync: (s: CacheStoreState['offlineSync']) => void;
         setPendingMutations: (n: number) => void;
         setSweep: (s: CacheStoreState['sweep']) => void;
     };
@@ -23,8 +25,37 @@ export interface CacheStoreState {
     cacheAvailable: boolean | undefined;
     entityCounts: Partial<Record<EntityType, number>>;
     hydrationStates: Partial<Record<EntityType, HydrationState>>;
+    // Aggregate offline-media stats, kept in the store so the settings panel
+    // and any future home-page chip can subscribe without each polling Dexie.
+    offlineMedia: OfflineMediaStats;
+    // Live in-flight offline download (a single target syncs at a time).
+    // Undefined when nothing is downloading.
+    offlineSync: OfflineSyncProgress | undefined;
     pendingMutations: number;
     sweep: undefined | { entity: EntityType; progress: SweepProgress };
+}
+
+export interface OfflineMediaStats {
+    // Total downloaded blob bytes across all targets.
+    bytesUsed: number;
+    // Distinct downloaded songs.
+    itemsDownloaded: number;
+    // Number of offline targets.
+    targetCount: number;
+}
+
+export interface OfflineSyncProgress {
+    bytesDownloaded: number;
+    bytesPerSec: number;
+    done: number;
+    entityKey: string;
+    // Best-effort projected total payload, from the average blob size so far
+    // extrapolated across all songs. Undefined until the first blob lands.
+    estimatedTotalBytes: number | undefined;
+    itemsPerSec: number;
+    name: string;
+    startedAt: number;
+    total: number | undefined;
 }
 
 export interface SweepProgress {
@@ -77,6 +108,14 @@ export const useCacheStore = createWithEqualityFn<CacheStoreActions & CacheStore
                     set((st) => {
                         st.hydrationStates[e] = s;
                     }),
+                setOfflineMedia: (s) =>
+                    set((st) => {
+                        st.offlineMedia = { ...st.offlineMedia, ...s };
+                    }),
+                setOfflineSync: (s) =>
+                    set((st) => {
+                        st.offlineSync = s;
+                    }),
                 setPendingMutations: (n) =>
                     set((st) => {
                         st.pendingMutations = n;
@@ -91,6 +130,8 @@ export const useCacheStore = createWithEqualityFn<CacheStoreActions & CacheStore
             cacheAvailable: undefined,
             entityCounts: {},
             hydrationStates: {},
+            offlineMedia: { bytesUsed: 0, itemsDownloaded: 0, targetCount: 0 },
+            offlineSync: undefined,
             pendingMutations: 0,
             sweep: undefined,
         })),

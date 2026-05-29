@@ -28,6 +28,13 @@ export const useSessionsPoller = () => {
     const tRef = useRef(t);
     tRef.current = t;
 
+    // Track the last server id we bound to so we can reset the shared
+    // sessionsSink only when the active server actually changes. updateServer
+    // (token / musicFolder refresh) replaces the currentServer object while
+    // keeping the same id, so we compare ids — not object identity — to avoid
+    // spuriously dropping the queue cache on a benign refresh.
+    const prevServerIdRef = useRef<null | string>(null);
+
     const currentServer = useAuthStore((s) => s.currentServer, shallow);
     // The local Jellyfin Sessions deviceId — baked into the SessionsSocket
     // URL at connect time. We watch it here so a deviceId rotation (re-login
@@ -39,6 +46,38 @@ export const useSessionsPoller = () => {
     const jellyfinRemoteEnabled = usePeerSyncSettings().jellyfinRemoteEnabled;
 
     useEffect(() => {
+        // Reset the shared sink's per-device queue cache + hydrate backoff
+        // whenever the bound server id actually changes (or on sign-out). The
+        // sink keys those by deviceId only, so a deviceId that exists on both
+        // server A and B would otherwise carry A's stale queue ids / backoff
+        // into B and suppress re-hydration of B's queue for up to 30s. Only
+        // the controllable-TARGET hook reset the sink before; the controller
+        // lane (this hook) never did. Guard on id so a token/musicFolder
+        // refresh (same id, new object) does not wipe a healthy cache.
+        const nextServerId = currentServer?.id ?? null;
+        if (prevServerIdRef.current !== nextServerId) {
+            console.info('[remote-target] server changed — resetting sessions sink cache', {
+                from: prevServerIdRef.current,
+                to: nextServerId,
+            });
+            sessionsSink.reset();
+            // E1 (secondary): when the active server genuinely changes (not the
+            // first bind), clear any remote target that belonged to the old
+            // server so its stale 'connected'/'reconnecting' chrome doesn't
+            // linger. The getRemoteCtx server-id guard already blocks the
+            // cross-server command leak; this releases the orphaned UI/target.
+            if (prevServerIdRef.current !== null) {
+                const rt = useRemoteTargetStore.getState();
+                if (rt.targetDeviceId) {
+                    console.info('[remote-target] clearing target after server switch', {
+                        deviceId: rt.targetDeviceId,
+                    });
+                    rt.actions.clearTarget();
+                }
+            }
+            prevServerIdRef.current = nextServerId;
+        }
+
         if (!jellyfinRemoteEnabled) {
             sessionsPoller.stop();
             return;

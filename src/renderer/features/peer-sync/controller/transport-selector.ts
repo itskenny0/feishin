@@ -87,6 +87,20 @@ export const getPeerIdForJellyfinDeviceId = (jellyfinDeviceId: string): string |
 };
 
 /**
+ * PeerIds with fresh presence right now — same freshness semantics as
+ * `pickTransport` (online + within `MQTT_PRESENCE_TTL_MS`). The mirror's
+ * "unbridged target" gate uses this to accept a frame only when exactly one
+ * peer is unambiguously live, instead of failing open to any peer.
+ */
+export const getFreshPeerIds = (now: number = Date.now()): string[] => {
+    const out: string[] = [];
+    for (const [peerId, rec] of state.presence) {
+        if (isFresh(rec, now)) out.push(peerId);
+    }
+    return out;
+};
+
+/**
  * Convenience: pick the transport for a Jellyfin Sessions deviceId by
  * resolving through the bridge. Returns 'jellyfin' when the deviceId has
  * no known MQTT peer or sync is disabled.
@@ -132,8 +146,19 @@ export const recordPresence = (
             state.jfDeviceIdToPeerId.delete(prev.jellyfinDeviceId);
         }
     }
-    if (jellyfinDeviceId) {
+    if (online && jellyfinDeviceId) {
+        // Live binding: point the bridge at this peer.
         state.jfDeviceIdToPeerId.set(jellyfinDeviceId, peerId);
+    } else if (!online && jellyfinDeviceId) {
+        // B2: an explicit offline (LWT) releases LIVE routing ownership so a
+        // departed peer can't durably hold a deviceId — which would otherwise
+        // keep routing commands to a dead peer and make the mirror's gate
+        // reject a legitimate new owner's frames. Only release if the entry
+        // still points to us (a newer peer may already have claimed the dev).
+        // The presence record below keeps the last-known dev for diagnostics.
+        if (state.jfDeviceIdToPeerId.get(jellyfinDeviceId) === peerId) {
+            state.jfDeviceIdToPeerId.delete(jellyfinDeviceId);
+        }
     }
     state.presence.set(peerId, { jellyfinDeviceId, lastSeenAt: now, online });
     notifyIfChanged(peerId, now);

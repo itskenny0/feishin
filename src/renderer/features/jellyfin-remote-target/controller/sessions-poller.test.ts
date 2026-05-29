@@ -14,6 +14,7 @@ import type { ServerListItemWithCredential } from '/@/shared/types/domain-types'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SessionsPoller } from '/@/renderer/features/jellyfin-remote-target/controller/sessions-poller';
+import { sessionsSink } from '/@/renderer/features/jellyfin-remote-target/controller/sessions-sink';
 import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
 
 vi.mock('/@/renderer/features/jellyfin-remote-target/api/remote-target-api', () => ({
@@ -151,5 +152,95 @@ describe('SessionsPoller adaptive cadence', () => {
         await vi.advanceTimersByTimeAsync(1_000);
         expect(listMock).not.toHaveBeenCalled();
         expect(inWindow).toBeGreaterThan(2); // active window did fire several ticks
+    });
+});
+
+// The generation guard sits between the awaited listSessionsWithRaw and the
+// hand-off to sessionsSink.apply, so spying on apply pins exactly which
+// generation's result reaches the store — without depending on the sink's
+// internal session→device parsing (and its un-mocked module deps).
+describe('SessionsPoller post-await generation guard (C2)', () => {
+    let poller: SessionsPoller;
+    let listMock: ReturnType<typeof vi.fn>;
+    let applySpy: ReturnType<typeof vi.spyOn>;
+
+    const serverA: ServerListItemWithCredential = {
+        ...server,
+        id: 'srv-A',
+    } as ServerListItemWithCredential;
+    const serverB: ServerListItemWithCredential = {
+        ...server,
+        id: 'srv-B',
+    } as ServerListItemWithCredential;
+
+    beforeEach(async () => {
+        vi.useFakeTimers();
+        const mod =
+            await import('/@/renderer/features/jellyfin-remote-target/api/remote-target-api');
+        listMock = mod.remoteTargetApi.listSessionsWithRaw as ReturnType<typeof vi.fn>;
+        listMock.mockReset();
+        applySpy = vi.spyOn(sessionsSink, 'apply').mockImplementation(() => {});
+        poller = new SessionsPoller();
+        useRemoteTargetStore.getState().actions.clearTarget();
+    });
+
+    afterEach(() => {
+        poller.stop();
+        applySpy.mockRestore();
+        useRemoteTargetStore.getState().actions.clearTarget();
+        vi.useRealTimers();
+    });
+
+    const serversAppliedTo = (): string[] =>
+        applySpy.mock.calls.map((c) => (c[1] as ServerListItemWithCredential).id);
+
+    it('drops a server-A result that resolves after a stop()+start() restart for server B', async () => {
+        const aRaws = { 'sess-A': { DeviceId: 'dev-A', Id: 'sess-A' } };
+        const bRaws = { 'sess-B': { DeviceId: 'dev-B', Id: 'sess-B' } };
+
+        // Server A's first poll stays in flight until we release it.
+        let releaseA: (v: { devices: never[]; raws: Record<string, unknown> }) => void = () => {};
+        const aPending = new Promise<{ devices: never[]; raws: Record<string, unknown> }>(
+            (resolve) => {
+                releaseA = resolve;
+            },
+        );
+
+        listMock.mockImplementationOnce(() => aPending); // server A — in flight
+        listMock.mockImplementation(async () => ({ devices: [], raws: bRaws })); // server B
+
+        // Start against server A; its immediate tick begins awaiting.
+        poller.start({ onOffline: () => {}, server: serverA });
+        await vi.advanceTimersByTimeAsync(0);
+        expect(applySpy).not.toHaveBeenCalled(); // A hasn't resolved yet
+
+        // Server switch: cleanup stop() then start() against server B (a
+        // fresh PollerStartArgs literal — distinct identity from A's).
+        poller.stop();
+        poller.start({ onOffline: () => {}, server: serverB });
+        await vi.advanceTimersByTimeAsync(0);
+        // B's tick resolved and applied.
+        expect(serversAppliedTo()).toEqual(['srv-B']);
+
+        // Now server A's stale poll finally resolves. The post-await
+        // generation guard must drop it — apply is never called with A.
+        releaseA({ devices: [], raws: aRaws } as never);
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(serversAppliedTo()).toEqual(['srv-B']);
+        expect(serversAppliedTo()).not.toContain('srv-A');
+    });
+
+    it('applies a normal single-server tick after the guard (no regression)', async () => {
+        listMock.mockImplementation(async () => ({
+            devices: [],
+            raws: { 'sess-X': { DeviceId: 'dev-X', Id: 'sess-X' } },
+        }));
+
+        poller.start({ onOffline: () => {}, server: serverA });
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(applySpy).toHaveBeenCalledTimes(1);
+        expect(serversAppliedTo()).toEqual(['srv-A']);
     });
 });

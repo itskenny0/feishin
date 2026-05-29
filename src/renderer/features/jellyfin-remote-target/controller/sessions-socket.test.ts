@@ -267,6 +267,80 @@ describe('SessionsSocket inbound parsing', () => {
         expect(MockWebSocket.instances).toHaveLength(1);
         expect(sock.getState()).toBe('closed');
     });
+
+    it('detaches handlers on stop() so a late buffered frame neither fires the callback nor arms a timer (C1/C6)', () => {
+        vi.useFakeTimers();
+        const onSessionsFrame = vi.fn();
+        const sock = new SessionsSocket({ onSessionsFrame, server });
+        sock.start();
+        const ws = MockWebSocket.instances[0];
+        ws.triggerOpen();
+
+        // Teardown (e.g. a server switch). Per spec close() is async and a
+        // buffered Sessions frame can still dispatch while CLOSING.
+        sock.stop();
+
+        // Handlers must be detached — onmessage is null after stop().
+        expect(ws.onmessage).toBeNull();
+        expect(ws.onclose).toBeNull();
+
+        // Even if a stray frame is forced through, the guard must drop it:
+        // no store poisoning, no re-armed liveness timer.
+        sock['handleMessage'](
+            ws as unknown as WebSocket,
+            JSON.stringify({
+                Data: [{ DeviceId: 'd1', DeviceName: 'Stale', Id: 's1' }],
+                MessageType: 'Sessions',
+            }),
+        );
+        expect(onSessionsFrame).not.toHaveBeenCalled();
+
+        // Advance well past the 30s liveness timeout — no reconnect must be
+        // scheduled (no new MockWebSocket constructed).
+        vi.advanceTimersByTime(31_000);
+        expect(MockWebSocket.instances).toHaveLength(1);
+        expect(sock.getState()).toBe('closed');
+        vi.useRealTimers();
+    });
+
+    it('ignores a frame from a previous socket while a new connection is in flight (C6 identity guard)', () => {
+        const onSessionsFrame = vi.fn();
+        const sock = new SessionsSocket({ onSessionsFrame, server });
+        sock.start();
+        const wsA = MockWebSocket.instances[0];
+        wsA.triggerOpen();
+
+        // Simulate a liveness-timeout-style reconnect: stop the live socket
+        // and spin up a fresh connection (socket B). We drive this via a
+        // direct start() after stop() to get a second MockWebSocket without
+        // depending on timer internals.
+        sock.stop();
+        sock.start();
+        const wsB = MockWebSocket.instances[1];
+        expect(wsB).toBeTruthy();
+        wsB.triggerOpen();
+
+        // A frame delivered on the OLD socket A must be ignored: A is no
+        // longer this.socket, so handleMessage's identity guard drops it.
+        sock['handleMessage'](
+            wsA as unknown as WebSocket,
+            JSON.stringify({
+                Data: [{ DeviceId: 'old', DeviceName: 'Old', Id: 'old' }],
+                MessageType: 'Sessions',
+            }),
+        );
+        expect(onSessionsFrame).not.toHaveBeenCalled();
+
+        // A frame on the LIVE socket B is processed normally.
+        wsB.triggerMessage(
+            JSON.stringify({
+                Data: [{ DeviceId: 'new', DeviceName: 'New', Id: 'new' }],
+                MessageType: 'Sessions',
+            }),
+        );
+        expect(onSessionsFrame).toHaveBeenCalledTimes(1);
+        sock.stop();
+    });
 });
 
 import { sessionsSink } from '/@/renderer/features/jellyfin-remote-target/controller/sessions-sink';
@@ -331,5 +405,71 @@ describe('socket path ⇄ poll path equivalence', () => {
         expect(socketDeviceList).toEqual(pollDeviceList);
 
         sock.stop();
+    });
+
+    /**
+     * Server-switch race (C1): a Sessions frame is buffered on server A's
+     * socket; the hook tears it down (stop) and re-binds server B. The buffered
+     * A frame must NOT land in the store after stop() — the detached handler +
+     * the stopped/identity guard drop it, so server B's device list stays
+     * authoritative rather than being clobbered by server A's sessions.
+     */
+    it('a buffered server-A frame delivered after stop() does not clobber server-B device list', () => {
+        const serverB: ServerListItemWithCredential = {
+            ...server,
+            id: 'srv-2',
+            url: 'https://b.example/',
+        };
+
+        const sockA = new SessionsSocket({
+            onSessionsFrame: (rows) => sessionsSink.apply(rows, server),
+            server,
+        });
+        sockA.start();
+        const wsA = MockWebSocket.instances[0];
+        wsA.triggerOpen();
+
+        // Effect cleanup on server switch tears down socket A.
+        sockA.stop();
+
+        // Server B's lane fetches its own sessions.
+        sessionsSink.apply(
+            [
+                {
+                    DeviceId: 'dev-B',
+                    DeviceName: 'B Living Room',
+                    Id: 'sess-B',
+                    NowPlayingItem: null,
+                    PlayState: { IsPaused: false, PositionTicks: 0, VolumeLevel: 50 },
+                    SupportsMediaControl: true,
+                    SupportsRemoteControl: true,
+                },
+            ],
+            serverB,
+        );
+        expect(useRemoteTargetStore.getState().deviceList[0].deviceId).toBe('dev-B');
+
+        // Server A's buffered frame finally dispatches on the dead socket.
+        wsA.triggerMessage(
+            JSON.stringify({
+                Data: [
+                    {
+                        DeviceId: 'dev-A',
+                        DeviceName: 'A Kitchen',
+                        Id: 'sess-A',
+                        NowPlayingItem: null,
+                        PlayState: { IsPaused: false, PositionTicks: 0, VolumeLevel: 50 },
+                        SupportsMediaControl: true,
+                        SupportsRemoteControl: true,
+                    },
+                ],
+                MessageType: 'Sessions',
+            }),
+        );
+
+        // The store must still reflect server B — A's frame was dropped.
+        const list = useRemoteTargetStore.getState().deviceList;
+        expect(list).toHaveLength(1);
+        expect(list[0].deviceId).toBe('dev-B');
     });
 });

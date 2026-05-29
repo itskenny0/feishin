@@ -8,6 +8,7 @@ import { useListContext } from '/@/renderer/context/list-context';
 import { AlbumListHeaderFilters } from '/@/renderer/features/albums/components/album-list-header-filters';
 import { useAlbumListFilters } from '/@/renderer/features/albums/hooks/use-album-list-filters';
 import { artistsQueries } from '/@/renderer/features/artists/api/artists-api';
+import { useOfflineListSource } from '/@/renderer/features/context-menu/hooks/use-offline-download';
 import { useGenreList } from '/@/renderer/features/genres/api/genres-api';
 import { FilterBar } from '/@/renderer/features/shared/components/filter-bar';
 import { LibraryHeaderBar } from '/@/renderer/features/shared/components/library-header-bar';
@@ -30,6 +31,7 @@ export const AlbumListHeader = ({ title }: AlbumListHeaderProps) => {
                     <PlayButton />
                     <PageTitle title={title} />
                     <AlbumListHeaderBadge />
+                    <OfflineButton />
                 </LibraryHeaderBar>
                 <Group>
                     <ListSearchInput />
@@ -100,16 +102,20 @@ const AlbumArtistTitle = () => {
     return <LibraryHeaderBar.Title>{albumArtist?.name || '—'}</LibraryHeaderBar.Title>;
 };
 
-const PlayButton = () => {
+const useMergedQuery = () => {
     const { query } = useAlbumListFilters();
     const { customFilters } = useListContext();
 
-    const mergedQuery = useMemo(() => {
+    return useMemo(() => {
         return {
             ...query,
             ...(customFilters ?? {}),
         };
     }, [query, customFilters]);
+};
+
+const PlayButton = () => {
+    const mergedQuery = useMergedQuery();
 
     return (
         <LibraryHeaderBar.PlayButton
@@ -118,4 +124,14 @@ const PlayButton = () => {
             variant="filled"
         />
     );
+};
+
+const OfflineButton = () => {
+    const mergedQuery = useMergedQuery();
+    const { itemCount } = useListContext();
+    const { available, getEntities } = useOfflineListSource(LibraryItem.ALBUM, mergedQuery);
+
+    if (!available) return null;
+
+    return <LibraryHeaderBar.OfflineButton source={{ getEntities, itemCount, type: 'list' }} />;
 };

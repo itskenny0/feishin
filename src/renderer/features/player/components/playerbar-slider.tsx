@@ -9,6 +9,7 @@ import {
     useActivePlayerSource,
     useRemoteInterpolatedPositionMs,
 } from '/@/renderer/features/jellyfin-remote-target/hooks/use-active-player-source';
+import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
 import { ScrobbleStatus } from '/@/renderer/features/player/components/scrobble-status';
 import { TrackmapCanvas } from '/@/renderer/features/trackmap';
 import { useAppStore, useAppStoreActions, usePlayerTimestamp } from '/@/renderer/store';
@@ -32,21 +33,29 @@ const PlayerbarWaveform = lazy(() =>
  * Right-side time readout. Subscribes to the playback timestamp only here, so
  * the rest of `<PlayerbarSlider />` doesn't re-render on every tick.
  *
- * When a remote Jellyfin device is the active target, currentTimeSec is
- * passed in from the parent (sourced from the mirrored remote state).
- * Otherwise it falls back to the local player's tick subscription.
+ * When a remote Jellyfin device is the active target, this leaf subscribes to
+ * the interpolated remote position itself (gated to the `isRemote` boolean
+ * passed from the parent). Confining the high-frequency position read to this
+ * leaf — instead of subscribing in PlayerbarSlider — keeps ScrobbleStatus /
+ * TrackmapCanvas / the waveform Suspense boundary out of the per-tick render
+ * path. Local mode falls back to the local player's tick subscription.
+ *
+ * The gate is the explicit `isRemote` boolean (not `remotePositionMs ??
+ * localTime`) because `useRemoteInterpolatedPositionMs` returns 0 — never
+ * undefined — in local mode.
  */
 const DurationReadout = ({
-    currentTimeSec,
+    isRemote,
     songDurationSec,
 }: {
-    currentTimeSec?: number;
+    isRemote: boolean;
     songDurationSec: number;
 }) => {
     const showTimeRemaining = useAppStore((state) => state.showTimeRemaining);
     const { setShowTimeRemaining } = useAppStoreActions();
     const localTime = usePlayerTimestamp();
-    const currentTime = currentTimeSec ?? localTime;
+    const remotePositionMs = useRemoteInterpolatedPositionMs();
+    const currentTime = isRemote ? remotePositionMs / 1000 : localTime;
 
     const text = showTimeRemaining
         ? formatDuration((currentTime - songDurationSec) * 1000 || 0)
@@ -74,11 +83,13 @@ export const PlayerbarSlider = () => {
     const playerbarSlider = usePlayerbarSlider();
 
     const songDuration = currentSong?.duration ? currentSong.duration / 1000 : 0;
-    // When the active player is a remote Jellyfin device, hand its
-    // mirrored position to the readout. Local mode leaves it undefined so
-    // DurationReadout falls back to its own usePlayerTimestamp subscription.
-    const remotePositionMs = useRemoteInterpolatedPositionMs();
-    const remoteTimeSec = source.mode === 'remote' ? remotePositionMs / 1000 : undefined;
+    // Subscribe to the cheap `isRemote` primitive here and hand it to the
+    // DurationReadout leaf, which owns the high-frequency interpolated-position
+    // subscription. Keeping the per-tick position read out of PlayerbarSlider
+    // means ScrobbleStatus / TrackmapCanvas / the waveform Suspense boundary
+    // don't reconcile on every remote frame — they only re-render on song /
+    // source changes.
+    const isRemote = useRemoteTargetStore((s) => s.targetDeviceId !== null);
 
     const isWaveform = playerbarSlider?.type === PlayerbarSliderType.WAVEFORM;
     const trackmapEnabled = useTrackmapEnabled();
@@ -111,7 +122,7 @@ export const PlayerbarSlider = () => {
                 )}
             </div>
             <div className={styles.sliderValueWrapper}>
-                <DurationReadout currentTimeSec={remoteTimeSec} songDurationSec={songDuration} />
+                <DurationReadout isRemote={isRemote} songDurationSec={songDuration} />
             </div>
         </div>
     );

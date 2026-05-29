@@ -128,4 +128,82 @@ describe('mirrorSession queue-cache stability', () => {
         );
         expect(result.hydrateQueue).not.toBeNull();
     });
+
+    /**
+     * A1: for an oversized queue whose now-playing item sits PAST the hydrated
+     * window (index >= MAX_QUEUE_HYDRATE), queueIndex must resolve against the
+     * truncated window — yielding -1 ("unknown") rather than an index that
+     * points past the hydrated array and breaks the queue-panel highlight.
+     */
+    it('does not return a queueIndex past the hydrated window for an oversized queue (A1)', () => {
+        const queueIds = Array.from({ length: 300 }, (_, i) => `item-${i}`);
+        const result = mirrorSession(
+            {
+                NowPlayingItem: { Id: 'item-247' }, // beyond the 200-item window
+                NowPlayingQueue: queueIds.map((Id) => ({ Id })),
+                PlayState: {},
+                SupportedCommands: [],
+            },
+            fakeServer,
+            [],
+        );
+        // -1 (unknown), never 247 which would index past the truncated queue.
+        expect(result.queueIndex).toBe(-1);
+    });
+
+    it('resolves queueIndex within the window when the current item is inside it (A1)', () => {
+        const queueIds = Array.from({ length: 300 }, (_, i) => `item-${i}`);
+        const result = mirrorSession(
+            {
+                NowPlayingItem: { Id: 'item-12' },
+                NowPlayingQueue: queueIds.map((Id) => ({ Id })),
+                PlayState: {},
+                SupportedCommands: [],
+            },
+            fakeServer,
+            [],
+        );
+        expect(result.queueIndex).toBe(12);
+    });
+});
+
+describe('mirrorSession empty-queue clear (A2)', () => {
+    /**
+     * A2: when the target's NowPlayingQueue transitions from N items to 0
+     * (playback stopped / queue cleared), the mirror must signal an empty
+     * queue so the sink clears the stale list — previously both queue branches
+     * were gated on `queueIds.length > 0`, so the defunct list lived forever.
+     */
+    it('signals an empty queue + reset index on the N->0 transition', () => {
+        const prevIds = Array.from({ length: 5 }, (_, i) => `item-${i}`);
+        const result = mirrorSession(
+            {
+                NowPlayingItem: null,
+                NowPlayingQueue: [],
+                PlayState: {},
+                SupportedCommands: [],
+            },
+            fakeServer,
+            prevIds,
+        );
+        expect(result.hydrateQueue).toBeNull();
+        expect(result.queueIds).toEqual([]);
+        expect(result.queueIndex).toBe(-1);
+    });
+
+    it('does not re-signal an empty queue once it has already settled to empty', () => {
+        const result = mirrorSession(
+            {
+                NowPlayingItem: null,
+                NowPlayingQueue: [],
+                PlayState: {},
+                SupportedCommands: [],
+            },
+            fakeServer,
+            [], // cache already empty → queueChanged is false
+        );
+        // No empty-clear signal (queueIds left undefined) → sink does nothing.
+        expect(result.queueIds).toBeUndefined();
+        expect(result.queueIndex).toBe(-1);
+    });
 });

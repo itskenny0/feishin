@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 
 import { AddToPlaylistAction } from '/@/renderer/features/context-menu/actions/add-to-playlist-action';
+import { OfflineDownloadAction } from '/@/renderer/features/context-menu/actions/offline-download-action';
 import { PlayAction } from '/@/renderer/features/context-menu/actions/play-action';
 import { ContextMenuPreview } from '/@/renderer/features/context-menu/components/context-menu-preview';
 import { ContextMenu } from '/@/shared/components/context-menu/context-menu';
@@ -24,6 +25,8 @@ export const GenreContextMenu = ({ items, type }: GenreContextMenuProps) => {
             <PlayAction ids={ids} itemType={LibraryItem.ALBUM} />
             <ContextMenu.Divider />
             <AddToPlaylistAction items={ids} itemType={LibraryItem.ALBUM} />
+            <ContextMenu.Divider />
+            <OfflineDownloadAction items={items} itemType={LibraryItem.GENRE} />
         </ContextMenu.Content>
     );
 };

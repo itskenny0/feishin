@@ -63,7 +63,27 @@ export type {
     FilterSongArtistsArgs,
     FilterSongsArgs,
 } from './local-filter';
+export {
+    blobKey,
+    LocalMediaStore,
+    localMediaStore,
+    mimeForContainer,
+    requestPersistentStorage,
+    targetKey,
+} from './media-store';
 export { enqueueMutation } from './mutations';
+export {
+    addAndSyncOfflineTarget,
+    addOfflineTarget,
+    cancelOfflineSync,
+    enumerateTargetSongs,
+    isSyncing as isOfflineSyncing,
+    refreshOfflineStats,
+    removeAllTargets,
+    removeOfflineTarget,
+    syncAllTargets,
+    syncTarget,
+} from './offline-media';
 export {
     toCachedAlbumRow,
     toCachedArtistRow,

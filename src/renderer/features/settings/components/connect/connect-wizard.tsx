@@ -11,14 +11,17 @@
 import { Alert, Group, Radio, ScrollArea, Stack, Stepper } from '@mantine/core';
 import isElectron from 'is-electron';
 import { nanoid } from 'nanoid';
-import { memo, useCallback, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { testBrokerConnection } from '/@/renderer/features/peer-sync/controller/peer-client';
 import { isPublicBrokerUrl } from '/@/renderer/features/settings/components/window/peer-sync-settings';
 import { useIsMobileShell } from '/@/renderer/hooks/use-breakpoint';
+import { useCurrentServer } from '/@/renderer/store/auth.store';
 import { usePeerSyncSettings, useSettingsStoreActions } from '/@/renderer/store/settings.store';
 import { Button } from '/@/shared/components/button/button';
 import { PasswordInput } from '/@/shared/components/password-input/password-input';
+import { Select } from '/@/shared/components/select/select';
 import { TextInput } from '/@/shared/components/text-input/text-input';
 import { Text } from '/@/shared/components/text/text';
 import { toast } from '/@/shared/components/toast/toast';
@@ -26,6 +29,7 @@ import { toast } from '/@/shared/components/toast/toast';
 const peerBrokerApi = isElectron() ? window.api.peerBroker : null;
 
 type BrokerTier = 'embedded' | 'own' | 'public';
+type PeerSyncTransport = 'auto' | 'tcp' | 'ws';
 
 interface PublicBroker {
     description: string;
@@ -150,11 +154,19 @@ interface StepConfigureProps {
     onBrokerUrl: (v: string) => void;
     onNext: () => void;
     onPassword: (v: string) => void;
+    onTest: () => void;
+    onTransport: (v: PeerSyncTransport) => void;
     onUsername: (v: string) => void;
     password: string;
+    testError: string;
+    testState: TestState;
     tier: BrokerTier;
+    transport: PeerSyncTransport;
     username: string;
 }
+
+/** Test-connection lifecycle for the wizard's broker-reachability gate. */
+type TestState = 'error' | 'idle' | 'ok' | 'testing';
 
 const StepConfigure = ({
     brokerUrl,
@@ -162,13 +174,24 @@ const StepConfigure = ({
     onBrokerUrl,
     onNext,
     onPassword,
+    onTest,
+    onTransport,
     onUsername,
     password,
+    testError,
+    testState,
     tier,
+    transport,
     username,
 }: StepConfigureProps): React.JSX.Element => {
     const { t } = useTranslation();
-    const canAdvance = tier === 'embedded' ? isElectron() : brokerUrl.trim().length > 0;
+    // Tiers that carry a broker URL (own/public) must pass a live connection
+    // test before the user can advance. The embedded tier has no URL — its
+    // broker is validated at Finish via peerBrokerApi.setEnabled — so it keeps
+    // the simpler "is this Electron" gate.
+    const hasBrokerUrl = tier !== 'embedded';
+    const hasBrokerInput = brokerUrl.trim().length > 0;
+    const canAdvance = tier === 'embedded' ? isElectron() : hasBrokerInput && testState === 'ok';
     const isPublic = tier === 'public' || isPublicBrokerUrl(brokerUrl);
 
     return (
@@ -226,6 +249,51 @@ const StepConfigure = ({
             )}
 
             {tier === 'own' && (
+                <Stack gap="xs">
+                    <Text fw={500} size="sm">
+                        {t('page.setting.wizardTransport', { defaultValue: 'Connection' })}
+                    </Text>
+                    <Select
+                        clearable={false}
+                        data={[
+                            {
+                                label: t('page.setting.wizardTransport', {
+                                    context: 'auto',
+                                    defaultValue: 'Automatic',
+                                }),
+                                value: 'auto',
+                            },
+                            {
+                                label: t('page.setting.wizardTransport', {
+                                    context: 'ws',
+                                    defaultValue: 'WebSocket',
+                                }),
+                                value: 'ws',
+                            },
+                            {
+                                label: t('page.setting.wizardTransport', {
+                                    context: 'tcp',
+                                    defaultValue: 'TCP (raw socket)',
+                                }),
+                                value: 'tcp',
+                            },
+                        ]}
+                        onChange={(v) => {
+                            if (v === 'auto' || v === 'ws' || v === 'tcp') onTransport(v);
+                        }}
+                        value={transport}
+                    />
+                    <Text isMuted size="sm">
+                        {t('page.setting.wizardTransport', {
+                            context: 'description',
+                            defaultValue:
+                                'Automatic uses WebSocket, and on Android or the desktop app upgrades to raw TCP for mqtt:// / mqtts:// broker URLs. Choose TCP if your broker only exposes raw MQTT on port 1883/8883 with no WebSocket listener. Raw TCP is unavailable in the browser/PWA build, which always uses WebSocket.',
+                        })}
+                    </Text>
+                </Stack>
+            )}
+
+            {tier === 'own' && (
                 <Group grow>
                     <Stack gap="xs">
                         <Text fw={500} size="sm">
@@ -260,6 +328,46 @@ const StepConfigure = ({
                             'This is a public broker. Anyone who knows the broker URL and your room key can see your playback state and commands.',
                     })}
                 </Alert>
+            )}
+
+            {hasBrokerUrl && (
+                <Stack gap="xs">
+                    <Group gap="sm">
+                        <Button
+                            disabled={!hasBrokerInput || testState === 'testing'}
+                            loading={testState === 'testing'}
+                            onClick={onTest}
+                            variant="default"
+                        >
+                            {t('page.setting.wizardTestConnection', {
+                                defaultValue: 'Test connection',
+                            })}
+                        </Button>
+                        {testState === 'ok' && (
+                            <Text c="teal" size="sm">
+                                {t('page.setting.wizardTestOk', {
+                                    defaultValue: 'Connected successfully.',
+                                })}
+                            </Text>
+                        )}
+                        {testState === 'error' && (
+                            <Text c="red" size="sm">
+                                {testError ||
+                                    t('page.setting.wizardTestFailed', {
+                                        defaultValue: 'Could not reach the broker.',
+                                    })}
+                            </Text>
+                        )}
+                    </Group>
+                    {testState !== 'ok' && (
+                        <Text isMuted size="sm">
+                            {t('page.setting.wizardTestHint', {
+                                defaultValue:
+                                    'Run a connection test before continuing. Next stays disabled until the test succeeds.',
+                            })}
+                        </Text>
+                    )}
+                </Stack>
             )}
 
             <Group justify="space-between">
@@ -357,6 +465,7 @@ export const ConnectWizard = memo(() => {
     const { t } = useTranslation();
     const isMobile = useIsMobileShell();
     const settings = usePeerSyncSettings();
+    const currentServer = useCurrentServer();
     const { setSettings } = useSettingsStoreActions();
 
     const [step, setStep] = useState(0);
@@ -376,6 +485,16 @@ export const ConnectWizard = memo(() => {
     const [brokerUrl, setBrokerUrl] = useState(settings.brokerUrl);
     const [username, setUsername] = useState(settings.brokerUsername);
     const [password, setPassword] = useState(settings.brokerPassword);
+    const [transport, setTransport] = useState<PeerSyncTransport>(
+        (settings.transport as PeerSyncTransport) ?? 'auto',
+    );
+    // Connection-test gate for the own/public tiers. `Next` on the Configure
+    // step is blocked until a test against the CURRENT broker config succeeds.
+    const [testState, setTestState] = useState<TestState>('idle');
+    const [testError, setTestError] = useState('');
+    // Token guards against a stale in-flight test resolving after the user has
+    // changed the broker config (which resets the gate back to idle).
+    const testTokenRef = useRef(0);
     const [saving, setSaving] = useState(false);
     // Guard against a double-tap on Finish racing two concurrent save flows
     // (Mantine's `loading` prop doesn't disable the underlying button, so
@@ -410,16 +529,57 @@ export const ConnectWizard = memo(() => {
         setMaxStepReached(0);
     }, []);
 
+    // Any change to the broker config invalidates a prior successful test —
+    // reset the gate to idle so the user must re-test the new configuration
+    // before Next re-enables. The tier itself is also a dependency: switching
+    // own ⇄ public ⇄ embedded changes which credentials/URL are in play.
+    useEffect(() => {
+        testTokenRef.current += 1;
+        setTestState('idle');
+        setTestError('');
+    }, [brokerUrl, username, password, transport, tier]);
+
+    const handleTest = useCallback(async () => {
+        const url = brokerUrl.trim();
+        if (!url) return;
+        const token = ++testTokenRef.current;
+        setTestState('testing');
+        setTestError('');
+        // own-tier credentials only — public brokers are anonymous, and the
+        // embedded tier never reaches this handler (no broker URL).
+        const result = await testBrokerConnection(url, {
+            password: tier === 'own' ? password : undefined,
+            transport,
+            username: tier === 'own' ? username : undefined,
+        });
+        // A config change (which bumped the token + reset to idle) supersedes
+        // this result; drop it so a slow test can't re-enable Next for a URL
+        // the user has since edited.
+        if (token !== testTokenRef.current) return;
+        if (result.ok) {
+            setTestState('ok');
+            setTestError('');
+        } else {
+            setTestState('error');
+            setTestError(result.error ?? '');
+        }
+    }, [brokerUrl, password, tier, transport, username]);
+
     const handleFinish = useCallback(async () => {
         if (finishingRef.current) return;
         finishingRef.current = true;
         setSaving(true);
         try {
             // Make sure the identity is seeded so the client has something
-            // to publish under. The peer-id stays stable for the install;
-            // the room key is regenerated on first opt-in only when missing.
+            // to publish under. The peer-id stays stable for the install.
+            // The room key (== broker auth password) is deterministically the
+            // Jellyfin username so every device the same account signs into
+            // authenticates to the same room — a random per-install key would
+            // stop a user's own devices from pairing. Persist it here so the
+            // embedded broker (peerBrokerApi.setEnabled) + diagnostics stay
+            // consistent with what the live client derives at runtime.
             const peerId = settings.peerId || nanoid();
-            const roomKey = settings.roomKey || nanoid(24);
+            const roomKey = currentServer?.username ?? '';
 
             if (tier === 'embedded' && peerBrokerApi) {
                 const errorMsg = await peerBrokerApi.setEnabled({
@@ -449,6 +609,11 @@ export const ConnectWizard = memo(() => {
                     onboarded: true,
                     peerId,
                     roomKey,
+                    // Embedded/public peers run over the embedded/public WS
+                    // listeners; only the own-broker tier exposes the transport
+                    // choice (raw TCP makes sense there). Reset to 'auto'
+                    // otherwise so a stale 'tcp' can't strand non-Android peers.
+                    transport: tier === 'own' ? transport : 'auto',
                 },
             });
             toast.info({
@@ -467,13 +632,14 @@ export const ConnectWizard = memo(() => {
         }
     }, [
         brokerUrl,
+        currentServer?.username,
         password,
         settings.broker,
         settings.peerId,
-        settings.roomKey,
         setSettings,
         t,
         tier,
+        transport,
         username,
     ]);
 
@@ -515,9 +681,14 @@ export const ConnectWizard = memo(() => {
                             onBrokerUrl={setBrokerUrl}
                             onNext={goNext}
                             onPassword={setPassword}
+                            onTest={handleTest}
+                            onTransport={setTransport}
                             onUsername={setUsername}
                             password={password}
+                            testError={testError}
+                            testState={testState}
                             tier={tier}
+                            transport={transport}
                             username={username}
                         />
                     </Stepper.Step>

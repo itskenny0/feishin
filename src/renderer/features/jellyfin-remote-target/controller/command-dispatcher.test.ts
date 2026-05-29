@@ -17,6 +17,7 @@ describe('command-dispatcher coalescing', () => {
     afterEach(() => {
         vi.doUnmock('/@/renderer/features/jellyfin-remote-target/api/remote-target-api');
         vi.doUnmock('/@/renderer/features/jellyfin-remote-target/controller/sessions-poller');
+        vi.doUnmock('/@/shared/components/toast/toast');
         vi.unstubAllGlobals();
         vi.useRealTimers();
     });
@@ -259,5 +260,124 @@ describe('command-dispatcher coalescing', () => {
         // leading invocation, so we expect 4 notifications: pause, unpause,
         // setVolume, seek.
         expect(notifySpy).toHaveBeenCalledTimes(4);
+    });
+
+    /**
+     * Audit E5: the per-key error-toast throttle map (lastToastByKey) is keyed
+     * by `${label}@${sessionId}` and entries were never evicted. sessionIds
+     * rotate on every device re-pick / re-login, so over a long uptime the map
+     * grows one permanent entry per (label, historical sessionId). The fix
+     * sweeps entries past TOAST_THROTTLE_MS on each write so the map self-bounds
+     * to keys active within the window.
+     */
+    describe('error-toast throttle map bounding', () => {
+        const mkCtx = (sessionId: string) => ({
+            server: {
+                credential: 't',
+                id: 's',
+                type: 'jellyfin',
+                url: 'x',
+                userId: 'u',
+            } as never,
+            sessionId,
+        });
+
+        it('caps the throttle map size as sessionIds rotate past the window', async () => {
+            vi.useFakeTimers();
+            const errorSpy = vi.fn();
+            vi.doMock('/@/shared/components/toast/toast', () => ({
+                toast: { error: errorSpy, info: vi.fn(), warn: vi.fn() },
+            }));
+            vi.doMock('/@/renderer/features/jellyfin-remote-target/api/remote-target-api', () => ({
+                // A plain (non-401/403, non-5xx) error reaches the toast/throttle
+                // path directly with no retry.
+                RemoteCommandError: class extends Error {},
+                remoteTargetApi: {
+                    sendGeneralCommand: vi.fn(async () => {}),
+                    sendPlaystate: vi.fn(async () => {
+                        throw new Error('offline');
+                    }),
+                },
+            }));
+
+            const mod =
+                await import('/@/renderer/features/jellyfin-remote-target/controller/command-dispatcher');
+
+            // 50 distinct sessionIds each erroring once, with the clock pushed
+            // past the throttle window between every batch so prior entries are
+            // pruned on the next write.
+            for (let i = 0; i < 50; i += 1) {
+                await mod.commandDispatcher.pause(mkCtx(`sess-${i}`));
+                vi.advanceTimersByTime(6_000);
+            }
+
+            // Without pruning the map would hold 50 entries. With the sweep it
+            // only ever retains the freshly-written key (all prior ones are past
+            // the 5s window when the next write occurs).
+            expect(mod.__getToastThrottleSize()).toBeLessThanOrEqual(2);
+            // Each fresh key fired exactly one toast (50 distinct keys).
+            expect(errorSpy).toHaveBeenCalledTimes(50);
+        });
+
+        it('still throttles two errors with the same key inside the window to one toast', async () => {
+            vi.useFakeTimers();
+            const errorSpy = vi.fn();
+            vi.doMock('/@/shared/components/toast/toast', () => ({
+                toast: { error: errorSpy, info: vi.fn(), warn: vi.fn() },
+            }));
+            vi.doMock('/@/renderer/features/jellyfin-remote-target/api/remote-target-api', () => ({
+                RemoteCommandError: class extends Error {},
+                remoteTargetApi: {
+                    sendGeneralCommand: vi.fn(async () => {}),
+                    sendPlaystate: vi.fn(async () => {
+                        throw new Error('offline');
+                    }),
+                },
+            }));
+
+            const mod =
+                await import('/@/renderer/features/jellyfin-remote-target/controller/command-dispatcher');
+            const ctx = mkCtx('sess-same');
+
+            await mod.commandDispatcher.pause(ctx);
+            // 4s later — still inside the 5s window: suppressed.
+            vi.advanceTimersByTime(4_000);
+            await mod.commandDispatcher.pause(ctx);
+
+            expect(errorSpy).toHaveBeenCalledTimes(1);
+            // Only the single live key is retained.
+            expect(mod.__getToastThrottleSize()).toBe(1);
+        });
+
+        it('re-emits a toast for a key whose timestamp predates the window (entry pruned)', async () => {
+            vi.useFakeTimers();
+            const errorSpy = vi.fn();
+            vi.doMock('/@/shared/components/toast/toast', () => ({
+                toast: { error: errorSpy, info: vi.fn(), warn: vi.fn() },
+            }));
+            vi.doMock('/@/renderer/features/jellyfin-remote-target/api/remote-target-api', () => ({
+                RemoteCommandError: class extends Error {},
+                remoteTargetApi: {
+                    sendGeneralCommand: vi.fn(async () => {}),
+                    sendPlaystate: vi.fn(async () => {
+                        throw new Error('offline');
+                    }),
+                },
+            }));
+
+            const mod =
+                await import('/@/renderer/features/jellyfin-remote-target/controller/command-dispatcher');
+            const ctx = mkCtx('sess-stale');
+
+            await mod.commandDispatcher.pause(ctx);
+            expect(errorSpy).toHaveBeenCalledTimes(1);
+
+            // Past the window — the same key must re-emit and the stale entry
+            // (here the same key, refreshed) is pruned then rewritten.
+            vi.advanceTimersByTime(6_000);
+            await mod.commandDispatcher.pause(ctx);
+            expect(errorSpy).toHaveBeenCalledTimes(2);
+            expect(mod.__getToastThrottleSize()).toBe(1);
+        });
     });
 });

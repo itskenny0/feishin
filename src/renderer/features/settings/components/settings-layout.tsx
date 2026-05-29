@@ -3,7 +3,7 @@ import type { TFunction } from 'i18next';
 import { Capacitor } from '@capacitor/core';
 import clsx from 'clsx';
 import isElectron from 'is-electron';
-import { ReactNode, Suspense, useCallback } from 'react';
+import { ReactNode, Suspense, useCallback, useLayoutEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
     RiArrowLeftLine,
@@ -154,6 +154,22 @@ export const SettingsLayout = () => {
     const selectedSubpage: SubpageDef | undefined = subpagesForTab.find(
         (s) => s.id === currentSubpage,
     );
+
+    // On mobile, entering Settings must always land on the top-level category
+    // list — never deep-linked into the last-open subpage. `tab`/`tabSubpage`
+    // live in the *persisted* settings store, so without this reset they
+    // survive both a route change (leave Settings → come back) and an app
+    // relaunch, dropping the user straight back into a Level-3 subpage. Desktop
+    // keeps its persisted position because the category rail is always visible
+    // there, so there's no "lost my place" surprise to undo. useLayoutEffect so
+    // the reset lands before paint (no one-frame flash of the stale subpage).
+    // Mount-scoped by design: this models "entered Settings", not "viewport
+    // became mobile" — the mobile route remounts SettingsLayout on every entry.
+    useLayoutEffect(() => {
+        if (isMobile) {
+            setSettings({ tab: '', tabSubpage: '' });
+        }
+    }, [isMobile, setSettings]);
 
     const handleSelectCategory = useCallback(
         (id: CategoryDef['id']) => setSettings({ tab: id, tabSubpage: '' }),

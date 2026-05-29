@@ -122,6 +122,11 @@ interface RemoteTargetState {
             capabilities: string[];
             deviceId: string;
             deviceName: string;
+            /** Id of the server that owns this target — see `ownerServerId`.
+             *  Optional: callers without a server context (and tests) omit it,
+             *  in which case the target carries no server binding (null) and the
+             *  getRemoteCtx server-match guard is a no-op for it. */
+            ownerServerId?: string;
             sessionId: string;
         }) => void;
     };
@@ -136,6 +141,13 @@ interface RemoteTargetState {
     /** Per-field optimistic holds — see `RemoteHoldField`. */
     holds: RemoteHolds;
     mirrored: RemoteMirrored;
+    /**
+     * Id of the server that established the current target (E1). `getRemoteCtx`
+     * refuses to build a command when the live server id no longer matches, so
+     * a server switch can never POST transport commands to the *new* server
+     * using the *old* session id. Null when there is no target.
+     */
+    ownerServerId: null | string;
     pickerOpen: boolean;
     /**
      * Last error message from the /Sessions poll, or null if the last poll
@@ -224,7 +236,22 @@ export const useRemoteTargetStore = create<RemoteTargetState>((set) => ({
                         if (now < hold.until) {
                             // Hold still active — revert this field to its
                             // optimistic value so the UI doesn't flicker.
-                            (merged as unknown as Record<string, unknown>)[field] = hold.expected;
+                            if (field === 'positionMs') {
+                                merged.positionMs = hold.expected as number;
+                                // A5: also restore the interpolation ANCHOR. The
+                                // incoming frame's fresh positionSampledAt was just
+                                // merged in via `...incomingPlayState`; if we pin
+                                // positionMs to the seek target but keep that fresh
+                                // sample time, interpolatePositionMs restarts from the
+                                // target on every poll — the playhead snaps back each
+                                // tick for the whole hold window. Re-anchoring to the
+                                // prior sample time lets it advance continuously from
+                                // the seek instant.
+                                merged.positionSampledAt = s.mirrored.playState.positionSampledAt;
+                            } else {
+                                (merged as unknown as Record<string, unknown>)[field] =
+                                    hold.expected;
+                            }
                         } else {
                             // Hold expired — trust the server.
                             delete holds[field];
@@ -252,6 +279,7 @@ export const useRemoteTargetStore = create<RemoteTargetState>((set) => ({
             set({
                 holds: {},
                 mirrored: emptyMirrored,
+                ownerServerId: null,
                 sessionId: null,
                 status: 'idle',
                 targetDeviceId: null,
@@ -453,10 +481,11 @@ export const useRemoteTargetStore = create<RemoteTargetState>((set) => ({
             ),
         setPollError: (error) => set({ pollError: error }),
         setStatus: (status) => set({ status }),
-        setTarget: ({ capabilities, deviceId, deviceName, sessionId }) =>
+        setTarget: ({ capabilities, deviceId, deviceName, ownerServerId, sessionId }) =>
             set(() => ({
                 holds: {},
                 mirrored: { ...emptyMirrored, capabilities },
+                ownerServerId: ownerServerId ?? null,
                 sessionId,
                 // Start in 'connecting' — the sessions sink/poller flips us to
                 // 'connected' as soon as the target session is found in the
@@ -471,6 +500,7 @@ export const useRemoteTargetStore = create<RemoteTargetState>((set) => ({
     hasPolledOnce: false,
     holds: {},
     mirrored: emptyMirrored,
+    ownerServerId: null,
     pickerOpen: false,
     pollError: null,
     sessionId: null,

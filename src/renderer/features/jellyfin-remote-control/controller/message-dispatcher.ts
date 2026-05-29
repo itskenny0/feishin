@@ -62,6 +62,11 @@ export async function dispatchJellyfinMessage(
 
     if (msg.MessageType === 'Playstate') {
         const data = (msg as Extract<JellyfinIncomingMessage, { MessageType: 'Playstate' }>).Data;
+        // A malformed frame with Data omitted/null must be ignored like any
+        // other unknown shape rather than throwing inside this async fn (the
+        // throw would be swallowed by the caller's .catch and drop the frame
+        // with a console.error instead of a graceful no-op).
+        if (!data || typeof data.Command !== 'string') return;
         debug('Playstate', data.Command);
         switch (data.Command) {
             case 'FastForward':
@@ -104,6 +109,9 @@ export async function dispatchJellyfinMessage(
     if (msg.MessageType === 'GeneralCommand') {
         const data = (msg as Extract<JellyfinIncomingMessage, { MessageType: 'GeneralCommand' }>)
             .Data;
+        // Guard a missing/null Data so a non-conformant frame is ignored
+        // (matching the default fallthrough) instead of throwing on data.Name.
+        if (!data || typeof data.Name !== 'string') return;
         const args = data.Arguments ?? {};
         switch (data.Name) {
             case 'DisplayMessage': {
@@ -167,6 +175,9 @@ export async function dispatchJellyfinMessage(
 
     if (msg.MessageType === 'Play') {
         const data = (msg as Extract<JellyfinIncomingMessage, { MessageType: 'Play' }>).Data;
+        // Guard a missing/null Data before reading data.PlayCommand so a
+        // malformed Play frame is ignored gracefully.
+        if (!data) return;
         const playType = PLAY_COMMAND_TO_PLAY_TYPE[data.PlayCommand];
         if (!playType) return;
         const ids = data.ItemIds ?? [];
@@ -203,7 +214,14 @@ export async function dispatchJellyfinMessage(
                     : startIndex;
                 state.mediaPlayByIndex(defaultIndex);
                 if (startPositionTicks > 0) {
-                    playerActions.mediaSeekToTimestamp(startPositionTicks / TICKS_PER_SECOND);
+                    // Defer past the track-change render so the new song's
+                    // media element is mounted by the time the seek lands.
+                    // Mirrors the fresh-queue path below; without this the
+                    // seek can hit the old/zeroed element and the requested
+                    // resume position is silently lost.
+                    requestAnimationFrame(() => {
+                        playerActions.mediaSeekToTimestamp(startPositionTicks / TICKS_PER_SECOND);
+                    });
                 }
                 return;
             }

@@ -204,6 +204,10 @@ const ConnectWizardSubpage = lazyDefault(
     () => import('/@/renderer/features/settings/components/connect/connect-wizard'),
     'ConnectWizard',
 );
+const OfflineMediaSubpage = lazyDefault(
+    () => import('/@/renderer/features/settings/components/connect/offline-media-settings'),
+    'OfflineMediaSettings',
+);
 
 // Advanced
 const UpdateSubpage = lazyDefault(
@@ -382,6 +386,17 @@ export const SETTINGS_SUBPAGES: Record<string, SubpageDef[]> = {
             Icon: RiDatabase2Line,
             id: 'library-sync',
             label: (t) => t('page.setting.librarySync', { defaultValue: 'Library sync' }),
+            visible: (server) => server?.type === 'jellyfin',
+        },
+        {
+            Component: OfflineMediaSubpage,
+            description: (t) =>
+                t('page.setting.offlineMediaDescription', {
+                    defaultValue: 'Download albums and playlists for offline playback.',
+                }),
+            Icon: RiDownloadLine,
+            id: 'offline-media',
+            label: (t) => t('page.setting.offlineMedia', { defaultValue: 'Offline downloads' }),
             visible: (server) => server?.type === 'jellyfin',
         },
         {

@@ -1,28 +1,37 @@
 /**
- * Wizard finish-flow regression coverage.
+ * Wizard finish-flow + connection-test-gate regression coverage.
  *
- * The Sync & Connect onboarding wizard has one job: collect a tier choice
- * + broker URL/credentials, then atomically flip every persisted flag the
- * rest of the app gates on (`onboarded=true`, `enabled=true`,
+ * The Sync & Connect onboarding wizard collects a tier choice + broker
+ * URL/credentials, makes the user prove the broker is reachable (the
+ * connection-test gate), then atomically flips every persisted flag the rest
+ * of the app gates on (`onboarded=true`, `enabled=true`,
  * `jellyfinRemoteEnabled=true`, plus the broker config the user picked).
  *
- * Before this suite a regression where the Finish click was silently
- * skipped — because two buttons matched "Finish" in the DOM (the Stepper
- * step label + the action button) and a query helper picked the wrong one
- * — went undetected because no test exercised the path. The harness here
- * fires the click directly on the action button so a future regression
- * fails loudly.
+ * Two behaviours are pinned here:
+ *   - Next on the Configure step is disabled until a connection test against
+ *     the current broker config SUCCEEDS (testBrokerConnection mocked).
+ *   - On Finish the persisted `roomKey` is the Jellyfin username — the broker
+ *     auth password is deterministic so a user's own devices auto-pair.
  */
 import { MantineProvider } from '@mantine/core';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ConnectWizard } from '/@/renderer/features/settings/components/connect/connect-wizard';
+import { useAuthStore } from '/@/renderer/store/auth.store';
 import { useSettingsStore } from '/@/renderer/store/settings.store';
 
 // nanoid is non-deterministic; pin it so we can assert on the seeded
 // identity without flake.
 vi.mock('nanoid', () => ({ nanoid: (length?: number) => (length ? 'k'.repeat(length) : 'pid') }));
+
+// The broker reachability probe. Default: succeed. Individual tests override
+// the resolved value to exercise the gate.
+const testBrokerConnection = vi.fn(async () => ({ ok: true }) as { error?: string; ok: boolean });
+vi.mock('/@/renderer/features/peer-sync/controller/peer-client', () => ({
+    testBrokerConnection: (...args: unknown[]) =>
+        (testBrokerConnection as unknown as (...a: unknown[]) => unknown)(...args),
+}));
 
 const renderWizard = () =>
     render(
@@ -30,6 +39,20 @@ const renderWizard = () =>
             <ConnectWizard />
         </MantineProvider>,
     );
+
+const seedServer = (username: string | undefined) => {
+    useAuthStore.setState({
+        ...useAuthStore.getState(),
+        currentServer: username
+            ? ({
+                  id: 'srv-1',
+                  type: 'jellyfin',
+                  userId: 'user-1',
+                  username,
+              } as never)
+            : null,
+    });
+};
 
 const resetPeerSync = () => {
     const prev = useSettingsStore.getState();
@@ -45,6 +68,7 @@ const resetPeerSync = () => {
             onboarded: false,
             peerId: '',
             roomKey: '',
+            transport: 'auto',
             ui: {
                 connectButton: true,
                 hideNonMqttDevices: false,
@@ -55,34 +79,55 @@ const resetPeerSync = () => {
     });
 };
 
-beforeEach(resetPeerSync);
+beforeEach(() => {
+    testBrokerConnection.mockClear();
+    testBrokerConnection.mockResolvedValue({ ok: true });
+    seedServer('alice');
+    resetPeerSync();
+});
 afterEach(() => {
     cleanup();
     resetPeerSync();
 });
 
-const clickByText = (text: string) => {
-    // Filter to actual <button> elements so the Mantine Stepper step labels
-    // (also rendered as buttons because the wizard sets onStepClick) don't
-    // accidentally consume the click intended for the action button at the
-    // bottom of the step content.
-    const buttons = screen
+const buttonsByText = (text: string): HTMLButtonElement[] =>
+    screen
         .getAllByRole('button')
-        .filter((b) => (b.textContent || '').trim() === text);
+        .filter((b) => (b.textContent || '').trim() === text) as HTMLButtonElement[];
+
+const clickByText = (text: string) => {
+    const buttons = buttonsByText(text);
     expect(buttons.length).toBeGreaterThan(0);
     // The action button is always the LAST occurrence because the Stepper
     // labels render at the top of the DOM and the action button at the end.
     fireEvent.click(buttons[buttons.length - 1]);
 };
 
+// Advance intro → tier → configure and fill in a broker URL.
+const goToConfigureWithUrl = (url: string) => {
+    clickByText('Next'); // intro → tier
+    clickByText('Next'); // tier → configure ('own' default)
+    const input = screen.getByPlaceholderText(/wss:\/\/broker\.example\.com/i);
+    fireEvent.change(input, { target: { value: url } });
+};
+
 describe('ConnectWizard', () => {
-    it('persists the full opt-in state when the user finishes the own-broker flow', async () => {
+    it('keeps Next disabled until the connection test passes, then persists roomKey = username', async () => {
         renderWizard();
-        clickByText('Next'); // intro → tier
-        // 'own' is the default; just advance.
-        clickByText('Next'); // tier → configure
-        const url = screen.getByPlaceholderText(/wss:\/\/broker\.example\.com/i);
-        fireEvent.change(url, { target: { value: 'wss://my.broker.example.net:8083/mqtt' } });
+        goToConfigureWithUrl('wss://my.broker.example.net:8083/mqtt');
+
+        // Before any test, Next is gated.
+        const nextBefore = buttonsByText('Next');
+        expect(nextBefore[nextBefore.length - 1].disabled).toBe(true);
+
+        // Run the (mocked-success) connection test.
+        clickByText('Test connection');
+        await waitFor(() => {
+            expect(testBrokerConnection).toHaveBeenCalled();
+            const nextAfter = buttonsByText('Next');
+            expect(nextAfter[nextAfter.length - 1].disabled).toBe(false);
+        });
+
         clickByText('Next'); // configure → finish
         clickByText('Finish');
 
@@ -92,24 +137,53 @@ describe('ConnectWizard', () => {
             expect(ps.enabled).toBe(true);
             expect(ps.jellyfinRemoteEnabled).toBe(true);
             expect(ps.brokerUrl).toBe('wss://my.broker.example.net:8083/mqtt');
-            // Identity seeded by the wizard's nanoid call.
             expect(ps.peerId.length).toBeGreaterThan(0);
-            expect(ps.roomKey.length).toBeGreaterThan(0);
+            // The room key is the Jellyfin username, not a random nanoid.
+            expect(ps.roomKey).toBe('alice');
         });
+    });
+
+    it('keeps Next disabled when the connection test fails', async () => {
+        testBrokerConnection.mockResolvedValue({ error: 'ECONNREFUSED', ok: false });
+        renderWizard();
+        goToConfigureWithUrl('wss://unreachable.example.net:8083');
+
+        clickByText('Test connection');
+        await waitFor(() => {
+            expect(testBrokerConnection).toHaveBeenCalled();
+            // The failure message surfaces.
+            expect(screen.getByText(/ECONNREFUSED/)).toBeTruthy();
+        });
+        const next = buttonsByText('Next');
+        expect(next[next.length - 1].disabled).toBe(true);
+    });
+
+    it('resets the test gate when the broker URL changes after a successful test', async () => {
+        renderWizard();
+        goToConfigureWithUrl('wss://first.example.net:8083');
+        clickByText('Test connection');
+        await waitFor(() => {
+            const next = buttonsByText('Next');
+            expect(next[next.length - 1].disabled).toBe(false);
+        });
+
+        // Edit the URL — the prior success no longer applies; Next re-gates.
+        const input = screen.getByPlaceholderText(/wss:\/\/broker\.example\.com/i);
+        fireEvent.change(input, { target: { value: 'wss://second.example.net:8083' } });
+        const next = buttonsByText('Next');
+        expect(next[next.length - 1].disabled).toBe(true);
     });
 
     it('keeps Next disabled on the configure step when the broker URL is empty', () => {
         renderWizard();
         clickByText('Next'); // intro → tier
         clickByText('Next'); // tier → configure (broker URL is empty)
-        // On the configure step the action button is the last "Next".
-        const buttons = screen
-            .getAllByRole('button')
-            .filter((b) => (b.textContent || '').trim() === 'Next');
-        const actionNext = buttons[buttons.length - 1] as HTMLButtonElement;
-        // Mantine renders disabled buttons with the native `disabled`
-        // attribute, so the form-level guard works without jest-dom.
+        const buttons = buttonsByText('Next');
+        const actionNext = buttons[buttons.length - 1];
         expect(actionNext.disabled).toBe(true);
+        // The Test connection button is also disabled with no URL.
+        const testButtons = buttonsByText('Test connection');
+        expect(testButtons[testButtons.length - 1].disabled).toBe(true);
     });
 
     it('flags a known public broker URL with a warning', () => {

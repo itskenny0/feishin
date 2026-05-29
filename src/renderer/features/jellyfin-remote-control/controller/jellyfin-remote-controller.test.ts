@@ -170,3 +170,246 @@ describe('JellyfinRemoteController — keepalive contract', () => {
         ctl.stop();
     });
 });
+
+/**
+ * Audit E2 + E4: the inbound message dispatcher.
+ *
+ * E2 — the PlayNow fast-path (queue already matches) issued the resume seek
+ *      synchronously in the same tick as mediaPlayByIndex, before the new
+ *      track's media element mounted, so the requested StartPositionTicks was
+ *      lost. The fix mirrors the fresh-queue path and defers the seek into
+ *      requestAnimationFrame.
+ * E4 — Playstate / GeneralCommand / Play frames dereferenced msg.Data without
+ *      guarding undefined/null, throwing a swallowed TypeError on a malformed
+ *      frame instead of ignoring it like any other unknown shape.
+ */
+describe('dispatchJellyfinMessage — E2 fast-path seek deferral + E4 Data guards', () => {
+    const TICKS_PER_SECOND = 10_000_000;
+
+    // Hoisted so the player.store mock factory can close over them.
+    const storeState = vi.hoisted(() => ({
+        mediaPlayByIndex: vi.fn(),
+        queue: {
+            // ids 'a','b','c' with stable uniqueIds; index maps 1:1.
+            default: ['ua', 'ub', 'uc'],
+            shuffled: [] as number[],
+            songs: {
+                ua: { id: 'a' },
+                ub: { id: 'b' },
+                uc: { id: 'c' },
+            } as Record<string, { id: string }>,
+        },
+    }));
+
+    beforeEach(() => {
+        vi.resetModules();
+        storeState.mediaPlayByIndex.mockClear();
+        vi.doMock('/@/renderer/store/player.store', () => ({
+            addToQueueByData: vi.fn(async () => {}),
+            isShuffleEnabled: () => false,
+            usePlayerStoreBase: {
+                getState: () => ({
+                    ...storeState,
+                    player: { muted: false },
+                }),
+            },
+        }));
+        vi.doMock('/@/shared/components/toast/toast', () => ({
+            toast: { error: vi.fn(), info: vi.fn(), warn: vi.fn() },
+        }));
+    });
+
+    afterEach(() => {
+        vi.doUnmock('/@/renderer/store/player.store');
+        vi.doUnmock('/@/shared/components/toast/toast');
+        vi.useRealTimers();
+        vi.restoreAllMocks();
+    });
+
+    const importDispatcher = async () => {
+        const mod =
+            await import('/@/renderer/features/jellyfin-remote-control/controller/message-dispatcher');
+        return mod.dispatchJellyfinMessage;
+    };
+
+    const mkDeps = () => {
+        const mediaSeekToTimestamp = vi.fn();
+        return {
+            deps: {
+                defaultVolumeStep: 5,
+                fetchSongsByIds: vi.fn(async () => []),
+                playerActions: {
+                    decreaseVolume: vi.fn(),
+                    increaseVolume: vi.fn(),
+                    mediaNext: vi.fn(),
+                    mediaPause: vi.fn(),
+                    mediaPlay: vi.fn(),
+                    mediaPrevious: vi.fn(),
+                    mediaSeekToTimestamp,
+                    mediaSkipBackward: vi.fn(),
+                    mediaSkipForward: vi.fn(),
+                    mediaStop: vi.fn(),
+                    mediaToggleMute: vi.fn(),
+                    mediaTogglePlayPause: vi.fn(),
+                    setRepeat: vi.fn(),
+                    setShuffle: vi.fn(),
+                    setVolume: vi.fn(),
+                },
+            },
+            mediaSeekToTimestamp,
+        };
+    };
+
+    it('E2: PlayNow fast-path jumps synchronously but defers the resume seek to a rAF tick', async () => {
+        // Mock rAF so we control exactly when the deferred seek runs.
+        const rafCbs: FrameRequestCallback[] = [];
+        vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+            rafCbs.push(cb);
+            return rafCbs.length;
+        });
+
+        const dispatch = await importDispatcher();
+        const { deps, mediaSeekToTimestamp } = mkDeps();
+
+        // ItemIds match the current queue exactly; StartIndex points at a
+        // different track; StartPositionTicks > 0 (resume mid-track).
+        await dispatch(
+            {
+                Data: {
+                    ItemIds: ['a', 'b', 'c'],
+                    PlayCommand: 'PlayNow',
+                    StartIndex: 2,
+                    StartPositionTicks: 90 * TICKS_PER_SECOND,
+                },
+                MessageType: 'Play',
+            } as never,
+            deps as never,
+        );
+
+        // The track jump is synchronous (fast path).
+        expect(storeState.mediaPlayByIndex).toHaveBeenCalledTimes(1);
+        expect(storeState.mediaPlayByIndex).toHaveBeenCalledWith(2);
+
+        // The seek MUST be deferred — nothing yet.
+        expect(mediaSeekToTimestamp).not.toHaveBeenCalled();
+        expect(rafCbs.length).toBe(1);
+
+        // Run the rAF callback; only now does the seek land, in SECONDS.
+        rafCbs.forEach((cb) => cb(0));
+        expect(mediaSeekToTimestamp).toHaveBeenCalledTimes(1);
+        expect(mediaSeekToTimestamp).toHaveBeenCalledWith(90);
+
+        vi.unstubAllGlobals();
+    });
+
+    it('E2: fresh-queue path also defers its seek to a rAF tick (symmetry)', async () => {
+        // Re-mock player.store so the queue does NOT match -> fresh-queue path.
+        vi.doMock('/@/renderer/store/player.store', () => ({
+            addToQueueByData: vi.fn(async () => {}),
+            isShuffleEnabled: () => false,
+            usePlayerStoreBase: {
+                getState: () => ({
+                    mediaPlayByIndex: storeState.mediaPlayByIndex,
+                    player: { muted: false },
+                    // Empty default => fresh-queue (and wasIdle), but we seed
+                    // fetched songs below so StartIndex>0 path runs.
+                    queue: { default: [], shuffled: [], songs: {} },
+                }),
+            },
+        }));
+
+        const dispatch = await importDispatcher();
+        const { deps, mediaSeekToTimestamp } = mkDeps();
+        // Return 3 songs so startIndex=2 is in range.
+        (deps.fetchSongsByIds as ReturnType<typeof vi.fn>).mockResolvedValue([
+            { id: 'a' },
+            { id: 'b' },
+            { id: 'c' },
+        ]);
+
+        const rafCbs: FrameRequestCallback[] = [];
+        vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+            rafCbs.push(cb);
+            return rafCbs.length;
+        });
+
+        await dispatch(
+            {
+                Data: {
+                    ItemIds: ['a', 'b', 'c'],
+                    PlayCommand: 'PlayNow',
+                    StartIndex: 2,
+                    StartPositionTicks: 30 * TICKS_PER_SECOND,
+                },
+                MessageType: 'Play',
+            } as never,
+            deps as never,
+        );
+
+        expect(mediaSeekToTimestamp).not.toHaveBeenCalled();
+        expect(rafCbs.length).toBe(1);
+        rafCbs.forEach((cb) => cb(0));
+        expect(mediaSeekToTimestamp).toHaveBeenCalledWith(30);
+
+        vi.unstubAllGlobals();
+    });
+
+    it('E4: a Playstate frame with no Data is ignored without throwing or dispatching', async () => {
+        const dispatch = await importDispatcher();
+        const { deps } = mkDeps();
+        await expect(
+            dispatch({ MessageType: 'Playstate' } as never, deps as never),
+        ).resolves.toBeUndefined();
+        await expect(
+            dispatch({ Data: null, MessageType: 'Playstate' } as never, deps as never),
+        ).resolves.toBeUndefined();
+        expect(deps.playerActions.mediaNext).not.toHaveBeenCalled();
+        expect(deps.playerActions.mediaPause).not.toHaveBeenCalled();
+    });
+
+    it('E4: a GeneralCommand frame with no Data is ignored without throwing or dispatching', async () => {
+        const dispatch = await importDispatcher();
+        const { deps } = mkDeps();
+        await expect(
+            dispatch({ MessageType: 'GeneralCommand' } as never, deps as never),
+        ).resolves.toBeUndefined();
+        await expect(
+            dispatch({ Data: null, MessageType: 'GeneralCommand' } as never, deps as never),
+        ).resolves.toBeUndefined();
+        expect(deps.playerActions.setVolume).not.toHaveBeenCalled();
+        expect(deps.playerActions.mediaToggleMute).not.toHaveBeenCalled();
+    });
+
+    it('E4: a Play frame with no Data is ignored without throwing', async () => {
+        const dispatch = await importDispatcher();
+        const { deps } = mkDeps();
+        await expect(
+            dispatch({ MessageType: 'Play' } as never, deps as never),
+        ).resolves.toBeUndefined();
+        expect(deps.fetchSongsByIds).not.toHaveBeenCalled();
+        expect(storeState.mediaPlayByIndex).not.toHaveBeenCalled();
+    });
+
+    it('E4: a valid Playstate still dispatches (guard is not over-broad)', async () => {
+        const dispatch = await importDispatcher();
+        const { deps } = mkDeps();
+        await dispatch(
+            { Data: { Command: 'NextTrack' }, MessageType: 'Playstate' } as never,
+            deps as never,
+        );
+        expect(deps.playerActions.mediaNext).toHaveBeenCalledTimes(1);
+    });
+
+    it('E4: a valid GeneralCommand still dispatches (guard is not over-broad)', async () => {
+        const dispatch = await importDispatcher();
+        const { deps } = mkDeps();
+        await dispatch(
+            {
+                Data: { Arguments: { Volume: '40' }, Name: 'SetVolume' },
+                MessageType: 'GeneralCommand',
+            } as never,
+            deps as never,
+        );
+        expect(deps.playerActions.setVolume).toHaveBeenCalledWith(40);
+    });
+});

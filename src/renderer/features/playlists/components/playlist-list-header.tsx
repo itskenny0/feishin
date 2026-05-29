@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useIsFetchingItemListCount } from '/@/renderer/components/item-list/helpers/use-is-fetching-item-list';
 import { PageHeader } from '/@/renderer/components/page-header/page-header';
 import { useListContext } from '/@/renderer/context/list-context';
+import { useOfflineListSource } from '/@/renderer/features/context-menu/hooks/use-offline-download';
 import { PlaylistListHeaderFilters } from '/@/renderer/features/playlists/components/playlist-list-header-filters';
 import { usePlaylistListFilters } from '/@/renderer/features/playlists/hooks/use-playlist-list-filters';
 import { FilterBar } from '/@/renderer/features/shared/components/filter-bar';
@@ -28,6 +29,7 @@ export const PlaylistListHeader = ({ title }: PlaylistListHeaderProps) => {
                     <PlayButton />
                     <LibraryHeaderBar.Title>{pageTitle}</LibraryHeaderBar.Title>
                     <PlaylistListHeaderBadge />
+                    <OfflineButton />
                 </LibraryHeaderBar>
                 <Group>
                     <ListSearchInput />
@@ -54,4 +56,14 @@ const PlayButton = () => {
     const { query } = usePlaylistListFilters();
 
     return <LibraryHeaderBar.PlayButton itemType={LibraryItem.PLAYLIST} listQuery={query} />;
+};
+
+const OfflineButton = () => {
+    const { query } = usePlaylistListFilters();
+    const { itemCount } = useListContext();
+    const { available, getEntities } = useOfflineListSource(LibraryItem.PLAYLIST, query);
+
+    if (!available) return null;
+
+    return <LibraryHeaderBar.OfflineButton source={{ getEntities, itemCount, type: 'list' }} />;
 };

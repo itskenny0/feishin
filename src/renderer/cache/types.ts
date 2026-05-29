@@ -67,6 +67,31 @@ export interface CachedLyrics extends CachedBase {
     Synced: boolean;
 }
 
+/**
+ * A downloaded audio blob for offline playback. One row per (server, song).
+ * The same blob can belong to several offline targets (e.g. a song is on an
+ * album AND in a playlist the user both marked offline), so membership is
+ * tracked via the multi-entry `EntityKeys` array rather than a single owner.
+ */
+export interface CachedMediaBlob {
+    // Decoded audio bytes.
+    Blob: Blob;
+    ByteSize: number;
+    // Container/extension hint (e.g. 'flac', 'mp3') — drives the blob MIME so
+    // the web-audio engine picks the right decoder.
+    Container: string | undefined;
+    DownloadedAt: number;
+    // Multi-entry index: every offline-target key (`${serverId}:${entityType}:${entityId}`)
+    // that pulled this song in. Eviction by entity removes the entity key here
+    // and only deletes the blob row once no target references it anymore.
+    EntityKeys: string[];
+    // `${serverId}:${songId}`.
+    Key: OfflineKey;
+    MimeType: string | undefined;
+    ServerId: string;
+    SongId: string;
+}
+
 export interface CachedPlaylist extends CachedBase {
     DateLastSaved: string;
     Id: string;
@@ -148,6 +173,35 @@ export interface MutationRow {
 }
 
 export type MutationStatus = 'failed' | 'in_progress' | 'pending';
+
+export type OfflineEntityType = 'album' | 'artist' | 'genre' | 'playlist' | 'song';
+
+export type OfflineKey = `${string}:${string}`;
+
+/**
+ * An entity the user marked for offline download. Primary key `Key` is
+ * `${serverId}:${entityType}:${entityId}`.
+ */
+export interface OfflineTargetRow {
+    AddedAt: number;
+    // Total bytes of the blobs currently downloaded for this target.
+    Bytes: number;
+    // Number of blobs downloaded so far (<= SongCount).
+    DownloadedCount: number;
+    EntityId: string;
+    EntityType: OfflineEntityType;
+    Key: string;
+    // Last error message if Status === 'error'.
+    LastError: string | undefined;
+    Name: string;
+    ServerId: string;
+    // Total songs enumerated for this entity (undefined until first sync).
+    SongCount: number | undefined;
+    Status: OfflineTargetStatus;
+    UpdatedAt: number;
+}
+
+export type OfflineTargetStatus = 'complete' | 'error' | 'idle' | 'partial' | 'syncing';
 
 export interface SyncMetaRow {
     EntityType: EntityType;

@@ -102,17 +102,31 @@ export const mirrorSession = (
         queueIndex: -1,
     };
 
-    if (queueChanged && queueIds.length > 0) {
+    if (queueChanged && queueIds.length === 0) {
+        // A2: the target cleared its queue (playback stopped / queue emptied).
+        // Signal an empty id-set so the sink pushes queue:[] / queueIndex:-1 and
+        // resets its per-device cache. Without this, both queue branches below
+        // are gated on `queueIds.length > 0`, so neither runs and the prior
+        // (now-defunct) track list lives on in the mirror forever even though
+        // nowPlayingItem is correctly cleared.
+        result.queueIds = [];
+        result.queueIndex = -1;
+    } else if (queueChanged && queueIds.length > 0) {
         const toFetch = compareIds;
         result.hydrateQueue = async () =>
             (await remoteTargetApi.hydrateSongs({ itemIds: toFetch, server })) as Song[];
         result.queueIds = compareIds;
         const currentItemId: null | string = session?.NowPlayingItem?.Id ?? null;
-        result.queueIndex = currentItemId ? queueIds.indexOf(currentItemId) : -1;
+        // A1: resolve the index against the SAME truncated window we hydrate and
+        // cache (`compareIds`), not the full `queueIds`. For an oversized queue
+        // whose now-playing item sits past MAX_QUEUE_HYDRATE this yields -1
+        // ("unknown" — handled by both the sink and the queue panel) instead of
+        // an index that points past the hydrated array.
+        result.queueIndex = currentItemId ? compareIds.indexOf(currentItemId) : -1;
     } else if (queueIds.length > 0) {
-        // No re-hydrate; recompute index against existing queue.
+        // No re-hydrate; recompute index against the existing (truncated) queue.
         const currentItemId: null | string = session?.NowPlayingItem?.Id ?? null;
-        result.queueIndex = currentItemId ? queueIds.indexOf(currentItemId) : -1;
+        result.queueIndex = currentItemId ? compareIds.indexOf(currentItemId) : -1;
         // Don't touch mirrored.queue at all when ids unchanged.
     }
 

@@ -23,7 +23,7 @@ interface GenreDetailHeaderProps {
 export const GenreDetailHeader = ({ title }: GenreDetailHeaderProps) => {
     const { t } = useTranslation();
 
-    const { itemCount } = useListContext();
+    const { id, itemCount } = useListContext();
     const pageTitle = title || t('page.genreList.title');
 
     const genreTarget = useGenreTarget();
@@ -37,6 +37,18 @@ export const GenreDetailHeader = ({ title }: GenreDetailHeaderProps) => {
                     <LibraryHeaderBar.Badge isLoading={itemCount === undefined}>
                         {itemCount}
                     </LibraryHeaderBar.Badge>
+                    {id && (
+                        <LibraryHeaderBar.OfflineButton
+                            source={{
+                                entity: {
+                                    entityType: 'genre',
+                                    id,
+                                    name: pageTitle,
+                                },
+                                type: 'entity',
+                            }}
+                        />
+                    )}
                 </LibraryHeaderBar>
                 <Group>
                     <ListSearchInput />
