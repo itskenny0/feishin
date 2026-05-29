@@ -106,7 +106,9 @@ export const artistsQueries = {
                         let favoriteArtistIds: Set<string> | undefined;
                         if (needsFavorites) {
                             const favRows = await db.favorites
-                                .filter((r) => r.ItemType === 'AlbumArtist' && r.IsFavorite)
+                                .where('ItemType')
+                                .equals('AlbumArtist')
+                                .and((r) => r.IsFavorite)
                                 .toArray();
                             favoriteArtistIds = new Set(favRows.map((r) => r.ItemId));
                         }
@@ -157,7 +159,8 @@ export const artistsQueries = {
                         // list is not empty offline (virtual scroll needs a count > 0).
                         if (args.query.favorite !== undefined && !args.query._custom) {
                             const favRows = await db.favorites
-                                .filter((r) => r.ItemType === 'AlbumArtist')
+                                .where('ItemType')
+                                .equals('AlbumArtist')
                                 .toArray();
                             if (args.query.favorite === true) {
                                 return favRows.filter((f) => f.IsFavorite).length;
@@ -234,7 +237,9 @@ export const artistsQueries = {
                             // the 'AlbumArtist' bucket — same underlying
                             // record shared between both artist kinds.
                             const favRows = await db.favorites
-                                .filter((r) => r.ItemType === 'AlbumArtist' && r.IsFavorite)
+                                .where('ItemType')
+                                .equals('AlbumArtist')
+                                .and((r) => r.IsFavorite)
                                 .toArray();
                             favoriteArtistIds = new Set(favRows.map((r) => r.ItemId));
                         }
@@ -282,7 +287,8 @@ export const artistsQueries = {
                         // list is not empty offline (virtual scroll needs a count > 0).
                         if (args.query.favorite !== undefined && !args.query._custom) {
                             const favRows = await db.favorites
-                                .filter((r) => r.ItemType === 'Artist')
+                                .where('ItemType')
+                                .equals('Artist')
                                 .toArray();
                             if (args.query.favorite === true) {
                                 return favRows.filter((f) => f.IsFavorite).length;

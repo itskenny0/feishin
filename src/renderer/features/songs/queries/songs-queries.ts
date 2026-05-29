@@ -16,7 +16,14 @@
 
 import { controller } from '/@/renderer/api/controller';
 import { queryKeys } from '/@/renderer/api/query-keys';
-import { filterSongsLocal, markSearchDirty, useCachedQuery } from '/@/renderer/cache';
+import {
+    buildListSignature,
+    filterSongsLocal,
+    getOrComputeSorted,
+    loadSongsRows,
+    markSearchDirty,
+    useCachedQuery,
+} from '/@/renderer/cache';
 import {
     Song,
     SongDetailQuery,
@@ -94,40 +101,69 @@ export const useSongListQuery = (args: SongListHookArgs) => {
         fromCache: async (db) => {
             if (hasServerOnlySongFilter(query)) return undefined;
 
-            // Prefer the cheapest Dexie pre-filter we can manage before
-            // we have to scan. Single-album and single-album-artist both
-            // map to indexed columns.
-            let rows;
-            if (query.albumIds?.length === 1) {
-                rows = await db.songs.where('AlbumId').equals(query.albumIds[0]).toArray();
-            } else if (query.albumArtistIds?.length === 1) {
-                rows = await db.songs
-                    .where('AlbumArtistId')
-                    .equals(query.albumArtistIds[0])
-                    .toArray();
-            } else {
-                rows = await db.songs.toArray();
-            }
-            if (rows.length === 0) return undefined;
+            // Scope key encodes "what rows are loaded" so a single-album
+            // scope doesn't collide with the full-library scope in the memo.
+            const scope =
+                query.albumIds?.length === 1
+                    ? `album:${query.albumIds[0]}`
+                    : query.albumArtistIds?.length === 1
+                      ? `albumArtist:${query.albumArtistIds[0]}`
+                      : 'all';
+            const sig = buildListSignature(
+                `songs:list:${scope}`,
+                query as unknown as Record<string, unknown>,
+            );
+            const sorted = await getOrComputeSorted<Song>('songs', sig, async () => {
+                // Prefer the cheapest Dexie pre-filter we can manage
+                // before we have to scan. Single-album and
+                // single-album-artist both map to indexed columns; the
+                // unfiltered case shares the JS-heap row cache.
+                let rows;
+                if (query.albumIds?.length === 1) {
+                    rows = await db.songs.where('AlbumId').equals(query.albumIds[0]).toArray();
+                } else if (query.albumArtistIds?.length === 1) {
+                    rows = await db.songs
+                        .where('AlbumArtistId')
+                        .equals(query.albumArtistIds[0])
+                        .toArray();
+                } else {
+                    rows = await loadSongsRows(db);
+                }
+                if (rows.length === 0) return undefined;
 
-            let favoriteSongIds: Set<string> | undefined;
-            const needsFavorites =
-                query.favorite !== undefined || query.sortBy === SongListSort.FAVORITED;
-            if (needsFavorites) {
-                // `ItemType` is part of the compound primary key but not a
-                // standalone index, so the previous .where('ItemType') form
-                // threw a SchemaError that the outer try/catch swallowed.
-                // .filter() does a table walk in JS — fine, the favorites
-                // table is small by design.
-                const favs = await db.favorites.filter((r) => r.ItemType === 'Song').toArray();
-                favoriteSongIds = new Set(favs.filter((f) => f.IsFavorite).map((f) => f.ItemId));
-            }
+                let favoriteSongIds: Set<string> | undefined;
+                const needsFavorites =
+                    query.favorite !== undefined || query.sortBy === SongListSort.FAVORITED;
+                if (needsFavorites) {
+                    // Schema v8 promoted `ItemType` to a standalone
+                    // index, so this rides an IDB cursor over the
+                    // Song-only rows instead of a JS-side `.filter()`
+                    // walk over the entire favorites table.
+                    const favs = await db.favorites.where('ItemType').equals('Song').toArray();
+                    favoriteSongIds = new Set(
+                        favs.filter((f) => f.IsFavorite).map((f) => f.ItemId),
+                    );
+                }
 
-            return filterSongsLocal({
-                favoriteSongIds,
-                query,
-                rows,
+                const result = filterSongsLocal({
+                    favoriteSongIds,
+                    query: { ...query, limit: undefined, startIndex: 0 },
+                    rows,
+                });
+                return result?.items;
             });
+            if (sorted === undefined) return undefined;
+            const startIndex = query.startIndex ?? 0;
+            const limit = query.limit;
+            const items =
+                limit === undefined
+                    ? sorted.slice(startIndex)
+                    : sorted.slice(startIndex, startIndex + limit);
+            return {
+                items,
+                startIndex,
+                totalRecordCount: sorted.length,
+            } satisfies SongListResponse;
         },
         queryKey: queryKeys.songs.list(serverId ?? '', effectiveQuery),
         remote: (ctx) =>

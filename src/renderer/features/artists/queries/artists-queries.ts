@@ -74,19 +74,17 @@ const canServeArtistFromCache = (query: ArtistListQuery | undefined): boolean =>
 // used only when the query opts into favorite-filtering. Caller decides
 // whether to spend the read.
 //
-// Bug fix (cache plumbing): `ItemType` is part of the favorites table's
-// compound primary key `[ItemId+ItemType]` but is NOT a standalone Dexie
-// index, so the previous `db.favorites.where('ItemType').equals(...)` form
-// throws a SchemaError at runtime. The error was swallowed by the
-// useCachedQuery try/catch and silently disabled local favourite filtering
-// for artists. We now scan with `.filter()` (which Dexie executes as a
-// table walk in JS, fine for favourites which is a small table by design)
-// so the query actually succeeds.
+// The cache DB schema v8 added a standalone `ItemType` index on
+// the favorites table, so `where('ItemType').equals(kind)` rides an
+// IDB cursor over the matching rows instead of a `.filter()` JS-side
+// table walk. Earlier schemas threw a SchemaError that the outer
+// `useCachedQuery` try/catch swallowed, hence the historic fallback
+// to `.filter()`.
 const readFavoriteArtistIds = async (
     db: LibraryCacheDb,
     kind: 'AlbumArtist' | 'Artist',
 ): Promise<Set<string>> => {
-    const rows = await db.favorites.filter((r) => r.ItemType === kind).toArray();
+    const rows = await db.favorites.where('ItemType').equals(kind).toArray();
     return new Set(rows.filter((r) => r.IsFavorite).map((r) => r.ItemId));
 };
 

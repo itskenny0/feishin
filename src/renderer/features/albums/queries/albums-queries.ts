@@ -147,7 +147,11 @@ const logApplied = (count: number): void => {
 const readFavoriteAlbumIds = async (
     db: NonNullable<ReturnType<typeof getActiveCacheDb>>,
 ): Promise<Set<string>> => {
-    const rows = await db.favorites.filter((r) => r.ItemType === 'Album').toArray();
+    // Schema v8 promoted `ItemType` to a standalone index, so this is
+    // an IDB cursor scan over the (much smaller) Album-only slice
+    // rather than the table-wide `.filter()` walk the prior schemas
+    // forced us into.
+    const rows = await db.favorites.where('ItemType').equals('Album').toArray();
     return new Set(rows.filter((r) => r.IsFavorite).map((r) => r.ItemId));
 };
 
@@ -494,7 +498,8 @@ export const useAlbumListCountQuery = (args: AlbumListCountQueryArgs) => {
                         isFullyUnfilteredCountQuery({ ...query, favorite: undefined })
                     ) {
                         const favRows = await db.favorites
-                            .filter((r) => r.ItemType === 'Album')
+                            .where('ItemType')
+                            .equals('Album')
                             .toArray();
                         if (query.favorite === true) {
                             return favRows.filter((f) => f.IsFavorite).length;

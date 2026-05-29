@@ -12,10 +12,20 @@
 //     compilation flag, _custom, ...)
 // The loader treats `undefined` as "no cache hit; go to network".
 
+import type { Album, AlbumArtist, Song } from '/@/shared/types/domain-types';
+
 import type { CachedAlbum, CachedFavoriteKind } from './types';
 
 import { isCacheAvailableSync } from './capability';
 import { getActiveCacheDb } from './db';
+import {
+    loadAlbumArtistsRows,
+    loadAlbumsRows,
+    loadArtistsRows,
+    loadSongsRows,
+    lookupSorted,
+    storeSorted,
+} from './local-cache';
 import {
     filterAlbumArtistsLocal,
     filterAlbumsLocal,
@@ -47,12 +57,39 @@ const getDb = () => (isCacheAvailableSync() ? getActiveCacheDb() : undefined);
 
 // Sample-rate logging so a busy infinite scroll doesn't spam devtools.
 let hitCounter = 0;
-const logHit = (label: string, count: number): void => {
+const logHit = (label: string, count: number, memo?: 'cold' | 'memo'): void => {
     hitCounter += 1;
     if (hitCounter % 50 === 1) {
-        console.info(`[cache] grid: hit ${label} (${count} items)`);
+        console.info(`[cache] grid: hit ${label} (${count} items)`, memo ? { memo } : undefined);
     }
 };
+
+// Build the LRU signature for a list query. The startIndex + limit fields
+// are excluded so every page of the same scroll lands on the same memo
+// entry — pagination becomes a slice on the cached sorted list.
+const memoSignature = (label: string, query: Record<string, unknown>): string => {
+    const stripped: Record<string, unknown> = {};
+    for (const k of Object.keys(query)) {
+        if (k === 'startIndex' || k === 'limit') continue;
+        const v = query[k];
+        if (v === undefined) continue;
+        stripped[k] = v;
+    }
+    return `${label}:${JSON.stringify(stripped)}`;
+};
+
+// Apply the (startIndex, limit) slice to a memo-cached sorted result and
+// rebuild the AlbumListResponse-style envelope. Used after a memo hit so
+// pagination is O(limit) rather than re-sorting the whole table.
+const paginateMemo = <T>(
+    items: T[],
+    startIndex: number,
+    limit: number,
+): { items: T[]; startIndex: number; totalRecordCount: number } => ({
+    items: items.slice(startIndex, startIndex + limit),
+    startIndex,
+    totalRecordCount: items.length,
+});
 
 // ---------------------------------------------------------------------------
 // Albums
@@ -62,7 +99,10 @@ const readFavoriteIds = async (
     db: NonNullable<ReturnType<typeof getActiveCacheDb>>,
     itemType: CachedFavoriteKind,
 ): Promise<Set<string>> => {
-    const rows = await db.favorites.filter((r) => r.ItemType === itemType).toArray();
+    // `where('ItemType')` rides the v8 standalone index — Dexie can
+    // scan only matching rows via the IDB cursor instead of pulling
+    // the entire favorites table into JS for a `.filter()` walk.
+    const rows = await db.favorites.where('ItemType').equals(itemType).toArray();
     return new Set(rows.filter((r) => r.IsFavorite).map((r) => r.ItemId));
 };
 
@@ -74,25 +114,51 @@ export const resolveAlbumPage = async (
 
     const { limit, query, startIndex } = args;
 
+    // Try the sorted-result memo first. The signature includes every
+    // filter field except pagination, so page 1 / page 2 / page 3 of the
+    // same scroll all hit the same entry.
+    const sig = memoSignature('albums', query as unknown as Record<string, unknown>);
+    const cached = lookupSorted<Album>('albums', sig);
+    if (cached) {
+        const page = paginateMemo(cached, startIndex, limit);
+        logHit('albums', page.items.length, 'memo');
+        return { items: page.items };
+    }
+
+    // Memo miss — pull the rows (memoized in-JS by `local-cache`) and run
+    // the filter/sort. The single-artist case hits the Dexie index
+    // directly; the unfiltered case shares the JS-heap row cache so the
+    // 50k-row materialisation only happens once per dirty-mark.
     let rows: CachedAlbum[];
     if (query.artistIds && query.artistIds.length === 1) {
         rows = await db.albums.where('AlbumArtistId').equals(query.artistIds[0]).toArray();
     } else {
-        rows = await db.albums.toArray();
+        rows = await loadAlbumsRows(db);
     }
     if (rows.length === 0) return undefined;
 
     const needsFavorites = query.favorite !== undefined || query.sortBy === AlbumListSort.FAVORITED;
     const favoriteAlbumIds = needsFavorites ? await readFavoriteIds(db, 'Album') : undefined;
 
+    // Filter+sort over the full row set ONCE (limit undefined skips
+    // pagination so we get the complete sorted list), then store the
+    // result and slice for this page. Subsequent pages reuse the cached
+    // sorted list via the lookupSorted() path above.
+    const fullQuery: AlbumListQuery = {
+        ...query,
+        limit: undefined,
+        startIndex: 0,
+    };
     const out = filterAlbumsLocal({
         favoriteAlbumIds,
-        query: { ...query, limit, startIndex },
+        query: fullQuery,
         rows,
     });
     if (out === undefined) return undefined;
-    logHit('albums', out.items.length);
-    return { items: out.items };
+    storeSorted<Album>('albums', sig, out.items);
+    const page = paginateMemo(out.items, startIndex, limit);
+    logHit('albums', page.items.length, 'cold');
+    return { items: page.items };
 };
 
 // ---------------------------------------------------------------------------
@@ -106,7 +172,16 @@ export const resolveAlbumArtistPage = async (
     if (!db) return undefined;
 
     const { limit, query, startIndex } = args;
-    const rows = await db.artists.where('Kind').equals('AlbumArtist').toArray();
+
+    const sig = memoSignature('albumArtists', query as unknown as Record<string, unknown>);
+    const cached = lookupSorted<AlbumArtist>('albumArtists', sig);
+    if (cached) {
+        const page = paginateMemo(cached, startIndex, limit);
+        logHit('albumArtists', page.items.length, 'memo');
+        return { items: page.items };
+    }
+
+    const rows = await loadAlbumArtistsRows(db);
     if (rows.length === 0) return undefined;
 
     const needsFavorites =
@@ -115,12 +190,14 @@ export const resolveAlbumArtistPage = async (
 
     const out = filterAlbumArtistsLocal({
         favoriteArtistIds,
-        query: { ...query, limit, startIndex },
+        query: { ...query, limit: undefined, startIndex: 0 },
         rows,
     });
     if (out === undefined) return undefined;
-    logHit('albumArtists', out.items.length);
-    return { items: out.items };
+    storeSorted<AlbumArtist>('albumArtists', sig, out.items);
+    const page = paginateMemo(out.items, startIndex, limit);
+    logHit('albumArtists', page.items.length, 'cold');
+    return { items: page.items };
 };
 
 // ---------------------------------------------------------------------------
@@ -134,7 +211,16 @@ export const resolveArtistPage = async (
     if (!db) return undefined;
 
     const { limit, query, startIndex } = args;
-    const rows = await db.artists.where('Kind').equals('Artist').toArray();
+
+    const sig = memoSignature('artists', query as unknown as Record<string, unknown>);
+    const cached = lookupSorted<AlbumArtist>('artists', sig);
+    if (cached) {
+        const page = paginateMemo(cached, startIndex, limit);
+        logHit('artists', page.items.length, 'memo');
+        return { items: page.items };
+    }
+
+    const rows = await loadArtistsRows(db);
     if (rows.length === 0) return undefined;
 
     // Jellyfin doesn't distinguish song-artist favorites from album-artist
@@ -145,12 +231,14 @@ export const resolveArtistPage = async (
 
     const out = filterArtistsLocal({
         favoriteArtistIds,
-        query: { ...query, limit, startIndex },
+        query: { ...query, limit: undefined, startIndex: 0 },
         rows,
     });
     if (out === undefined) return undefined;
-    logHit('artists', out.items.length);
-    return { items: out.items };
+    storeSorted<AlbumArtist>('artists', sig, out.items);
+    const page = paginateMemo(out.items, startIndex, limit);
+    logHit('artists', page.items.length, 'cold');
+    return { items: page.items };
 };
 
 // ---------------------------------------------------------------------------
@@ -165,14 +253,24 @@ export const resolveSongPage = async (
 
     const { limit, query, startIndex } = args;
 
+    const sig = memoSignature('songs', query as unknown as Record<string, unknown>);
+    const cached = lookupSorted<Song>('songs', sig);
+    if (cached) {
+        const page = paginateMemo(cached, startIndex, limit);
+        logHit('songs', page.items.length, 'memo');
+        return { items: page.items };
+    }
+
     // Prefer indexed pre-filters before scanning the full songs table.
+    // The full-table path goes through the JS-heap row cache so a 50k-row
+    // structured-clone only runs once per dirty-mark.
     let rows;
     if (query.albumIds?.length === 1) {
         rows = await db.songs.where('AlbumId').equals(query.albumIds[0]).toArray();
     } else if (query.albumArtistIds?.length === 1) {
         rows = await db.songs.where('AlbumArtistId').equals(query.albumArtistIds[0]).toArray();
     } else {
-        rows = await db.songs.toArray();
+        rows = await loadSongsRows(db);
     }
     if (rows.length === 0) return undefined;
 
@@ -182,12 +280,14 @@ export const resolveSongPage = async (
 
     const out = filterSongsLocal({
         favoriteSongIds,
-        query: { ...query, limit, startIndex },
+        query: { ...query, limit: undefined, startIndex: 0 },
         rows,
     });
     if (out === undefined) return undefined;
-    logHit('songs', out.items.length);
-    return { items: out.items };
+    storeSorted<Song>('songs', sig, out.items);
+    const page = paginateMemo(out.items, startIndex, limit);
+    logHit('songs', page.items.length, 'cold');
+    return { items: page.items };
 };
 
 // ---------------------------------------------------------------------------

@@ -5,8 +5,11 @@ import { controller } from '/@/renderer/api/controller';
 import { queryKeys } from '/@/renderer/api/query-keys';
 import { getOptimizedListCount } from '/@/renderer/api/utils-list-count';
 import {
+    buildListSignature,
     cachedSwr,
     filterAlbumsLocal,
+    getOrComputeSorted,
+    loadAlbumsRows,
     readSnapshot,
     toCachedAlbumRow,
     toCachedSongRow,
@@ -123,35 +126,65 @@ export const albumQueries = {
                         // artist-detail "albums by this artist" surface, the
                         // sidebar favourites, and every other list consumer
                         // serves from local storage instead of awaiting the
-                        // network. Picks the cheapest available Dexie index.
-                        let rows;
-                        if (args.query?.artistIds && args.query.artistIds.length === 1) {
-                            rows = await db.albums
-                                .where('AlbumArtistId')
-                                .equals(args.query.artistIds[0])
-                                .toArray();
-                        } else {
-                            rows = await db.albums.toArray();
-                        }
-                        if (rows.length === 0) return undefined;
-                        let favoriteAlbumIds: Set<string> | undefined;
-                        const needsFavorites =
-                            args.query?.favorite !== undefined ||
-                            args.query?.sortBy === AlbumListSort.FAVORITED;
-                        if (needsFavorites) {
-                            const favs = await db.favorites
-                                .filter((r) => r.ItemType === 'Album')
-                                .toArray();
-                            favoriteAlbumIds = new Set(
-                                favs.filter((f) => f.IsFavorite).map((f) => f.ItemId),
-                            );
-                        }
-                        const out = filterAlbumsLocal({
-                            favoriteAlbumIds,
-                            query: args.query,
-                            rows,
-                        });
-                        return out as AlbumListResponse | undefined;
+                        // network. Picks the cheapest available Dexie index,
+                        // then asks the renderer-side memo for a previously
+                        // computed sorted result before doing the work.
+                        const singleArtist =
+                            args.query?.artistIds && args.query.artistIds.length === 1
+                                ? args.query.artistIds[0]
+                                : undefined;
+
+                        // Signature includes "scope" so a single-artist
+                        // list doesn't collide with the full-library list.
+                        const sig = buildListSignature(
+                            `albums:list:${singleArtist ?? 'all'}`,
+                            (args.query ?? {}) as unknown as Record<string, unknown>,
+                        );
+
+                        const sorted = await getOrComputeSorted<unknown>(
+                            'albums',
+                            sig,
+                            async () => {
+                                const rows = singleArtist
+                                    ? await db.albums
+                                          .where('AlbumArtistId')
+                                          .equals(singleArtist)
+                                          .toArray()
+                                    : await loadAlbumsRows(db);
+                                if (rows.length === 0) return undefined;
+                                let favoriteAlbumIds: Set<string> | undefined;
+                                const needsFavorites =
+                                    args.query?.favorite !== undefined ||
+                                    args.query?.sortBy === AlbumListSort.FAVORITED;
+                                if (needsFavorites) {
+                                    const favs = await db.favorites
+                                        .where('ItemType')
+                                        .equals('Album')
+                                        .toArray();
+                                    favoriteAlbumIds = new Set(
+                                        favs.filter((f) => f.IsFavorite).map((f) => f.ItemId),
+                                    );
+                                }
+                                const result = filterAlbumsLocal({
+                                    favoriteAlbumIds,
+                                    query: { ...args.query, limit: undefined, startIndex: 0 },
+                                    rows,
+                                });
+                                return result?.items;
+                            },
+                        );
+                        if (sorted === undefined) return undefined;
+                        const startIndex = args.query?.startIndex ?? 0;
+                        const limit = args.query?.limit;
+                        const items =
+                            limit === undefined
+                                ? sorted.slice(startIndex)
+                                : sorted.slice(startIndex, startIndex + limit);
+                        return {
+                            items,
+                            startIndex,
+                            totalRecordCount: sorted.length,
+                        } as AlbumListResponse;
                     },
                     queryKey: key,
                     remote: ({ signal }) =>
@@ -191,7 +224,8 @@ export const albumQueries = {
                         // without a count the virtual scroll renders 0 rows).
                         if (args.query.favorite !== undefined && !args.query.artistIds) {
                             const favRows = await db.favorites
-                                .filter((r) => r.ItemType === 'Album')
+                                .where('ItemType')
+                                .equals('Album')
                                 .toArray();
                             if (args.query.favorite === true) {
                                 return favRows.filter((f) => f.IsFavorite).length;

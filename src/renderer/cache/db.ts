@@ -187,6 +187,31 @@ export class LibraryCacheDb extends Dexie {
             syncMeta: 'EntityType',
             thumbnails: 'ItemId, LastUsed, ByteSize, MissAt, __cachedAt',
         });
+
+        // v8: add standalone `ItemType` index to favorites so
+        // `where('ItemType').equals('Album')` runs as an O(log n) index
+        // scan. Previously ItemType only existed in the compound primary
+        // key `[ItemId+ItemType]`, which Dexie cannot address as a
+        // standalone field — every list query that filtered by favorite
+        // fell back to `.filter()` (a full JS-side row walk). On a 50k
+        // library with thousands of favorites that's the second-largest
+        // per-list cost after the table-scan. Purely additive; existing
+        // rows already carry ItemType so the index populates immediately
+        // without a row-copy migration.
+        this.version(8).stores({
+            albums: 'Id, AlbumArtistId, [AlbumArtistId+SortName], DateLastSaved, SortName, ProductionYear, *GenreIds, __cachedAt',
+            artists: 'Id, SortName, Name, DateLastSaved, Kind, __cachedAt',
+            favorites:
+                '[ItemId+ItemType], ItemType, IsFavorite, Rating, LastPlayedDate, PlayCount, __cachedAt',
+            genres: 'Id, SortName, Name, __cachedAt',
+            lyrics: 'SongId, __cachedAt',
+            mutationQueue: 'id, status, createdAt, idempotencyKey',
+            playlists: 'Id, SortName, DateLastSaved, __cachedAt',
+            playlistSongs: '[PlaylistId+ListOrder], PlaylistId, SongId, __cachedAt',
+            songs: 'Id, AlbumId, [AlbumId+ParentIndexNumber+IndexNumber], AlbumArtistId, DateLastSaved, [AlbumId+IndexNumber], __cachedAt',
+            syncMeta: 'EntityType',
+            thumbnails: 'ItemId, LastUsed, ByteSize, MissAt, __cachedAt',
+        });
     }
 }
 const handles = new Map<Key, LibraryCacheDb>();

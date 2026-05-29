@@ -159,7 +159,8 @@ export const songsQueries = {
                             args.query?.sortBy === SongListSort.FAVORITED;
                         if (needsFavorites) {
                             const favs = await db.favorites
-                                .filter((r) => r.ItemType === 'Song')
+                                .where('ItemType')
+                                .equals('Song')
                                 .toArray();
                             favoriteSongIds = new Set(
                                 favs.filter((f) => f.IsFavorite).map((f) => f.ItemId),
@@ -226,7 +227,8 @@ export const songsQueries = {
                             !args.query.genreIds?.length
                         ) {
                             const favRows = await db.favorites
-                                .filter((r) => r.ItemType === 'Song')
+                                .where('ItemType')
+                                .equals('Song')
                                 .toArray();
                             if (args.query.favorite === true) {
                                 return favRows.filter((f) => f.IsFavorite).length;

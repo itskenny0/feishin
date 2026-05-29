@@ -34,6 +34,20 @@ export { HydrationBanner } from './hydration-banner';
 export { resolveThumbnail } from './images';
 export { useCacheLifecycle } from './lifecycle';
 export {
+    buildListSignature,
+    getOrComputeSorted,
+    loadAlbumArtistsRows,
+    loadAlbumsRows,
+    loadArtistsRows,
+    loadSongsRows,
+    lookupSorted,
+    markRowCacheDirty,
+    resetRowCache,
+    storeSorted,
+} from './local-cache';
+export type { LocalCacheDebugSnapshot } from './local-cache';
+export { debugLocalCache } from './local-cache';
+export {
     filterAlbumArtistsLocal,
     filterAlbumsLocal,
     filterArtistsLocal,
