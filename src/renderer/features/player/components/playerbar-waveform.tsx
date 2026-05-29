@@ -14,7 +14,7 @@ import {
     usePlaybackSettings,
     usePlayerbarSlider,
     usePlayerSong,
-    usePlayerTimestamp,
+    useTimestampStoreBase,
 } from '/@/renderer/store';
 import { useAppThemeColors, useColorScheme } from '/@/renderer/themes/use-app-theme';
 import { Text } from '/@/shared/components/text/text';
@@ -22,17 +22,24 @@ import { Text } from '/@/shared/components/text/text';
 export const PlayerbarWaveform = () => {
     const currentSong = usePlayerSong();
     const playerbarSlider = usePlayerbarSlider();
-    const currentTime = usePlayerTimestamp();
     const containerRef = useRef<HTMLDivElement>(null);
     const audioElementRef = useRef<HTMLAudioElement>(document.createElement('audio'));
     const { mediaSeekToTimestamp } = usePlayer();
     const [isLoading, setIsLoading] = useState(true);
     const [isDragging, setIsDragging] = useState(false);
+    const isDraggingRef = useRef(false);
     const [tooltipPosition, setTooltipPosition] = useState<null | { x: number; y: number }>(null);
     const [tooltipValue, setTooltipValue] = useState(0);
     const seekTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const lastSeekValueRef = useRef<null | number>(null);
     const containerPositionRef = useRef<DOMRect | null>(null);
+
+    // Keep a ref mirror of `isDragging` so the imperative timestamp
+    // subscription (declared once on mount) can read the latest value without
+    // re-subscribing on every drag toggle.
+    useEffect(() => {
+        isDraggingRef.current = isDragging;
+    }, [isDragging]);
 
     const songDuration = currentSong?.duration ? currentSong.duration / 1000 : 0;
 
@@ -296,32 +303,51 @@ export const PlayerbarWaveform = () => {
         };
     }, [wavesurfer, songDuration, mediaSeekToTimestamp]);
 
-    // Sync dragging state when currentTime catches up to seek value
+    // Drive the cursor + drag-settle from the timestamp store imperatively.
+    // The waveform component re-renders only on data changes (new song, new
+    // wavesurfer instance, drag state flip) — not on every ~250ms tick.
     useEffect(() => {
-        if (isDragging && lastSeekValueRef.current !== null) {
-            const timeDiff = Math.abs(currentTime - lastSeekValueRef.current);
-            if (timeDiff < 0.5) {
-                setIsDragging(false);
-                setTooltipPosition(null);
-                lastSeekValueRef.current = null;
-                if (seekTimeoutRef.current) {
-                    clearTimeout(seekTimeoutRef.current);
-                    seekTimeoutRef.current = null;
+        if (!wavesurfer || !songDuration) return undefined;
+
+        const applyTimestamp = (timestamp: number) => {
+            // Drag-settle: a previous seek committed; once the real player
+            // clock catches up to it, release the drag-locked UI.
+            if (isDraggingRef.current && lastSeekValueRef.current !== null) {
+                const timeDiff = Math.abs(timestamp - lastSeekValueRef.current);
+                if (timeDiff < 0.5) {
+                    setIsDragging(false);
+                    setTooltipPosition(null);
+                    lastSeekValueRef.current = null;
+                    if (seekTimeoutRef.current) {
+                        clearTimeout(seekTimeoutRef.current);
+                        seekTimeoutRef.current = null;
+                    }
                 }
+                // Don't overwrite the dragged cursor mid-drag.
+                return;
             }
-        }
-    }, [currentTime, isDragging]);
 
-    // Update waveform progress based on player current time (only when not dragging)
-    useEffect(() => {
-        if (!wavesurfer || !songDuration || isDragging) return;
+            const duration = wavesurfer.getDuration();
+            if (duration > 0 && timestamp >= 0) {
+                // Direct DOM-equivalent: wavesurfer.seekTo paints the cursor
+                // and progress band by mutating its own canvases; React does
+                // not commit.
+                wavesurfer.seekTo(timestamp / duration);
+            }
+        };
 
-        const duration = wavesurfer.getDuration();
-        if (duration > 0 && currentTime >= 0) {
-            const ratio = currentTime / duration;
-            wavesurfer.seekTo(ratio);
-        }
-    }, [wavesurfer, currentTime, songDuration, isDragging]);
+        // Apply the current value once on subscribe so the cursor lands at the
+        // right spot when the waveform first becomes ready (without waiting
+        // for the next store update).
+        applyTimestamp(useTimestampStoreBase.getState().timestamp);
+
+        return useTimestampStoreBase.subscribe(
+            (state) => state.timestamp,
+            (timestamp) => {
+                applyTimestamp(timestamp);
+            },
+        );
+    }, [wavesurfer, songDuration]);
 
     // Show disabled slider when there's no current song
     if (!currentSong) {

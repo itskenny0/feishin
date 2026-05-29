@@ -95,10 +95,16 @@ export const Lyrics = ({ fadeOutNoLyricsMessage = true, settingsKey = 'default' 
         };
     }, [currentSong?.id]);
 
+    // Leaf-select the two scalars that actually key the lyrics fetch so
+    // unrelated mutations of `currentSong` (favorite / rating flips, queue
+    // metadata refreshes) don't recompute the key or cascade into the
+    // useCallback identity chain below.
+    const serverId = currentSong?._serverId;
+    const songId = currentSong?.id;
     const lyricsKey = useMemo(() => {
-        if (!currentSong?._serverId || !currentSong?.id) return null;
-        return queryKeys.songs.lyrics(currentSong._serverId, { songId: currentSong.id });
-    }, [currentSong]);
+        if (!serverId || !songId) return null;
+        return queryKeys.songs.lyrics(serverId, { songId });
+    }, [serverId, songId]);
 
     const { data, isLoading } = useQuery(
         lyricsQueries.songLyrics(
@@ -146,7 +152,7 @@ export const Lyrics = ({ fadeOutNoLyricsMessage = true, settingsKey = 'default' 
 
     const handleUpdateOffset = useCallback(
         (offsetMs: number) => {
-            if (!currentSong || !lyricsKey) return;
+            if (!lyricsKey) return;
 
             queryClient.setQueryData<LyricsQueryResult>(lyricsKey, (prev) => {
                 if (!prev) return prev;
@@ -162,7 +168,7 @@ export const Lyrics = ({ fadeOutNoLyricsMessage = true, settingsKey = 'default' 
                 return updated;
             });
         },
-        [currentSong, indexToUse, lyricsKey],
+        [indexToUse, lyricsKey],
     );
 
     const setIndex = useCallback(
@@ -193,7 +199,7 @@ export const Lyrics = ({ fadeOutNoLyricsMessage = true, settingsKey = 'default' 
     );
 
     const handleOnRemoveLyric = useCallback(async () => {
-        if (!currentSong || !lyricsKey) return;
+        if (!lyricsKey) return;
 
         queryClient.setQueryData<LyricsQueryResult>(lyricsKey, (prev) =>
             prev
@@ -207,7 +213,7 @@ export const Lyrics = ({ fadeOutNoLyricsMessage = true, settingsKey = 'default' 
                 : prev,
         );
         await queryClient.invalidateQueries({ queryKey: lyricsKey });
-    }, [currentSong, lyricsKey]);
+    }, [lyricsKey]);
 
     const fetchTranslation = useCallback(async () => {
         if (!lyrics || isLyricsDisabled) return;
