@@ -29,6 +29,13 @@ export interface SweepContext {
 
 const DEFAULT_PAGE_SIZE = 500;
 
+// Module-level UTF-8 encoder for byte-length accounting. `.length` on a
+// JS string returns UTF-16 code units, which understates UTF-8 byte size
+// for non-ASCII content. TextEncoder gives the real wire size without
+// allocating a Blob per item.
+const _utf8Encoder = new TextEncoder();
+const utf8ByteLength = (s: string): number => _utf8Encoder.encode(s).length;
+
 export const isSweepNetworkError = (err: unknown): boolean => {
     const name = (err as Error)?.name;
     if (name === 'AbortError') return false;
@@ -183,10 +190,9 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
         const elapsed = (Date.now() - sweepStartedAt) / 1000;
         const itemsPerSec = elapsed > 0 ? itemsDone / elapsed : 0;
 
-        // Approximate wire size of this page by JSON-stringifying each item.
-        // UTF-16 character counts inflate vs. real UTF-8 bytes, but for the
-        // ASCII-heavy Jellyfin metadata payloads this is a reasonable proxy.
-        const pageBytes = pageItems.reduce((a, it) => a + JSON.stringify(it).length, 0);
+        // Approximate wire size of this page by JSON-stringifying each item
+        // and measuring its real UTF-8 byte length via TextEncoder.
+        const pageBytes = pageItems.reduce((a, it) => a + utf8ByteLength(JSON.stringify(it)), 0);
         bytesDownloaded += pageBytes;
         const bytesPerSec = bytesDownloaded / Math.max(1, elapsed);
         const estimatedTotalBytes =

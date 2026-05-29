@@ -15,8 +15,10 @@ import { memo, useCallback, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { isPublicBrokerUrl } from '/@/renderer/features/settings/components/window/peer-sync-settings';
+import { useIsMobileShell } from '/@/renderer/hooks/use-breakpoint';
 import { usePeerSyncSettings, useSettingsStoreActions } from '/@/renderer/store/settings.store';
 import { Button } from '/@/shared/components/button/button';
+import { PasswordInput } from '/@/shared/components/password-input/password-input';
 import { TextInput } from '/@/shared/components/text-input/text-input';
 import { Text } from '/@/shared/components/text/text';
 import { toast } from '/@/shared/components/toast/toast';
@@ -242,10 +244,9 @@ const StepConfigure = ({
                         <Text fw={500} size="sm">
                             {t('page.setting.wizardPassword', { defaultValue: 'Password' })}
                         </Text>
-                        <TextInput
+                        <PasswordInput
                             autoComplete="new-password"
                             onChange={(e) => onPassword(e.currentTarget.value)}
-                            type="password"
                             value={password}
                         />
                     </Stack>
@@ -275,16 +276,20 @@ const StepConfigure = ({
 
 interface StepFinishProps {
     brokerUrl: string;
+    finished: boolean;
     onBack: () => void;
     onFinish: () => void;
+    onRerun: () => void;
     saving: boolean;
     tier: BrokerTier;
 }
 
 const StepFinish = ({
     brokerUrl,
+    finished,
     onBack,
     onFinish,
+    onRerun,
     saving,
     tier,
 }: StepFinishProps): React.JSX.Element => {
@@ -299,12 +304,21 @@ const StepFinish = ({
               : t('page.setting.wizardTierPublic', { defaultValue: 'Public broker' });
     return (
         <Stack gap="md">
-            <Text>
-                {t('page.setting.wizardFinishIntro', {
-                    defaultValue:
-                        'All set. Click Finish to enable peer sync and unhide the Connect UI in the rest of the app. You can still tweak everything later from Sync & Connect.',
-                })}
-            </Text>
+            {finished ? (
+                <Alert color="teal" variant="light">
+                    {t('page.setting.wizardFinishedAlert', {
+                        defaultValue:
+                            'Sync is on. You can close this page or re-run the wizard to change brokers.',
+                    })}
+                </Alert>
+            ) : (
+                <Text>
+                    {t('page.setting.wizardFinishIntro', {
+                        defaultValue:
+                            'All set. Click Finish to enable peer sync and unhide the Connect UI in the rest of the app. You can still tweak everything later from Sync & Connect.',
+                    })}
+                </Text>
+            )}
             <Stack gap={4}>
                 <Group justify="space-between">
                     <Text isMuted size="sm">
@@ -322,12 +336,18 @@ const StepFinish = ({
                 )}
             </Stack>
             <Group justify="space-between">
-                <Button disabled={saving} onClick={onBack} variant="default">
+                <Button disabled={saving || finished} onClick={onBack} variant="default">
                     {t('common.back', { defaultValue: 'Back' })}
                 </Button>
-                <Button disabled={saving} loading={saving} onClick={onFinish} variant="filled">
-                    {t('common.finish', { defaultValue: 'Finish' })}
-                </Button>
+                {finished ? (
+                    <Button onClick={onRerun} variant="filled">
+                        {t('page.setting.wizardRerun', { defaultValue: 'Re-run wizard' })}
+                    </Button>
+                ) : (
+                    <Button disabled={saving} loading={saving} onClick={onFinish} variant="filled">
+                        {t('common.finish', { defaultValue: 'Finish' })}
+                    </Button>
+                )}
             </Group>
         </Stack>
     );
@@ -335,10 +355,15 @@ const StepFinish = ({
 
 export const ConnectWizard = memo(() => {
     const { t } = useTranslation();
+    const isMobile = useIsMobileShell();
     const settings = usePeerSyncSettings();
     const { setSettings } = useSettingsStoreActions();
 
     const [step, setStep] = useState(0);
+    // Latches once the user clicks Finish and the save resolves so the
+    // Finish step renders a success Alert + Re-run button instead of
+    // teleporting back to step 0 (which read as "the click broke").
+    const [finished, setFinished] = useState(false);
     // Seed the tier from existing settings ONCE on mount. A subsequent
     // setSettings (e.g. the user typing in the broker URL field — which
     // round-trips through the store) must not clobber the tier the user
@@ -374,10 +399,16 @@ export const ConnectWizard = memo(() => {
     const goBack = useCallback(() => setStep((s) => Math.max(0, s - 1)), []);
     const handleStepClick = useCallback(
         (index: number) => {
+            if (finished) return;
             if (index <= maxStepReached) setStep(index);
         },
-        [maxStepReached],
+        [finished, maxStepReached],
     );
+    const handleRerun = useCallback(() => {
+        setFinished(false);
+        setStep(0);
+        setMaxStepReached(0);
+    }, []);
 
     const handleFinish = useCallback(async () => {
         if (finishingRef.current) return;
@@ -426,11 +457,10 @@ export const ConnectWizard = memo(() => {
                         'Sync & Connect is set up. Look for the Connect button on the player bar.',
                 }),
             });
-            // Reset back to the first step so a re-run starts clean — but
-            // hold onto the tier/URL/credentials so the user sees what
-            // they just confirmed instead of a blank form.
-            setStep(0);
-            setMaxStepReached(0);
+            // Stay on the Finish step and flip into the success state so the
+            // user sees a confirmation instead of being teleported back to the
+            // intro (which read as "the click broke").
+            setFinished(true);
         } finally {
             setSaving(false);
             finishingRef.current = false;
@@ -458,7 +488,12 @@ export const ConnectWizard = memo(() => {
                 </Alert>
             )}
             <ScrollArea offsetScrollbars type="auto">
-                <Stepper active={step} allowNextStepsSelect={false} onStepClick={handleStepClick}>
+                <Stepper
+                    active={step}
+                    allowNextStepsSelect={false}
+                    onStepClick={handleStepClick}
+                    orientation={isMobile ? 'vertical' : 'horizontal'}
+                >
                     <Stepper.Step
                         label={t('page.setting.wizardStepIntro', { defaultValue: 'About' })}
                     >
@@ -491,8 +526,10 @@ export const ConnectWizard = memo(() => {
                     >
                         <StepFinish
                             brokerUrl={brokerUrl}
+                            finished={finished}
                             onBack={goBack}
                             onFinish={handleFinish}
+                            onRerun={handleRerun}
                             saving={saving}
                             tier={tier}
                         />

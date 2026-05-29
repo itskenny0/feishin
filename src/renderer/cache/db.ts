@@ -124,6 +124,16 @@ export class LibraryCacheDb extends Dexie {
                 } catch (err) {
                     console.warn('[cache] v4 upgrade: thumbnails.clear failed', err);
                 }
+                // Also drop the thumbnails sync-meta row so the next
+                // launch doesn't see hydrationState: 'full' against an
+                // empty table and skip the re-sync. Without this the
+                // thumbnails table stays empty until the daily auto
+                // resync fires.
+                try {
+                    await tx.table('syncMeta').delete('thumbnails');
+                } catch (err) {
+                    console.warn('[cache] v4 upgrade: syncMeta.delete(thumbnails) failed', err);
+                }
             });
 
         // v5: add standalone `AlbumId` index to songs so `where('AlbumId').equals()`

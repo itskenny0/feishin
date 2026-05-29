@@ -20,6 +20,7 @@ import {
 import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
 import { MainPlayButton, PlayerButton } from '/@/renderer/features/player/components/player-button';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
+import { decideCoverSwipeCommit } from '/@/renderer/features/player/utils/cover-swipe-signal';
 import { ComponentErrorBoundary } from '/@/renderer/features/shared/components/component-error-boundary';
 import { TrackmapCanvas } from '/@/renderer/features/trackmap';
 import { triggerHaptic } from '/@/renderer/hooks/use-haptic';
@@ -27,6 +28,7 @@ import { AppRoute } from '/@/renderer/router/routes';
 import {
     useFullScreenPlayerExpanded,
     useFullScreenPlayerStoreActions,
+    usePlayerData,
     useSetFullScreenPlayerStore,
 } from '/@/renderer/store';
 import {
@@ -58,6 +60,12 @@ export const MobilePlayerbar = () => {
     const canNext = useTransportEnabled('NextTrack');
     const canPlayPause = useTransportEnabled('PlayPause');
     const isRemote = useRemoteTargetStore((s) => s.targetDeviceId !== null);
+    // Queue boundary awareness so a swipe at end-of-queue (repeat=NONE)
+    // springs back instead of triggering a mediaNext() that the store
+    // would no-op while the cover visibly slides off.
+    const { nextSong, previousSong } = usePlayerData();
+    const hasNext = Boolean(nextSong?._uniqueId);
+    const hasPrevious = Boolean(previousSong?._uniqueId);
     const { mediaNext, mediaPrevious, mediaTogglePlayPause } = usePlayer();
     const title = currentSong?.name;
     const artists = currentSong?.artists;
@@ -113,16 +121,27 @@ export const MobilePlayerbar = () => {
     const handleDragEnd = useCallback(
         (_event: unknown, info: PanInfo) => {
             const width = containerRef.current?.offsetWidth ?? 320;
-            const commitOffset = width * 0.25;
-            const flickVelocity = 500;
-
             const offset = info.offset.x;
             const velocity = info.velocity.x;
 
-            const wantsNext = offset < -commitOffset || velocity < -flickVelocity;
-            const wantsPrev = offset > commitOffset || velocity > flickVelocity;
+            // Share the fullscreen player's commit decision so the mini
+            // player honours queue boundaries (no next/prev song =>
+            // snap back instead of firing a no-op skip that visibly
+            // slides the cover off and back).
+            const decision = decideCoverSwipeCommit({
+                coverWidth: width,
+                hasNext,
+                hasPrevious,
+                // The mini-player is hidden entirely during radio
+                // playback, so there's no realistic "radio active"
+                // state to handle here — fixed to false.
+                isRadioActive: false,
+                isSongDefined,
+                offsetX: offset,
+                velocityX: velocity,
+            });
 
-            if (wantsNext && isSongDefined) {
+            if (decision === 'next') {
                 triggerHaptic('selection');
                 mediaNext();
                 // Continue the motion with the release velocity for a
@@ -136,7 +155,7 @@ export const MobilePlayerbar = () => {
                     type: 'spring',
                     velocity,
                 });
-            } else if (wantsPrev && isSongDefined) {
+            } else if (decision === 'previous') {
                 triggerHaptic('selection');
                 mediaPrevious();
                 animate(swipeX, 0, {
@@ -146,8 +165,9 @@ export const MobilePlayerbar = () => {
                     velocity,
                 });
             } else {
-                // Not enough drag/velocity — spring back to rest. Carry
-                // the release velocity so the bounce feels natural.
+                // Not enough drag/velocity or at queue boundary — spring
+                // back to rest. Carry the release velocity so the
+                // bounce feels natural.
                 animate(swipeX, 0, {
                     damping: 28,
                     stiffness: 360,
@@ -156,7 +176,7 @@ export const MobilePlayerbar = () => {
                 });
             }
         },
-        [isSongDefined, mediaNext, mediaPrevious, swipeX],
+        [hasNext, hasPrevious, isSongDefined, mediaNext, mediaPrevious, swipeX],
     );
 
     /*

@@ -892,6 +892,18 @@ export const enqueueMutation = async (op: MutationOp, args: unknown): Promise<vo
     if (!db) {
         console.info('[mutations] no active db — calling remote directly', { op });
         await handlers[op].remote(args);
+        // Without the cache layer there's no optimistic patch driving
+        // react-query refetches. Mirror the post-success path's
+        // invalidate so views (favorite hearts, playlist lists, …)
+        // refresh against the live server response.
+        try {
+            handlers[op].invalidate(args);
+        } catch (invErr) {
+            console.error('[mutations] direct-remote invalidate failed', {
+                error: String(invErr),
+                op,
+            });
+        }
         return;
     }
 

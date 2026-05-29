@@ -109,7 +109,6 @@ const hasUnsupportedAlbumFilter = (query: AlbumListQuery | undefined): boolean =
 const hasUnsupportedSongFilter = (query: SongListQuery): boolean => {
     if (query.hasRating !== undefined) return true;
     if (query.musicFolderId) return true;
-    if (query.minYear !== undefined || query.maxYear !== undefined) return true;
     if (query._custom && Object.keys(query._custom).length > 0) return true;
     return false;
 };
@@ -550,6 +549,17 @@ export const filterSongsLocal = (args: FilterSongsArgs): SongListResponse | unde
     if (query.genreIds && query.genreIds.length > 0) {
         const set = new Set(query.genreIds);
         out = out.filter((r) => r.Payload.genres?.some((g) => set.has(g.id)));
+    }
+
+    // Year-range filters mirror the album branch's ProductionYear pass.
+    // CachedSong has no top-level ReleaseYear column, so read off the
+    // embedded Payload; rows without a year sort as 0 and are excluded
+    // by any non-trivial range.
+    if (query.minYear !== undefined) {
+        out = out.filter((r) => (r.Payload.releaseYear ?? 0) >= query.minYear!);
+    }
+    if (query.maxYear !== undefined) {
+        out = out.filter((r) => (r.Payload.releaseYear ?? 0) <= query.maxYear!);
     }
 
     if (query.searchTerm) {

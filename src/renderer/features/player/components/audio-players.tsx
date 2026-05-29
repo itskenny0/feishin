@@ -46,7 +46,7 @@ import {
 import { logFn } from '/@/renderer/utils/logger';
 import { toast } from '/@/shared/components/toast/toast';
 import { LibraryItem } from '/@/shared/types/domain-types';
-import { PlayerType } from '/@/shared/types/types';
+import { PlayerType, WebAudio } from '/@/shared/types/types';
 
 const CODEC_PROBES = [
     { codec: 'mp3', container: 'mp3', mime: 'audio/mpeg' },
@@ -191,33 +191,64 @@ const AudioPlayersContent = ({
     const isRadioActive = useIsRadioActive();
 
     useEffect(() => {
-        if (webAudio && 'AudioContext' in window) {
-            let context: AudioContext;
-
-            try {
-                context = new AudioContext({
-                    latencyHint: 'playback',
-                    sampleRate: audioSampleRateHz || undefined,
-                });
-            } catch (error) {
-                // In practice, this should never be hit because the UI should validate
-                // the range. However, the actual supported range is not guaranteed
-                toast.error({ message: (error as Error).message });
-                context = new AudioContext({ latencyHint: 'playback' });
-                resetSampleRate();
-            }
-
-            const gains = [context.createGain(), context.createGain()];
-            for (const gain of gains) {
-                gain.connect(context.destination);
-            }
-
-            setWebAudio!({ context, gains });
+        if (!webAudio || !('AudioContext' in window)) {
+            return;
         }
+
+        let context: AudioContext;
+
+        try {
+            context = new AudioContext({
+                latencyHint: 'playback',
+                sampleRate: audioSampleRateHz || undefined,
+            });
+        } catch (error) {
+            // In practice, this should never be hit because the UI should validate
+            // the range. However, the actual supported range is not guaranteed
+            toast.error({ message: (error as Error).message });
+            context = new AudioContext({ latencyHint: 'playback' });
+            resetSampleRate();
+        }
+
+        const gains = [context.createGain(), context.createGain()];
+        for (const gain of gains) {
+            gain.connect(context.destination);
+        }
+
+        setWebAudio!({ context, gains });
+
+        return () => {
+            // Tear down the context promptly when the component unmounts
+            // or when the user toggles WebAudio off — letting it linger
+            // keeps an audio thread alive and (on Chromium) prevents the
+            // tab from going fully idle.
+            try {
+                for (const gain of gains) {
+                    try {
+                        gain.disconnect();
+                    } catch {
+                        // gain may already be detached
+                    }
+                }
+                if (context.state !== 'closed') {
+                    // AudioContext.close() is async and can reject if the
+                    // context is already closed; we don't want to block
+                    // cleanup on it, so fire-and-forget with a swallow.
+                    context.close().catch(() => {});
+                }
+            } catch {
+                // Some WebViews stub close() — nothing meaningful to do.
+            }
+            // The context type narrows to WebAudio, but the underlying
+            // useState in app.tsx accepts undefined — cast through any
+            // to clear the slot so downstream subscribers see the
+            // teardown rather than a stale closed-context handle.
+            (setWebAudio as unknown as (audio: undefined | WebAudio) => void)(undefined);
+        };
 
         // Intentionally ignore the sample rate dependency, as it makes things really messy
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [webAudio]);
 
     useEffect(() => {
         // Not standard, just used in chromium-based browsers. See

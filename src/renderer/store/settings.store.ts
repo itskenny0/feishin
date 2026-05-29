@@ -849,7 +849,7 @@ const LocalCacheSettingsSchema = z.object({
     capacityBytes: z.number().optional(),
     enabled: z.boolean().optional(),
     entities: LocalCacheEntitiesSchema.optional(),
-    sweepProgressSmoothing: z.boolean().optional(),
+    sweepProgressSmoothing: z.boolean().default(true),
     // Worker count for the thumbnail pre-cache sweep. Higher = faster but
     // more concurrent fetches / IndexedDB writes. 24 is the default on
     // modern HTTP/2 servers. Range enforced at sweep start.
@@ -2139,6 +2139,7 @@ const initialState: SettingsState = {
             playlists: true,
             songs: true,
         },
+        sweepProgressSmoothing: true,
         thumbnailSizes: [],
     },
     lyrics: {
@@ -3065,6 +3066,7 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                         state.localCache = {
                             capacityBytes: undefined,
                             enabled: undefined,
+                            sweepProgressSmoothing: true,
                         };
                     }
                 }

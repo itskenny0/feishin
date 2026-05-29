@@ -18,8 +18,11 @@ import {
 } from '/@/renderer/features/peer-sync/diagnostics/diagnostics-store';
 import { resetDiagnostics } from '/@/renderer/features/peer-sync/diagnostics/diagnostics-store';
 import { SettingsSection } from '/@/renderer/features/settings/components/settings-section';
-import { usePeerSyncSettings } from '/@/renderer/store/settings.store';
+import { usePeerSyncSettings, useSettingsStoreActions } from '/@/renderer/store/settings.store';
+import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Button } from '/@/shared/components/button/button';
+import { CopyButton } from '/@/shared/components/copy-button/copy-button';
+import { Icon } from '/@/shared/components/icon/icon';
 import { Text } from '/@/shared/components/text/text';
 
 const statusColor: Record<BrokerConnectionStatus, string> = {
@@ -44,9 +47,25 @@ const peerLabel = (peerId: string): string => {
     return peerId.length > 12 ? `${peerId.slice(0, 6)}…${peerId.slice(-4)}` : peerId;
 };
 
+/**
+ * Tiny inline copy affordance for the diagnostics tables. Surfaces the full
+ * value on click while keeping the rendered cell tight; without it the
+ * truncated peer id is genuinely unrecoverable from the UI.
+ */
+const CopyValue = ({ label, value }: { label: string; value: string }): React.JSX.Element => (
+    <CopyButton timeout={1500} value={value}>
+        {({ copied, copy }) => (
+            <ActionIcon aria-label={label} onClick={copy} size="sm" variant="subtle">
+                <Icon icon={copied ? 'check' : 'clipboardCopy'} size="xs" />
+            </ActionIcon>
+        )}
+    </CopyButton>
+);
+
 export const ConnectDiagnosticsSettings = memo(() => {
     const { t } = useTranslation();
     const settings = usePeerSyncSettings();
+    const { setSettings } = useSettingsStoreActions();
 
     const broker = useDiagnostics((s) => s.broker);
     const embedded = useDiagnostics((s) => s.embeddedBroker);
@@ -70,6 +89,24 @@ export const ConnectDiagnosticsSettings = memo(() => {
 
     const presenceList = useMemo(() => Object.values(presence), [presence]);
 
+    if (!settings.onboarded) {
+        return (
+            <Stack gap="sm">
+                <Alert color="blue" variant="light">
+                    {t('page.setting.connectDiagnosticsOnboardingCta', {
+                        defaultValue: 'Set up Sync & Connect to see live diagnostics.',
+                    })}
+                </Alert>
+                <Group justify="flex-start">
+                    <Button onClick={() => setSettings({ tabSubpage: 'wizard' })} variant="filled">
+                        {t('page.setting.connectOpenWizard', {
+                            defaultValue: 'Open setup wizard',
+                        })}
+                    </Button>
+                </Group>
+            </Stack>
+        );
+    }
     if (!settings.jellyfinRemoteEnabled) {
         return (
             <Alert color="gray" variant="light">
@@ -112,12 +149,20 @@ export const ConnectDiagnosticsSettings = memo(() => {
                         ),
                         description: (
                             <Stack gap={2}>
-                                <Text isMuted isNoSelect size="sm">
-                                    {settings.brokerUrl ||
-                                        t('page.setting.diagnosticsBrokerAutoDiscover', {
-                                            defaultValue: 'Auto-discover via mDNS',
-                                        })}
-                                </Text>
+                                <Group gap={4} wrap="nowrap">
+                                    <Text isMuted isNoSelect size="sm">
+                                        {settings.brokerUrl ||
+                                            t('page.setting.diagnosticsBrokerAutoDiscover', {
+                                                defaultValue: 'Auto-discover via mDNS',
+                                            })}
+                                    </Text>
+                                    {settings.brokerUrl && (
+                                        <CopyValue
+                                            label={t('common.copy', { defaultValue: 'Copy' })}
+                                            value={settings.brokerUrl}
+                                        />
+                                    )}
+                                </Group>
                                 {broker.lastErrorMessage && (
                                     <Text c="red" size="sm">
                                         {broker.lastErrorMessage}
@@ -158,6 +203,42 @@ export const ConnectDiagnosticsSettings = memo(() => {
                 ]}
             />
 
+            {(settings.peerId || settings.roomKey) && (
+                <Stack gap="xs">
+                    <Text fw={600}>
+                        {t('page.setting.diagnosticsIdentity', { defaultValue: 'Identity' })}
+                    </Text>
+                    {settings.peerId && (
+                        <Group gap={6} wrap="nowrap">
+                            <Text isMuted size="sm">
+                                {t('page.setting.diagnosticsPeerId', { defaultValue: 'Peer ID' })}
+                            </Text>
+                            <Text size="sm">{peerLabel(settings.peerId)}</Text>
+                            <CopyValue
+                                label={t('page.setting.diagnosticsCopyPeerId', {
+                                    defaultValue: 'Copy peer ID',
+                                })}
+                                value={settings.peerId}
+                            />
+                        </Group>
+                    )}
+                    {settings.roomKey && (
+                        <Group gap={6} wrap="nowrap">
+                            <Text isMuted size="sm">
+                                {t('page.setting.diagnosticsRoomKey', { defaultValue: 'Room key' })}
+                            </Text>
+                            <Text size="sm">{peerLabel(settings.roomKey)}</Text>
+                            <CopyValue
+                                label={t('page.setting.diagnosticsCopyRoomKey', {
+                                    defaultValue: 'Copy room key',
+                                })}
+                                value={settings.roomKey}
+                            />
+                        </Group>
+                    )}
+                </Stack>
+            )}
+
             <Stack gap="xs">
                 <Group justify="space-between">
                     <Text fw={600}>
@@ -196,7 +277,20 @@ export const ConnectDiagnosticsSettings = memo(() => {
                                     const lat = latency[p.peerId];
                                     return (
                                         <Table.Tr key={p.peerId}>
-                                            <Table.Td>{peerLabel(p.peerId)}</Table.Td>
+                                            <Table.Td>
+                                                <Group gap={4} wrap="nowrap">
+                                                    <span>{peerLabel(p.peerId)}</span>
+                                                    <CopyValue
+                                                        label={t(
+                                                            'page.setting.diagnosticsCopyPeerId',
+                                                            {
+                                                                defaultValue: 'Copy peer ID',
+                                                            },
+                                                        )}
+                                                        value={p.peerId}
+                                                    />
+                                                </Group>
+                                            </Table.Td>
                                             <Table.Td>
                                                 <Badge
                                                     color={p.online ? 'teal' : 'gray'}

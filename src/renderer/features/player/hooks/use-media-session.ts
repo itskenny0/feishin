@@ -92,6 +92,18 @@ export const useMediaSession = () => {
 
     useEffect(() => {
         isMediaSessionEnabledRef.current = isMediaSessionEnabled;
+        // If the user just disabled media session mid-playback, blank
+        // the OS scrubber so we don't leave a stale position pinned
+        // to the lock screen.
+        if (!isMediaSessionEnabled && mediaSession) {
+            if (typeof mediaSession.setPositionState === 'function') {
+                try {
+                    mediaSession.setPositionState();
+                } catch {
+                    // ignore — some WebViews throw on the zero-arg form
+                }
+            }
+        }
     }, [isMediaSessionEnabled]);
 
     // Register/unregister handlers whenever isMediaSessionEnabled changes so that
@@ -274,6 +286,68 @@ export const useMediaSession = () => {
     // subscribeCurrentTrack and subscribePlayerStatus are stable Zustand subscriptions with
     // proper equality checks — registered once on mount and never torn down mid-session.
     useEffect(() => {
+        // Position-state ticker: pushes the current playhead into the OS
+        // media UI so the lock-screen scrubber tracks playback instead of
+        // sitting at 0. The browser caps this at one update per second
+        // anyway, so a 1s interval is the right cadence.
+        let positionInterval: null | ReturnType<typeof setInterval> = null;
+
+        const clearPositionState = () => {
+            if (positionInterval) {
+                clearInterval(positionInterval);
+                positionInterval = null;
+            }
+            if (!mediaSession || typeof mediaSession.setPositionState !== 'function') {
+                return;
+            }
+            try {
+                mediaSession.setPositionState();
+            } catch {
+                // Some WebViews throw on the zero-arg form — safe to ignore.
+            }
+        };
+
+        const pushPositionState = () => {
+            if (!isMediaSessionEnabledRef.current || !mediaSession) {
+                return;
+            }
+            if (typeof mediaSession.setPositionState !== 'function') {
+                return;
+            }
+            if (isRadioActiveRef.current && isRadioPlayingRef.current) {
+                return;
+            }
+            const song = usePlayerStore.getState().getCurrentSong();
+            const durationMs = song?.duration ?? 0;
+            if (!song || durationMs <= 0) {
+                return;
+            }
+            const durationSec = durationMs / 1000;
+            const positionSec = Math.max(
+                0,
+                Math.min(durationSec, useTimestampStoreBase.getState().timestamp),
+            );
+            const speed = usePlayerStore.getState().player.speed ?? 1;
+            try {
+                mediaSession.setPositionState({
+                    duration: durationSec,
+                    playbackRate: speed > 0 ? speed : 1,
+                    position: positionSec,
+                });
+            } catch {
+                // setPositionState throws when duration/position become
+                // inconsistent mid-skip — next tick will recover.
+            }
+        };
+
+        const startPositionTicker = () => {
+            if (positionInterval) return;
+            // Prime immediately so the first lock-screen frame matches
+            // the current playhead instead of waiting a full second.
+            pushPositionState();
+            positionInterval = setInterval(pushPositionState, 1000);
+        };
+
         const unsubscribeCurrentSong = subscribeCurrentTrack(({ song }) => {
             if (!isMediaSessionEnabledRef.current) {
                 return;
@@ -284,6 +358,14 @@ export const useMediaSession = () => {
             }
 
             debouncedUpdateMetadata(song);
+            // Re-publish position immediately on track change so the OS
+            // scrubber jumps to 0 (or wherever the new track starts)
+            // instead of holding the previous track's elapsed value.
+            if (usePlayerStore.getState().player.status === PlayerStatus.PLAYING) {
+                pushPositionState();
+            } else {
+                clearPositionState();
+            }
         });
 
         const unsubscribeStatus = subscribePlayerStatus(({ status }) => {
@@ -292,11 +374,25 @@ export const useMediaSession = () => {
             }
 
             mediaSession.playbackState = status === PlayerStatus.PLAYING ? 'playing' : 'paused';
+
+            if (status === PlayerStatus.PLAYING) {
+                startPositionTicker();
+            } else {
+                clearPositionState();
+            }
         });
+
+        // If the hook mounts mid-playback (e.g. user toggles the setting
+        // on while a song is already playing), kick the ticker so we
+        // don't wait for the next status transition.
+        if (usePlayerStore.getState().player.status === PlayerStatus.PLAYING) {
+            startPositionTicker();
+        }
 
         return () => {
             unsubscribeCurrentSong();
             unsubscribeStatus();
+            clearPositionState();
         };
     }, [debouncedUpdateMetadata]);
 

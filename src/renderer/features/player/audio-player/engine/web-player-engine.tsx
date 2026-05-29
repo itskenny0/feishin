@@ -111,12 +111,15 @@ export const WebPlayerEngine = (props: WebPlayerEngineProps) => {
 
     useImperativeHandle<WebPlayerEngineHandle, WebPlayerEngineHandle>(playerRef, () => ({
         decreaseVolume(by: number) {
-            setInternalVolume1(Math.max(0, internalVolume1 - by / 100));
-            setInternalVolume2(Math.max(0, internalVolume2 - by / 100));
+            // Use functional updates so back-to-back presses compound
+            // against the latest state instead of the value captured
+            // when this imperative handle was first installed.
+            setInternalVolume1((prev) => Math.max(0, prev - by / 100));
+            setInternalVolume2((prev) => Math.max(0, prev - by / 100));
         },
         increaseVolume(by: number) {
-            setInternalVolume1(Math.min(1, internalVolume1 + by / 100));
-            setInternalVolume2(Math.min(1, internalVolume2 + by / 100));
+            setInternalVolume1((prev) => Math.min(1, prev + by / 100));
+            setInternalVolume2((prev) => Math.min(1, prev + by / 100));
         },
         pause() {
             player1Ref.current?.getInternalPlayer()?.pause();
