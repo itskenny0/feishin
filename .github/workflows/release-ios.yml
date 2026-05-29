@@ -1,0 +1,224 @@
+# Builds an unsigned iOS .ipa for a `v*-itskenny0-*` tag and uploads it to the
+# matching GitHub Release. The IPA wraps the existing `pnpm build:web` output
+# via Capacitor (Swift Package Manager — no CocoaPods) — see IOS.md for the
+# design overview, sideload-install steps, and known limitations.
+#
+# The .ipa is UNSIGNED (mirrors the unsigned Android debug APK): it carries no
+# Apple Developer signature, so it cannot be installed directly. Users sideload
+# it with AltStore / SideStore / Sideloadly (which re-sign with a free Apple ID)
+# or TrollStore on supported iOS versions. See the commented "signing" notes at
+# the bottom of the ios job for how to switch to a signed export later.
+#
+# Trigger: push a tag like `v1.11.0-itskenny0-2026.05.20a` to this fork.
+# Re-trigger via the Actions UI ("Run workflow") with an existing tag name.
+name: Release iOS (fork)
+
+on:
+    push:
+        tags:
+            - 'v*-itskenny0-*'
+    workflow_dispatch:
+        inputs:
+            tag:
+                description: 'Existing git tag to (re-)build the iOS IPA for'
+                required: true
+                type: string
+
+permissions:
+    contents: write
+
+concurrency:
+    group: release-ios-${{ github.event.inputs.tag || github.ref }}
+    cancel-in-progress: false
+
+jobs:
+    prepare:
+        if: github.repository == 'itskenny0/feishin'
+        runs-on: ubuntu-latest
+        outputs:
+            tag: ${{ steps.tag.outputs.tag }}
+            packageVersion: ${{ steps.tag.outputs.packageVersion }}
+            baseVersion: ${{ steps.tag.outputs.baseVersion }}
+        steps:
+            - uses: actions/checkout@v6
+              with:
+                  fetch-depth: 0
+            - name: Resolve tag and derive artifact version
+              id: tag
+              run: |
+                  if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+                      tag="${{ github.event.inputs.tag }}"
+                  else
+                      tag="${GITHUB_REF#refs/tags/}"
+                  fi
+                  echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+
+                  # Strip the leading semver so we are left with the
+                  # fork-specific suffix (e.g. itskenny0-2026.05.20a).
+                  rawSuffix="${tag#v*.*.*-}"
+                  sanitizedSuffix="${rawSuffix//./-}"
+
+                  baseVersion="$(node -p "require('./package.json').version")"
+                  echo "baseVersion=${baseVersion}" >> "$GITHUB_OUTPUT"
+                  if [ "${rawSuffix}" != "${tag}" ] && [ -n "${rawSuffix}" ]; then
+                      packageVersion="${baseVersion}-${sanitizedSuffix}"
+                  else
+                      packageVersion="${baseVersion}"
+                  fi
+                  echo "packageVersion=${packageVersion}" >> "$GITHUB_OUTPUT"
+                  echo "Using artifact version: ${packageVersion} (base ${baseVersion})"
+
+    ios:
+        needs: prepare
+        # macOS runner — building an .ipa needs Xcode. The fork's desktop
+        # "Release (fork)" workflow already builds the Mac app on macos-26, so
+        # the runner image is a known quantity here.
+        runs-on: macos-26
+        steps:
+            - uses: actions/checkout@v6
+              with:
+                  ref: ${{ needs.prepare.outputs.tag }}
+            - uses: pnpm/action-setup@v4
+              with:
+                  version: 10
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: pnpm
+            - name: Show toolchain
+              run: |
+                  echo "Xcode: $(xcodebuild -version | tr '\n' ' ')"
+                  echo "Selected: $(xcode-select -p)"
+            - name: Install dependencies
+              run: pnpm install --frozen-lockfile
+            - name: Set artifact version
+              run: npm pkg set version="${{ needs.prepare.outputs.packageVersion }}"
+            - name: Build web bundle
+              run: pnpm build:web
+            - name: Generate stub settings.js
+              # settings.js.template is the Docker-deploy runtime-config file;
+              # an .ipa ships it statically. envsubst with no env set replaces
+              # every ${VAR} with an empty string, which the renderer tolerates
+              # (every read site falls back to a sensible default). Mirrors the
+              # Android workflow's identical step.
+              run: envsubst < settings.js.template > out/web/settings.js
+            - name: Sync Capacitor iOS project
+              # Copies the web bundle + capacitor.config.json into ios/App/App
+              # and regenerates ios/App/CapApp-SPM/Package.swift (gitignored)
+              # from the installed plugins. No `pod install` — the project uses
+              # Swift Package Manager.
+              run: npx cap sync ios
+            - name: Resolve Swift packages
+              run: |
+                  set -euo pipefail
+                  xcodebuild -resolvePackageDependencies \
+                      -project ios/App/App.xcodeproj \
+                      -scheme App \
+                      -clonedSourcePackagesDirPath "$RUNNER_TEMP/spm" \
+                      -skipPackagePluginValidation
+            - name: Archive (unsigned)
+              run: |
+                  set -euo pipefail
+                  xcodebuild \
+                      -project ios/App/App.xcodeproj \
+                      -scheme App \
+                      -configuration Release \
+                      -destination 'generic/platform=iOS' \
+                      -archivePath "$RUNNER_TEMP/App.xcarchive" \
+                      -clonedSourcePackagesDirPath "$RUNNER_TEMP/spm" \
+                      -skipPackagePluginValidation \
+                      MARKETING_VERSION="${{ needs.prepare.outputs.baseVersion }}" \
+                      CODE_SIGNING_ALLOWED=NO \
+                      CODE_SIGNING_REQUIRED=NO \
+                      CODE_SIGN_IDENTITY="" \
+                      CODE_SIGN_ENTITLEMENTS="" \
+                      DEVELOPMENT_TEAM="" \
+                      PROVISIONING_PROFILE_SPECIFIER="" \
+                      archive
+            - name: Package unsigned IPA
+              id: ipa
+              run: |
+                  set -euo pipefail
+                  app="$RUNNER_TEMP/App.xcarchive/Products/Applications/App.app"
+                  if [ ! -d "$app" ]; then
+                      echo "::error::App.app not found in archive at $app"
+                      exit 1
+                  fi
+                  work="$RUNNER_TEMP/ipa"
+                  rm -rf "$work"
+                  mkdir -p "$work/Payload"
+                  cp -R "$app" "$work/Payload/"
+                  ( cd "$work" && zip -qry app.ipa Payload )
+                  mkdir -p dist
+                  dst="dist/feishin-${{ needs.prepare.outputs.packageVersion }}-ios-unsigned.ipa"
+                  cp "$work/app.ipa" "$dst"
+                  echo "path=$dst" >> "$GITHUB_OUTPUT"
+                  echo "Built $dst ($(du -h "$dst" | cut -f1))"
+            - name: Ensure release exists
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  TAG: ${{ needs.prepare.outputs.tag }}
+              run: |
+                  # Poll briefly for an existing release — the parallel desktop
+                  # "Release (fork)" and "Release Android (fork)" workflows
+                  # create the same GitHub Release for the same tag, and a bare
+                  # view-then-create check would race with them and error out
+                  # 422 "already exists". Up to ~30s of polling lets another job
+                  # win the race cleanly.
+                  for i in $(seq 1 15); do
+                      if gh release view "$TAG" >/dev/null 2>&1; then
+                          exit 0
+                      fi
+                      sleep 2
+                  done
+                  # Still missing — create it ourselves but swallow the
+                  # "already exists" 422 in case another job pipped us at the
+                  # last possible moment.
+                  if ! gh release create "$TAG" \
+                      --title "Feishin $TAG" \
+                      --generate-notes \
+                      --target "$(git rev-parse HEAD)" 2>&1 | tee /tmp/gh-out; then
+                      if grep -q "already_exists\|already exists" /tmp/gh-out; then
+                          echo "Release was created concurrently — continuing."
+                          exit 0
+                      fi
+                      exit 1
+                  fi
+            - name: Upload IPA to release
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  TAG: ${{ needs.prepare.outputs.tag }}
+              run: |
+                  gh release upload "$TAG" \
+                      "${{ steps.ipa.outputs.path }}" \
+                      --clobber
+
+# ---------------------------------------------------------------------------
+# Enabling a SIGNED build later (optional)
+# ---------------------------------------------------------------------------
+# The archive above is unsigned (CODE_SIGNING_ALLOWED=NO) so it needs no Apple
+# Developer account or secrets. To instead ship a directly-installable signed
+# .ipa, add these repository secrets:
+#   APPLE_CERTIFICATE_BASE64   - base64 of your distribution .p12
+#   APPLE_CERTIFICATE_PASSWORD - the .p12 export password
+#   APPLE_PROVISIONING_PROFILE_BASE64 - base64 of the .mobileprovision
+#   APPLE_TEAM_ID              - your 10-char Team ID
+#   KEYCHAIN_PASSWORD          - any throwaway password for the temp keychain
+# ...then, before the archive step, import them:
+#   - name: Import signing assets
+#     run: |
+#         CERT="$RUNNER_TEMP/cert.p12"; PROFILE="$RUNNER_TEMP/pp.mobileprovision"
+#         KEYCHAIN="$RUNNER_TEMP/app.keychain-db"
+#         echo -n "${{ secrets.APPLE_CERTIFICATE_BASE64 }}" | base64 --decode -o "$CERT"
+#         echo -n "${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}" | base64 --decode -o "$PROFILE"
+#         security create-keychain -p "${{ secrets.KEYCHAIN_PASSWORD }}" "$KEYCHAIN"
+#         security set-keychain-settings -lut 21600 "$KEYCHAIN"
+#         security unlock-keychain -p "${{ secrets.KEYCHAIN_PASSWORD }}" "$KEYCHAIN"
+#         security import "$CERT" -P "${{ secrets.APPLE_CERTIFICATE_PASSWORD }}" -A -t cert -f pkcs12 -k "$KEYCHAIN"
+#         security list-keychain -d user -s "$KEYCHAIN"
+#         mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+#         cp "$PROFILE" ~/Library/MobileDevice/Provisioning\ Profiles/
+# ...then drop the CODE_SIGNING_* overrides from `archive` and add a real
+# `xcodebuild -exportArchive -exportOptionsPlist ExportOptions.plist` step
+# (method: ad-hoc / development / app-store, with your DEVELOPMENT_TEAM). Ad-hoc
+# distribution additionally requires the target devices' UDIDs in the profile.

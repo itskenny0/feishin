@@ -22,6 +22,7 @@ import {
     useAndroidStatusBar,
 } from '/@/renderer/hooks/use-android-native';
 import { useIsMobileShell } from '/@/renderer/hooks/use-breakpoint';
+import { useIosStatusBar } from '/@/renderer/hooks/use-ios-native';
 import { useCheckForUpdates } from '/@/renderer/hooks/use-check-for-updates';
 import { useGithubReleasesUpdater } from '/@/renderer/hooks/use-github-releases-updater';
 import { useNativeMenuSync } from '/@/renderer/hooks/use-native-menu-sync';
@@ -130,6 +131,7 @@ const AppEffects = () => (
         <NativeMenuSyncEffect />
         <DocumentTitleEffect />
         <AndroidNativeEffect />
+        <IosNativeEffect />
         <CacheLifecycleEffect />
         <InputFocusEffect />
     </>
@@ -147,6 +149,12 @@ const AndroidNativeEffect = () => {
     useAndroidKeepAwake();
     useAndroidBodyFlag();
     useAndroidForceFullVolume();
+
+    return null;
+};
+
+const IosNativeEffect = () => {
+    useIosStatusBar();
 
     return null;
 };

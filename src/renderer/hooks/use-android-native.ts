@@ -16,9 +16,19 @@ import { PlayerStatus } from '/@/shared/types/types';
  * Capacitor WebView (i.e. in Electron or the plain web build), so they're
  * safe to mount unconditionally from app.tsx.
  *
- * Each hook does its own Capacitor.isNativePlatform() check and resolves the
- * plugin lazily via dynamic import — this keeps the web/Electron bundles from
- * pulling Capacitor plugin code that they don't need.
+ * Most hooks gate on Capacitor.getPlatform() === 'android' (via isAndroid)
+ * because their behaviour is Android-specific: the status-bar hook calls
+ * setOverlaysWebView({ overlay: false }) and the body-flag hook forces
+ * --android-safe-* insets — both correct on Android (whose WebView reports
+ * env(safe-area-inset-*) as 0) but wrong on iOS (where WKWebView reports real
+ * insets and we want the WebView edge-to-edge). iOS gets its own equivalents
+ * in use-ios-native.ts. The one exception is useAndroidKeepAwake, which is
+ * genuinely cross-platform (the keep-awake plugin has an iOS implementation
+ * and holding the screen on during playback is desirable on both), so it
+ * gates on the broader isNative().
+ *
+ * Each hook resolves the plugin lazily via dynamic import — this keeps the
+ * web/Electron bundles from pulling Capacitor plugin code they don't need.
  */
 
 const importCapacitorCore = () => import('@capacitor/core');
@@ -27,6 +37,15 @@ const isNative = async () => {
     try {
         const { Capacitor } = await importCapacitorCore();
         return Capacitor.isNativePlatform();
+    } catch {
+        return false;
+    }
+};
+
+const isAndroid = async () => {
+    try {
+        const { Capacitor } = await importCapacitorCore();
+        return Capacitor.getPlatform() === 'android';
     } catch {
         return false;
     }
@@ -48,7 +67,7 @@ export const useAndroidBodyFlag = () => {
 
         const apply = async () => {
             try {
-                if (!(await isNative())) return;
+                if (!(await isAndroid())) return;
                 if (cancelled) return;
                 document.documentElement.setAttribute('data-capacitor-android', 'true');
 
@@ -113,7 +132,7 @@ export const useAndroidStatusBar = () => {
 
         const applyStatusBar = async () => {
             try {
-                if (!(await isNative())) return;
+                if (!(await isAndroid())) return;
                 if (cancelled) return;
                 const { StatusBar, Style } = await import('@capacitor/status-bar');
                 if (cancelled) return;
@@ -157,7 +176,7 @@ export const useAndroidStatusBar = () => {
         // shown by the OS while we were paused.
         const registerLifecycle = async () => {
             try {
-                if (!(await isNative())) return;
+                if (!(await isAndroid())) return;
                 if (cancelled) return;
                 const { App: CapApp } = await import('@capacitor/app');
                 if (cancelled) return;
@@ -235,7 +254,7 @@ export const useAndroidBackButton = () => {
 
         const register = async () => {
             try {
-                if (!(await isNative())) return;
+                if (!(await isAndroid())) return;
                 if (cancelled) return;
                 const { App: CapApp } = await import('@capacitor/app');
                 if (cancelled) return;

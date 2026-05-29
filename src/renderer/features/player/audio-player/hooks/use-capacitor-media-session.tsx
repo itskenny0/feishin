@@ -57,7 +57,17 @@ import { PlayerStatus } from '/@/shared/types/types';
 // log surfaced a "module is both statically and dynamically imported"
 // warning and we still couldn't get the notification to appear, raising
 // the suspicion that the dynamic chunk wasn't resolving on device.
-const isNative = Capacitor.isNativePlatform();
+//
+// Gated to Android specifically (not isNativePlatform()): the plugin has
+// NO native iOS implementation (its package ships only android/ + a web
+// fallback). On iOS, isNativePlatform() is also true, but the plugin would
+// resolve to its MediaSessionWeb fallback and double-wire navigator.media
+// Session against the dedicated useMediaSession() web hook — which is
+// "always on" for non-Electron and already drives the iOS WKWebView lock
+// screen. So on iOS we let useMediaSession() own it and this hook stays
+// inert. iOS background audio is handled natively via AVAudioSession in
+// AppDelegate.swift + the `audio` UIBackgroundMode.
+const isAndroid = Capacitor.getPlatform() === 'android';
 
 // One-shot telemetry toast so we can see on the device whether the
 // plugin actually loaded. Without this it was impossible to tell from
@@ -117,11 +127,13 @@ const useCapacitorMediaSession = () => {
     };
 
     useEffect(() => {
-        if (!isNative) {
-            // On web / electron the static-imported MediaSession falls
+        if (!isAndroid) {
+            // On web / electron / iOS the static-imported MediaSession falls
             // back to MediaSessionWeb which just proxies to
             // navigator.mediaSession — already covered by the existing
-            // useMediaSession Web hook. Bail to avoid double-wiring.
+            // useMediaSession Web hook. Bail to avoid double-wiring. (iOS
+            // gets its lock-screen controls from that web hook and its
+            // background audio from AVAudioSession in AppDelegate.swift.)
             return;
         }
 

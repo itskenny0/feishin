@@ -48,6 +48,11 @@
 > - Wake-lock during playback, hardware media keys, cold-start lands on Home (not the last-visited route).
 > - APK is unsigned dev / debug-style for now — usable but expect Play-Store-tier hardening to come later.
 >
+> **iOS (Capacitor)**
+> - Packaged iOS app shipped as an unsigned `.ipa` alongside the desktop and Android builds, on the same release tag. Same renderer, same features.
+> - Built on a macOS runner via Swift Package Manager (no CocoaPods): background audio (`AVAudioSession` `.playback`), lock-screen controls via the Web Media Session API, ATS arbitrary-loads so plain-http LAN servers work, and notch / home-indicator safe-area handling driven by the WKWebView's real `env()` insets.
+> - Unsigned by design — sideload with AltStore / SideStore / Sideloadly / TrollStore (see `IOS.md`). Optional signing hooks are stubbed in the release workflow for anyone with an Apple Developer account.
+>
 > **Library / display**
 > - Show the on-disk folder name for albums and folders instead of the Jellyfin metadata title (toggleable per type). Applied across the album list, album detail header, sticky scroll header, breadcrumbs, sidebar, search results, context menu, and player bar.
 > - Configurable sidebar bottom section: Playlists, Favorited Albums, or hidden.

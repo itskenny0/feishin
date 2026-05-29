@@ -19,6 +19,24 @@ const config: CapacitorConfig = {
     },
     appId: 'cat.kenny.feishin',
     appName: 'Feishin',
+    ios: {
+        // Paint the WebView's backdrop black during the cold-start frame so
+        // the launch storyboard hands off to a dark surface instead of a
+        // white flash (the renderer's dark theme takes over once React
+        // mounts).
+        backgroundColor: '#000000',
+        // Don't let WKWebView add its own scroll content insets — the mobile
+        // shell manages its own safe-area padding via env(safe-area-inset-*),
+        // which iOS reports correctly (unlike the Android WebView, which is
+        // why android needs the --android-safe-* fallbacks). 'never' keeps
+        // the WebView edge-to-edge so those insets stay accurate.
+        contentInset: 'never',
+        // NB: the iOS analogue of android.allowMixedContent / server.cleartext
+        // (letting the capacitor://localhost secure origin load a user's
+        // http:// LAN media server) is NOT a Capacitor config flag — it lives
+        // in ios/App/App/Info.plist as NSAppTransportSecurity →
+        // NSAllowsArbitraryLoads. See IOS.md.
+    },
     plugins: {
         SplashScreen: {
             androidScaleType: 'CENTER_CROP',
