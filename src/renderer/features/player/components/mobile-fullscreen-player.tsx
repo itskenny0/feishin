@@ -32,7 +32,7 @@ import { MobileFullscreenPlayerMetadata } from '/@/renderer/features/player/comp
 import { MobileFullscreenPlayerProgress } from '/@/renderer/features/player/components/mobile-fullscreen-player-progress';
 import { MobileFullscreenPlayerVolume } from '/@/renderer/features/player/components/mobile-fullscreen-player-volume';
 import { MobileFullscreenVisualizerCard } from '/@/renderer/features/player/components/mobile-fullscreen-visualizer-card';
-import { coverSwipeSignal } from '/@/renderer/features/player/utils/cover-swipe-signal';
+import { coverGestureArbiter } from '/@/renderer/features/player/utils/cover-swipe-signal';
 import {
     useIsRadioActive,
     useRadioPlayer,
@@ -626,50 +626,70 @@ export const MobileFullscreenPlayer = () => {
     useEffect(() => {
         const el = playerStateRef.current;
         if (!el) return;
-        let startY = 0;
+        // The active touch identifier. Like the cover listener, the face is
+        // finger-aware: a second finger landing or lifting mid-dismiss must
+        // not re-seed tracking, finalize the gesture early, or release the
+        // shared arbiter out from under the still-down primary finger.
+        let activeId: null | number = null;
         let startX = 0;
-        let startTime = 0;
+        let startY = 0;
         let active = false;
         let claimed = false;
         let lastY = 0;
         let lastTime = 0;
 
+        const findTouch = (e: TouchEvent): null | Touch => {
+            if (activeId === null) return null;
+            for (let i = 0; i < e.changedTouches.length; i += 1) {
+                const t = e.changedTouches[i];
+                if (t.identifier === activeId) return t;
+            }
+            return null;
+        };
+
         const onTouchStart = (e: TouchEvent) => {
             if (!isPlayerStateRef.current) return;
-            // Album-art horizontal swipe owns the x-axis but vertical
-            // pulls should still dismiss — the cover element has Motion's
-            // `drag="x"` which (a) auto-sets touch-action: pan-y so the
-            // browser keeps letting vertical events through, and (b)
-            // locks its drag to the x axis so vertical moves don't shift
-            // the cover. The two listeners thus coexist: our touchmove
-            // bails on the next event if horizontal motion dominates,
-            // letting Motion's drag claim the gesture.
+            // A gesture is already in flight — a second finger must not
+            // re-seed startY / claimed / timers or wipe the arbiter claim.
+            if (activeId !== null) return;
+            // Fresh single-finger touch — reset the arbiter so a previous
+            // gesture's owner can't leak into this one. The cover's listener
+            // (inner element) also releases here; both setting 'none' is
+            // idempotent.
+            if (e.touches.length === 1) coverGestureArbiter.release();
+            // The cover swipe owns the x-axis; vertical pulls dismiss. The
+            // two coexist because the cover element sets touch-action: pan-y
+            // (browser keeps vertical events flowing to us) and our touchmove
+            // defers to the cover when it claims the gesture. Arbitration is
+            // deterministic: the cover's listener runs first (inner node) and
+            // claims on horizontal-dominant moves, so by the time we evaluate
+            // this same move the owner is already settled.
             if (el.scrollTop > 0) return;
-            const touch = e.touches[0];
+            const touch = e.changedTouches[0];
             if (!touch) return;
+            activeId = touch.identifier;
             startX = touch.clientX;
             startY = touch.clientY;
-            startTime = performance.now();
             lastY = startY;
-            lastTime = startTime;
+            lastTime = performance.now();
             active = true;
             claimed = false;
         };
 
         const onTouchMove = (e: TouchEvent) => {
             if (!active) return;
-            // The cover's horizontal drag won the gesture (signalled in
-            // Motion's onDragStart on the album-art motion.div). Bail
-            // immediately so we don't accumulate any swipeY from the
-            // remainder of this touch — without this the parent's
-            // dismiss drag and the cover's x-axis drag race for the
-            // same finger and the cover visibly stops tracking it
-            // until the user lifts off.
-            if (coverSwipeSignal.isDragging()) {
+            // The cover claimed this touch for its horizontal swipe — stand
+            // down so we don't accumulate swipeY and fight the cover. The
+            // cover's listener runs before this one on the same event, so by
+            // now the owner reflects this very move.
+            if (coverGestureArbiter.owner() === 'cover') {
                 active = false;
                 return;
             }
-            const touch = e.touches[0];
+            // Our tracked finger moves every frame while dragging, so it is
+            // always in changedTouches; reading it (not touches[0]) avoids
+            // tracking a second finger's coordinates during multi-touch.
+            const touch = findTouch(e);
             if (!touch) return;
             const dy = touch.clientY - startY;
             const dx = Math.abs(touch.clientX - startX);
@@ -684,8 +704,13 @@ export const MobileFullscreenPlayer = () => {
                     return;
                 }
                 if (dx > Math.abs(dy)) {
-                    // mostly horizontal — bail so cover swipe / etc.
-                    // can claim it
+                    // mostly horizontal — bail so the cover swipe can claim it
+                    active = false;
+                    return;
+                }
+                // Downward-dominant pull at scrollTop 0: claim the dismiss.
+                // Fails only if the cover somehow already owns this touch.
+                if (!coverGestureArbiter.claimDismiss()) {
                     active = false;
                     return;
                 }
@@ -700,18 +725,27 @@ export const MobileFullscreenPlayer = () => {
             lastTime = performance.now();
         };
 
-        const onTouchEnd = () => {
-            if (!active) {
-                return;
-            }
+        const finish = (settle: 'dismiss-or-spring' | 'spring') => {
             const wasClaimed = claimed;
+            const wasActive = active;
+            activeId = null;
             active = false;
             claimed = false;
-            if (!wasClaimed) return;
+            // Release our claim so the next gesture starts clean. Guarded on
+            // owner so we never clobber a claim the cover currently holds.
+            if (coverGestureArbiter.owner() === 'dismiss') coverGestureArbiter.release();
+            if (!wasActive || !wasClaimed) return;
+
+            if (settle === 'spring') {
+                // touchcancel — never dismiss, just snap back.
+                animate(swipeY, 0, { damping: 30, stiffness: 380, type: 'spring' });
+                return;
+            }
 
             const offset = swipeY.get();
             // Recover finger velocity from the last move snapshot so a
-            // flick dismisses even at small absolute offsets.
+            // flick dismisses even at small absolute offsets. A held-still
+            // release inflates `elapsed` and decays velocity toward 0.
             const elapsed = Math.max(16, performance.now() - lastTime);
             const recentDy = lastY - startY;
             const velocity = (recentDy / elapsed) * 1000;
@@ -731,15 +765,30 @@ export const MobileFullscreenPlayer = () => {
             }
         };
 
+        const onTouchEnd = (e: TouchEvent) => {
+            if (activeId === null) return;
+            // Ignore a non-tracked finger lifting while ours is still down.
+            if (!findTouch(e) && e.touches.length > 0) return;
+            finish('dismiss-or-spring');
+        };
+
+        const onTouchCancel = () => {
+            if (activeId === null) return;
+            finish('spring');
+        };
+
         el.addEventListener('touchstart', onTouchStart, { passive: true });
         el.addEventListener('touchmove', onTouchMove, { passive: false });
         el.addEventListener('touchend', onTouchEnd, { passive: true });
-        el.addEventListener('touchcancel', onTouchEnd, { passive: true });
+        el.addEventListener('touchcancel', onTouchCancel, { passive: true });
         return () => {
             el.removeEventListener('touchstart', onTouchStart);
             el.removeEventListener('touchmove', onTouchMove);
             el.removeEventListener('touchend', onTouchEnd);
-            el.removeEventListener('touchcancel', onTouchEnd);
+            el.removeEventListener('touchcancel', onTouchCancel);
+            // If we still owned the gesture when the listener tears down,
+            // hand it back so the cover isn't permanently suspended.
+            if (coverGestureArbiter.owner() === 'dismiss') coverGestureArbiter.release();
         };
     }, [swipeY]);
 

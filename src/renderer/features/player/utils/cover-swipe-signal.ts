@@ -1,45 +1,77 @@
 /**
- * Tiny module-scoped signal the mobile fullscreen player cover uses to tell
- * the player face's native touch listener "I own this gesture, don't claim
- * it as a vertical dismiss".
+ * Single-owner gesture arbiter for the mobile fullscreen player.
  *
- * Background: the album cover has Framer Motion's `drag="x"` for the
- * Spotify-style finger-tracking carousel. The parent .playerState has a
- * non-passive native touchmove listener that drives the swipe-down
- * dismiss. Both run in parallel for the same touch, with the parent
- * bailing out once it detects horizontal motion dominating. That
- * heuristic is fragile — a slow finger that pauses mid-drag, or a
- * straight-horizontal pull that the parent's tiny dy<4 dead-zone
- * silently keeps "active" through, can leave the parent in a state
- * where the next touchmove racks up `swipeY` and visibly fights the
- * cover.
+ * The album cover supports a Spotify-style horizontal swipe carousel, and
+ * the player face supports a vertical pull-to-dismiss. Both gestures live on
+ * the same touch surface, so exactly one of them must own any given touch.
  *
- * The cover toggles this flag synchronously inside Motion's onDragStart
- * / onDragEnd; the parent's touchstart consults it and skips the
- * dismiss gesture entirely while the cover is the gesture owner.
+ * Why an arbiter and not the old one-way boolean: the cover used to claim
+ * the gesture through Framer Motion's `drag="x"`, whose `onDragStart` fires
+ * *asynchronously* once Motion's own movement threshold is crossed — which
+ * is later than the parent's synchronous native `touchmove`. That timing gap
+ * let the parent claim the vertical dismiss and `preventDefault()` the touch
+ * before the cover had announced ownership, so both motion values moved at
+ * once and the cover visibly "fought" the dismiss.
  *
- * The implementation is intentionally a module-scoped boolean, not a
- * React context: the touch listener is registered against a raw DOM
- * node and reads the flag during the synchronous browser event loop
- * — a context lookup would race the touch callback that needs the
- * value immediately.
+ * The fix: both gestures now decide their axis synchronously inside native
+ * `touchmove` listeners, and call this arbiter to claim. The cover's listener
+ * is on an inner element, so by DOM bubble order it runs before the player
+ * face's listener on every single move — making arbitration deterministic:
+ *
+ *   - horizontal-dominant move → cover calls `claimCover()` first; the face
+ *     listener then sees `owner() === 'cover'` and stands down.
+ *   - vertical-dominant move → the cover declines (doesn't claim); the face
+ *     listener then calls `claimDismiss()` and drives the pull-to-dismiss.
+ *
+ * Once an owner is set it sticks for the rest of the touch; `release()` is
+ * called on touchend / touchcancel (and defensively on a fresh single-finger
+ * touchstart) to reset for the next gesture.
+ *
+ * Implemented as a module-scoped value, not React context: the touch
+ * listeners are registered against raw DOM nodes and read/write the owner
+ * synchronously inside the browser event loop — a context lookup would race
+ * the event callback that needs the value immediately.
  */
-let dragging = false;
+export type CoverGestureOwner = 'cover' | 'dismiss' | 'none';
 
-export const coverSwipeSignal = {
-    /** Cover relinquished the gesture — parent can claim again. */
-    end: (): void => {
-        if (!dragging) return;
-        dragging = false;
-        console.info('[cover-swipe] end — parent dismiss re-enabled');
+let owner: CoverGestureOwner = 'none';
+
+const log = (...args: unknown[]) => console.info('[cover-swipe]', ...args);
+
+export const coverGestureArbiter = {
+    /**
+     * Try to claim the touch for the cover's horizontal swipe. Succeeds
+     * unless the dismiss gesture already owns it. Idempotent while owned by
+     * the cover.
+     */
+    claimCover: (): boolean => {
+        if (owner === 'dismiss') return false;
+        if (owner !== 'cover') {
+            owner = 'cover';
+            log('cover claimed gesture — dismiss suspended');
+        }
+        return true;
     },
-    /** True while the cover's horizontal drag is in progress. */
-    isDragging: (): boolean => dragging,
-    /** Cover took the gesture; parent should stand down. */
-    start: (): void => {
-        if (dragging) return;
-        dragging = true;
-        console.info('[cover-swipe] start — parent dismiss suspended');
+    /**
+     * Try to claim the touch for the vertical pull-to-dismiss. Succeeds
+     * unless the cover swipe already owns it. Idempotent while owned by
+     * dismiss.
+     */
+    claimDismiss: (): boolean => {
+        if (owner === 'cover') return false;
+        if (owner !== 'dismiss') {
+            owner = 'dismiss';
+            log('dismiss claimed gesture — cover suspended');
+        }
+        return true;
+    },
+    /** Current gesture owner. */
+    owner: (): CoverGestureOwner => owner,
+    /** Reset for the next touch. */
+    release: (): void => {
+        if (owner === 'none') return;
+        owner = 'none';
+        log('gesture released');
     },
 };
 

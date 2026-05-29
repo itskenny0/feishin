@@ -1,27 +1,30 @@
 import { act, cleanup, render } from '@testing-library/react';
-import { animate, motion, useMotionValue } from 'motion/react';
-import { useCallback, useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { coverSwipeSignal } from '/@/renderer/features/player/utils/cover-swipe-signal';
+import { coverGestureArbiter } from '/@/renderer/features/player/utils/cover-swipe-signal';
 
 /**
  * Regression coverage for the mobile fullscreen player cover swipe vs
  * the player face's swipe-down dismiss.
  *
- * The bug: vertical-dismiss touch listener on .playerState and the
- * horizontal cover-drag both run for the same touch. Without an
- * explicit cross-talk signal, the dismiss listener can claim the
- * gesture, leaving the cover stuck under the finger until reload.
+ * The bug: the horizontal cover swipe and the vertical dismiss both run for
+ * the same touch. The original implementation used Framer Motion's
+ * `drag="x"`, which announced ownership asynchronously — *after* the face's
+ * synchronous touchmove had already claimed the dismiss — so both gestures
+ * drove their motion values at once and the cover fought the dismiss.
  *
- * The fix: cover toggles coverSwipeSignal in onDragStart / onDragEnd;
- * the dismiss listener consults coverSwipeSignal.isDragging() and
- * bails immediately when true.
+ * The fix: both gestures decide their axis synchronously inside native
+ * touchmove listeners and claim a single-owner `coverGestureArbiter`. The
+ * cover's listener is on an inner element, so by DOM bubble order it runs
+ * before the face's listener on every move — making arbitration
+ * deterministic on the *same* event, with no async gap to lose.
  *
- * These tests don't render the full mobile player (too many heavy
- * dependencies — stores, queue, item-image hook, settings). They wire
- * up the same gesture-routing rules in a minimal harness so the
- * behaviour can be locked down independently.
+ * This harness mirrors the real listeners (cover nested inside the face,
+ * both consulting the arbiter) so a regression in either side surfaces as a
+ * failing test rather than a UI bug. Touch events are dispatched on the
+ * inner cover element and bubble to the face, reproducing the exact event
+ * ordering the production code relies on.
  */
 
 interface HarnessProps {
@@ -29,67 +32,82 @@ interface HarnessProps {
     swipeXReportRef?: { current: number };
 }
 
-/**
- * Minimal model of MobileFullscreenPlayer's gesture routing:
- *
- * - .face: native non-passive touchmove listener owns the vertical
- *   dismiss drag (writes to onDismissOffset for the test to inspect).
- * - .cover: Framer-Motion `drag="x"` motion.div with onDragStart /
- *   onDragEnd hooked through coverSwipeSignal.
- *
- * Both are siblings in the same scrollable surface. The listener
- * registered against .face is the exact bail-out pattern used in
- * mobile-fullscreen-player.tsx — extracted here so a regression in
- * either side surfaces as a failing test rather than a UI bug.
- */
 function GestureHarness({ onDismissOffset, swipeXReportRef }: HarnessProps) {
     const faceRef = useRef<HTMLDivElement | null>(null);
-    const swipeX = useMotionValue(0);
+    const coverRef = useRef<HTMLDivElement | null>(null);
 
-    // Mirror the cover's drag-start/end into coverSwipeSignal, exactly
-    // the way mobile-fullscreen-player-album-art.tsx does it.
-    const onDragStart = useCallback(() => {
-        coverSwipeSignal.start();
-    }, []);
-    const onDragEnd = useCallback(() => {
-        coverSwipeSignal.end();
-        // Settle the spring back to 0 with the same animate() call the
-        // real component uses so we exercise the cancel-stale-anim path.
-        animate(swipeX, 0, { duration: 0.05 });
-    }, [swipeX]);
-
+    // --- Cover listener (inner element, runs first) -----------------------
     useEffect(() => {
-        if (swipeXReportRef) {
-            return swipeX.on('change', (v) => {
-                swipeXReportRef.current = v;
-            });
-        }
-        return undefined;
-    }, [swipeX, swipeXReportRef]);
+        const el = coverRef.current;
+        if (!el) return undefined;
+        let startX = 0;
+        let startY = 0;
+        let axis: 'declined' | 'none' | 'x' = 'none';
 
+        const onTouchStart = (e: TouchEvent) => {
+            if (e.touches.length === 1) coverGestureArbiter.release();
+            const touch = e.touches[0];
+            if (!touch) return;
+            startX = touch.clientX;
+            startY = touch.clientY;
+            axis = 'none';
+        };
+        const onTouchMove = (e: TouchEvent) => {
+            if (coverGestureArbiter.owner() === 'dismiss') {
+                axis = 'declined';
+                return;
+            }
+            if (axis === 'declined') return;
+            const touch = e.touches[0];
+            if (!touch) return;
+            const dx = touch.clientX - startX;
+            const dy = touch.clientY - startY;
+            if (axis === 'none') {
+                const adx = Math.abs(dx);
+                const ady = Math.abs(dy);
+                if (adx < 4 && ady < 4) return;
+                if (adx > ady && coverGestureArbiter.claimCover()) {
+                    axis = 'x';
+                } else {
+                    axis = 'declined';
+                    return;
+                }
+            }
+            if (swipeXReportRef) swipeXReportRef.current = dx;
+        };
+        const onTouchEnd = () => {
+            axis = 'none';
+            coverGestureArbiter.release();
+        };
+        el.addEventListener('touchstart', onTouchStart, { passive: true });
+        el.addEventListener('touchmove', onTouchMove, { passive: false });
+        el.addEventListener('touchend', onTouchEnd, { passive: true });
+        return () => {
+            el.removeEventListener('touchstart', onTouchStart);
+            el.removeEventListener('touchmove', onTouchMove);
+            el.removeEventListener('touchend', onTouchEnd);
+        };
+    }, [swipeXReportRef]);
+
+    // --- Face listener (ancestor element, runs second) --------------------
     useEffect(() => {
         const el = faceRef.current;
         if (!el) return undefined;
-
         let startY = 0;
         let active = false;
         let claimed = false;
 
         const onTouchStart = (e: TouchEvent) => {
+            if (e.touches.length === 1) coverGestureArbiter.release();
             const touch = e.touches[0];
             if (!touch) return;
             startY = touch.clientY;
             active = true;
             claimed = false;
         };
-
         const onTouchMove = (e: TouchEvent) => {
             if (!active) return;
-            // The bail-out under test. If the cover claimed the gesture,
-            // the dismiss listener stands down for the rest of the
-            // touch — even if subsequent touchmove samples look
-            // vertical-enough to satisfy the claim heuristic.
-            if (coverSwipeSignal.isDragging()) {
+            if (coverGestureArbiter.owner() === 'cover') {
                 active = false;
                 return;
             }
@@ -102,16 +120,19 @@ function GestureHarness({ onDismissOffset, swipeXReportRef }: HarnessProps) {
                     active = false;
                     return;
                 }
+                if (!coverGestureArbiter.claimDismiss()) {
+                    active = false;
+                    return;
+                }
                 claimed = true;
             }
             onDismissOffset?.(Math.max(0, dy * 0.75));
         };
-
         const onTouchEnd = () => {
             active = false;
             claimed = false;
+            if (coverGestureArbiter.owner() === 'dismiss') coverGestureArbiter.release();
         };
-
         el.addEventListener('touchstart', onTouchStart, { passive: true });
         el.addEventListener('touchmove', onTouchMove, { passive: false });
         el.addEventListener('touchend', onTouchEnd, { passive: true });
@@ -124,14 +145,11 @@ function GestureHarness({ onDismissOffset, swipeXReportRef }: HarnessProps) {
 
     return (
         <div data-testid="face" ref={faceRef} style={{ height: 800, width: 400 }}>
-            <motion.div
+            <div
                 data-cover-swipe
                 data-testid="cover"
-                drag="x"
-                dragConstraints={{ left: 0, right: 0 }}
-                onDragEnd={onDragEnd}
-                onDragStart={onDragStart}
-                style={{ height: 320, width: 320, x: swipeX }}
+                ref={coverRef}
+                style={{ height: 320, width: 320 }}
             />
         </div>
     );
@@ -143,8 +161,8 @@ const makeTouchInit = (clientX: number, clientY: number): TouchEventInit => ({
     // jsdom doesn't ship the Touch constructor, but TouchEvent reads
     // touches/changedTouches as ordinary arrays so a plain object with
     // the fields the listener uses is enough.
-    changedTouches: [{ clientX, clientY } as unknown as Touch],
-    touches: [{ clientX, clientY } as unknown as Touch],
+    changedTouches: [{ clientX, clientY, identifier: 0 } as unknown as Touch],
+    touches: [{ clientX, clientY, identifier: 0 } as unknown as Touch],
 });
 
 const dispatchTouch = (target: Element, type: string, x: number, y: number) => {
@@ -156,76 +174,97 @@ const hasTouchEvent = typeof window !== 'undefined' && typeof window.TouchEvent 
 
 afterEach(() => {
     cleanup();
-    coverSwipeSignal.end();
+    coverGestureArbiter.release();
     vi.restoreAllMocks();
 });
 
 describe.runIf(hasTouchEvent)('mobile fullscreen player cover-swipe vs dismiss routing', () => {
-    it('the face listener still drives swipeY when the cover has not claimed', () => {
+    it('a vertical pull on the cover is owned by the face dismiss (cover declines)', () => {
         const dismissOffsets: number[] = [];
         const { getByTestId } = render(
             <GestureHarness onDismissOffset={(o) => dismissOffsets.push(o)} />,
         );
-        const face = getByTestId('face');
+        const cover = getByTestId('cover');
 
         act(() => {
-            dispatchTouch(face, 'touchstart', 200, 100);
-            dispatchTouch(face, 'touchmove', 200, 150);
-            dispatchTouch(face, 'touchmove', 200, 220);
+            dispatchTouch(cover, 'touchstart', 200, 100);
+            dispatchTouch(cover, 'touchmove', 200, 150);
+            dispatchTouch(cover, 'touchmove', 200, 220);
         });
 
-        // Vertical pull was claimed and a positive swipeY was emitted.
+        expect(coverGestureArbiter.owner()).toBe('dismiss');
         expect(dismissOffsets.length).toBeGreaterThan(0);
         expect(dismissOffsets.at(-1)).toBeGreaterThan(0);
     });
 
-    it('the face listener stops accumulating dismiss offsets once the cover claims the gesture', () => {
+    it('a horizontal pull on the cover is owned by the cover (face stands down)', () => {
         const dismissOffsets: number[] = [];
+        const swipeXReportRef = { current: 0 };
         const { getByTestId } = render(
-            <GestureHarness onDismissOffset={(o) => dismissOffsets.push(o)} />,
+            <GestureHarness
+                onDismissOffset={(o) => dismissOffsets.push(o)}
+                swipeXReportRef={swipeXReportRef}
+            />,
         );
-        const face = getByTestId('face');
+        const cover = getByTestId('cover');
 
         act(() => {
-            dispatchTouch(face, 'touchstart', 200, 100);
-            // Cover's drag-start fires before the first touchmove the
-            // face would have used to "claim" the dismiss — mirrors
-            // Motion's onDragStart firing on the first move past its
-            // own threshold.
-            coverSwipeSignal.start();
-            dispatchTouch(face, 'touchmove', 200, 200);
-            dispatchTouch(face, 'touchmove', 200, 260);
+            dispatchTouch(cover, 'touchstart', 200, 100);
+            dispatchTouch(cover, 'touchmove', 260, 105);
+            dispatchTouch(cover, 'touchmove', 300, 108);
         });
 
-        // The dismiss listener stood down — no offsets accumulated even
-        // though the touch was vertically large enough to qualify.
+        // The cover claimed on the same move the face also saw; deterministic
+        // inner-first ordering means the face never accumulated an offset.
+        expect(coverGestureArbiter.owner()).toBe('cover');
         expect(dismissOffsets).toEqual([]);
+        expect(swipeXReportRef.current).toBeGreaterThan(0);
     });
 
-    it('a second gesture after end() routes cleanly (the "restart the app" case)', () => {
+    it('a near-diagonal tie defers to the dismiss (cover only claims strict horizontal dominance)', () => {
         const dismissOffsets: number[] = [];
         const { getByTestId } = render(
             <GestureHarness onDismissOffset={(o) => dismissOffsets.push(o)} />,
         );
-        const face = getByTestId('face');
+        const cover = getByTestId('cover');
 
-        // First touch: cover claims, then ends cleanly.
         act(() => {
-            dispatchTouch(face, 'touchstart', 200, 100);
-            coverSwipeSignal.start();
-            dispatchTouch(face, 'touchmove', 200, 200);
-            coverSwipeSignal.end();
-            dispatchTouch(face, 'touchend', 200, 200);
+            dispatchTouch(cover, 'touchstart', 200, 100);
+            // dx === dy → cover does not claim (needs adx > ady); face claims.
+            dispatchTouch(cover, 'touchmove', 230, 130);
+        });
+
+        expect(coverGestureArbiter.owner()).toBe('dismiss');
+        expect(dismissOffsets.length).toBeGreaterThan(0);
+    });
+
+    it('a second gesture after release routes cleanly (the "restart the app" case)', () => {
+        const dismissOffsets: number[] = [];
+        const swipeXReportRef = { current: 0 };
+        const { getByTestId } = render(
+            <GestureHarness
+                onDismissOffset={(o) => dismissOffsets.push(o)}
+                swipeXReportRef={swipeXReportRef}
+            />,
+        );
+        const cover = getByTestId('cover');
+
+        // First touch: cover claims a horizontal swipe, then ends.
+        act(() => {
+            dispatchTouch(cover, 'touchstart', 200, 100);
+            dispatchTouch(cover, 'touchmove', 280, 104);
+            dispatchTouch(cover, 'touchend', 280, 104);
         });
         expect(dismissOffsets).toEqual([]);
+        expect(coverGestureArbiter.owner()).toBe('none');
 
-        // Second touch: a vertical pull that the dismiss listener
-        // should pick up because the cover signalled it had let go.
-        // Pre-fix this stayed inert because dragging never cleared.
+        // Second touch: a vertical pull the face should now pick up — pre-fix
+        // a leaked owner left this inert.
         act(() => {
-            dispatchTouch(face, 'touchstart', 200, 100);
-            dispatchTouch(face, 'touchmove', 200, 200);
+            dispatchTouch(cover, 'touchstart', 200, 100);
+            dispatchTouch(cover, 'touchmove', 200, 200);
         });
+        expect(coverGestureArbiter.owner()).toBe('dismiss');
         expect(dismissOffsets.length).toBeGreaterThan(0);
     });
 });

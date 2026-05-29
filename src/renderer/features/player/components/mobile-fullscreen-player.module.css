@@ -597,6 +597,20 @@
 }
 
 /*
+ * The swipeable cover owns the horizontal axis via a native touch listener
+ * (see mobile-fullscreen-player-album-art.tsx). `touch-action: pan-y` tells
+ * the browser it may still pan vertically (native scroll up, and our
+ * non-passive listener can preventDefault a downward pull-to-dismiss) but
+ * must NOT handle horizontal pans itself — leaving the x-axis for our
+ * listener. Framer Motion used to set this implicitly for `drag="x"`; with
+ * Motion's drag removed we set it explicitly or the browser would steal the
+ * horizontal swipe as an overscroll/back gesture.
+ */
+[data-cover-swipe] {
+    touch-action: pan-y;
+}
+
+/*
  * Tablet sweet-spot: at 600–834px portrait the 480px cover cap leaves
  * ~130px of dead space on each side. Bump it to 560 (with the corner
  * radius scaling to match) so the album art takes its rightful place as
