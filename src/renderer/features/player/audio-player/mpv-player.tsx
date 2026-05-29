@@ -6,11 +6,11 @@ import { MpvPlayerEngine, MpvPlayerEngineHandle } from './engine/mpv-player-engi
 import { usePlayerEvents } from '/@/renderer/features/player/audio-player/hooks/use-player-events';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
 import {
+    useActiveSongStatus,
     usePlaybackSettings,
     usePlayerActions,
-    usePlayerData,
     usePlayerMuted,
-    usePlayerProperties,
+    usePlayerSpeed,
     usePlayerStore,
     usePlayerVolume,
 } from '/@/renderer/store';
@@ -23,9 +23,9 @@ const mpvPlayer = isElectron() ? window.api.mpvPlayer : null;
 
 export function MpvPlayer() {
     const playerRef = useRef<MpvPlayerEngineHandle>(null);
-    const { currentSong, status } = usePlayerData();
+    const { currentSong, status } = useActiveSongStatus();
     const { mediaAutoNext, setTimestamp } = usePlayerActions();
-    const { speed } = usePlayerProperties();
+    const speed = usePlayerSpeed();
     const isMuted = usePlayerMuted();
     const volume = usePlayerVolume();
     const { audioFadeOnStatusChange } = usePlaybackSettings();

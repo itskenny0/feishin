@@ -18,11 +18,11 @@ import {
     useMpvSettings,
     usePlaybackSettings,
     usePlayerActions,
-    usePlayerData,
+    usePlayerCoreData,
     usePlayerMuted,
-    usePlayerProperties,
     usePlayerRepeat,
     usePlayerStoreBase,
+    usePlayerTransition,
     usePlayerVolume,
 } from '/@/renderer/store';
 import { toast } from '/@/shared/components/toast/toast';
@@ -35,14 +35,14 @@ const PLAY_PAUSE_FADE_INTERVAL = 10;
 export function WebPlayer() {
     const playerRef = useRef<null | WebPlayerEngineHandle>(null);
     const { t } = useTranslation();
-    const { num, player1, player2, status } = usePlayerData();
+    const { num, player1, player2, status } = usePlayerCoreData();
     const repeat = usePlayerRepeat();
     const repeatOneProgressRef = useRef({ player1: 0, player2: 0 });
     const { mediaAutoNext, mediaPause, setTimestamp } = usePlayerActions();
     const playback = useMpvSettings();
     const { webAudio } = useWebAudio();
 
-    const { crossfadeDuration, crossfadeStyle, speed, transitionType } = usePlayerProperties();
+    const { crossfadeDuration, crossfadeStyle, speed, transitionType } = usePlayerTransition();
     const isMuted = usePlayerMuted();
     const volume = usePlayerVolume();
     const { audioFadeOnStatusChange, preservePitch, transcode } = usePlaybackSettings();

@@ -760,8 +760,13 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                     });
                 },
                 getCurrentSong: () => {
+                    // Hot path: called by `usePlayerSong` on every store mutation for
+                    // every subscriber. Avoid `state.getQueue()` here — it would build a
+                    // full QueueSong[] copy of the default-order queue, allocating a new
+                    // array proportional to queue length on every call. Direct O(1) lookup
+                    // via the songs map keeps mutation-time cost flat regardless of queue
+                    // size.
                     const state = get();
-                    const queue = state.getQueue();
                     let index = state.player.index;
 
                     // If shuffle is enabled, map shuffled position to actual queue position
@@ -769,7 +774,11 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                         index = mapShuffledToQueueIndex(index, state.queue.shuffled);
                     }
 
-                    return queue.items[index];
+                    const uniqueId = state.queue.default[index];
+                    if (!uniqueId) {
+                        return undefined;
+                    }
+                    return state.queue.songs[uniqueId];
                 },
                 getPlayerData: () => {
                     const state = get();
@@ -1977,7 +1986,6 @@ export const usePlayerProperties = () => {
 
 export const usePlayerDuration = () => {
     return usePlayerStoreBase((state) => {
-        const queue = state.getQueue();
         let index = state.player.index;
 
         // If shuffle is enabled, map shuffled position to actual queue position
@@ -1987,15 +1995,32 @@ export const usePlayerDuration = () => {
             }
         }
 
-        const currentTrack = queue.items[index];
-        return currentTrack?.duration;
+        // O(1) lookup — avoid `state.getQueue()` which would build a full QueueSong[] copy.
+        const uniqueId = state.queue.default[index];
+        return uniqueId ? state.queue.songs[uniqueId]?.duration : undefined;
     });
 };
+
+/**
+ * O(1) lookup into the song map by default-queue index. Returns undefined for
+ * out-of-range indices or missing songs. Used by `usePlayerData` to avoid
+ * materializing the full queue items array on every store mutation.
+ */
+function getSongAtQueueIndex(
+    state: { queue: { default: string[]; songs: Record<string, QueueSong> } },
+    queueIndex: number,
+): QueueSong | undefined {
+    const uniqueId = state.queue.default[queueIndex];
+    if (!uniqueId) {
+        return undefined;
+    }
+    return state.queue.songs[uniqueId];
+}
 
 export const usePlayerData = (): PlayerData => {
     return usePlayerStoreBase(
         useShallow((state) => {
-            const queue = state.getQueue();
+            const defaultLength = state.queue.default.length;
             const index = state.player.index;
 
             // If shuffle is enabled, map shuffled position to actual queue position for display
@@ -2004,7 +2029,7 @@ export const usePlayerData = (): PlayerData => {
                 queueIndex = mapShuffledToQueueIndex(index, state.queue.shuffled);
             }
 
-            const currentSong = queue.items[queueIndex];
+            const currentSong = getSongAtQueueIndex(state, queueIndex);
             const repeat = state.player.repeat;
 
             // For previousSong calculation, we need to consider the shuffled order
@@ -2013,16 +2038,21 @@ export const usePlayerData = (): PlayerData => {
                 // Calculate previous in shuffled order
                 const previousShuffledIndex = index - 1;
                 if (previousShuffledIndex >= 0) {
-                    const previousQueueIndex = state.queue.shuffled[previousShuffledIndex];
-                    previousSong = queue.items[previousQueueIndex];
+                    previousSong = getSongAtQueueIndex(
+                        state,
+                        state.queue.shuffled[previousShuffledIndex],
+                    );
                 } else if (repeat === PlayerRepeat.ALL) {
                     // Wrap to last in shuffled order
                     const lastShuffledIndex = state.queue.shuffled.length - 1;
-                    const lastQueueIndex = state.queue.shuffled[lastShuffledIndex];
-                    previousSong = queue.items[lastQueueIndex];
+                    previousSong = getSongAtQueueIndex(
+                        state,
+                        state.queue.shuffled[lastShuffledIndex],
+                    );
                 }
             } else {
-                previousSong = queueIndex > 0 ? queue.items[queueIndex - 1] : undefined;
+                previousSong =
+                    queueIndex > 0 ? getSongAtQueueIndex(state, queueIndex - 1) : undefined;
             }
 
             // For nextSong calculation, we need to consider the shuffled order
@@ -2031,15 +2061,18 @@ export const usePlayerData = (): PlayerData => {
                 // Calculate next in shuffled order
                 const nextShuffledIndex = index + 1;
                 if (nextShuffledIndex < state.queue.shuffled.length) {
-                    const nextQueueIndex = state.queue.shuffled[nextShuffledIndex];
-                    nextSong = queue.items[nextQueueIndex];
+                    nextSong = getSongAtQueueIndex(state, state.queue.shuffled[nextShuffledIndex]);
                 } else if (repeat === PlayerRepeat.ALL) {
                     // Wrap to first in shuffled order
-                    const firstQueueIndex = state.queue.shuffled[0];
-                    nextSong = queue.items[firstQueueIndex];
+                    nextSong = getSongAtQueueIndex(state, state.queue.shuffled[0]);
                 }
+            } else if (repeat === PlayerRepeat.ONE) {
+                nextSong = currentSong;
+            } else if (repeat === PlayerRepeat.ALL) {
+                const nextIndex = queueIndex === defaultLength - 1 ? 0 : queueIndex + 1;
+                nextSong = getSongAtQueueIndex(state, nextIndex);
             } else {
-                nextSong = calculateNextSong(queueIndex, queue.items, repeat);
+                nextSong = getSongAtQueueIndex(state, queueIndex + 1);
             }
 
             const { player1, player2 } = getDualPlayerSongs(
@@ -2057,7 +2090,114 @@ export const usePlayerData = (): PlayerData => {
                 player1,
                 player2,
                 previousSong,
-                queueLength: state.queue.default.length,
+                queueLength: defaultLength,
+                status: state.player.status,
+            };
+        }),
+    );
+};
+
+/**
+ * Leaf selector for the dual-player audio orchestrator. The audio player only
+ * needs the active player index, the two side songs, and the play/pause status;
+ * subscribing to the full `usePlayerData` payload would re-render the player on
+ * every shuffle/repeat/queueLength change, which during a heavy session means
+ * tearing down progress callbacks and re-binding react-player props on every
+ * insert into the queue. Returning the narrow tuple keeps re-renders pinned to
+ * the four fields that actually drive audio output.
+ */
+export const usePlayerCoreData = (): {
+    num: 1 | 2;
+    player1: QueueSong | undefined;
+    player2: QueueSong | undefined;
+    status: PlayerStatus;
+} => {
+    return usePlayerStoreBase(
+        useShallow((state) => {
+            const index = state.player.index;
+            const defaultLength = state.queue.default.length;
+
+            let queueIndex = index;
+            if (isShuffleEnabled(state)) {
+                queueIndex = mapShuffledToQueueIndex(index, state.queue.shuffled);
+            }
+
+            const currentSong = getSongAtQueueIndex(state, queueIndex);
+            const repeat = state.player.repeat;
+
+            let nextSong: QueueSong | undefined;
+            if (isShuffleEnabled(state) && repeat !== PlayerRepeat.ONE) {
+                const nextShuffledIndex = index + 1;
+                if (nextShuffledIndex < state.queue.shuffled.length) {
+                    nextSong = getSongAtQueueIndex(state, state.queue.shuffled[nextShuffledIndex]);
+                } else if (repeat === PlayerRepeat.ALL) {
+                    nextSong = getSongAtQueueIndex(state, state.queue.shuffled[0]);
+                }
+            } else if (repeat === PlayerRepeat.ONE) {
+                nextSong = currentSong;
+            } else if (repeat === PlayerRepeat.ALL) {
+                const nextIndex = queueIndex === defaultLength - 1 ? 0 : queueIndex + 1;
+                nextSong = getSongAtQueueIndex(state, nextIndex);
+            } else {
+                nextSong = getSongAtQueueIndex(state, queueIndex + 1);
+            }
+
+            const { player1, player2 } = getDualPlayerSongs(
+                state.player.playerNum,
+                currentSong,
+                nextSong,
+                repeat,
+            );
+
+            return {
+                num: state.player.playerNum,
+                player1,
+                player2,
+                status: state.player.status,
+            };
+        }),
+    );
+};
+
+/**
+ * Transition-specific subset of player properties: anything that the dual-player
+ * progress callbacks need to compute crossfade/gapless timing. Avoids
+ * re-rendering when unrelated `usePlayerProperties` fields change (e.g. mute,
+ * shuffle, repeat). Kept separate from `usePlayerCoreData` because these change
+ * on user-config, not on track change.
+ */
+export const usePlayerTransition = (): {
+    crossfadeDuration: number;
+    crossfadeStyle: CrossfadeStyle;
+    speed: number;
+    transitionType: PlayerStyle;
+} => {
+    return usePlayerStoreBase(
+        useShallow((state) => ({
+            crossfadeDuration: state.player.crossfadeDuration,
+            crossfadeStyle: state.player.crossfadeStyle,
+            speed: state.player.speed,
+            transitionType: state.player.transitionType,
+        })),
+    );
+};
+
+/**
+ * Audio-player-only subset: current song + status. Used by single-stream
+ * back-ends (mpv, etc.) that don't need the next song.
+ */
+export const useActiveSongStatus = (): {
+    currentSong: QueueSong | undefined;
+    status: PlayerStatus;
+} => {
+    return usePlayerStoreBase(
+        useShallow((state) => {
+            let queueIndex = state.player.index;
+            if (isShuffleEnabled(state)) {
+                queueIndex = mapShuffledToQueueIndex(queueIndex, state.queue.shuffled);
+            }
+            return {
+                currentSong: getSongAtQueueIndex(state, queueIndex),
                 status: state.player.status,
             };
         }),
