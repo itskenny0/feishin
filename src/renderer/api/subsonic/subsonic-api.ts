@@ -447,7 +447,7 @@ export const ssApiClient = (args: {
     return initClient(contract, {
         api: async ({ body, headers, method, path, rawQuery }) => {
             let baseUrl: string | undefined;
-            const authParams: Record<string, any> = {};
+            const authParams: Record<string, unknown> = {};
 
             const { params, path: api } = parsePath(path);
 
@@ -529,7 +529,7 @@ export const ssApiClient = (args: {
                     headers: result.headers as any,
                     status: result.status,
                 };
-            } catch (e: any | AxiosError | Error) {
+            } catch (e: unknown) {
                 if (isAxiosError(e)) {
                     if (e.code === 'ERR_NETWORK') {
                         throw new Error(i18n.t('error.networkError') as string);

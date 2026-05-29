@@ -253,7 +253,7 @@ const Controls = () => {
         setStore({ expanded: !expanded, visualizerExpanded: false });
     };
 
-    const handleLyricsSettings = (property: string, value: any) => {
+    const handleLyricsSettings = (property: string, value: boolean | number | string) => {
         const displayProperties = ['fontSize', 'fontSizeUnsync', 'gap', 'gapUnsync'];
         if (displayProperties.includes(property)) {
             const currentDisplay = useSettingsStore.getState().lyricsDisplay;
@@ -442,7 +442,7 @@ const Controls = () => {
                                     w="100%"
                                 />
                                 <Slider
-                                    defaultValue={lyricConfig.fontSize}
+                                    defaultValue={lyricConfig.fontSizeUnsync}
                                     label={(e) =>
                                         `${t('page.fullscreenPlayer.config.unsynchronized')}: ${e}px`
                                     }
@@ -469,7 +469,7 @@ const Controls = () => {
                                     w="100%"
                                 />
                                 <Slider
-                                    defaultValue={lyricConfig.gap}
+                                    defaultValue={lyricConfig.gapUnsync}
                                     label={(e) => `Unsynchronized: ${e}px`}
                                     max={50}
                                     min={0}

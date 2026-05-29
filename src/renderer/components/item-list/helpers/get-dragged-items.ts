@@ -18,15 +18,16 @@ import {
 const hasRequiredDragProperties = (
     item: unknown,
 ): item is ItemListStateItemWithRequiredProperties => {
+    if (typeof item !== 'object' || item === null) {
+        return false;
+    }
+
+    const record = item as Record<string, unknown>;
+
     return (
-        typeof item === 'object' &&
-        item !== null &&
-        'id' in item &&
-        typeof (item as any).id === 'string' &&
-        '_itemType' in item &&
-        typeof (item as any)._itemType === 'string' &&
-        '_serverId' in item &&
-        typeof (item as any)._serverId === 'string'
+        typeof record.id === 'string' &&
+        typeof record._itemType === 'string' &&
+        typeof record._serverId === 'string'
     );
 };
 

@@ -111,9 +111,9 @@ export const UpdatePlaylistContextModal = ({
                 message: t('form.editPlaylist.success'),
             });
             closeModal(id);
-        } catch (err: any) {
+        } catch (err) {
             toast.error({
-                message: err?.message,
+                message: err instanceof Error ? err.message : undefined,
                 title: t('error.genericError'),
             });
         } finally {

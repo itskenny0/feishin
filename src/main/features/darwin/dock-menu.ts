@@ -52,6 +52,10 @@ ipcMain.on('update-playback', (_event, status: PlayerStatus) => {
 });
 
 // Initialize dock menu after app is ready
-app.whenReady().then(() => {
-    updateDockMenu();
-});
+app.whenReady()
+    .then(() => {
+        updateDockMenu();
+    })
+    .catch((error) => {
+        console.error('Failed to initialize dock menu', error);
+    });

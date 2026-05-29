@@ -615,6 +615,12 @@ const VolumeButton = () => {
                 volumeToSet = calculateVolumeUp(volume, volumeWheelStep);
             }
 
+            // Move the thumb optimistically (like the drag path) instead
+            // of waiting for the [volume] effect to round-trip the store.
+            // In remote mode `source.volume` is an async mirror, so without
+            // this the thumb (and the volume-driven icon/tooltip) visibly
+            // lag the wheel.
+            setSliderValue(volumeToSet);
             setVolume(volumeToSet);
         },
         [setVolume, volume, volumeWheelStep],

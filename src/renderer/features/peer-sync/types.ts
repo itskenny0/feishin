@@ -36,7 +36,10 @@ export type PeerCommandArgs =
     | undefined
     | { from: number; to: number } // queueReorder
     | { index: number; itemIds: string[] } // queueInsert
-    | { index: number } // playIndex
+    | { index: number } // playIndex — DEFAULT-order queue index (SEV-3); the
+    // receiver's mediaPlayByIndex maps it to the shuffled playback position
+    // internally, so a controller MUST send a default-order index (convert a
+    // visible/shuffled tap with mapShuffledToQueueIndex's inverse first).
     | { indices: number[] } // queueRemove
     | { itemIds: string[]; playCommand?: 'PlayLast' | 'PlayNext' | 'PlayNow'; startIndex?: number } // play
     | { mode: PeerRepeatMode } // repeat
@@ -157,13 +160,22 @@ export interface PeerState {
     paused: boolean;
     /** Current position in milliseconds. */
     pos: number;
-    /** Truncated queue id list, in playback order. Optional — the controller
-     *  hydrates this into Song objects through the existing `hydrateSongs`
-     *  path so the queue panel mirrors the target. Capped at 200 items to
-     *  match the Jellyfin-lane truncation. */
+    /** Truncated queue id list, in DEFAULT (non-shuffle) order. Optional — the
+     *  controller hydrates this into Song objects through the existing
+     *  `hydrateSongs` path so the queue panel mirrors the target. Capped at 200
+     *  items to match the Jellyfin-lane truncation.
+     *
+     *  Index-space contract (SEV-3): `qIds` is the publisher's
+     *  `getQueueOrder().items` (default order), which is the SAME order the
+     *  receiver's `mediaPlayByIndex` / queue verbs interpret an index against.
+     *  This holds EVEN WHEN the target has shuffle on — emitting the visible
+     *  shuffled order here would make a controller's tap jump to the wrong track
+     *  on the receiver. */
     qIds?: string[];
-    /** Index of the currently-playing item in `qIds`. -1 / absent when not
-     *  resolvable. */
+    /** Index of the currently-playing item in `qIds`, in DEFAULT order. -1 /
+     *  absent when not resolvable. The publisher resolves the now-playing item's
+     *  position by `_uniqueId` against the default-order queue, so shuffle on the
+     *  target still produces a default-order index the controller can act on. */
     qIdx?: number;
     /** Playback rate (1.0 = normal). Surface-only — emitted by Feishin
      *  targets so a controller can display the target's speed; control of

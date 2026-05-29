@@ -14,7 +14,10 @@ export const getMpvSetting = (
         case 'replayGainClip':
             return { 'replaygain-clip': value || 'no' };
         case 'replayGainFallbackDB':
-            return { 'replaygain-fallback': value };
+            // mpv's `replaygain-fallback` default is 0 (untagged tracks left
+            // untouched). Map an unset value to 0 rather than `undefined`,
+            // which mpv rejects.
+            return { 'replaygain-fallback': value ?? 0 };
         case 'replayGainMode':
             return { replaygain: value || 'no' };
         case 'replayGainPreampDB':
@@ -32,7 +35,7 @@ export const getMpvProperties = (settings: SettingsState['playback']['mpvPropert
         'gapless-audio': settings.gaplessAudio || 'weak',
         replaygain: settings.replayGainMode || 'no',
         'replaygain-clip': settings.replayGainClip || 'no',
-        'replaygain-fallback': settings.replayGainFallbackDB,
+        'replaygain-fallback': settings.replayGainFallbackDB ?? 0,
         'replaygain-preamp': settings.replayGainPreampDB || 0,
     };
 

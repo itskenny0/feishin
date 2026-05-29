@@ -191,7 +191,9 @@ export const NavidromeController: InternalControllerEndpoint = {
     deleteArtistImage: async (args: DeleteArtistImageArgs): Promise<DeleteArtistImageResponse> => {
         const { apiClientProps, query } = args;
 
-        const res = await ndApiClient(apiClientProps as any).deleteArtistImage({
+        const res = await ndApiClient(
+            apiClientProps as Parameters<typeof ndApiClient>[0],
+        ).deleteArtistImage({
             params: {
                 id: query.id,
             },
@@ -224,7 +226,9 @@ export const NavidromeController: InternalControllerEndpoint = {
     ): Promise<DeleteInternetRadioStationImageResponse> => {
         const { apiClientProps, query } = args;
 
-        const res = await ndApiClient(apiClientProps as any).deleteInternetRadioStationImage({
+        const res = await ndApiClient(
+            apiClientProps as Parameters<typeof ndApiClient>[0],
+        ).deleteInternetRadioStationImage({
             params: {
                 id: query.id,
             },
@@ -256,7 +260,9 @@ export const NavidromeController: InternalControllerEndpoint = {
     ): Promise<DeletePlaylistImageResponse> => {
         const { apiClientProps, query } = args;
 
-        const res = await ndApiClient(apiClientProps as any).deletePlaylistImage({
+        const res = await ndApiClient(
+            apiClientProps as Parameters<typeof ndApiClient>[0],
+        ).deletePlaylistImage({
             params: {
                 id: query.id,
             },
@@ -705,7 +711,9 @@ export const NavidromeController: InternalControllerEndpoint = {
     getPlaylistSongList: async (args: PlaylistSongListArgs): Promise<PlaylistSongListResponse> => {
         const { apiClientProps, query } = args;
 
-        const res = await ndApiClient(apiClientProps as any).getPlaylistSongList({
+        const res = await ndApiClient(
+            apiClientProps as Parameters<typeof ndApiClient>[0],
+        ).getPlaylistSongList({
             params: {
                 id: query.id,
             },
@@ -1120,7 +1128,7 @@ export const NavidromeController: InternalControllerEndpoint = {
         const { apiClientProps, body, query } = args;
 
         // 1. Fetch existing songs from the playlist without any sorts
-        const existingSongsRes = await ndApiClient(apiClientProps as any).getPlaylistSongList({
+        const existingSongsRes = await ndApiClient(apiClientProps).getPlaylistSongList({
             params: {
                 id: query.id,
             },
@@ -1321,7 +1329,7 @@ export const NavidromeController: InternalControllerEndpoint = {
             typeof File !== 'undefined'
                 ? new File([bytes], 'image', { type: 'application/octet-stream' })
                 : new Blob([bytes], { type: 'application/octet-stream' });
-        form.append('image', fileLike as any);
+        form.append('image', fileLike);
 
         const res = await axios.post(`${serverUrl}/api/artist/${query.id}/image`, form, {
             headers: {
@@ -1357,7 +1365,7 @@ export const NavidromeController: InternalControllerEndpoint = {
             typeof File !== 'undefined'
                 ? new File([bytes], 'image', { type: 'application/octet-stream' })
                 : new Blob([bytes], { type: 'application/octet-stream' });
-        form.append('image', fileLike as any);
+        form.append('image', fileLike);
 
         const res = await axios.post(`${serverUrl}/api/radio/${query.id}/image`, form, {
             headers: {
@@ -1393,7 +1401,7 @@ export const NavidromeController: InternalControllerEndpoint = {
             typeof File !== 'undefined'
                 ? new File([bytes], 'image', { type: 'application/octet-stream' })
                 : new Blob([bytes], { type: 'application/octet-stream' });
-        form.append('image', fileLike as any);
+        form.append('image', fileLike);
 
         const res = await axios.post(`${serverUrl}/api/playlist/${query.id}/image`, form, {
             headers: {

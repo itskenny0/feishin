@@ -3,6 +3,7 @@ import type { ServerListItem } from '/@/shared/types/domain-types';
 
 import { Capacitor } from '@capacitor/core';
 import { Alert, Button, Group, Progress, Slider, Stack, Switch, Text, Title } from '@mantine/core';
+import { openConfirmModal } from '@mantine/modals';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -85,9 +86,26 @@ const formatCap = (n: number | undefined): string => {
     return formatBytes(n);
 };
 
-const safeConfirm = (message: string): boolean => {
-    if (typeof window === 'undefined' || typeof window.confirm !== 'function') return false;
-    return window.confirm(message);
+/*
+ * Themed replacement for the old native `window.confirm()` guard. The
+ * destructive cache actions are async, so we run their body inside the
+ * modal's `onConfirm` callback rather than gating a synchronous early
+ * return. `confirmLabel` defaults to the shared "Confirm" string.
+ */
+const confirmAction = (params: {
+    cancelLabel: string;
+    confirmLabel: string;
+    message: string;
+    onConfirm: () => void;
+    title: string;
+}): void => {
+    openConfirmModal({
+        centered: true,
+        children: params.message,
+        labels: { cancel: params.cancelLabel, confirm: params.confirmLabel },
+        onConfirm: params.onConfirm,
+        title: params.title,
+    });
 };
 
 export const LibrarySyncSettings = () => {
@@ -303,16 +321,27 @@ export const LibrarySyncSettings = () => {
     // `lastFullSyncAt`). Fast on subsequent runs because we only fetch
     // items added since the previous sync.
     const handleResync = useCallback(
-        async (server: ServerListItem) => {
-            if (!safeConfirm(t('page.setting.librarySyncDashboard.confirmResync'))) return;
-            try {
-                console.info('[cache] dashboard: re-sync confirmed (delta-eligible)');
-                void hydrate(server, 'full');
-                await refreshBytesUsed();
-            } catch (err) {
-                console.warn('[cache] dashboard: re-sync failed', { err });
-                toast.error({ message: (err as Error).message ?? String(err) });
-            }
+        (server: ServerListItem) => {
+            confirmAction({
+                cancelLabel: t('common.cancel', { defaultValue: 'Cancel' }),
+                confirmLabel: t('common.confirm', { defaultValue: 'Confirm' }),
+                message: t('page.setting.librarySyncDashboard.confirmResync'),
+                onConfirm: () => {
+                    void (async () => {
+                        try {
+                            console.info('[cache] dashboard: re-sync confirmed (delta-eligible)');
+                            void hydrate(server, 'full');
+                            await refreshBytesUsed();
+                        } catch (err) {
+                            console.warn('[cache] dashboard: re-sync failed', { err });
+                            toast.error({ message: (err as Error).message ?? String(err) });
+                        }
+                    })();
+                },
+                title: t('page.setting.librarySyncDashboard.resync', {
+                    defaultValue: 'Re-sync library',
+                }),
+            });
         },
         // eslint-disable-next-line react-hooks/exhaustive-deps
         [refreshBytesUsed],
@@ -323,28 +352,39 @@ export const LibrarySyncSettings = () => {
     // suspects local rot (metadata edited on server, items deleted,
     // etc.) — delta-mode misses those changes by design.
     const handleForceFullResync = useCallback(
-        async (server: ServerListItem) => {
-            if (
-                !safeConfirm(
-                    'Force a full re-sync? This wipes the local cache and re-downloads everything (slow). Use the regular Re-sync button for new items only.',
-                )
-            ) {
-                return;
-            }
-            try {
-                console.info('[cache] dashboard: force-full re-sync confirmed');
-                await clearAllCacheData();
-                resetEntityCountsForClear();
-                setThumbnailCount(0);
-                setThumbnailBytes(0);
-                setSyncMeta({});
-                void hydrate(server, 'full');
-                await refreshBytesUsed();
-            } catch (err) {
-                console.warn('[cache] dashboard: force-full re-sync failed', { err });
-                toast.error({ message: (err as Error).message ?? String(err) });
-            }
+        (server: ServerListItem) => {
+            confirmAction({
+                cancelLabel: t('common.cancel', { defaultValue: 'Cancel' }),
+                confirmLabel: t('page.setting.librarySyncDashboard.forceFullResync', {
+                    defaultValue: 'Force full re-sync',
+                }),
+                message: t('page.setting.librarySyncDashboard.confirmForceFullResync', {
+                    defaultValue:
+                        'Force a full re-sync? This wipes the local cache and re-downloads everything (slow). Use the regular Re-sync button for new items only.',
+                }),
+                onConfirm: () => {
+                    void (async () => {
+                        try {
+                            console.info('[cache] dashboard: force-full re-sync confirmed');
+                            await clearAllCacheData();
+                            resetEntityCountsForClear();
+                            setThumbnailCount(0);
+                            setThumbnailBytes(0);
+                            setSyncMeta({});
+                            void hydrate(server, 'full');
+                            await refreshBytesUsed();
+                        } catch (err) {
+                            console.warn('[cache] dashboard: force-full re-sync failed', { err });
+                            toast.error({ message: (err as Error).message ?? String(err) });
+                        }
+                    })();
+                },
+                title: t('page.setting.librarySyncDashboard.forceFullResync', {
+                    defaultValue: 'Force full re-sync',
+                }),
+            });
         },
+        // eslint-disable-next-line react-hooks/exhaustive-deps
         [refreshBytesUsed, resetEntityCountsForClear],
     );
 
@@ -364,20 +404,33 @@ export const LibrarySyncSettings = () => {
         }
     }, [refreshBytesUsed]);
 
-    const handleClearAll = useCallback(async () => {
-        if (!safeConfirm(t('page.setting.librarySyncDashboard.confirmClearAll'))) return;
-        try {
-            console.info('[cache] dashboard: clear all confirmed');
-            await clearAllCacheData();
-            resetEntityCountsForClear();
-            setThumbnailCount(0);
-            setThumbnailBytes(0);
-            setSyncMeta({});
-            await refreshBytesUsed();
-        } catch (err) {
-            console.warn('[cache] dashboard: clear all failed', { err });
-            toast.error({ message: (err as Error).message ?? String(err) });
-        }
+    const handleClearAll = useCallback(() => {
+        confirmAction({
+            cancelLabel: t('common.cancel', { defaultValue: 'Cancel' }),
+            confirmLabel: t('page.setting.librarySyncDashboard.clearAll', {
+                defaultValue: 'Clear all',
+            }),
+            message: t('page.setting.librarySyncDashboard.confirmClearAll'),
+            onConfirm: () => {
+                void (async () => {
+                    try {
+                        console.info('[cache] dashboard: clear all confirmed');
+                        await clearAllCacheData();
+                        resetEntityCountsForClear();
+                        setThumbnailCount(0);
+                        setThumbnailBytes(0);
+                        setSyncMeta({});
+                        await refreshBytesUsed();
+                    } catch (err) {
+                        console.warn('[cache] dashboard: clear all failed', { err });
+                        toast.error({ message: (err as Error).message ?? String(err) });
+                    }
+                })();
+            },
+            title: t('page.setting.librarySyncDashboard.clearAll', {
+                defaultValue: 'Clear all cache data',
+            }),
+        });
     }, [refreshBytesUsed, resetEntityCountsForClear, t]);
 
     // Hard-reset path that bypasses the active-handle requirement.
@@ -385,32 +438,48 @@ export const LibrarySyncSettings = () => {
     // failure — in that state the normal Clear / Re-sync buttons can't
     // do anything because they need a live db handle.
     const openErr = getLastOpenError();
-    const handleForceReset = useCallback(async () => {
-        if (!safeConfirm('Reset and rebuild the cache database from scratch?')) return;
-        const err = getLastOpenError();
-        const serverId = err?.serverId ?? currentServer?.id;
-        const userId = err?.userId ?? currentServer?.userId;
-        if (!serverId || !userId) {
-            toast.error({ message: 'No server selected.' });
-            return;
-        }
-        try {
-            console.info('[cache] dashboard: force-reset DB', { serverId, userId });
-            await resetCacheDb(serverId, userId);
-            clearLastOpenError();
-            resetEntityCountsForClear();
-            setThumbnailCount(0);
-            setThumbnailBytes(0);
-            setSyncMeta({});
-            const reopened = await openCacheDb(serverId, userId);
-            if (reopened && currentServer) {
-                void hydrate(currentServer, 'full');
-            }
-            toast.success({ message: 'Cache database reset.' });
-        } catch (e) {
-            console.warn('[cache] dashboard: force-reset failed', { err: e });
-            toast.error({ message: (e as Error).message ?? String(e) });
-        }
+    const handleForceReset = useCallback(() => {
+        confirmAction({
+            cancelLabel: t('common.cancel', { defaultValue: 'Cancel' }),
+            confirmLabel: t('page.setting.librarySyncDashboard.forceReset', {
+                defaultValue: 'Reset database',
+            }),
+            message: t('page.setting.librarySyncDashboard.confirmForceReset', {
+                defaultValue: 'Reset and rebuild the cache database from scratch?',
+            }),
+            onConfirm: () => {
+                void (async () => {
+                    const err = getLastOpenError();
+                    const serverId = err?.serverId ?? currentServer?.id;
+                    const userId = err?.userId ?? currentServer?.userId;
+                    if (!serverId || !userId) {
+                        toast.error({ message: 'No server selected.' });
+                        return;
+                    }
+                    try {
+                        console.info('[cache] dashboard: force-reset DB', { serverId, userId });
+                        await resetCacheDb(serverId, userId);
+                        clearLastOpenError();
+                        resetEntityCountsForClear();
+                        setThumbnailCount(0);
+                        setThumbnailBytes(0);
+                        setSyncMeta({});
+                        const reopened = await openCacheDb(serverId, userId);
+                        if (reopened && currentServer) {
+                            void hydrate(currentServer, 'full');
+                        }
+                        toast.success({ message: 'Cache database reset.' });
+                    } catch (e) {
+                        console.warn('[cache] dashboard: force-reset failed', { err: e });
+                        toast.error({ message: (e as Error).message ?? String(e) });
+                    }
+                })();
+            },
+            title: t('page.setting.librarySyncDashboard.forceReset', {
+                defaultValue: 'Reset cache database',
+            }),
+        });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [currentServer, resetEntityCountsForClear]);
 
     const handleSliderCommit = useCallback(

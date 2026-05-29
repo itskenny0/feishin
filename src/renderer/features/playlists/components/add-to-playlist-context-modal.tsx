@@ -215,9 +215,11 @@ export const AddToPlaylistContextModal = ({
                         if (response?.id) {
                             playlistIds.push(response?.id);
                         }
-                    } catch (error: any) {
+                    } catch (error) {
                         toast.error({
-                            message: `[${playlist}] ${error?.message}`,
+                            message: `[${playlist}] ${
+                                error instanceof Error ? error.message : undefined
+                            }`,
                             title: t('error.genericError'),
                         });
                     }
@@ -282,10 +284,11 @@ export const AddToPlaylistContextModal = ({
                 }),
             });
             closeModal(id);
-        } catch (error: any) {
+        } catch (error) {
             setIsLoading(false);
             toast.error({
-                message: error?.message || t('error.genericError'),
+                message:
+                    (error instanceof Error ? error.message : undefined) || t('error.genericError'),
                 title: t('error.genericError'),
             });
         }

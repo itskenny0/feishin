@@ -17,6 +17,7 @@ import { useCurrentServer } from '/@/renderer/store';
 import { ActionIcon, ActionIconGroup } from '/@/shared/components/action-icon/action-icon';
 import { Flex } from '/@/shared/components/flex/flex';
 import { Text } from '/@/shared/components/text/text';
+import { toast } from '/@/shared/components/toast/toast';
 import { Tooltip } from '/@/shared/components/tooltip/tooltip';
 import { ExplicitStatus, LibraryItem, Song } from '/@/shared/types/domain-types';
 import { Play } from '/@/shared/types/types';
@@ -78,11 +79,26 @@ export const LibraryCommandItem = ({
             // Use addToQueueByData for songs when we have the song data
             if (itemType === LibraryItem.SONG && song) {
                 addToQueueByData([song], playType);
+
+                // Confirm the enqueue. Play Next / Last add the track to the
+                // queue without it being the obvious "music started" feedback
+                // that Play Now gives, and the command palette closes on
+                // select — so without this toast the user has no signal the
+                // track actually reached the queue. addToQueueByData is
+                // synchronous, so by here the add has genuinely happened.
+                if (playType === Play.NEXT || playType === Play.LAST) {
+                    toast.success({
+                        message: t('player.addedToQueue', {
+                            defaultValue: 'Added "{{item}}" to the queue',
+                            item: song.name,
+                        }),
+                    });
+                }
             } else {
                 addToQueueByFetch(server.id, [id], itemType, playType);
             }
         },
-        [addToQueueByData, addToQueueByFetch, id, itemType, server.id, song],
+        [addToQueueByData, addToQueueByFetch, id, itemType, server.id, song, t],
     );
 
     const handlePlayNext = usePlayButtonClick({

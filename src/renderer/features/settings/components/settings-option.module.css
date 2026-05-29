@@ -3,6 +3,24 @@
 }
 
 /*
+ * Desktop label column. Capped at 50% so a long description never pushes
+ * the control off-screen. At tablet content widths (≤1199, incl. the
+ * settings modal) 50% halves an already-narrow pane and crushes the
+ * control, so relax the cap to give the control column more room.
+ */
+.row-label {
+    display: flex;
+    align-self: flex-start;
+    max-width: 50%;
+}
+
+@media (width <= 1199px) {
+    .row-label {
+        max-width: 62%;
+    }
+}
+
+/*
  * Phone shell stacks label-above-control vertically. align-items:
  * center from the desktop layout centred every label and toggle row,
  * which looks like a settings page rendered as a tutorial. Override
@@ -18,7 +36,7 @@
 .row-indented {
     padding-left: var(--theme-spacing-lg);
     margin-left: var(--theme-spacing-md);
-    border-left: 2px solid var(--theme-colors-surface);
+    border-left: 2px solid var(--theme-colors-border);
 }
 
 /*
@@ -33,12 +51,12 @@
     align-items: center;
     padding-bottom: var(--theme-spacing-xs);
     letter-spacing: 0.04em;
-    border-bottom: 1px solid var(--theme-colors-surface);
+    border-bottom: 1px solid var(--theme-colors-border);
     opacity: 0.75;
 }
 
 .subheader-indented {
     padding-left: var(--theme-spacing-lg);
     margin-left: var(--theme-spacing-md);
-    border-left: 2px solid var(--theme-colors-surface);
+    border-left: 2px solid var(--theme-colors-border);
 }

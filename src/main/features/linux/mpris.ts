@@ -95,7 +95,7 @@ mprisPlayer.on('loopStatus', (event: string) => {
     mprisPlayer.loopStatus = event;
 });
 
-mprisPlayer.on('position', (event: any) => {
+mprisPlayer.on('position', (event: { position: number }) => {
     getMainWindow()?.webContents.send('request-position', {
         position: event.position / 1e6,
     });
@@ -185,9 +185,7 @@ ipcMain.on(
                 'xesam:comment': song.comment ? [song.comment] : null,
                 'xesam:contentCreated': song.releaseDate,
                 'xesam:discNumber': song.discNumber ? song.discNumber : null,
-                'xesam:genre': song.genres?.length
-                    ? song.genres.map((genre: any) => genre.name)
-                    : null,
+                'xesam:genre': song.genres?.length ? song.genres.map((genre) => genre.name) : null,
                 'xesam:lastUsed': song.lastPlayedAt,
                 'xesam:title': song.name || null,
                 'xesam:trackNumber': song.trackNumber ? song.trackNumber : null,

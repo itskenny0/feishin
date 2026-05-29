@@ -1,3 +1,5 @@
+import type { TFunction } from 'i18next';
+
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -159,7 +161,7 @@ export const getArtistAlbumsGrouped = (
     routeId: string,
     groupingType: GroupingType,
     artistReleaseTypeItems: { disabled: boolean; id: string }[],
-    t: (key: string, options?: any) => string,
+    t: TFunction,
 ) => {
     const albumsByReleaseType = groupAlbumsByReleaseType(albums, routeId, groupingType);
 

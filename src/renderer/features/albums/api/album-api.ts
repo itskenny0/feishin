@@ -164,6 +164,30 @@ export const albumQueries = {
                                     favoriteAlbumIds = new Set(
                                         favs.filter((f) => f.IsFavorite).map((f) => f.ItemId),
                                     );
+                                    // Favourites are swept AFTER the albums table
+                                    // (see sync/hydrate.ts ordering), and on a
+                                    // cold start `db.favorites` is briefly empty.
+                                    // A `favorite:true` filter against an empty
+                                    // favourites set yields zero rows — but
+                                    // `filterAlbumsLocal` returns an empty
+                                    // *response* (not undefined), so without this
+                                    // guard `getOrComputeSorted` would memoise the
+                                    // empty list under the favourite-filter
+                                    // signature and `cachedSwr` would serve it as a
+                                    // cache hit, suppressing the remote fallback.
+                                    // Nothing invalidates that poisoned entry when
+                                    // the favourites sweep later lands, so the
+                                    // sidebar "Favourite albums" section stayed
+                                    // permanently empty. Treat "favourites needed
+                                    // but none cached yet" as a cache MISS so we
+                                    // fall through to the network (which returns the
+                                    // real favourites) instead of caching nothing.
+                                    if (
+                                        args.query?.favorite === true &&
+                                        favoriteAlbumIds.size === 0
+                                    ) {
+                                        return undefined;
+                                    }
                                 }
                                 const result = filterAlbumsLocal({
                                     favoriteAlbumIds,

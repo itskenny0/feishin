@@ -19,7 +19,7 @@ interface LogFn {
         message?: string,
         options?: {
             category?: string;
-            meta?: any;
+            meta?: unknown;
         },
     ): void;
 }
@@ -34,7 +34,7 @@ interface Logger {
 
 const DEFAULT_LOG_LEVEL = process.env.NODE_ENV === 'production' ? 'info' : 'debug';
 
-const NO_OP: LogFn = (_message?: string, ..._optionalParams: any[]) => {};
+const NO_OP: LogFn = () => {};
 
 const colors = {
     debug: '\x1B[38;2;100;149;237m', // #6495ED
@@ -91,7 +91,7 @@ class ConsoleLogger implements Logger {
     private initializeLoggers(level: LogLevel) {
         // Create timestamp wrapper function with colors and debouncing
         const withTimestamp = (logLevel: string): LogFn => {
-            return (message?: any, options?: { category?: string; meta?: any }) => {
+            return (message?: string, options?: { category?: string; meta?: unknown }) => {
                 const { category, meta } = options || {};
                 const key = JSON.stringify([logLevel, message, category, meta]);
                 const now = Date.now();

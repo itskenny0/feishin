@@ -4,6 +4,7 @@
 // written, failed fetches, etc.
 
 import { Button, Group, Stack, Text, Title } from '@mantine/core';
+import { openConfirmModal } from '@mantine/modals';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -46,18 +47,22 @@ export const CacheStatsWidget = () => {
     }, []);
 
     const handleReset = (): void => {
-        if (
-            typeof window !== 'undefined' &&
-            typeof window.confirm === 'function' &&
-            !window.confirm(
-                t('page.setting.librarySyncDashboard.statsResetConfirm', {
-                    defaultValue: 'Reset cache hit/miss stats? Historical data will be lost.',
+        openConfirmModal({
+            centered: true,
+            children: t('page.setting.librarySyncDashboard.statsResetConfirm', {
+                defaultValue: 'Reset cache hit/miss stats? Historical data will be lost.',
+            }),
+            labels: {
+                cancel: t('common.cancel', { defaultValue: 'Cancel' }),
+                confirm: t('page.setting.librarySyncDashboard.statsReset', {
+                    defaultValue: 'Reset stats',
                 }),
-            )
-        ) {
-            return;
-        }
-        resetStats();
+            },
+            onConfirm: () => resetStats(),
+            title: t('page.setting.librarySyncDashboard.statsResetTitle', {
+                defaultValue: 'Reset stats',
+            }),
+        });
     };
 
     const lookups = stats.blobHits + stats.missMarkerHits + stats.fetched + stats.missWrites;

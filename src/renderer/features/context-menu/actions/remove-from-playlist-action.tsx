@@ -41,9 +41,9 @@ export const RemoveFromPlaylistAction = ({ items }: RemoveFromPlaylistActionProp
             toast.success({
                 message: t('action.removeFromPlaylist'),
             });
-        } catch (err: any) {
+        } catch (err) {
             toast.error({
-                message: err.message,
+                message: err instanceof Error ? err.message : undefined,
                 title: t('error.genericError'),
             });
         }

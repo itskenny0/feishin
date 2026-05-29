@@ -274,7 +274,7 @@ export const ControlSettings = memo(() => {
                     onBlur={(e) => {
                         if (!e) return;
                         const newVal = e.currentTarget.value
-                            ? Math.min(Math.max(Number(e.currentTarget.value), 10), 100)
+                            ? Math.min(Math.max(Number(e.currentTarget.value), 10), 200)
                             : settings.artistRadioCount;
                         setSettings({
                             general: {

@@ -94,6 +94,12 @@ jobs:
             - name: Set artifact version
               run: npm pkg set version="${{ needs.prepare.outputs.packageVersion }}"
             - name: Build web bundle
+              # The macOS runner's node defaults to a ~2 GB old-space heap and
+              # the PWA bundle now peaks just over that (OOM / exit 134 on the
+              # arm64 runner, while the Linux Android runner squeaks by). Give
+              # node headroom so the web build can't run out of heap.
+              env:
+                  NODE_OPTIONS: --max-old-space-size=6144
               run: pnpm build:web
             - name: Generate stub settings.js
               # settings.js.template is the Docker-deploy runtime-config file;

@@ -21,7 +21,7 @@
      * back/close/etc buttons need to stay clear of the clock.
      */
     padding-top: max(env(safe-area-inset-top, 0px), var(--android-safe-top, 0px));
-    background: rgb(var(--theme-colors-background-transparent), 80%);
+    background: color-mix(in srgb, var(--theme-colors-background) 80%, transparent);
 }
 
 /*

@@ -41,7 +41,7 @@ export interface LrcLibTrackResponse {
 }
 
 export async function getLyricsBySongId(songId: string): Promise<null | string> {
-    let result: AxiosResponse<LrcLibTrackResponse, any>;
+    let result: AxiosResponse<LrcLibTrackResponse>;
 
     try {
         result = await axios.get<LrcLibTrackResponse>(`${FETCH_URL}/${songId}`);
@@ -93,7 +93,7 @@ export async function getSearchResults(
 export async function query(
     params: LyricSearchQuery,
 ): Promise<InternetProviderLyricResponse | null> {
-    let result: AxiosResponse<LrcLibTrackResponse, any>;
+    let result: AxiosResponse<LrcLibTrackResponse>;
 
     try {
         result = await axios.get<LrcLibTrackResponse>(FETCH_URL, {

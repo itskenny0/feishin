@@ -265,7 +265,16 @@
         "searchTitle": "No results",
         "searchDescription": "We couldn't find anything matching that search.",
         "queueTitle": "Your queue is empty",
-        "queueDescription": "Pick a song from the library and the queue will pick up from there."
+        "queueDescription": "Pick a song from the library and the queue will pick up from there.",
+        "artistsTitle": "No artists yet",
+        "artistsDescription": "Artists will appear here once your library is scanned.",
+        "albumArtistsTitle": "No album artists yet",
+        "albumArtistsDescription": "Album artists will appear here once your library is scanned.",
+        "genresTitle": "No genres yet",
+        "genresDescription": "Genres will appear here once your library is scanned.",
+        "playlistsTitle": "No playlists yet",
+        "playlistsDescription": "Create a playlist to start organizing your music.",
+        "createPlaylist": "Create playlist"
     },
     "error": {
         "apiRouteError": "Unable to route request",
@@ -1119,6 +1128,7 @@
         "addNext": "Next",
         "addLastShuffled": "Last (shuffled)",
         "addNextShuffled": "Next (shuffled)",
+        "addedToQueue": "Added \"{{item}}\" to the queue",
         "albumRadio": "Album radio",
         "artistRadio": "Artist radio",
         "holdToShuffle": "Hold to shuffle",

@@ -65,7 +65,7 @@ const getPathReplaceSettings = () => {
     return { pathReplace, pathReplaceWith };
 };
 
-const addContext = <T extends { apiClientProps: any; context?: any }>(args: T): T => {
+const addContext = <T extends { apiClientProps: unknown; context?: unknown }>(args: T): T => {
     const pathSettings = getPathReplaceSettings();
 
     return {

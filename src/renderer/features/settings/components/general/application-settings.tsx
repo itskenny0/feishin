@@ -160,7 +160,7 @@ export const ApplicationSettings = memo(() => {
                     // WARNING (Oct 17 2023): while this query is valid for chromium-based
                     // browsers, it is still experimental, and so Typescript will complain
                     const status = await navigator.permissions.query({
-                        name: 'local-fonts' as any,
+                        name: 'local-fonts' as PermissionName,
                     });
 
                     if (status.state === 'denied') {

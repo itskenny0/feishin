@@ -25,6 +25,12 @@
  * designed for desktop widths. Spotify / Apple Music / YouTube Music
  * all handle this with a single horizontally-scrollable row of pills.
  *
+ * Extended to <= 900px (was < 768px) so the tablet-portrait band
+ * (768–834, desktop shell with a narrow content area) keeps the same
+ * finger-scrollable pill row instead of reverting to the desktop
+ * space-between layout, where the right-hand cluster (display toggle,
+ * config menu) clips off the right edge once the controls overflow.
+ *
  * Mobile rules:
  *   1. overflow-x: auto on the bar so the user can pan-x to reach the
  *      off-screen controls.
@@ -42,7 +48,7 @@
  *   6. Scrollbar hidden — the row should feel like a finger-pushed
  *      strip rather than a UI element with chrome.
  */
-@media (width < 768px) {
+@media (width <= 900px) {
     .filter-bar {
         overflow-x: auto;
         overflow-y: hidden;

@@ -321,13 +321,25 @@ export const MpvSettings = memo(() => {
             control: (
                 <NumberInput
                     defaultValue={settings.mpvProperties.replayGainFallbackDB}
-                    onBlur={(e) =>
-                        handleSetMpvProperty('replayGainFallbackDB', Number(e.currentTarget.value))
-                    }
-                    width={75}
+                    onBlur={(e) => {
+                        const raw = e.currentTarget.value;
+                        // Empty input clears the fallback (untagged tracks left
+                        // untouched); a number — including 0 — is an explicit
+                        // fallback applied library-wide to untagged tracks.
+                        handleSetMpvProperty(
+                            'replayGainFallbackDB',
+                            raw === '' ? undefined : Number(raw),
+                        );
+                    }}
+                    rightSection={<Text size="xs">dB</Text>}
+                    step={0.5}
+                    width={90}
                 />
             ),
-            description: t('setting.replayGainFallback', { ReplayGain: 'ReplayGain' }),
+            description: t('setting.replayGainFallback', {
+                context: 'description',
+                ReplayGain: 'ReplayGain',
+            }),
             title: t('setting.replayGainFallback', { ReplayGain: 'ReplayGain' }),
         },
     ];

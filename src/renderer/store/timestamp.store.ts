@@ -55,10 +55,6 @@ export const subscribePlayerProgress = (
     );
 };
 
-export const usePlayerProgress = () => {
-    return useTimestampStoreBase((state) => state.timestamp);
-};
-
 export const usePlayerTimestamp = () => {
     return useTimestampStoreBase((state) => state.timestamp);
 };

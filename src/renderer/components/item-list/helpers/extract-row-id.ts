@@ -12,14 +12,16 @@ export const createExtractRowId = (
             return undefined;
         }
 
+        const record = item as Record<string, unknown>;
+
         if (getRowId === undefined) {
             // Default behavior: use 'id' property
-            return (item as any).id;
+            return record.id as string | undefined;
         }
 
         if (typeof getRowId === 'string') {
             // getRowId is a property name
-            return (item as any)[getRowId];
+            return record[getRowId] as string | undefined;
         }
 
         // getRowId is a function

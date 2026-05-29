@@ -45,7 +45,7 @@ export const useSyncSettingsToMain = () => {
 
             const settingsMappings: Array<{
                 mainStoreKey: string;
-                rendererValue: any;
+                rendererValue: boolean | Record<string, unknown> | string | string[] | undefined;
             }> = [
                 {
                     mainStoreKey: 'lyrics',

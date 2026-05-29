@@ -13,6 +13,7 @@ import type {
     CachedPlaylistSong,
     CachedSong,
     CachedThumbnail,
+    CachedTrackmap,
     MutationRow,
     OfflineTargetRow,
     SyncMetaRow,
@@ -44,6 +45,10 @@ export class LibraryCacheDb extends Dexie {
     songs!: EntityTable<CachedSong, 'Id'>;
     syncMeta!: EntityTable<SyncMetaRow, 'EntityType'>;
     thumbnails!: EntityTable<CachedThumbnail, 'ItemId'>;
+    // Lazily-generated trackmap spectrum analyses. Compound primary key
+    // `[SongId+Sensitivity+Version]` (see CachedTrackmap). Never populated by
+    // the sync sweep — written only on first play/visualise of a song.
+    trackmaps!: Table<CachedTrackmap, [string, number, number]>;
 
     constructor(name: string) {
         super(name);
@@ -262,6 +267,36 @@ export class LibraryCacheDb extends Dexie {
             songs: 'Id, AlbumId, [AlbumId+ParentIndexNumber+IndexNumber], AlbumArtistId, DateLastSaved, [AlbumId+IndexNumber], __cachedAt',
             syncMeta: 'EntityType',
             thumbnails: 'ItemId, LastUsed, ByteSize, MissAt, __cachedAt',
+        });
+
+        // v10: additive — adds the `trackmaps` store for the lazily-generated
+        // spectrum analyses. Compound primary key `[SongId+Sensitivity+Version]`
+        // so multiple sensitivity settings coexist and a TRACKMAP_DATA_VERSION
+        // bump turns every prior row into a natural cache miss (forcing
+        // re-analysis with the new algorithm rather than serving a stale blob).
+        // `SongId` is indexed for a direct lookup/delete by song, `LastUsed`
+        // powers the LRU eviction pass, and `ByteSize` lets the eviction pass
+        // sum sizes via the index keys without materialising every Bins buffer.
+        // CRITICAL: this table is NEVER written by the library sync sweep — it
+        // is populated only when a song is actually played/visualised. Every
+        // existing v9 store is re-declared identically so Dexie performs zero
+        // row-copy work; the new table starts empty.
+        this.version(10).stores({
+            albums: 'Id, AlbumArtistId, [AlbumArtistId+SortName], DateLastSaved, SortName, ProductionYear, *GenreIds, __cachedAt',
+            artists: 'Id, SortName, Name, DateLastSaved, Kind, __cachedAt',
+            favorites:
+                '[ItemId+ItemType], ItemType, IsFavorite, Rating, LastPlayedDate, PlayCount, __cachedAt',
+            genres: 'Id, SortName, Name, __cachedAt',
+            lyrics: 'SongId, __cachedAt',
+            mediaBlobs: 'Key, SongId, *EntityKeys, ByteSize, DownloadedAt',
+            mutationQueue: 'id, status, createdAt, idempotencyKey',
+            offlineTargets: 'Key, EntityType, Status, AddedAt',
+            playlists: 'Id, SortName, DateLastSaved, __cachedAt',
+            playlistSongs: '[PlaylistId+ListOrder], PlaylistId, SongId, __cachedAt',
+            songs: 'Id, AlbumId, [AlbumId+ParentIndexNumber+IndexNumber], AlbumArtistId, DateLastSaved, [AlbumId+IndexNumber], __cachedAt',
+            syncMeta: 'EntityType',
+            thumbnails: 'ItemId, LastUsed, ByteSize, MissAt, __cachedAt',
+            trackmaps: '[SongId+Sensitivity+Version], SongId, LastUsed, ByteSize, __cachedAt',
         });
     }
 }

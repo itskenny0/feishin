@@ -39,6 +39,18 @@
     &:hover button {
         display: block;
     }
+
+    /*
+     * Touch tablets run the desktop shell here, so :hover never fires
+     * and the cover-expand button would be unreachable. Keep it visible
+     * on coarse pointers (Spotify shows an always-on expand chip on
+     * touch too).
+     */
+    @media (pointer: coarse) {
+        button {
+            display: block;
+        }
+    }
 }
 
 .playerbar-image {

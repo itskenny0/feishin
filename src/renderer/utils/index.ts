@@ -6,6 +6,5 @@ export * from './parse-search-params';
 export * from './random-string';
 export * from './rgb-to-rgba';
 export * from './sentence-case';
-export * from './set-local-storage-setttings';
 export * from './title-case';
 export * from './truncate-middle';

@@ -28,6 +28,11 @@ export type RemoteHoldField =
     | 'isPaused'
     | 'nowPlayingItemId'
     | 'positionMs'
+    // Finding 1: queueIndex is a TOP-LEVEL mirrored field (not under playState).
+    // optimisticNext/Previous + mediaPlayByIndex install this hold so a stale
+    // /Sessions frame that recomputes the OLD index from the not-yet-updated
+    // NowPlayingItem can't snap the queue highlight back to the previous track.
+    | 'queueIndex'
     | 'repeatMode'
     | 'shuffle'
     | 'volume';
@@ -273,6 +278,25 @@ export const useRemoteTargetStore = create<RemoteTargetState>((set) => ({
                     }
                 }
 
+                // Finding 1: queueIndex hold — a stale frame recomputes the OLD
+                // index from the not-yet-updated NowPlayingItem and would snap
+                // the queue highlight back. Revert the incoming queueIndex to the
+                // optimistic value while the hold is live, and clear on agreement
+                // or expiry. queueIndex is a top-level field, so an incoming
+                // value arrives via `incomingTopLevel` (already spread above) and
+                // we restore from the prior mirrored value.
+                const qIdxHold = holds.queueIndex;
+                if (qIdxHold && 'queueIndex' in incoming) {
+                    const incomingIdx = incoming.queueIndex;
+                    if (valuesAgree('queueIndex', qIdxHold.expected, incomingIdx)) {
+                        delete holds.queueIndex;
+                    } else if (now < qIdxHold.until) {
+                        mirrored = { ...mirrored, queueIndex: qIdxHold.expected as number };
+                    } else {
+                        delete holds.queueIndex;
+                    }
+                }
+
                 return { holds, mirrored };
             }),
         clearTarget: () =>
@@ -322,6 +346,9 @@ export const useRemoteTargetStore = create<RemoteTargetState>((set) => ({
                         ...s.holds,
                         nowPlayingItemId: { expected: nextItem.id, until: now + DEFAULT_HOLD_MS },
                         positionMs: { expected: 0, until: now + DEFAULT_HOLD_MS },
+                        // Finding 1: pin the advanced index so a stale poll that
+                        // recomputes the old index can't bounce the highlight.
+                        queueIndex: { expected: idx + 1, until: now + DEFAULT_HOLD_MS },
                     },
                     mirrored: {
                         ...s.mirrored,
@@ -364,6 +391,8 @@ export const useRemoteTargetStore = create<RemoteTargetState>((set) => ({
                         ...s.holds,
                         nowPlayingItemId: { expected: prevItem.id, until: now + DEFAULT_HOLD_MS },
                         positionMs: { expected: 0, until: now + DEFAULT_HOLD_MS },
+                        // Finding 1: pin the rewound index (see optimisticNext).
+                        queueIndex: { expected: idx - 1, until: now + DEFAULT_HOLD_MS },
                     },
                     mirrored: {
                         ...s.mirrored,
@@ -473,9 +502,18 @@ export const useRemoteTargetStore = create<RemoteTargetState>((set) => ({
                           // different population. Letting them linger leaks
                           // last-server devices into the picker until the
                           // next tick lands.
+                          //
+                          // Finding 3: do NOT clear `holds` here. The poller hook
+                          // tears the poller down on every isPickerOpen flip, so
+                          // opening the device picker while connected used to wipe
+                          // every in-flight optimistic hold (pause/seek/skip) —
+                          // the exact snap-back the hold system prevents. Holds
+                          // are only meaningful with a target, and `clearTarget`
+                          // already resets them, so a genuine target teardown is
+                          // still covered. Picker open/close no longer destroys
+                          // holds.
                           deviceList: [],
                           hasPolledOnce: false,
-                          holds: {},
                           pollError: null,
                       },
             ),

@@ -47,6 +47,42 @@ interface GridCarouselProps {
     title?: ReactNode | string;
 }
 
+/**
+ * Returns the page the carousel should be on after `cardCount` items become
+ * available, given the current `page` and `pageSize`. When the underlying
+ * card set shrinks so the current page would slice past the end, this snaps
+ * back to the last non-empty page so the user is never stranded on a blank
+ * page with both nav arrows disabled.
+ *
+ * Returns the same `page` (no clamp needed) when:
+ *   - `pageSize` is non-positive (page math not yet meaningful), or
+ *   - more pages are still pending fetch (`hasNextPage === true`) — clamping
+ *     then would fight a legitimately-advancing infinite query, or
+ *   - the current page still has content.
+ */
+export function clampCarouselPage(
+    page: number,
+    cardCount: number,
+    pageSize: number,
+    hasNextPage?: boolean,
+): number {
+    if (pageSize <= 0) {
+        return page;
+    }
+
+    if (hasNextPage === true) {
+        return page;
+    }
+
+    const lastPage = cardCount > 0 ? Math.ceil(cardCount / pageSize) - 1 : 0;
+
+    if (page > lastPage) {
+        return Math.max(0, lastPage);
+    }
+
+    return page;
+}
+
 const MemoizedCard = memo(({ content }: { content: ReactNode }) => (
     <div className={styles.card}>{content}</div>
 ));
@@ -89,21 +125,29 @@ function BaseGridCarousel(props: GridCarouselProps) {
         page: 0,
     });
 
+    // Mirror of the current page index so the nav callbacks can report it to
+    // the parent (`onPrevPage`/`onNextPage`) without closing over the whole
+    // `currentPage` object. Keeps the callbacks stable across page changes —
+    // and the deps honest, which the React Compiler's manual-memoization check
+    // requires — instead of recreating them every page.
+    const currentPageRef = useRef(currentPage.page);
+    currentPageRef.current = currentPage.page;
+
     const handlePrevPage = useCallback(() => {
         setCurrentPage((prev) => ({
             isNext: false,
             page: prev.page > 0 ? prev.page - 1 : 0,
         }));
-        onPrevPage(currentPage.page);
-    }, [currentPage, onPrevPage]);
+        onPrevPage(currentPageRef.current);
+    }, [onPrevPage]);
 
     const handleNextPage = useCallback(() => {
         setCurrentPage((prev) => ({
             isNext: true,
             page: prev.page + 1,
         }));
-        onNextPage(currentPage.page);
-    }, [currentPage, onNextPage]);
+        onNextPage(currentPageRef.current);
+    }, [onNextPage]);
 
     const cardsToShow = getCardsToShow({
         isLargerThan2xl: cq.is2xl,
@@ -165,6 +209,23 @@ function BaseGridCarousel(props: GridCarouselProps) {
             loadNextPage?.();
         }
     }, [loadNextPage, shouldLoadNextPage]);
+
+    // Clamp the current page when the underlying `cards` array shrinks (e.g. a
+    // random-carousel refresh that returns fewer items, or `excludeIds`
+    // filtering out the page's items). Without this the slice runs past the
+    // end and the carousel renders an empty page with both nav arrows
+    // disabled, stranding the user. Snap back to the last non-empty page.
+    const pageSize = cardsToShow * rowCount;
+
+    useEffect(() => {
+        const clamped = clampCarouselPage(currentPage.page, cards.length, pageSize, hasNextPage);
+        if (clamped !== currentPage.page) {
+            setCurrentPage({
+                isNext: false,
+                page: clamped,
+            });
+        }
+    }, [cards.length, pageSize, currentPage.page, hasNextPage]);
 
     const isPrevDisabled = currentPage.page === 0;
     const hasMoreCards = (currentPage.page + 1) * cardsToShow * rowCount < cards.length;

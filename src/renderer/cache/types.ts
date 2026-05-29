@@ -136,6 +136,44 @@ export interface CachedThumbnail extends CachedBase {
     Size?: number;
 }
 
+/**
+ * A lazily-generated trackmap (intensity-spectrum) analysis result for one
+ * song at one sensitivity setting. Generated ONLY the first time a song is
+ * played/visualised — never pre-generated during the library sync sweep —
+ * then cached here so subsequent plays skip the (expensive) decode + DSP pass.
+ *
+ * Primary key is the compound `[SongId+Sensitivity+Version]`:
+ *   - `SongId` namespaces per track (the cache DB is already per server+user,
+ *     so the song id alone is unambiguous within a single DB).
+ *   - `Sensitivity` is the user-tunable analysis knob — changing it produces a
+ *     visually different curve, so each value gets its own row.
+ *   - `Version` is the algorithm/output-format version (TRACKMAP_DATA_VERSION).
+ *     Bumping it makes every prior row a natural cache miss, forcing re-analysis
+ *     with the new algorithm rather than serving a stale-shaped blob.
+ */
+export interface CachedTrackmap extends CachedBase {
+    // The intensity bins (length = TRACKMAP_BIN_COUNT, values in [0,1]). Stored
+    // as a Float32Array — IndexedDB's structured clone round-trips typed arrays
+    // losslessly, so no JSON stringify/parse is needed.
+    Bins: Float32Array;
+    // Bytes occupied by `Bins` (Float32Array.byteLength). Promoted to a top-
+    // level indexed column so the eviction pass can sum sizes via the index
+    // keys without materialising every Bins buffer.
+    ByteSize: number;
+    // Date.now() when the analysis was computed — debugging only.
+    ComputedAt: number;
+    // Decoded audio duration in ms (may differ from song metadata duration).
+    DurationMs: number;
+    // LRU timestamp — bumped on every cache hit so the eviction pass drops the
+    // least-recently-played analyses first.
+    LastUsed: number;
+    // The analysis sensitivity knob this row was computed at.
+    Sensitivity: number;
+    SongId: string;
+    // TRACKMAP_DATA_VERSION at write time.
+    Version: number;
+}
+
 export type EntityType =
     | 'albums'
     | 'artists'

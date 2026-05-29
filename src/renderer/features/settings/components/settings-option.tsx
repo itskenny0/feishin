@@ -73,14 +73,7 @@ export const SettingsOptions = memo(
                     justify="space-between"
                     wrap="nowrap"
                 >
-                    <Stack
-                        gap="xs"
-                        style={{
-                            alignSelf: 'flex-start',
-                            display: 'flex',
-                            maxWidth: '50%',
-                        }}
-                    >
+                    <Stack className={styles.rowLabel} gap="xs">
                         <Group>
                             <Text isNoSelect size="md">
                                 {title}

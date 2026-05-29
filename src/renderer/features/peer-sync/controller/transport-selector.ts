@@ -165,6 +165,26 @@ export const recordPresence = (
 };
 
 /**
+ * Freshness-only refresh (SEV-1). A successful liveness probe (pong) proves the
+ * peer is still alive, so bump its `lastSeenAt` WITHOUT touching `online` or the
+ * `jellyfinDeviceId` reverse-map binding. This is deliberately NOT
+ * `recordPresence(peer, true, now)` — that path deletes the reverse-map entry
+ * whenever the supplied `dev` differs from the stored one (including the
+ * `undefined` a pong carries), which would silently destroy the
+ * jfDeviceId -> peerId bridge (SEV-4). A peer we've never seen a presence frame
+ * for is ignored: a pong from an unknown peer can't conjure a presence record
+ * out of thin air (online/dev would be unknowable).
+ */
+export const touchPresence = (peerId: string, now: number = Date.now()): void => {
+    const rec = state.presence.get(peerId);
+    if (!rec) return;
+    rec.lastSeenAt = now;
+    // Re-arm observers in case the peer had already aged out and a stale
+    // 'jellyfin' was last reported — the refresh flips it back to 'mqtt'.
+    notifyIfChanged(peerId, now);
+};
+
+/**
  * Forget a peer entirely — e.g. when the user clears the target or the
  * client disconnects. Drops the reverse-map entry too if it still points
  * to this peer.

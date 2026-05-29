@@ -35,7 +35,7 @@ interface Album {
 
 interface Artist {
     albumSize: number;
-    alias: any[];
+    alias: unknown[];
     fansGroup: null;
     id: number;
     img1v1: number;
@@ -44,6 +44,11 @@ interface Artist {
     picId: number;
     picUrl: null;
     trans: null;
+}
+
+interface NetEaseLyricResponse {
+    lrc?: { lyric?: string };
+    tlyric?: { lyric?: string };
 }
 
 interface NetEaseResponse {
@@ -70,9 +75,9 @@ interface Song {
 }
 
 export async function getLyricsBySongId(songId: string): Promise<null | string> {
-    let result: AxiosResponse<any, any>;
+    let result: AxiosResponse<NetEaseLyricResponse>;
     try {
-        result = await axios.get(LYRICS_URL, {
+        result = await axios.get<NetEaseLyricResponse>(LYRICS_URL, {
             params: {
                 id: songId,
                 kv: '-1',
@@ -115,7 +120,7 @@ export async function getSearchResults(
     }
 
     try {
-        result = await axios.get(SEARCH_URL, {
+        result = await axios.get<NetEaseResponse>(SEARCH_URL, {
             params: {
                 limit: 5,
                 offset: 0,

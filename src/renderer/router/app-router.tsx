@@ -1,3 +1,5 @@
+import type { ComponentProps } from 'react';
+
 import { lazy, Suspense } from 'react';
 import { HashRouter, Navigate, Route, Routes } from 'react-router';
 
@@ -93,7 +95,9 @@ const LazyLyricsSettingsContextModal = lazy(() =>
     })),
 );
 
-const LyricsSettingsContextModal = (props: any) => (
+const LyricsSettingsContextModal = (
+    props: ComponentProps<typeof LazyLyricsSettingsContextModal>,
+) => (
     <Suspense fallback={<Spinner container />}>
         <LazyLyricsSettingsContextModal {...props} />
     </Suspense>
@@ -107,7 +111,7 @@ const LazyAddToPlaylistContextModal = lazy(() =>
     ),
 );
 
-const AddToPlaylistContextModal = (props: any) => (
+const AddToPlaylistContextModal = (props: ComponentProps<typeof LazyAddToPlaylistContextModal>) => (
     <Suspense fallback={<Spinner container />}>
         <LazyAddToPlaylistContextModal {...props} />
     </Suspense>
@@ -121,7 +125,9 @@ const LazySaveAndReplaceContextModal = lazy(() =>
     ),
 );
 
-const SaveAndReplaceContextModal = (props: any) => (
+const SaveAndReplaceContextModal = (
+    props: ComponentProps<typeof LazySaveAndReplaceContextModal>,
+) => (
     <Suspense fallback={<Spinner container />}>
         <LazySaveAndReplaceContextModal {...props} />
     </Suspense>
@@ -133,7 +139,9 @@ const LazyUpdatePlaylistContextModal = lazy(() =>
     })),
 );
 
-const UpdatePlaylistContextModal = (props: any) => (
+const UpdatePlaylistContextModal = (
+    props: ComponentProps<typeof LazyUpdatePlaylistContextModal>,
+) => (
     <Suspense fallback={<Spinner container />}>
         <LazyUpdatePlaylistContextModal {...props} />
     </Suspense>
@@ -145,9 +153,11 @@ const LazySettingsContextModal = lazy(() =>
     })),
 );
 
-const SettingsContextModal = (props: any) => (
+// SettingsContextModal takes no props; ComponentProps collapses to `unknown`
+// for a zero-arg component, so render it bare rather than spreading.
+const SettingsContextModal = () => (
     <Suspense fallback={<Spinner container />}>
-        <LazySettingsContextModal {...props} />
+        <LazySettingsContextModal />
     </Suspense>
 );
 
@@ -157,7 +167,7 @@ const LazyShareItemContextModal = lazy(() =>
     })),
 );
 
-const ShareItemContextModal = (props: any) => (
+const ShareItemContextModal = (props: ComponentProps<typeof LazyShareItemContextModal>) => (
     <Suspense fallback={<Spinner container />}>
         <LazyShareItemContextModal {...props} />
     </Suspense>
@@ -171,9 +181,10 @@ const LazyVisualizerSettingsContextModal = lazy(() =>
     ),
 );
 
-const VisualizerSettingsContextModal = (props: any) => (
+// Zero-prop modal (see SettingsContextModal above) — render bare.
+const VisualizerSettingsContextModal = () => (
     <Suspense fallback={<Spinner container />}>
-        <LazyVisualizerSettingsContextModal {...props} />
+        <LazyVisualizerSettingsContextModal />
     </Suspense>
 );
 

@@ -348,6 +348,10 @@ button {
     --theme-colors-primary-filled: var(--mantine-primary-color-filled);
     --theme-colors-primary-contrast: var(--mantine-primary-color-contrast);
 
+    /* Single source of truth for the "favorite" accent (heart/like). Was
+       duplicated as a bare rgb(255 49 49) literal in icon.module.css. */
+    --theme-colors-favorite: rgb(255 49 49);
+
     @mixin light-root {
         --theme-colors-border: rgb(0 0 0 / 5%);
     }

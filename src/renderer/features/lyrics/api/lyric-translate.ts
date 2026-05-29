@@ -5,7 +5,7 @@ export const translateLyrics = async (
     translationApiKey: string,
     translationApiProvider: null | string,
     translationTargetLanguage: null | string,
-) => {
+): Promise<null | string> => {
     let TranslatedText = '';
     if (translationApiProvider === 'Microsoft Azure') {
         try {

@@ -14,7 +14,10 @@ import {
 } from '/@/renderer/features/jellyfin-remote-target/controller/remote-play';
 import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
 import { peerDispatcher } from '/@/renderer/features/peer-sync/controller/peer-dispatcher';
-import { getPeerIdForJellyfinDeviceId } from '/@/renderer/features/peer-sync/controller/transport-selector';
+import {
+    getPeerIdForJellyfinDeviceId,
+    pickTransport,
+} from '/@/renderer/features/peer-sync/controller/transport-selector';
 import { jellyfinToPeerRepeat } from '/@/renderer/features/peer-sync/protocol/builders';
 import {
     fetchPlaylistSongsBatch,
@@ -187,6 +190,31 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
             sessionId: target.sessionId,
         };
     }, []);
+
+    /**
+     * J4: capability gate for the Jellyfin lane. Many Jellyfin targets advertise
+     * transport control but NOT SetVolume / SetRepeatMode / SetShuffleQueue /
+     * Mute (jellyfin-web, Chromecast). Sending those yields a 4xx → error toast,
+     * or a silent no-op while the controller's optimistic mirror lies (slider
+     * moves then snaps back). Before optimistically patching + dispatching a
+     * GeneralCommand-class verb, confirm the target's `SupportedCommands`
+     * (mirrored.capabilities) actually lists it. The MQTT lane has no such
+     * restriction — its receiver applies every verb locally — so the check is
+     * SKIPPED when MQTT owns the lane. Returns true when the command may proceed.
+     */
+    const remoteCmdAllowed = useCallback(
+        (remote: { peer: { peerId: string } }, capability: string): boolean => {
+            // MQTT lane: receiver handles everything, no capability gating.
+            if (remote.peer.peerId && pickTransport(remote.peer.peerId) === 'mqtt') return true;
+            const caps = useRemoteTargetStore.getState().mirrored.capabilities;
+            // Be permissive when the target advertised NO capabilities at all —
+            // an empty list usually means the session simply didn't report them,
+            // and refusing every command there would be worse than today.
+            if (!caps || caps.length === 0) return true;
+            return caps.includes(capability);
+        },
+        [],
+    );
 
     /**
      * If a remote target is active and this intent can be expressed as a
@@ -704,24 +732,6 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
         storeActions.mediaPause();
     }, [getRemoteCtx, storeActions]);
 
-    const mediaPlay = useCallback(
-        (id?: string) => {
-            logFn.debug(logMsg[LogCategory.PLAYER].mediaPlay, {
-                category: LogCategory.PLAYER,
-                meta: { id },
-            });
-
-            const remote = getRemoteCtx();
-            if (remote) {
-                peerDispatcher.unpause(remote);
-                useRemoteTargetStore.getState().actions.setPaused(false);
-                return;
-            }
-            storeActions.mediaPlay(id);
-        },
-        [getRemoteCtx, storeActions],
-    );
-
     const mediaPlayByIndex = useCallback(
         (index: number) => {
             logFn.debug(logMsg[LogCategory.PLAYER].mediaPlayByIndex, {
@@ -747,6 +757,10 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
                     ...(item ? { nowPlayingItem: item } : {}),
                     queueIndex: index,
                 });
+                // Finding 1: install a queueIndex hold alongside the track hold
+                // so a stale poll's recomputed (old) index can't snap the queue
+                // highlight back while the new track is held.
+                actions.hold('queueIndex', index);
                 actions.patchPlayState({ isPaused: false, positionMs: 0, positionSampledAt: now });
                 if (item) {
                     // Track-identity hold (DEFAULT_HOLD_MS ~6s, covering the next
@@ -759,6 +773,43 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
             storeActions.mediaPlayByIndex(index);
         },
         [getRemoteCtx, storeActions],
+    );
+
+    const mediaPlay = useCallback(
+        (id?: string) => {
+            logFn.debug(logMsg[LogCategory.PLAYER].mediaPlay, {
+                category: LogCategory.PLAYER,
+                meta: { id },
+            });
+
+            const remote = getRemoteCtx();
+            if (remote) {
+                // H2: locally `mediaPlay(uniqueId)` JUMPS to that queue item (a
+                // double-click on a queue row, item-list-controls passes
+                // queueSong._uniqueId). The remote branch used to discard `id`
+                // and merely resume the current track — wrong song. Resolve the
+                // id against the mirrored queue (match by _uniqueId OR id, since
+                // MQTT-lane stubs only carry id) and route through the corrected
+                // skip-to-index path. Only fall back to resume when no id was
+                // supplied.
+                if (id) {
+                    const queue = useRemoteTargetStore.getState().mirrored.queue;
+                    const idx = queue.findIndex(
+                        (s) => (s as { _uniqueId?: string })._uniqueId === id || s.id === id,
+                    );
+                    if (idx >= 0) {
+                        mediaPlayByIndex(idx);
+                        return;
+                    }
+                    // Unknown id (un-hydrated mirror) — best effort: resume.
+                }
+                peerDispatcher.unpause(remote);
+                useRemoteTargetStore.getState().actions.setPaused(false);
+                return;
+            }
+            storeActions.mediaPlay(id);
+        },
+        [getRemoteCtx, mediaPlayByIndex, storeActions],
     );
 
     const mediaPrevious = useCallback(() => {
@@ -858,6 +909,9 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
         });
         const remote = getRemoteCtx();
         if (remote) {
+            // J4: skip when the Jellyfin target can't mute — avoids a 4xx toast
+            // and a lying optimistic icon flip on a capable-but-limited target.
+            if (!remoteCmdAllowed(remote, 'Mute')) return;
             // Jellyfin reports IsMuted independently of VolumeLevel — a
             // session can be muted at vol 50. Read the mirrored isMuted flag,
             // not volume===0. Then patch optimistically so the icon doesn't
@@ -868,7 +922,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
             return;
         }
         storeActions.mediaToggleMute();
-    }, [getRemoteCtx, storeActions]);
+    }, [getRemoteCtx, remoteCmdAllowed, storeActions]);
 
     const mediaTogglePlayPause = useCallback(() => {
         logFn.debug(logMsg[LogCategory.PLAYER].mediaTogglePlayPause, {
@@ -948,6 +1002,8 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
             });
             const remote = getRemoteCtx();
             if (remote) {
+                // J4: skip when the Jellyfin target doesn't accept SetVolume.
+                if (!remoteCmdAllowed(remote, 'SetVolume')) return;
                 peerDispatcher.setVolume(remote, volume);
                 useRemoteTargetStore.getState().actions.patchPlayState({
                     volume: Math.max(0, Math.min(100, Math.round(volume))),
@@ -956,7 +1012,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
             }
             storeActions.setVolume(volume);
         },
-        [getRemoteCtx, storeActions],
+        [getRemoteCtx, remoteCmdAllowed, storeActions],
     );
 
     const setRepeat = useCallback(
@@ -968,6 +1024,8 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
 
             const remote = getRemoteCtx();
             if (remote) {
+                // J4: skip when the Jellyfin target doesn't accept SetRepeatMode.
+                if (!remoteCmdAllowed(remote, 'SetRepeatMode')) return;
                 const jf = playerRepeatToJellyfin(repeat);
                 // peerDispatcher.setRepeat takes the compact PeerRepeatMode
                 // (the Jellyfin string is re-derived inside its jellyfin lane).
@@ -977,7 +1035,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
             }
             storeActions.setRepeat(repeat);
         },
-        [getRemoteCtx, storeActions],
+        [getRemoteCtx, remoteCmdAllowed, storeActions],
     );
 
     const setShuffle = useCallback(
@@ -989,6 +1047,8 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
 
             const remote = getRemoteCtx();
             if (remote) {
+                // J4: skip when the Jellyfin target doesn't accept SetShuffleQueue.
+                if (!remoteCmdAllowed(remote, 'SetShuffleQueue')) return;
                 const on = shuffle === PlayerShuffle.TRACK;
                 peerDispatcher.setShuffle(remote, on);
                 useRemoteTargetStore.getState().actions.patchPlayState({ shuffle: on });
@@ -996,7 +1056,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
             }
             storeActions.setShuffle(shuffle);
         },
-        [getRemoteCtx, storeActions],
+        [getRemoteCtx, remoteCmdAllowed, storeActions],
     );
 
     const shuffle = useCallback(() => {
@@ -1034,6 +1094,8 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
 
         const remote = getRemoteCtx();
         if (remote) {
+            // J4: skip when the Jellyfin target doesn't accept SetRepeatMode.
+            if (!remoteCmdAllowed(remote, 'SetRepeatMode')) return;
             const current = useRemoteTargetStore.getState().mirrored.playState.repeatMode;
             const next = nextJellyfinRepeat(current);
             peerDispatcher.setRepeat(remote, jellyfinToPeerRepeat(next));
@@ -1041,7 +1103,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
             return;
         }
         storeActions.toggleRepeat();
-    }, [getRemoteCtx, storeActions]);
+    }, [getRemoteCtx, remoteCmdAllowed, storeActions]);
 
     const toggleShuffle = useCallback(() => {
         logFn.debug(logMsg[LogCategory.PLAYER].toggleShuffle, {
@@ -1050,13 +1112,15 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
 
         const remote = getRemoteCtx();
         if (remote) {
+            // J4: skip when the Jellyfin target doesn't accept SetShuffleQueue.
+            if (!remoteCmdAllowed(remote, 'SetShuffleQueue')) return;
             const isShuffled = useRemoteTargetStore.getState().mirrored.playState.shuffle;
             peerDispatcher.setShuffle(remote, !isShuffled);
             useRemoteTargetStore.getState().actions.patchPlayState({ shuffle: !isShuffled });
             return;
         }
         storeActions.toggleShuffle();
-    }, [getRemoteCtx, storeActions]);
+    }, [getRemoteCtx, remoteCmdAllowed, storeActions]);
 
     const contextValue: PlayerContext = useMemo(
         () => ({

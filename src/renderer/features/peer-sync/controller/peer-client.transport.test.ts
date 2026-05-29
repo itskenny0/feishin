@@ -10,6 +10,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+    parseTcpTarget,
     resolveEffectiveTransport,
     type TransportEnv,
 } from '/@/renderer/features/peer-sync/controller/peer-client';
@@ -76,5 +77,64 @@ describe('resolveEffectiveTransport', () => {
             'ws',
         );
         expect(resolveEffectiveTransport('auto', 'broker.lan', ANDROID_WITH_PLUGIN)).toBe('ws');
+    });
+});
+
+describe('parseTcpTarget', () => {
+    it('parses bare host with default raw-MQTT port 1883', () => {
+        expect(parseTcpTarget('broker.lan')).toEqual({
+            host: 'broker.lan',
+            port: 1883,
+            tls: false,
+        });
+    });
+
+    it('parses an explicit mqtt:// host:port', () => {
+        expect(parseTcpTarget('mqtt://broker.lan:1884')).toEqual({
+            host: 'broker.lan',
+            port: 1884,
+            tls: false,
+        });
+    });
+
+    it('parses mqtts:// as TLS with default 8883', () => {
+        expect(parseTcpTarget('mqtts://secure.lan')).toEqual({
+            host: 'secure.lan',
+            port: 8883,
+            tls: true,
+        });
+    });
+
+    // S1-A: a ws:// URL points at the WebSocket listener (HTTP Upgrade), NOT a
+    // raw-MQTT port. Carrying its port (e.g. 8083) into a raw socket either gets
+    // reset → 4s reconnect storm, or hangs until connectTimeout. We must re-map
+    // to the standard raw-MQTT port and DROP the WS port.
+    it('re-maps ws://host:8083 to raw mqtt:1883 (drops the WS port) — S1-A', () => {
+        expect(parseTcpTarget('ws://broker.lan:8083')).toEqual({
+            host: 'broker.lan',
+            port: 1883,
+            tls: false,
+        });
+    });
+
+    it('re-maps wss://host:8084 to raw mqtts:8883 (drops the WS port) — S1-A', () => {
+        expect(parseTcpTarget('wss://broker.lan:8084')).toEqual({
+            host: 'broker.lan',
+            port: 8883,
+            tls: true,
+        });
+    });
+
+    it('re-maps a ws:// URL without an explicit port too', () => {
+        expect(parseTcpTarget('ws://broker.lan')).toEqual({
+            host: 'broker.lan',
+            port: 1883,
+            tls: false,
+        });
+    });
+
+    it('returns null for empty input', () => {
+        expect(parseTcpTarget('')).toBeNull();
+        expect(parseTcpTarget('   ')).toBeNull();
     });
 });

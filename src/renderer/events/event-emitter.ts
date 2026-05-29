@@ -22,7 +22,7 @@ class TypedEventEmitterImpl implements TypedEventEmitter<EventMap> {
     off<K extends keyof EventMap>(event: K, callback: EventCallback<EventMap[K]>): void {
         const callbacks = this.events.get(String(event));
         if (callbacks) {
-            const index = callbacks.indexOf(callback);
+            const index = callbacks.indexOf(callback as EventCallback);
             if (index > -1) {
                 callbacks.splice(index, 1);
             }
@@ -34,7 +34,9 @@ class TypedEventEmitterImpl implements TypedEventEmitter<EventMap> {
         if (!this.events.has(eventKey)) {
             this.events.set(eventKey, []);
         }
-        this.events.get(eventKey)!.push(callback);
+        // The internal Map is a type-erased heterogeneous store (one bucket per
+        // event name); the public on/off signatures keep callers fully typed.
+        this.events.get(eventKey)!.push(callback as EventCallback);
     }
 
     removeAllListeners<K extends keyof EventMap>(event?: K): void {
@@ -51,7 +53,7 @@ class TypedEventEmitterImpl implements TypedEventEmitter<EventMap> {
         this.errorHandler = handler;
     }
 
-    private handleError(error: Error, event: string, payload: any): void {
+    private handleError(error: Error, event: string, payload: unknown): void {
         if (this.errorHandler) {
             this.errorHandler(error, event, payload);
         } else {

@@ -8,6 +8,7 @@ import { openShuffleAllModal } from '/@/renderer/features/player/components/shuf
 import { preloadRoute } from '/@/renderer/router/route-preloaders';
 import { AppRoute } from '/@/renderer/router/routes';
 import { Icon } from '/@/shared/components/icon/icon';
+import { TextTitle } from '/@/shared/components/text-title/text-title';
 
 /**
  * Horizontal row of shortcut chips at the top of the home page. Each chip is
@@ -30,7 +31,9 @@ export const QuickFilterChips = () => {
 
     return (
         <section className={styles.section}>
-            <h2 className={styles.header}>{t('page.home.quickFilters_title')}</h2>
+            <TextTitle className={styles.header} fw={700} isNoSelect order={3}>
+                {t('page.home.quickFilters_title')}
+            </TextTitle>
             <div className={styles.row}>
                 <Link
                     className={styles.chip}

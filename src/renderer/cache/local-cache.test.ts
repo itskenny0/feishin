@@ -210,6 +210,111 @@ describe('local-cache sorted layer', () => {
         await getOrComputeSorted('albums', 'sig-empty', compute);
         expect(compute).toHaveBeenCalledTimes(2);
     });
+
+    it('caches an empty array as a hit (the favourites-poisoning trap)', async () => {
+        // This documents the foot-gun behind the sidebar "Favourite albums"
+        // regression: `getOrComputeSorted` treats `[]` as a legitimate result
+        // and memoises it. Once stored, the compute is never re-run for that
+        // signature until markRowCacheDirty fires. A `favorite:true` compute
+        // that ran while `db.favorites` was still empty would therefore pin an
+        // empty list under the favourite-filter signature forever.
+        const compute = vi.fn(async () => [] as string[]);
+        const first = await getOrComputeSorted('albums', 'sig-fav-empty', compute);
+        const second = await getOrComputeSorted('albums', 'sig-fav-empty', compute);
+        expect(first).toEqual([]);
+        expect(second).toBe(first);
+        expect(compute).toHaveBeenCalledTimes(1);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Regression: sidebar "Favourite albums" stays empty after a cold start.
+//
+// Reproduces the exact memo-poisoning failure and proves the album-api
+// fromCache fix. The compute below mirrors albumQueries.list's fromCache
+// favourite branch WITHOUT a live Dexie (we drive the favourites set
+// directly): when `favorite:true` is requested and the favourites set is
+// empty, the FIXED compute returns `undefined` (cache miss → remote
+// fallback) instead of an empty list. The buggy compute returned the empty
+// list, which getOrComputeSorted memoised, so even after favourites synced
+// the sidebar kept serving the stale empty memo.
+// ---------------------------------------------------------------------------
+describe('favourite-albums fromCache contract (sidebar regression)', () => {
+    // Stand-in for the favourites cache + albums table the album-api compute
+    // reads. Mutating `favoriteIds` between calls simulates the favourites
+    // sweep landing AFTER the first (cold) read.
+    const makeFavouriteCompute = (
+        favoriteIds: () => Set<string>,
+        albumIds: string[],
+        opts: { fixed: boolean },
+    ) =>
+        vi.fn(async (): Promise<string[] | undefined> => {
+            if (albumIds.length === 0) return undefined; // albums table empty
+            const favs = favoriteIds();
+            // FIXED behaviour: a favourite:true filter with no cached
+            // favourites is a cache MISS so cachedSwr falls back to remote.
+            if (opts.fixed && favs.size === 0) return undefined;
+            // filterAlbumsLocal(favorite:true) over an empty set yields [].
+            return albumIds.filter((id) => favs.has(id));
+        });
+
+    it('BUGGY: memoises the empty list and never recovers after favourites sync', async () => {
+        const favs = new Set<string>();
+        const compute = makeFavouriteCompute(() => favs, ['alb-1', 'alb-2'], { fixed: false });
+        const sig = 'albums:list:all:{"favorite":true,"sortBy":"name"}';
+
+        // Cold read — favourites not yet synced.
+        const cold = await getOrComputeSorted('albums', sig, compute);
+        expect(cold).toEqual([]); // empty list served
+
+        // Favourites sweep lands.
+        favs.add('alb-1');
+        favs.add('alb-2');
+
+        // Without invalidation the poisoned empty memo is still served and
+        // compute is NOT re-run — this is the user-visible regression.
+        const warm = await getOrComputeSorted('albums', sig, compute);
+        expect(warm).toEqual([]);
+        expect(compute).toHaveBeenCalledTimes(1);
+    });
+
+    it('FIXED: empty favourites is a miss, so the populated list appears once synced', async () => {
+        const favs = new Set<string>();
+        const compute = makeFavouriteCompute(() => favs, ['alb-1', 'alb-2'], { fixed: true });
+        const sig = 'albums:list:all:{"favorite":true,"sortBy":"name"}';
+
+        // Cold read — favourites not yet synced → MISS (compute returns
+        // undefined), so nothing is memoised and cachedSwr would hit remote.
+        const cold = await getOrComputeSorted('albums', sig, compute);
+        expect(cold).toBeUndefined();
+
+        // Favourites sweep lands.
+        favs.add('alb-1');
+        favs.add('alb-2');
+
+        // Next read recomputes (no poisoned entry) and serves the favourites.
+        const warm = await getOrComputeSorted('albums', sig, compute);
+        expect(warm).toEqual(['alb-1', 'alb-2']);
+        expect(compute).toHaveBeenCalledTimes(2);
+    });
+
+    it('FIXED: the markRowCacheDirty path also clears a stale empty memo', async () => {
+        // Defence-in-depth: even if an empty list WAS memoised (e.g. a non-
+        // favourite query path), the favourites sweep now calls
+        // markSearchDirty('albums') → markRowCacheDirty('albums'), dropping
+        // the sorted LRU so the next read recomputes.
+        const favs = new Set<string>();
+        const compute = makeFavouriteCompute(() => favs, ['alb-1'], { fixed: false });
+        const sig = 'albums:list:all:{"favorite":true,"sortBy":"name"}';
+
+        await getOrComputeSorted('albums', sig, compute); // memoises []
+        favs.add('alb-1');
+        markRowCacheDirty('albums'); // what the favourites sweep now triggers
+
+        const after = await getOrComputeSorted('albums', sig, compute);
+        expect(after).toEqual(['alb-1']);
+        expect(compute).toHaveBeenCalledTimes(2);
+    });
 });
 
 describe('buildListSignature', () => {

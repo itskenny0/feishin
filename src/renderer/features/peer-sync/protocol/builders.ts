@@ -101,7 +101,12 @@ export const buildState = (input: StateSnapshotInput): PeerState => {
             .filter((id): id is string => typeof id === 'string' && id.length > 0);
         if (filtered.length > 0) out.qIds = filtered;
     }
-    if (typeof input.qIdx === 'number' && Number.isFinite(input.qIdx)) {
+    // SEV-4: only emit `qIdx` alongside a `qIds` array it can index into. A bare
+    // qIdx (qIds omitted/empty) is dead weight on the wire — the receiver's
+    // mirror only consumes qIdx when qIds is present — and an easy footgun for a
+    // publisher that truncates qIds to empty while still shipping qIdx. Gating
+    // on `out.qIds !== undefined` keeps the invariant explicit.
+    if (out.qIds !== undefined && typeof input.qIdx === 'number' && Number.isFinite(input.qIdx)) {
         // qIdx is an array index — negative is meaningful only as "no
         // selection" (-1). Allow that one sentinel through; clamp anything
         // worse to -1 so the receiver's branch on `qIdx >= 0` always wins.

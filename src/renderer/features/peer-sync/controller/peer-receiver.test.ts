@@ -304,6 +304,34 @@ describe('applyPeerCommand verb mapping', () => {
         }
     });
 
+    // SEV-3: playIndex is a DEFAULT-order index. With shuffle ON the receiver's
+    // mediaPlayByIndex must select the song at DEFAULT index N (then map it to
+    // the shuffled playback position internally) — NOT the shuffled position N.
+    it('playIndex selects the DEFAULT-order song even with shuffle on (SEV-3)', () => {
+        const songs: Song[] = Array.from(
+            { length: 5 },
+            (_, i) =>
+                ({
+                    album: 'A',
+                    albumArtists: [],
+                    artists: [],
+                    container: null,
+                    duration: 1000,
+                    id: `song-${i}`,
+                    itemType: 'song',
+                    name: `Song ${i}`,
+                }) as unknown as Song,
+        );
+        usePlayerStoreBase.getState().setQueue(songs, 0, 0);
+        usePlayerStoreBase.getState().setShuffle(PlayerShuffle.TRACK);
+
+        const r = applyPeerCommand(SENDER, buildCommand('playIndex', { index: 2 }));
+        expect(r.reason).toBe('applied');
+        // The current song must be the one at DEFAULT index 2, regardless of
+        // where it landed in the shuffled order.
+        expect(usePlayerStoreBase.getState().getCurrentSong()?.id).toBe('song-2');
+    });
+
     it('drops a seek with a non-numeric positionMs as validation', () => {
         // Construct a deliberately malformed frame — the wire shape allows
         // it but the receiver should refuse to act.

@@ -4,9 +4,7 @@
 
 .header {
     margin-bottom: var(--theme-spacing-md);
-    font-size: 1.4rem;
-    font-weight: 700;
-    color: var(--theme-colors-text-default);
+    color: var(--theme-colors-foreground);
 }
 
 .row {
@@ -20,13 +18,13 @@
     gap: 6px;
     align-items: center;
     padding: 8px 14px;
-    font-size: 0.85rem;
+    font-size: var(--theme-font-size-sm);
     font-weight: 500;
-    color: var(--theme-colors-text-default);
+    color: var(--theme-colors-foreground);
     text-decoration: none;
     cursor: pointer;
     background: var(--theme-colors-surface);
-    border: 1px solid var(--theme-colors-foreground-muted);
+    border: 1px solid var(--theme-colors-border);
     border-radius: 999px;
     transition:
         transform 140ms ease-out,

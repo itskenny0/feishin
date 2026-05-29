@@ -113,21 +113,47 @@ describe('command-dispatcher coalescing', () => {
     });
 
     /**
-     * Audit regression: `skipToIndex` posts a PlayingCommand named
-     * `PlaylistIndex` carrying the target queue index. The peer-dispatcher's
-     * `skipToIndex` fallback delegates here, so coverage here covers both
-     * lanes.
+     * H1: `skipToIndex` must NOT emit the bogus `PlaylistIndex` Playstate command
+     * (no such Jellyfin verb — real servers ignore it). It re-issues the
+     * mirrored queue with PlayNow + StartIndex, exactly like jellyfin-web's
+     * "jump to track". This test replaces the old one that pinned the bug.
      */
-    it('dispatches skipToIndex as a PlaylistIndex Playstate command', async () => {
-        const calls: Array<{ command: string; playlistIndex?: number }> = [];
+    it('re-issues the mirrored queue with PlayNow + StartIndex (H1)', async () => {
+        const playCalls: Array<{ itemIds: string[]; playCommand?: string; startIndex?: number }> =
+            [];
         vi.doMock('/@/renderer/features/jellyfin-remote-target/api/remote-target-api', () => ({
             remoteTargetApi: {
+                play: vi.fn(
+                    async (args: {
+                        itemIds: string[];
+                        playCommand?: string;
+                        startIndex?: number;
+                    }) => {
+                        playCalls.push({
+                            itemIds: args.itemIds,
+                            playCommand: args.playCommand,
+                            startIndex: args.startIndex,
+                        });
+                    },
+                ),
                 sendGeneralCommand: vi.fn(async () => {}),
-                sendPlaystate: vi.fn(async (args: { command: string; playlistIndex?: number }) => {
-                    calls.push({ command: args.command, playlistIndex: args.playlistIndex });
-                }),
+                sendPlaystate: vi.fn(async () => {}),
             },
         }));
+
+        const { useRemoteTargetStore } =
+            await import('/@/renderer/features/jellyfin-remote-target/store/remote-target-store');
+        // Seed a hydrated mirrored queue in default order.
+        useRemoteTargetStore.getState().actions.setMirrored({
+            queue: [
+                { id: 'a' } as never,
+                { id: 'b' } as never,
+                { id: 'c' } as never,
+                { id: 'd' } as never,
+                { id: 'e' } as never,
+            ],
+            queueIndex: 0,
+        });
 
         const { commandDispatcher } =
             await import('/@/renderer/features/jellyfin-remote-target/controller/command-dispatcher');
@@ -137,7 +163,33 @@ describe('command-dispatcher coalescing', () => {
         };
 
         await commandDispatcher.skipToIndex(ctx, 4);
-        expect(calls).toEqual([{ command: 'PlaylistIndex', playlistIndex: 4 }]);
+        expect(playCalls).toEqual([
+            { itemIds: ['a', 'b', 'c', 'd', 'e'], playCommand: 'PlayNow', startIndex: 4 },
+        ]);
+    });
+
+    it('skipToIndex drops (no POST) when the mirrored queue is empty (H1 fallback)', async () => {
+        const playCalls: unknown[] = [];
+        vi.doMock('/@/renderer/features/jellyfin-remote-target/api/remote-target-api', () => ({
+            remoteTargetApi: {
+                play: vi.fn(async () => {
+                    playCalls.push(true);
+                }),
+                sendGeneralCommand: vi.fn(async () => {}),
+                sendPlaystate: vi.fn(async () => {}),
+            },
+        }));
+        const { useRemoteTargetStore } =
+            await import('/@/renderer/features/jellyfin-remote-target/store/remote-target-store');
+        useRemoteTargetStore.getState().actions.setMirrored({ queue: [], queueIndex: -1 });
+        const { commandDispatcher } =
+            await import('/@/renderer/features/jellyfin-remote-target/controller/command-dispatcher');
+        const ctx = {
+            server: { credential: 't', id: 's', type: 'jellyfin', url: 'x', userId: 'u' } as never,
+            sessionId: 'sess',
+        };
+        await commandDispatcher.skipToIndex(ctx, 2);
+        expect(playCalls).toHaveLength(0);
     });
 
     /**

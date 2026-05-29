@@ -14,6 +14,7 @@ import {
     setSyncEnabled,
     subscribe,
     sweepStalePresence,
+    touchPresence,
 } from '/@/renderer/features/peer-sync/controller/transport-selector';
 
 beforeEach(() => {
@@ -82,6 +83,48 @@ describe('transport-selector', () => {
         recordPresence('peer-1', true, 300);
         expect(listener).toHaveBeenCalledTimes(1);
         expect(listener).toHaveBeenLastCalledWith('peer-1', 'mqtt');
+    });
+
+    // SEV-1: presence freshness must be refreshable from real liveness or the
+    // MQTT lane self-destructs ~12s after connect even though the peer is still
+    // exchanging ping/pong.
+    it('touchPresence keeps a peer fresh across the TTL boundary (SEV-1)', () => {
+        setSyncEnabled(true);
+        const now = 1_000_000;
+        recordPresence('peer-1', true, now);
+        expect(pickTransport('peer-1', now + 1_000)).toBe('mqtt');
+        // Without a refresh the lane would flip at now+TTL.
+        expect(pickTransport('peer-1', now + MQTT_PRESENCE_TTL_MS + 1)).toBe('jellyfin');
+        // A pong-driven refresh at TTL/2 keeps it alive through the old expiry.
+        recordPresence('peer-1', true, now); // reset baseline for the next leg
+        touchPresence('peer-1', now + MQTT_PRESENCE_TTL_MS / 2);
+        expect(pickTransport('peer-1', now + MQTT_PRESENCE_TTL_MS + 1)).toBe('mqtt');
+        // ...but still ages out once refreshes genuinely stop.
+        expect(
+            pickTransport('peer-1', now + MQTT_PRESENCE_TTL_MS / 2 + MQTT_PRESENCE_TTL_MS + 1),
+        ).toBe('jellyfin');
+    });
+
+    // SEV-4: touchPresence must NOT clear the jfDeviceId -> peerId bridge the
+    // way a dev-less recordPresence(peer, true, now) does.
+    it('touchPresence preserves the dev bridge; dev-less recordPresence clears it (SEV-4)', () => {
+        setSyncEnabled(true);
+        const now = 1_000_000;
+        recordPresence('peer-1', true, now, 'jf-device-1');
+        expect(getPeerIdForJellyfinDeviceId('jf-device-1')).toBe('peer-1');
+        // touchPresence keeps the bridge intact.
+        touchPresence('peer-1', now + 1_000);
+        expect(getPeerIdForJellyfinDeviceId('jf-device-1')).toBe('peer-1');
+        expect(pickTransport('peer-1', now + 1_000)).toBe('mqtt');
+        // Documents the trap: a dev-less recordPresence DOES destroy the bridge.
+        recordPresence('peer-1', true, now + 2_000);
+        expect(getPeerIdForJellyfinDeviceId('jf-device-1')).toBeUndefined();
+    });
+
+    it('touchPresence on an unknown peer is a no-op (no phantom presence record)', () => {
+        setSyncEnabled(true);
+        touchPresence('ghost', 1_000_000);
+        expect(pickTransport('ghost', 1_000_000)).toBe('jellyfin');
     });
 
     it('sweepStalePresence ages out a peer whose presence stops landing', () => {

@@ -10,13 +10,14 @@ import {
     AlbumArtistListView,
     OverrideAlbumArtistListQuery,
 } from '/@/renderer/features/artists/components/album-artist-list-content';
+import { useAlbumArtistListQuery } from '/@/renderer/features/artists/queries/artists-queries';
 import { AnimatedPage } from '/@/renderer/features/shared/components/animated-page';
-import { EmptyStateProps } from '/@/renderer/features/shared/components/empty-state';
+import { EmptyState, EmptyStateProps } from '/@/renderer/features/shared/components/empty-state';
 import {
     OverrideSongListQuery,
     SongListView,
 } from '/@/renderer/features/songs/components/song-list-content';
-import { useListSettings } from '/@/renderer/store';
+import { useCurrentServer, useListSettings } from '/@/renderer/store';
 import { Spinner } from '/@/shared/components/spinner/spinner';
 import {
     AlbumArtistListSort,
@@ -29,6 +30,20 @@ import { ItemListKey } from '/@/shared/types/types';
 
 export const SearchContent = () => {
     const { itemType } = useParams() as { itemType: LibraryItem };
+    const [searchParams] = useSearchParams();
+    const searchTerm = searchParams.get('query') || '';
+
+    // With no query the dedicated /search page would otherwise dump the
+    // entire alphabetical library, which reads as a redundant library list
+    // and hides what the page is for. Show a prompt instead until the user
+    // types. (Applies to every tab.)
+    if (searchTerm.length === 0) {
+        return (
+            <AnimatedPage>
+                <SearchPrompt />
+            </AnimatedPage>
+        );
+    }
 
     return (
         <AnimatedPage>
@@ -38,6 +53,19 @@ export const SearchContent = () => {
                 {itemType === LibraryItem.ALBUM_ARTIST && <ArtistSearch />}
             </Suspense>
         </AnimatedPage>
+    );
+};
+
+const SearchPrompt = () => {
+    const { t } = useTranslation();
+    return (
+        <EmptyState
+            description={t('emptyState.searchPromptDescription', {
+                defaultValue: 'Find songs, albums, and artists.',
+            })}
+            icon="search"
+            title={t('emptyState.searchPromptTitle', { defaultValue: 'Search your library' })}
+        />
     );
 };
 
@@ -118,6 +146,8 @@ const ArtistSearch = () => {
     const { display, grid, itemsPerPage, pagination, table } = useListSettings(ItemListKey.ARTIST);
     const [searchParams] = useSearchParams();
     const searchTerm = searchParams.get('query') || '';
+    const server = useCurrentServer();
+    const emptyState = useSearchEmptyState(searchTerm.length > 0);
 
     const albumArtistQuery = useMemo<OverrideAlbumArtistListQuery>(
         () => ({
@@ -127,6 +157,20 @@ const ArtistSearch = () => {
         }),
         [searchTerm],
     );
+
+    // AlbumArtistListView doesn't accept an `emptyState` prop (unlike the
+    // album/song views), so surface the "no results" state here. A
+    // limit-1 probe just reads totalRecordCount cheaply; the list view
+    // fetches its own pages independently.
+    const countProbe = useAlbumArtistListQuery({
+        query: { ...albumArtistQuery, limit: 1, startIndex: 0 },
+        serverId: server.id,
+    });
+    const resultCount = countProbe.data?.totalRecordCount;
+
+    if (resultCount === 0 && emptyState) {
+        return <EmptyState {...emptyState} />;
+    }
 
     return (
         <AlbumArtistListView

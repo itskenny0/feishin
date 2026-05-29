@@ -99,12 +99,13 @@ export const applyDeletePlaylistOptimisticUpdates = (
                         if (prev && prev.data) {
                             return {
                                 ...prev,
-                                data: prev.data.filter((item: any) => {
-                                    if (!item || !item.id) {
+                                data: prev.data.filter((item) => {
+                                    const playlistLike = item as null | undefined | { id?: string };
+                                    if (!playlistLike || !playlistLike.id) {
                                         return true;
                                     }
 
-                                    return item.id !== playlistId;
+                                    return playlistLike.id !== playlistId;
                                 }),
                             };
                         }

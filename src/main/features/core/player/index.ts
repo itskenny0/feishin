@@ -15,14 +15,6 @@ import { PlayerData } from '/@/shared/types/domain-types';
 
 declare module 'node-mpv';
 
-// function wait(timeout: number) {
-//     return new Promise((resolve) => {
-//         setTimeout(() => {
-//             resolve('resolved');
-//         }, timeout);
-//     });
-// }
-
 let mpvInstance: MpvAPI | null = null;
 let currentPlayerData: null | PlayerData = null;
 const socketPath = isWindows() ? `\\\\.\\pipe\\mpvserver-${pid}` : `/tmp/node-mpv-${pid}.sock`;

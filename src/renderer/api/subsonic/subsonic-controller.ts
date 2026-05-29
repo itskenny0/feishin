@@ -258,12 +258,12 @@ function buildGetTranscodeStreamUrl(
     return `${server?.url}/rest/getTranscodeStream.view?${params.toString()}&${server?.credential}`;
 }
 
-function sortAndPaginate<T>(
+function sortAndPaginate<T, S = never>(
     items: T[],
     options: {
         limit?: number;
-        sortBy?: any;
-        sortFn?: (items: T[], sortBy: any, sortOrder: SortOrder) => T[];
+        sortBy?: S;
+        sortFn?: (items: T[], sortBy: S, sortOrder: SortOrder) => T[];
         sortOrder?: SortOrder;
         startIndex?: number;
     },

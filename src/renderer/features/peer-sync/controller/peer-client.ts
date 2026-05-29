@@ -242,6 +242,17 @@ export const resolveEffectiveTransport = (
  * Parse a broker URL into the host/port/tls a raw TCP socket needs. Defaults
  * the port to 1883 (mqtt) / 8883 (mqtts) when absent, matching the standard
  * MQTT listener ports brokers expose on raw TCP.
+ *
+ * S1-A: a `ws://`/`wss://` URL points at the broker's WebSocket listener
+ * (typically 8083/8084), which speaks the HTTP Upgrade handshake — NOT raw
+ * MQTT control bytes. Opening a raw socket to that port and writing MQTT bytes
+ * either gets reset (→ perpetual 4s reconnect storm) or hangs until
+ * connectTimeout. `resolveEffectiveTransport` lets an explicit `pref='tcp'`
+ * win without a scheme check, so a user who set transport=tcp in settings but
+ * typed a `ws://` URL would land here. We must NOT carry the WS port as a raw
+ * MQTT port: re-map the scheme to its raw-MQTT equivalent and DROP the WS port
+ * so we fall back to the standard 1883/8883 listener (`ws→mqtt:1883`,
+ * `wss→mqtts:8883`). A warn surfaces the mis-config.
  */
 export const parseTcpTarget = (
     brokerUrl: string,
@@ -251,9 +262,20 @@ export const parseTcpTarget = (
     const withScheme = /^[a-z]+:\/\//i.test(trimmed) ? trimmed : `mqtt://${trimmed}`;
     try {
         const url = new URL(withScheme);
-        const tls = /^(mqtts|wss|ssl|tls)$/i.test(url.protocol.replace(/:$/, ''));
+        const scheme = url.protocol.replace(/:$/, '').toLowerCase();
+        const isWsScheme = scheme === 'ws' || scheme === 'wss';
+        // ws(s) → raw MQTT: tls follows the secure variant; the WS port is
+        // explicitly discarded (it's the HTTP-Upgrade listener, not raw MQTT).
+        const tls = isWsScheme ? scheme === 'wss' : /^(mqtts|ssl|tls)$/i.test(scheme);
         const host = url.hostname.replace(/^\[|\]$/g, '');
         if (!host) return null;
+        if (isWsScheme) {
+            warn('tcp transport given a ws(s):// URL; re-mapping to raw MQTT port', {
+                brokerUrl: redactBrokerUrl(brokerUrl),
+                port: tls ? 8883 : 1883,
+            });
+            return { host, port: tls ? 8883 : 1883, tls };
+        }
         const port = url.port ? Number(url.port) : tls ? 8883 : 1883;
         if (!Number.isFinite(port) || port <= 0) return null;
         return { host, port, tls };
@@ -581,9 +603,16 @@ export const startPeerClient = (args: PeerClientStartArgs, events: PeerEvents = 
         void buildNativeTcpStreamBuilder(args.brokerUrl, args.tls)
             .then((streamBuilder) => {
                 // The session might have been torn down / superseded while we
-                // were awaiting the dynamic import. Bail if so.
-                if (session && session.args !== args) {
-                    log('native-tcp build superseded before connect; dropping');
+                // were awaiting the dynamic import. Bail if so. S2-C: the guard
+                // must ALSO bail when the session was torn down to null (kill
+                // switch / unmount fired during the dynamic import) — not just
+                // when a fresh start superseded us. `session?.args !== args`
+                // bails on null (`undefined !== args` → true), closing the
+                // native-TCP analogue of the C3 resurrection window. The
+                // previous `session && session.args !== args` let a null session
+                // fall through and resurrect the just-torn-down subsystem on TCP.
+                if (session?.args !== args) {
+                    log('native-tcp build superseded/torn-down before connect; dropping');
                     return;
                 }
                 if (!streamBuilder) {
@@ -801,6 +830,38 @@ export const publishOwnState = (state: PeerState): void => {
 };
 
 /**
+ * Republish our retained `online: true` presence frame (SEV-1 heartbeat).
+ *
+ * Presence is otherwise published exactly once — inside the `connect` handler —
+ * so a peer's `lastSeenAt` in every OTHER instance's transport-selector freezes
+ * at connect time and ages out after `MQTT_PRESENCE_TTL_MS` (12 s), silently
+ * dropping the MQTT lane back to Jellyfin for a peer that is still fully
+ * connected. A periodic retained heartbeat at ~TTL/2 keeps remote selectors
+ * fresh and lets late joiners learn our live `dev` bridge immediately. No-op
+ * when the client is down or not actually connected (a heartbeat published
+ * while offline would just sit in mqtt.js's outgoing queue). Cheap retained
+ * QoS-1 publish — same frame shape the connect handler sends.
+ */
+export const publishPresenceHeartbeat = (): void => {
+    const s = session;
+    if (!s || !s.client.connected) return;
+    const frame = codec.encode({
+        ...(s.args.jellyfinDeviceId ? { dev: s.args.jellyfinDeviceId } : {}),
+        online: true,
+        t: 'presence',
+        ts: Date.now(),
+        v: PROTOCOL_VERSION,
+    });
+    publishWithErrorLog(
+        s.client,
+        topicFor(s.selfAddress, 'presence'),
+        Buffer.from(frame),
+        { qos: 1, retain: true },
+        'presence-heartbeat',
+    );
+};
+
+/**
  * Send a liveness probe to a specific peer. The peer is expected to echo
  * back a Pong on its own pong topic. Returns the ping id so the caller can
  * match it against the subsequent onPong event.
@@ -869,12 +930,22 @@ export const stopPeerClient = (): void => {
 export interface TestBrokerConnectionOptions {
     /** Broker auth password (own-broker tier). */
     password?: string;
+    /** S2-B: embedded-scheme room key (== broker password against the embedded
+     *  broker, normally the Jellyfin username). Used as the CONNECT password
+     *  only when no external `username` is supplied, mirroring the live path so
+     *  the test gate faithfully predicts live-connect success against a broker
+     *  that enforces the embedded userId/roomKey scheme. */
+    roomKey?: string;
     /** Connection timeout in ms. Defaults to ~8s. */
     timeoutMs?: number;
     /** TLS hint — falls back to the URL scheme when undefined. */
     tls?: boolean;
     /** Transport preference; resolved exactly like the live connect path. */
     transport?: PeerSyncTransport;
+    /** S2-B: embedded-scheme userId (== broker username against the embedded
+     *  broker). Used as the CONNECT username only when no external `username`
+     *  is supplied. */
+    userId?: string;
     /** Broker auth username (own-broker tier). */
     username?: string;
 }
@@ -899,17 +970,23 @@ export const testBrokerConnection = async (
     const timeoutMs = options.timeoutMs ?? 8_000;
     const loggedUrl = redactBrokerUrl(url);
     const useExternalAuth = Boolean(options.username);
+    // S2-B: when no external username is supplied, fall back to the embedded
+    // userId/roomKey scheme EXACTLY like the live connect path (startPeerClient:
+    // username=args.userId, password=args.roomKey). Probing anonymously here
+    // produced a false FAIL against an embedded/auth-enforcing broker (which
+    // requires a non-empty username + password===roomKey) and a false PASS
+    // against an anonymous broker, so the test gate didn't predict live connect.
     const opts: IClientOptions = {
         clean: true,
         clientId: `feishin-test-${Math.random().toString(36).slice(2, 10)}`,
         connectTimeout: timeoutMs,
         keepalive: 30,
-        password: useExternalAuth ? (options.password ?? '') : undefined,
+        password: useExternalAuth ? (options.password ?? '') : options.roomKey,
         protocolVersion: 4,
         // No reconnect loop — a one-shot probe.
         reconnectPeriod: 0,
         rejectUnauthorized: options.tls !== false,
-        username: useExternalAuth ? options.username : undefined,
+        username: useExternalAuth ? options.username : options.userId,
     };
 
     const effectiveTransport = resolveEffectiveTransport(options.transport, url);

@@ -9,12 +9,28 @@
 
 .layout {
     display: grid;
+
+    /* Fixed 320px nav column on desktop. */
     grid-template-columns: 320px minmax(0, 1fr);
     gap: 0;
     width: 100%;
     height: 100%;
     overflow: hidden;
     background: var(--theme-colors-background);
+}
+
+/*
+ * Tablet two-pane squeeze (768–1199 desktop shell, or the settings modal
+ * which is ~90vw): a fixed 320px nav column leaves the content pane a
+ * cramped sliver once the app nav rail (80px) is also subtracted. Let the
+ * nav column shrink fluidly so the content pane keeps breathing room.
+ * Single-column drill-down still takes over below the mobile-shell cutoff
+ * via `.layout.mobile`.
+ */
+@media (width <= 1199px) {
+    .layout {
+        grid-template-columns: clamp(220px, 28vw, 320px) minmax(0, 1fr);
+    }
 }
 
 /* Phone shell: single column. .mobile.phoneDetail flips the row to show
@@ -397,7 +413,7 @@
     padding: 0.55rem 0.95rem;
     font-size: 0.9rem;
     font-weight: 600;
-    color: var(--mantine-color-white);
+    color: var(--theme-colors-primary-contrast);
     cursor: pointer;
     background: var(--theme-colors-primary-filled);
     border: none;

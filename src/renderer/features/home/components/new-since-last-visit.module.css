@@ -4,7 +4,7 @@
     align-items: center;
     justify-content: space-between;
     padding: var(--theme-spacing-lg);
-    color: var(--theme-colors-text-default);
+    color: var(--theme-colors-foreground);
     background:
         linear-gradient(
             135deg,
@@ -23,9 +23,9 @@
 }
 
 .eyebrow {
-    font-size: 0.7rem;
+    font-size: var(--theme-font-size-xs);
     font-weight: 600;
-    color: var(--theme-colors-text-muted);
+    color: var(--theme-colors-foreground-muted);
     text-transform: uppercase;
     letter-spacing: 0.08em;
 }
@@ -34,12 +34,12 @@
     font-size: clamp(1.2rem, 2cqw, 1.8rem);
     font-weight: 800;
     line-height: 1.15;
-    color: var(--theme-colors-text-default);
+    color: var(--theme-colors-foreground);
 }
 
 .subtitle {
-    font-size: 0.85rem;
-    color: var(--theme-colors-text-muted);
+    font-size: var(--theme-font-size-sm);
+    color: var(--theme-colors-foreground-muted);
 }
 
 .action {
@@ -48,9 +48,9 @@
     gap: 6px;
     align-items: center;
     padding: 8px 16px;
-    font-size: 0.9rem;
+    font-size: var(--theme-font-size-md);
     font-weight: 600;
-    color: white;
+    color: var(--theme-colors-primary-contrast);
     text-decoration: none;
     background: var(--theme-colors-primary);
     border-radius: var(--theme-radius-md);

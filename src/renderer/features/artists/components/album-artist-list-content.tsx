@@ -1,6 +1,9 @@
 import { lazy, Suspense, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { useAlbumArtistListFilters } from '/@/renderer/features/artists/hooks/use-album-artist-list-filters';
+import { useAlbumArtistListQuery } from '/@/renderer/features/artists/queries/artists-queries';
+import { EmptyState, EmptyStateProps } from '/@/renderer/features/shared/components/empty-state';
 import { ItemListSettings, useCurrentServer, useListSettings } from '/@/renderer/store';
 import { Spinner } from '/@/shared/components/spinner/spinner';
 import { AlbumArtistListQuery } from '/@/shared/types/domain-types';
@@ -60,12 +63,17 @@ export type OverrideAlbumArtistListQuery = Omit<AlbumArtistListQuery, 'limit' | 
 
 export const AlbumArtistListView = ({
     display,
+    emptyState,
     grid,
     itemsPerPage,
     overrideQuery,
     pagination,
     table,
-}: ItemListSettings & { overrideQuery?: OverrideAlbumArtistListQuery }) => {
+}: ItemListSettings & {
+    emptyState?: EmptyStateProps;
+    overrideQuery?: OverrideAlbumArtistListQuery;
+}) => {
+    const { t } = useTranslation();
     const server = useCurrentServer();
 
     const { query } = useAlbumArtistListFilters();
@@ -82,6 +90,25 @@ export const AlbumArtistListView = ({
             sortOrder: overrideQuery.sortOrder || query.sortOrder,
         };
     }, [query, overrideQuery]);
+
+    // Cheap count probe (limit 1) so an empty library / over-narrow filter
+    // renders a friendly EmptyState instead of a blank canvas — mirrors the
+    // album list pattern.
+    const countQuery = useAlbumArtistListQuery({
+        query: { ...mergedQuery, limit: 1, startIndex: 0 } as AlbumArtistListQuery,
+        serverId: server.id,
+    });
+
+    if (countQuery.data?.totalRecordCount === 0) {
+        const fallback: EmptyStateProps = {
+            description: t('emptyState.albumArtistsDescription', {
+                defaultValue: 'Album artists will appear here once your library is scanned.',
+            }),
+            icon: 'artist',
+            title: t('emptyState.albumArtistsTitle', { defaultValue: 'No album artists yet' }),
+        };
+        return <EmptyState {...fallback} {...emptyState} />;
+    }
 
     switch (display) {
         case ListDisplayType.GRID: {

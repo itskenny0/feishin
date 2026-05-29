@@ -58,6 +58,71 @@ const fireMqtt = (peer: PeerAddress, cmd: PeerCommand): void => {
     recordOutboundCommand(peer.peerId, cmd);
 };
 
+/**
+ * J5: coalesce a high-frequency drag (seek / volume) on the MQTT lane the same
+ * way the Jellyfin lane already does in command-dispatcher. A 60-event slider
+ * drag would otherwise emit 60 QoS-0 publishes per second to the peer — the
+ * exact "wake up and burst" symptom the Jellyfin-lane coalesce exists to
+ * prevent, just on the other lane.
+ *
+ * Leading + trailing, keyed per (peerId, verb) so a volume drag and a seek
+ * drag don't share a slot and device-A's drag never blocks device-B. The
+ * leading call fires immediately for instant feedback; while the throttle
+ * window is open the latest args replace the pending slot and fire once when it
+ * closes. QoS-0 fire-and-forget means there's no in-flight ack to await, so we
+ * throttle on a timer rather than on completion.
+ */
+const MQTT_COALESCE_MS = 60;
+
+interface CoalesceSlot {
+    lastFiredAt: number;
+    pending: (() => void) | null;
+    timer: null | ReturnType<typeof setTimeout>;
+}
+
+const coalesceSlots = new Map<string, CoalesceSlot>();
+
+const coalesceMqtt = (key: string, fire: () => void): void => {
+    let slot = coalesceSlots.get(key);
+    if (!slot) {
+        slot = { lastFiredAt: 0, pending: null, timer: null };
+        coalesceSlots.set(key, slot);
+    }
+    const now = Date.now();
+    const elapsed = now - slot.lastFiredAt;
+    if (elapsed >= MQTT_COALESCE_MS && !slot.timer) {
+        // Leading edge — fire immediately.
+        slot.lastFiredAt = now;
+        fire();
+        return;
+    }
+    // Inside the window: stash the latest and arm a trailing publish.
+    slot.pending = fire;
+    if (slot.timer) return;
+    slot.timer = setTimeout(
+        () => {
+            const s = coalesceSlots.get(key);
+            if (!s) return;
+            s.timer = null;
+            const next = s.pending;
+            s.pending = null;
+            if (next) {
+                s.lastFiredAt = Date.now();
+                next();
+            }
+        },
+        Math.max(0, MQTT_COALESCE_MS - elapsed),
+    );
+};
+
+/** Test-only: reset the coalesce slots so a fresh test starts clean. */
+export const __resetMqttCoalesce = (): void => {
+    for (const slot of coalesceSlots.values()) {
+        if (slot.timer) clearTimeout(slot.timer);
+    }
+    coalesceSlots.clear();
+};
+
 export interface PeerDispatcherCtx {
     /** Address of the remote peer. Required when the MQTT lane is alive. */
     peer: PeerAddress;
@@ -169,7 +234,12 @@ export const peerDispatcher = {
     seek: (ctx: PeerDispatcherCtx, positionMs: number): void =>
         route(
             ctx,
-            () => fireMqtt(ctx.peer, buildCommand('seek', { positionMs })),
+            // J5: coalesce the MQTT publish so a slider drag collapses to
+            // leading + trailing instead of flooding the peer with QoS-0 frames.
+            () =>
+                coalesceMqtt(`${ctx.peer.peerId}:seek`, () =>
+                    fireMqtt(ctx.peer, buildCommand('seek', { positionMs })),
+                ),
             () =>
                 commandDispatcher.seek(
                     { server: ctx.server, sessionId: ctx.sessionId },
@@ -227,7 +297,11 @@ export const peerDispatcher = {
     setVolume: (ctx: PeerDispatcherCtx, volume: number): void =>
         route(
             ctx,
-            () => fireMqtt(ctx.peer, buildCommand('volume', { volume })),
+            // J5: coalesce the MQTT publish (see seek).
+            () =>
+                coalesceMqtt(`${ctx.peer.peerId}:volume`, () =>
+                    fireMqtt(ctx.peer, buildCommand('volume', { volume })),
+                ),
             () =>
                 commandDispatcher.setVolume(
                     { server: ctx.server, sessionId: ctx.sessionId },
@@ -236,8 +310,10 @@ export const peerDispatcher = {
         ),
 
     /**
-     * Jump to a specific queue index. Maps to JF's `PlaylistIndex` playstate
-     * command on the Jellyfin lane; the MQTT receiver applies it locally.
+     * Jump to a specific (default-order) queue index. On the MQTT lane the
+     * receiver applies a `playIndex` verb locally; on the Jellyfin lane the
+     * command-dispatcher re-issues the mirrored queue with PlayNow + StartIndex
+     * (H1 — Jellyfin has no native "jump to index" Playstate verb).
      */
     skipToIndex: (ctx: PeerDispatcherCtx, index: number): void =>
         route(

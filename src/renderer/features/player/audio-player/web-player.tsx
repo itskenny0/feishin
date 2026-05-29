@@ -12,6 +12,7 @@ import {
 import { usePlayerEvents } from '/@/renderer/features/player/audio-player/hooks/use-player-events';
 import { useSongUrl } from '/@/renderer/features/player/audio-player/hooks/use-stream-url';
 import { PlayerOnProgressProps } from '/@/renderer/features/player/audio-player/types';
+import { calculateReplayGain } from '/@/renderer/features/player/audio-player/utils/replay-gain';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
 import { useWebAudio } from '/@/renderer/features/player/hooks/use-webaudio';
 import {
@@ -437,52 +438,14 @@ export function WebPlayer() {
         return () => clearInterval(interval);
     }, [localPlayerStatus, num, setTimestamp, transitionType]);
 
-    const calculateReplayGain = useCallback(
-        (song: QueueSong): number => {
-            if (playback.replayGainMode === 'no') {
-                return 1;
-            }
-
-            let gain: number | undefined;
-            let peak: number | undefined;
-
-            if (playback.replayGainMode === 'track') {
-                gain = song.gain?.track ?? song.gain?.album;
-                peak = song.peak?.track ?? song.peak?.album;
-            } else {
-                gain = song.gain?.album ?? song.gain?.track;
-                peak = song.peak?.album ?? song.peak?.track;
-            }
-
-            if (gain === undefined) {
-                gain = playback.replayGainFallbackDB;
-
-                if (!gain) {
-                    return 1;
-                }
-            }
-
-            if (peak === undefined) {
-                peak = 1;
-            }
-
-            const preAmp = playback.replayGainPreampDB ?? 0;
-
-            // https://wiki.hydrogenaud.io/index.php?title=ReplayGain_1.0_specification&section=19
-            // Normalized to max gain
-            let expectedGain = 10 ** ((gain + preAmp) / 20);
-
-            // Nothing in the system should allow this. But, in the case that preAmp is a
-            // bad value (not a number, for example), a NaN gain will cause the entire system to panic
-            if (isNaN(expectedGain)) {
-                expectedGain = 1;
-            }
-
-            if (playback.replayGainClip) {
-                return Math.min(expectedGain, 1 / peak);
-            }
-            return expectedGain;
-        },
+    const computeGain = useCallback(
+        (song: QueueSong): number =>
+            calculateReplayGain(song, {
+                replayGainClip: playback.replayGainClip,
+                replayGainFallbackDB: playback.replayGainFallbackDB,
+                replayGainMode: playback.replayGainMode,
+                replayGainPreampDB: playback.replayGainPreampDB,
+            }),
         [
             playback.replayGainClip,
             playback.replayGainFallbackDB,
@@ -491,11 +454,32 @@ export function WebPlayer() {
         ],
     );
 
+    // Diagnostic: on the web engine, ReplayGain is applied via a Web Audio
+    // GainNode. If the user has normalization enabled but the WebAudio toggle
+    // off, the HTMLAudioElement path has no per-song gain stage, so untagged
+    // and tagged tracks both play at raw loudness. Surface this once so the
+    // silent inconsistency is debuggable. (The MPV engine is unaffected — it
+    // normalizes natively regardless of this toggle.)
+    const loggedWebAudioGapRef = useRef(false);
+    useEffect(() => {
+        const rgEnabled = playback.replayGainMode && playback.replayGainMode !== 'no';
+        if (rgEnabled && !webAudio && !loggedWebAudioGapRef.current) {
+            loggedWebAudioGapRef.current = true;
+            console.warn(
+                '[replay-gain] ReplayGain mode is "%s" but WebAudio is disabled; the web engine cannot apply per-song normalization. Enable WebAudio in playback settings for library-wide loudness consistency.',
+                playback.replayGainMode,
+            );
+        }
+        if (webAudio) {
+            loggedWebAudioGapRef.current = false;
+        }
+    }, [playback.replayGainMode, webAudio]);
+
     useEffect(() => {
         if (!webAudio) return;
 
         if (player1 && player1Source && num === 1) {
-            const newGain = calculateReplayGain(player1);
+            const newGain = computeGain(player1);
 
             // This error SHOULD never happen, as calculateReplayGain is expected to
             // always return a real value. However, to prevent app crash, check this just in case
@@ -505,20 +489,20 @@ export function WebPlayer() {
                 console.error('Error setting gain', error);
             }
         }
-    }, [calculateReplayGain, num, player1, player1Source, volume, webAudio]);
+    }, [computeGain, num, player1, player1Source, volume, webAudio]);
 
     useEffect(() => {
         if (!webAudio) return;
 
         if (player2 && player2Source && num === 2) {
-            const newGain = calculateReplayGain(player2);
+            const newGain = computeGain(player2);
             try {
                 webAudio.gains[1].gain.setValueAtTime(Math.max(0, newGain), 0);
             } catch (error) {
                 console.error('Error setting gain', error);
             }
         }
-    }, [calculateReplayGain, num, player1, player2Source, player2, volume, webAudio]);
+    }, [computeGain, num, player1, player2Source, player2, volume, webAudio]);
 
     const player1Url = useSongUrl(player1, num === 1, transcode);
     const player2Url = useSongUrl(player2, num === 2, transcode);

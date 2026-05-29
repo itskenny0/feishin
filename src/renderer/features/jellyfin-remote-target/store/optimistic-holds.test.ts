@@ -216,6 +216,74 @@ describe('optimistic holds — stale-poll guard', () => {
         expect(useRemoteTargetStore.getState().mirrored.nowPlayingItem?.id).toBe('b');
     });
 
+    // Finding 1: queueIndex must also be held across an optimistic skip, or a
+    // stale poll that recomputes the OLD index from the not-yet-updated
+    // NowPlayingItem snaps the queue highlight back even though nowPlayingItem
+    // is held on the new track.
+    it('optimisticNext holds queueIndex so a stale poll cannot snap the highlight back (Finding 1)', () => {
+        connectTarget();
+        const a = stubSong('a');
+        const b = stubSong('b');
+        useRemoteTargetStore.getState().actions.applyMirrorFromServer({
+            nowPlayingItem: a,
+            playState: {
+                isPaused: false,
+                positionMs: 100_000,
+                positionSampledAt: Date.now(),
+                repeatMode: 'RepeatNone',
+                shuffle: false,
+                volume: 50,
+            },
+            queue: [a, b],
+            queueIndex: 0,
+        });
+        useRemoteTargetStore.getState().actions.optimisticNext();
+        expect(useRemoteTargetStore.getState().mirrored.queueIndex).toBe(1);
+        expect(useRemoteTargetStore.getState().holds.queueIndex).toBeDefined();
+
+        // A stale frame recomputes the OLD index (0) — the hold rejects it.
+        useRemoteTargetStore.getState().actions.applyMirrorFromServer({ queueIndex: 0 });
+        expect(useRemoteTargetStore.getState().mirrored.queueIndex).toBe(1);
+
+        // A frame agreeing with the optimistic index clears the hold.
+        useRemoteTargetStore.getState().actions.applyMirrorFromServer({ queueIndex: 1 });
+        expect(useRemoteTargetStore.getState().mirrored.queueIndex).toBe(1);
+        expect(useRemoteTargetStore.getState().holds.queueIndex).toBeUndefined();
+    });
+
+    it('a queueIndex hold installed directly survives a stale frame then trusts the server after expiry (Finding 1)', () => {
+        connectTarget();
+        useRemoteTargetStore.getState().actions.applyMirrorFromServer({ queueIndex: 3 });
+        // Install a hold for index 3 in the PAST so it has already expired.
+        useRemoteTargetStore.setState((s) => ({
+            holds: { ...s.holds, queueIndex: { expected: 3, until: Date.now() - 1 } },
+        }));
+        // Expired hold → trust the server's new index.
+        useRemoteTargetStore.getState().actions.applyMirrorFromServer({ queueIndex: 5 });
+        expect(useRemoteTargetStore.getState().mirrored.queueIndex).toBe(5);
+        expect(useRemoteTargetStore.getState().holds.queueIndex).toBeUndefined();
+    });
+
+    // Finding 3: opening the device picker tears the poller down (isPickerOpen
+    // is a dep). setPollerActive(false) must NOT wipe in-flight holds anymore —
+    // only clearTarget does.
+    it('setPollerActive(false) preserves in-flight holds; clearTarget still clears them (Finding 3)', () => {
+        connectTarget();
+        useRemoteTargetStore.getState().actions.setPaused(true);
+        expect(useRemoteTargetStore.getState().holds.isPaused).toBeDefined();
+
+        // Poller stops because the picker opened — holds must survive.
+        useRemoteTargetStore.getState().actions.setPollerActive(false);
+        expect(useRemoteTargetStore.getState().holds.isPaused).toBeDefined();
+        // The device list / hasPolledOnce reset is still in effect.
+        expect(useRemoteTargetStore.getState().deviceList).toEqual([]);
+        expect(useRemoteTargetStore.getState().hasPolledOnce).toBe(false);
+
+        // A genuine target teardown still resets holds.
+        useRemoteTargetStore.getState().actions.clearTarget();
+        expect(useRemoteTargetStore.getState().holds).toEqual({});
+    });
+
     it('default hold horizon matches DEFAULT_HOLD_MS and seek uses SEEK_HOLD_MS', () => {
         connectTarget();
         const before = Date.now();

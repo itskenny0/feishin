@@ -19,16 +19,22 @@ import { shallow } from 'zustand/shallow';
 import {
     isPeerClientConnected,
     publishPing,
+    publishPresenceHeartbeat,
     startPeerClient,
     stopPeerClient,
 } from '/@/renderer/features/peer-sync/controller/peer-client';
 import { applyPeerCommand } from '/@/renderer/features/peer-sync/controller/peer-receiver';
 import { applyPeerStateToStore } from '/@/renderer/features/peer-sync/controller/peer-state-mirror';
 import {
+    startStatePublisher,
+    stopStatePublisher,
+} from '/@/renderer/features/peer-sync/controller/state-publisher';
+import {
     pickTransport,
     setSyncEnabled,
     subscribe as subscribeTransport,
     sweepStalePresence,
+    touchPresence,
 } from '/@/renderer/features/peer-sync/controller/transport-selector';
 import {
     recordBrokerStatus,
@@ -47,6 +53,10 @@ const log = (...args: unknown[]) => console.info('[peer-sync]', ...args);
 
 const PRESENCE_SWEEP_MS = 3_000;
 const PING_INTERVAL_MS = 8_000;
+// SEV-1: republish our retained online presence at ~TTL/2 (MQTT_PRESENCE_TTL_MS
+// is 12s) so remote selectors keep us fresh and never age the MQTT lane out
+// while we're still connected. Kept under the TTL with margin for jitter.
+const PRESENCE_HEARTBEAT_MS = 6_000;
 
 export const usePeerSync = () => {
     const peerSync = usePeerSyncSettings();
@@ -154,6 +164,13 @@ export const usePeerSync = () => {
                     recordBrokerStatus(status);
                 },
                 onPong: (from, pong) => {
+                    // SEV-1: a successful RTT probe proves the peer is still
+                    // alive, so refresh its freshness in the transport selector.
+                    // touchPresence bumps only lastSeenAt — it deliberately does
+                    // NOT re-run recordPresence (which would clear the dev bridge
+                    // when the pong carries no `dev`; see SEV-4). This keeps the
+                    // MQTT lane up even between presence heartbeats.
+                    touchPresence(from.peerId);
                     const pending = pendingPings.get(pong.id);
                     if (!pending) return;
                     pendingPings.delete(pong.id);
@@ -175,6 +192,14 @@ export const usePeerSync = () => {
             },
         );
 
+        // D1 / SEV-2: mirror the local player onto the `state` topic so a peer
+        // that picks THIS instance as its Connect target can actually reflect
+        // our playback. Without this the entire receive-side mirror (gates, RTT
+        // offset, stub queue) is dead code. The publisher self-gates on
+        // isSyncEnabled() + connection and routes through publishOwnState, which
+        // consults the loop guard, so an inbound-apply window suppresses echoes.
+        startStatePublisher();
+
         // Liveness probes. Ping every known online peer on an interval; the
         // pong's arrival flips the latency sample. We don't ping when the
         // client itself isn't connected — pongs would never come back.
@@ -192,8 +217,21 @@ export const usePeerSync = () => {
             }
         }, PING_INTERVAL_MS);
 
+        // SEV-1: retained presence heartbeat. Without it our presence is only
+        // ever published once (the connect handler), so every OTHER peer's
+        // transport-selector freezes our lastSeenAt and ages the MQTT lane out
+        // ~12s later even though we're still connected. Republishing the
+        // retained online frame at TTL/2 keeps remote selectors fresh and lets
+        // a late joiner learn our live dev bridge immediately.
+        const heartbeatTimer = window.setInterval(() => {
+            if (!isPeerClientConnected()) return;
+            publishPresenceHeartbeat();
+        }, PRESENCE_HEARTBEAT_MS);
+
         return () => {
             window.clearInterval(pingTimer);
+            window.clearInterval(heartbeatTimer);
+            stopStatePublisher();
             unsubscribeTransport();
             pendingPings.clear();
             knownPeers.clear();

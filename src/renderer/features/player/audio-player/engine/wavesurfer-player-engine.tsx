@@ -20,6 +20,15 @@ export interface WaveSurferPlayerEngineHandle extends AudioPlayer {
 }
 
 interface WaveSurferPlayerEngineProps {
+    /**
+     * Linear ReplayGain multiplier for player 1's current track (1 = no change).
+     * Folded into the wavesurfer volume so loudness normalization stays
+     * consistent with the web-audio engine. wavesurfer.js does not expose a
+     * separate gain stage, so we apply gain * userVolume.
+     */
+    gain1?: number;
+    /** Linear ReplayGain multiplier for player 2's current track (1 = no change). */
+    gain2?: number;
     isMuted: boolean;
     isTransitioning: boolean;
     onEndedPlayer1: () => void;
@@ -45,6 +54,8 @@ const EMPTY_SOURCE =
 
 export const WaveSurferPlayerEngine = (props: WaveSurferPlayerEngineProps) => {
     const {
+        gain1 = 1,
+        gain2 = 1,
         isMuted,
         isTransitioning,
         onEndedPlayer1,
@@ -90,20 +101,23 @@ export const WaveSurferPlayerEngine = (props: WaveSurferPlayerEngineProps) => {
         waveColor: 'transparent',
     });
 
-    // Handle volume changes
+    // Handle volume changes. ReplayGain is folded into the volume because
+    // wavesurfer.js exposes no separate gain stage; setVolume clamps to [0,1].
     useEffect(() => {
         if (wavesurfer1) {
             const logVolume1 = convertToLogVolume(internalVolume1);
-            wavesurfer1.setVolume(isMuted ? 0 : logVolume1);
+            const withGain = Math.max(0, Math.min(1, logVolume1 * (gain1 || 1)));
+            wavesurfer1.setVolume(isMuted ? 0 : withGain);
         }
-    }, [wavesurfer1, internalVolume1, isMuted]);
+    }, [wavesurfer1, internalVolume1, isMuted, gain1]);
 
     useEffect(() => {
         if (wavesurfer2) {
             const logVolume2 = convertToLogVolume(internalVolume2);
-            wavesurfer2.setVolume(isMuted ? 0 : logVolume2);
+            const withGain = Math.max(0, Math.min(1, logVolume2 * (gain2 || 1)));
+            wavesurfer2.setVolume(isMuted ? 0 : withGain);
         }
-    }, [wavesurfer2, internalVolume2, isMuted]);
+    }, [wavesurfer2, internalVolume2, isMuted, gain2]);
 
     // Handle playback rate (speed)
     useEffect(() => {

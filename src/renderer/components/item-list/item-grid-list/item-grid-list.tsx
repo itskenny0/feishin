@@ -245,53 +245,77 @@ const VirtualizedGridList = React.memo(
 
 VirtualizedGridList.displayName = 'VirtualizedGridList';
 
+/**
+ * Maps a measured content width (in px) to the number of grid columns. Keyed
+ * on the grid's CONTENT width, not the viewport — in the desktop shell the
+ * content area is the viewport minus the sidebar.
+ *
+ * Tablet content-width tiers: the desktop shell renders for the whole
+ * 768-1199 viewport band; with an expanded (240px) sidebar the content area
+ * can be as narrow as ~560-700px, which previously fell into the 2-column
+ * branch and produced oversized covers on the device class with the most
+ * room. Intermediate 3-col (>=540) and 4-col (>=700) steps give tablet content
+ * widths a sensible 3-4 columns.
+ */
+export function getDynamicItemsPerRow(width: number, size?: 'compact' | 'default' | 'large') {
+    // Small-phone tier: below 380 (covers 320 iPhone SE through 360 Pixel 4a
+    // plus padding), drop to a single column. Two square covers at 360 minus
+    // padding leaves ~150px each, which is smaller than the text rows beneath
+    // them and looks cramped on Spotify-tier devices.
+    const isSmallPhone = width < 380;
+    const is3col = width >= 540;
+    const is4col = width >= 700;
+    const isSm = width >= 600;
+    const isMd = width >= 768;
+    const isLg = width >= 960;
+    const isXl = width >= 1200;
+    const is2xl = width >= 1440;
+    const is3xl = width >= 1920;
+    const is4xl = width >= 2560;
+
+    let dynamicItemsPerRow = 2;
+
+    if (is4xl) {
+        dynamicItemsPerRow = 10;
+    } else if (is3xl) {
+        dynamicItemsPerRow = 8;
+    } else if (is2xl) {
+        dynamicItemsPerRow = 7;
+    } else if (isXl) {
+        dynamicItemsPerRow = 6;
+    } else if (isLg) {
+        dynamicItemsPerRow = 5;
+    } else if (isMd) {
+        dynamicItemsPerRow = 4;
+    } else if (is4col) {
+        dynamicItemsPerRow = 4;
+    } else if (isSm) {
+        dynamicItemsPerRow = 3;
+    } else if (is3col) {
+        dynamicItemsPerRow = 3;
+    } else if (isSmallPhone) {
+        dynamicItemsPerRow = 1;
+    } else {
+        dynamicItemsPerRow = 2;
+    }
+
+    if (size === 'large') {
+        dynamicItemsPerRow = Math.round(dynamicItemsPerRow * 0.75);
+        if (dynamicItemsPerRow < 1) {
+            dynamicItemsPerRow = 1;
+        }
+    }
+
+    return dynamicItemsPerRow;
+}
+
 const createThrottledSetTableMeta = (
     itemsPerRow?: number,
     rowsCount?: number,
     size?: 'compact' | 'default' | 'large',
 ) => {
     return throttle((width: number, dataLength: number, setTableMeta: (meta: any) => void) => {
-        // Small-phone tier: below 380 (covers 320 iPhone SE through 360 Pixel 4a
-        // plus padding), drop to a single column. Two square covers at 360
-        // minus padding leaves ~150px each, which is smaller than the text
-        // rows beneath them and looks cramped on Spotify-tier devices.
-        const isSmallPhone = width < 380;
-        const isSm = width >= 600;
-        const isMd = width >= 768;
-        const isLg = width >= 960;
-        const isXl = width >= 1200;
-        const is2xl = width >= 1440;
-        const is3xl = width >= 1920;
-        const is4xl = width >= 2560;
-
-        let dynamicItemsPerRow = 2;
-
-        if (is4xl) {
-            dynamicItemsPerRow = 10;
-        } else if (is3xl) {
-            dynamicItemsPerRow = 8;
-        } else if (is2xl) {
-            dynamicItemsPerRow = 7;
-        } else if (isXl) {
-            dynamicItemsPerRow = 6;
-        } else if (isLg) {
-            dynamicItemsPerRow = 5;
-        } else if (isMd) {
-            dynamicItemsPerRow = 4;
-        } else if (isSm) {
-            dynamicItemsPerRow = 3;
-        } else if (isSmallPhone) {
-            dynamicItemsPerRow = 1;
-        } else {
-            dynamicItemsPerRow = 2;
-        }
-
-        if (size === 'large') {
-            dynamicItemsPerRow = Math.round(dynamicItemsPerRow * 0.75);
-            if (dynamicItemsPerRow < 1) {
-                dynamicItemsPerRow = 1;
-            }
-        }
+        const dynamicItemsPerRow = getDynamicItemsPerRow(width, size);
 
         const setItemsPerRow = itemsPerRow || dynamicItemsPerRow;
 

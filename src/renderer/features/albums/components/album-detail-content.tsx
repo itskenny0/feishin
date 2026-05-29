@@ -2,6 +2,7 @@ import type {
     ItemListStateActions,
     ItemListStateItemWithRequiredProperties,
 } from '/@/renderer/components/item-list/helpers/item-list-state';
+import type { TFunction } from 'i18next';
 
 import { ReactNode, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -667,7 +668,7 @@ interface DiscGroupRowProps {
     };
     groupItems: unknown[];
     internalState: ItemListStateActions;
-    t: (key: string, options?: any) => string;
+    t: TFunction;
 }
 
 const DiscGroupRow = ({ discGroup, groupItems, internalState, t }: DiscGroupRowProps) => {

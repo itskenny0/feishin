@@ -546,10 +546,16 @@ export const ConnectWizard = memo(() => {
         setTestState('testing');
         setTestError('');
         // own-tier credentials only — public brokers are anonymous, and the
-        // embedded tier never reaches this handler (no broker URL).
+        // embedded tier never reaches this handler (no broker URL). S2-B: also
+        // pass the embedded-scheme userId/roomKey so a broker that enforces the
+        // userId+roomKey CONNECT (an own-broker pointed at the embedded scheme)
+        // is probed with the SAME credentials the live client will send —
+        // otherwise the gate probes anonymously and mis-predicts live connect.
         const result = await testBrokerConnection(url, {
             password: tier === 'own' ? password : undefined,
+            roomKey: currentServer?.username ?? undefined,
             transport,
+            userId: currentServer?.userId ?? undefined,
             username: tier === 'own' ? username : undefined,
         });
         // A config change (which bumped the token + reset to idle) supersedes
@@ -563,7 +569,7 @@ export const ConnectWizard = memo(() => {
             setTestState('error');
             setTestError(result.error ?? '');
         }
-    }, [brokerUrl, password, tier, transport, username]);
+    }, [brokerUrl, currentServer, password, tier, transport, username]);
 
     const handleFinish = useCallback(async () => {
         if (finishingRef.current) return;
@@ -580,6 +586,22 @@ export const ConnectWizard = memo(() => {
             // consistent with what the live client derives at runtime.
             const peerId = settings.peerId || nanoid();
             const roomKey = currentServer?.username ?? '';
+
+            // S2-A: never start the embedded broker with a blank roomKey. The
+            // room key IS the broker auth password, and a broker started with
+            // roomKey==='' accepts any client presenting an empty password —
+            // effectively open. Mirror the guard peer-sync-settings'
+            // handleBrokerToggle already enforces. (Bare username flows can
+            // produce a blank username → blank roomKey.)
+            if (tier === 'embedded' && !roomKey) {
+                toast.warn({
+                    message: t('error.embeddedBrokerNeedsServer', {
+                        defaultValue:
+                            'Sign in to a Jellyfin server before starting the embedded broker — the room key is derived from your username.',
+                    }),
+                });
+                return;
+            }
 
             if (tier === 'embedded' && peerBrokerApi) {
                 const errorMsg = await peerBrokerApi.setEnabled({

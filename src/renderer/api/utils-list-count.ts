@@ -33,14 +33,12 @@ export const getOptimizedListCount = async <
         return null;
     }
 
-    const limit =
-        typeof query === 'object' &&
-        query !== null &&
-        'limit' in query &&
-        typeof (query as any).limit === 'number' &&
-        (query as any).limit > 0
-            ? (query as any).limit
-            : 100;
+    const queryLimit =
+        typeof query === 'object' && query !== null && 'limit' in query
+            ? (query as { limit?: unknown }).limit
+            : undefined;
+
+    const limit = typeof queryLimit === 'number' && queryLimit > 0 ? queryLimit : 100;
 
     // In most cases, the list count is called when entering the first page, so we fetch from the first page
     // This optimization will only help in this case, otherwise we still need 2 requests to get both the count and the data

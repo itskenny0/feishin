@@ -92,9 +92,36 @@ const openSocket = (wc: WebContents, options: OpenOptions): void => {
 
     sockets.set(id, { socket, webContents: wc });
 
+    // S3-A: MQTT control frames are small + latency-sensitive — disable Nagle so
+    // a publish isn't held waiting to coalesce. Keep-alive lets the OS detect a
+    // silently-dead peer (cable pull, sleeping broker) instead of stranding the
+    // socket. The connect/idle timeout reclaims a broker that accepts the TCP
+    // handshake but never CONNACKs (firewalled/hung MQTT service) WITHOUT
+    // relying on mqtt.js's connectTimeout reaching us through the IPC bridge.
+    const CONNECT_IDLE_TIMEOUT_MS = 15_000;
+    try {
+        socket.setNoDelay(true);
+        socket.setKeepAlive(true, 30_000);
+        socket.setTimeout(CONNECT_IDLE_TIMEOUT_MS);
+    } catch (err) {
+        warn('socket tuning failed', { err: (err as Error).message, id });
+    }
+    socket.on('timeout', () => {
+        warn('socket timeout — reclaiming', { id });
+        safeSend(wc, 'tcp-socket-error', { id, message: 'Socket timed out' });
+        destroySocket(id);
+    });
+
     const onConnectEvent = tls ? 'secureConnect' : 'connect';
     socket.on(onConnectEvent, () => {
         log('connected', { id });
+        // CONNACK arrived (or at least the byte stream is live); clear the
+        // aggressive connect timeout. Keep-alive continues to guard liveness.
+        try {
+            socket.setTimeout(0);
+        } catch {
+            // best-effort — a destroyed socket can't be re-armed, which is fine.
+        }
     });
     socket.on('data', (chunk: Buffer) => {
         safeSend(wc, 'tcp-socket-data', { data: chunk.toString('base64'), id });

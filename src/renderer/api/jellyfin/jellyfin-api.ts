@@ -528,7 +528,7 @@ export const jfApiClient = (args: {
                     headers: result.headers as any,
                     status: result.status,
                 };
-            } catch (e: any | AxiosError | Error) {
+            } catch (e: unknown) {
                 if (isAxiosError(e)) {
                     if (e.code === 'ERR_NETWORK') {
                         throw new Error(i18n.t('error.networkError') as string);

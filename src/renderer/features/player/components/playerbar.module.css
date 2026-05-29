@@ -93,6 +93,22 @@
 }
 
 /*
+ * The center column stacks the transport row (CenterControls'
+ * .controls-container) above the seek slider (PlayerbarSlider's
+ * .slider-container). Pin both as non-shrinking flex bands so the row
+ * always reserves its real rendered height and the slider sits cleanly
+ * beneath it — never squeezed into / under the buttons. Without this the
+ * transport row's declared `height: 35px` is treated as a shrinkable
+ * flex-basis, so on touch devices (where the buttons inflate to 44px and
+ * the seek thumb to a permanently-visible 28px circle, see below) the two
+ * bands collapse into each other and the prev/play/next buttons overlap
+ * the progress line. Children of the row/slider keep their own sizing.
+ */
+.center-grid-item > * {
+    flex: 0 0 auto;
+}
+
+/*
  * Touch-target audit: on pointer:coarse devices (touch) every interactive
  * control inside the playerbar - in any of the three grid columns - gets
  * a 44×44 minimum hit area to satisfy WCAG AA / iOS HIG / Material 48dp.
@@ -105,5 +121,19 @@
     .right-grid-item button {
         min-width: 44px;
         min-height: 44px;
+    }
+
+    /*
+     * Coarse-pointer collision fix. The 44px transport buttons and the
+     * 28px (permanently visible) seek thumb stack with only the 0.5rem
+     * column gap between them; the thumb bulges ~4px above the 20px
+     * slider band, which is enough to clip the buttons' bottom edge (the
+     * tablet-viewport overlap bug). Widen the inter-band gap so the thumb
+     * always clears the transport row. The bar reserves enough vertical
+     * slack below the slider (the seek band sits ~9px above the bar
+     * bottom) to absorb the extra space without clipping the thumb.
+     */
+    .center-grid-item {
+        gap: 0.85rem;
     }
 }

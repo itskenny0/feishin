@@ -101,7 +101,7 @@ export const MpvPlayerEngine = (props: MpvPlayerEngineProps) => {
             hasPopulatedQueueRef.current = false;
 
             // Initialize mpv with fresh state
-            const properties: Record<string, any> = {
+            const properties: Record<string, unknown> = {
                 ...getMpvProperties(mpvProperties),
                 speed: speed,
                 volume: volume,

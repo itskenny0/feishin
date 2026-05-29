@@ -52,10 +52,10 @@
     min-width: 16px;
     height: 16px;
     padding: 0 4px;
-    font-size: 10px;
+    font-size: var(--theme-font-size-xs);
     font-weight: 600;
     line-height: 16px;
-    color: var(--theme-colors-primary-color, #fff);
+    color: var(--theme-colors-primary-contrast);
     text-align: center;
     pointer-events: none;
     background-color: var(--theme-colors-primary-filled, var(--theme-colors-primary));

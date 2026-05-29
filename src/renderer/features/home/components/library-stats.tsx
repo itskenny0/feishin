@@ -9,6 +9,7 @@ import { api } from '/@/renderer/api';
 import { cachedSwr, readSnapshot } from '/@/renderer/cache';
 import { AppRoute } from '/@/renderer/router/routes';
 import { useCurrentServer } from '/@/renderer/store';
+import { TextTitle } from '/@/shared/components/text-title/text-title';
 import {
     AlbumArtistListSort,
     AlbumListSort,
@@ -244,7 +245,9 @@ export const LibraryStats = () => {
 
     return (
         <section className={styles.section}>
-            <h2 className={styles.header}>{t('page.home.libraryStats_title')}</h2>
+            <TextTitle className={styles.header} fw={700} isNoSelect order={3}>
+                {t('page.home.libraryStats_title')}
+            </TextTitle>
             <div className={styles.grid}>
                 {tilesData.map((tile) => (
                     <Tile

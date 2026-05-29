@@ -92,17 +92,29 @@ class SessionsSink {
             positionMs: mirror.mirrored.playState?.positionMs,
             volume: mirror.mirrored.playState?.volume,
         });
-        // B4: when the live lane for this target is MQTT, a Jellyfin poll that
-        // was already in flight (or the slow fallback heartbeat) must NOT
-        // overwrite the fresher MQTT play-state. Strip the playState slice but
-        // still apply capabilities / queue / queueIndex so the WS keeps
-        // hydrating the queue list while MQTT drives position/pause/volume.
-        if (pickTransportByJellyfinDeviceId(state.targetDeviceId) === 'mqtt') {
-            const { playState: _droppedPlayState, ...withoutPlayState } = mirror.mirrored;
-            actions.applyMirrorFromServer(withoutPlayState);
-        } else {
-            actions.applyMirrorFromServer(mirror.mirrored);
+        // Finding 2 + B4: decide a SINGLE queue owner per lane. When the live
+        // lane for this target is MQTT, the MQTT state-mirror is the sole driver
+        // of play-state AND queue/queueIndex (peerStateToMirrored builds a stub
+        // queue from qIds). A Jellyfin poll that was already in flight (or the
+        // 10s fallback heartbeat) must therefore NOT write queue/queueIndex
+        // either — otherwise the queue rows flicker between rich Jellyfin
+        // metadata and bare MQTT stubs every ~10s, and the two lanes can disagree
+        // on queueIndex. So while MQTT owns the lane we strip playState AND
+        // queue/queueIndex and skip the hydrate entirely.
+        const mqttOwnsLane = pickTransportByJellyfinDeviceId(state.targetDeviceId) === 'mqtt';
+        if (mqttOwnsLane) {
+            const {
+                playState: _droppedPlayState,
+                queue: _droppedQueue,
+                queueIndex: _droppedQueueIndex,
+                ...rest
+            } = mirror.mirrored;
+            actions.applyMirrorFromServer(rest);
+            // MQTT is the queue owner — do not hydrate/write the Jellyfin queue.
+            return;
         }
+
+        actions.applyMirrorFromServer(mirror.mirrored);
 
         if (mirror.hydrateQueue) {
             const now = Date.now();
@@ -112,9 +124,12 @@ class SessionsSink {
                 // pretending the cache is fresh, so we'll try again as
                 // soon as the window opens. The queueIndex below still
                 // updates so the UI tracks the current item even while
-                // the queue list is stale.
+                // the queue list is stale. Finding 1: route through
+                // applyMirrorFromServer (hold-aware) so a live queueIndex hold
+                // from an optimistic skip isn't clobbered by the recomputed
+                // (stale) index.
                 if (mirror.queueIndex !== -1) {
-                    actions.setMirrored({ queueIndex: mirror.queueIndex });
+                    actions.applyMirrorFromServer({ queueIndex: mirror.queueIndex });
                 }
                 return;
             }
@@ -127,7 +142,10 @@ class SessionsSink {
             void mirror
                 .hydrateQueue()
                 .then((queue) => {
-                    actions.setMirrored({ queue, queueIndex: mirror.queueIndex });
+                    // queue list is fresh metadata; queueIndex routes through the
+                    // hold-aware path (Finding 1).
+                    actions.setMirrored({ queue });
+                    actions.applyMirrorFromServer({ queueIndex: mirror.queueIndex });
                     delete this.hydrateBackoff[match.deviceId];
                 })
                 .catch((err) => {
@@ -161,9 +179,10 @@ class SessionsSink {
             // index, and sync the per-device cache to [] so `queueChanged`
             // settles on the next tick (no churn while the queue stays empty).
             this.prevQueueIdsByDevice[match.deviceId] = [];
-            actions.setMirrored({ queue: [], queueIndex: -1 });
+            actions.setMirrored({ queue: [] });
+            actions.applyMirrorFromServer({ queueIndex: -1 });
         } else if (mirror.queueIndex !== -1) {
-            actions.setMirrored({ queueIndex: mirror.queueIndex });
+            actions.applyMirrorFromServer({ queueIndex: mirror.queueIndex });
         }
     }
 

@@ -40,9 +40,9 @@ export const DeletePlaylistAction = ({ disabled, items }: DeletePlaylistActionPr
             toast.success({
                 message: t('action.deletePlaylist'),
             });
-        } catch (err: any) {
+        } catch (err) {
             toast.error({
-                message: err.message,
+                message: err instanceof Error ? err.message : undefined,
                 title: t('error.genericError'),
             });
         }

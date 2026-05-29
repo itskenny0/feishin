@@ -72,11 +72,11 @@ img.size-5xl {
 }
 
 .color-warn {
-    color: var(--theme-colors-state-warn);
+    color: var(--theme-colors-state-warning);
 }
 
 .color-favorite {
-    color: rgb(255 49 49);
+    color: var(--theme-colors-favorite);
 }
 
 .color-transparent {
@@ -120,11 +120,11 @@ img.size-5xl {
 }
 
 .fill-warn {
-    fill: var(--theme-colors-state-warn);
+    fill: var(--theme-colors-state-warning);
 }
 
 .fill-favorite {
-    fill: rgb(255 49 49);
+    fill: var(--theme-colors-favorite);
 }
 
 .fill-transparent {

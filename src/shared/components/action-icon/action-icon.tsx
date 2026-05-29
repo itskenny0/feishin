@@ -3,7 +3,7 @@ import {
     ActionIcon as MantineActionIcon,
     ActionIconProps as MantineActionIconProps,
 } from '@mantine/core';
-import { forwardRef, useMemo } from 'react';
+import { forwardRef, MouseEvent as ReactMouseEvent, useMemo } from 'react';
 
 import styles from './action-icon.module.css';
 
@@ -13,8 +13,10 @@ import { createPolymorphicComponent } from '/@/shared/utils/create-polymorphic-c
 
 const COMPACT_SIZES = ['compact-xs', 'compact-sm', 'compact-md'] as const;
 
-const isCompactSize = (size: number | string | undefined): boolean => {
-    return typeof size === 'string' && COMPACT_SIZES.includes(size as any);
+type CompactSize = (typeof COMPACT_SIZES)[number];
+
+const isCompactSize = (size: number | string | undefined): size is CompactSize => {
+    return typeof size === 'string' && (COMPACT_SIZES as readonly string[]).includes(size);
 };
 
 export interface ActionIconProps
@@ -41,7 +43,7 @@ const _ActionIcon = forwardRef<HTMLButtonElement, ActionIconProps>(
         },
         ref,
     ) => {
-        const handleClick = (e: any) => {
+        const handleClick = (e: ReactMouseEvent<HTMLButtonElement>) => {
             if (stopsPropagation) e.stopPropagation();
             if (onClick) onClick(e);
         };
@@ -55,13 +57,24 @@ const _ActionIcon = forwardRef<HTMLButtonElement, ActionIconProps>(
         );
 
         const mantineSize = isCompactSize(size) ? 'sm' : size;
-        const compactSize = isCompactSize(size) ? (size as string) : undefined;
+        const compactSize = isCompactSize(size) ? size : undefined;
+
+        // A Mantine Tooltip only sets aria-describedby while hovered/focused;
+        // it does not give the button an accessible name. ~100 icon-only
+        // buttons app-wide pass only `tooltip` with no aria-label, so screen
+        // readers announce them as unlabeled "button". When no explicit
+        // aria-label is supplied, fall back to the tooltip's string label so
+        // every tooltip-only icon button gets a name.
+        const accessibleName =
+            (props as { 'aria-label'?: string })['aria-label'] ??
+            (typeof tooltip?.label === 'string' ? tooltip.label : undefined);
 
         const actionIconProps: ActionIconProps & { 'data-size'?: string } = {
             classNames: memoizedClassNames,
             size: mantineSize,
             variant,
             ...props,
+            ...(accessibleName !== undefined && { 'aria-label': accessibleName }),
             onClick: handleClick,
             ...(compactSize && { 'data-size': compactSize }),
         };

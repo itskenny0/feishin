@@ -309,7 +309,7 @@ const parsePath = (fullPath: string) => {
     const parsedParams = qs.parse(params);
 
     // Convert indexed object to array
-    const newParams: Record<string, any> = {};
+    const newParams: Record<string, unknown> = {};
     Object.keys(parsedParams).forEach((key) => {
         const isIndexedArrayObject =
             typeof parsedParams[key] === 'object' &&
@@ -438,7 +438,7 @@ axiosClient.interceptors.response.use(
 
                         return axiosClient.request(error.config);
                     })
-                    .catch((newError: any) => {
+                    .catch((newError: unknown) => {
                         if (newError !== TIMEOUT_ERROR) {
                             console.error('Error when trying to reauthenticate: ', newError);
 
@@ -512,7 +512,7 @@ export const ndApiClient = (args: {
                     headers: result.headers as any,
                     status: result.status,
                 };
-            } catch (e: any | AxiosError | Error) {
+            } catch (e: unknown) {
                 if (isAxiosError(e)) {
                     if (e.code === 'ERR_NETWORK') {
                         throw new Error(i18n.t('error.networkError') as string);

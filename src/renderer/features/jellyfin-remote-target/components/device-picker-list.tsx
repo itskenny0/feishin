@@ -146,9 +146,13 @@ export const DevicePickerList = ({ onClose, variant = 'desktop' }: DevicePickerL
             capabilities: d.capabilities,
             deviceId: d.deviceId,
             deviceName: d.deviceName,
-            // E1: bind the target to the server that established it so commands
-            // can't leak to a different server after a switch.
-            ownerServerId: server?.id ?? '',
+            // E1/J3: bind the target to the server that established it so
+            // commands can't leak to a different server after a switch. Use
+            // `undefined` (reducer maps it to null) — NOT `''`. The getRemoteCtx
+            // guard is `target.ownerServerId && target.ownerServerId !== id`, so
+            // an empty string is falsy and would DISABLE the cross-server guard
+            // for a target picked while no Jellyfin server was current.
+            ownerServerId: server?.id ?? undefined,
             sessionId: d.sessionId,
         });
         setSettings({

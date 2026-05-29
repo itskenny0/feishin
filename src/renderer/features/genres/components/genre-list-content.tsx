@@ -1,6 +1,9 @@
 import { lazy, Suspense, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { useGenreListFilters } from '/@/renderer/features/genres/hooks/use-genre-list-filters';
+import { useGenreListQuery } from '/@/renderer/features/genres/queries/genres-queries';
+import { EmptyState, EmptyStateProps } from '/@/renderer/features/shared/components/empty-state';
 import { ItemListSettings, useCurrentServer, useListSettings } from '/@/renderer/store';
 import { Spinner } from '/@/shared/components/spinner/spinner';
 import { GenreListQuery } from '/@/shared/types/domain-types';
@@ -48,12 +51,17 @@ export const GenreListContent = () => {
 
 export const GenreListView = ({
     display,
+    emptyState,
     grid,
     itemsPerPage,
     overrideQuery,
     pagination,
     table,
-}: ItemListSettings & { overrideQuery?: Omit<GenreListQuery, 'limit' | 'startIndex'> }) => {
+}: ItemListSettings & {
+    emptyState?: EmptyStateProps;
+    overrideQuery?: Omit<GenreListQuery, 'limit' | 'startIndex'>;
+}) => {
+    const { t } = useTranslation();
     const server = useCurrentServer();
 
     const { query } = useGenreListFilters();
@@ -70,6 +78,24 @@ export const GenreListView = ({
             sortOrder: overrideQuery.sortOrder || query.sortOrder,
         };
     }, [query, overrideQuery]);
+
+    // Cheap count probe (limit 1) so an empty genre library renders a friendly
+    // EmptyState instead of a blank canvas — mirrors the album list pattern.
+    const countQuery = useGenreListQuery({
+        query: { ...mergedQuery, limit: 1, startIndex: 0 } as GenreListQuery,
+        serverId: server.id,
+    });
+
+    if (countQuery.data?.totalRecordCount === 0) {
+        const fallback: EmptyStateProps = {
+            description: t('emptyState.genresDescription', {
+                defaultValue: 'Genres will appear here once your library is scanned.',
+            }),
+            icon: 'genre',
+            title: t('emptyState.genresTitle', { defaultValue: 'No genres yet' }),
+        };
+        return <EmptyState {...fallback} {...emptyState} />;
+    }
 
     switch (display) {
         case ListDisplayType.GRID: {

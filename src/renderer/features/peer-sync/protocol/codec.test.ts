@@ -160,6 +160,57 @@ describe('peer-sync codec', () => {
         expect((decoded as typeof frame).lyr).toBe(true);
     });
 
+    // SEV-4: buildState must NOT emit a standalone qIdx when qIds is absent —
+    // a bare qIdx is a meaningless field the receiver can never use (the mirror
+    // only consumes qIdx when qIds is present), and an easy publisher footgun.
+    it('buildState drops qIdx when qIds is absent (SEV-4)', () => {
+        const frame = buildState({
+            dur: 1000,
+            paused: false,
+            pos: 0,
+            qIds: undefined,
+            qIdx: 3,
+            rep: 'off',
+            shuf: false,
+            track: null,
+            vol: 100,
+        });
+        expect(frame.qIds).toBeUndefined();
+        expect(frame.qIdx).toBeUndefined();
+    });
+
+    it('buildState drops qIdx when qIds is empty (SEV-4)', () => {
+        const frame = buildState({
+            dur: 1000,
+            paused: false,
+            pos: 0,
+            qIds: [],
+            qIdx: 0,
+            rep: 'off',
+            shuf: false,
+            track: null,
+            vol: 100,
+        });
+        expect(frame.qIds).toBeUndefined();
+        expect(frame.qIdx).toBeUndefined();
+    });
+
+    it('buildState keeps qIdx alongside a non-empty qIds (SEV-4)', () => {
+        const frame = buildState({
+            dur: 1000,
+            paused: false,
+            pos: 0,
+            qIds: ['a', 'b'],
+            qIdx: 1,
+            rep: 'off',
+            shuf: false,
+            track: null,
+            vol: 100,
+        });
+        expect(frame.qIds).toEqual(['a', 'b']);
+        expect(frame.qIdx).toBe(1);
+    });
+
     it('accepts a state frame from an older publisher that omits the v1+ optional fields', () => {
         // Hand-build the frame so `buildState` doesn't tack on optional
         // fields — this simulates what an older publisher would emit.

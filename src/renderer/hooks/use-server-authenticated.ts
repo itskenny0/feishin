@@ -26,9 +26,9 @@ const MIN_AUTH_DELAY_MS = 1000;
 const MAX_NETWORK_RETRIES = 1;
 const NETWORK_RETRY_DELAY_MS = 500;
 
-const isNetworkError = (error: any): boolean => {
+const isNetworkError = (error: unknown): boolean => {
     const message =
-        error.message && typeof error.message === 'string' ? (error.message as string) : null;
+        error instanceof Error && typeof error.message === 'string' ? error.message : null;
     const messageLower = message?.toLowerCase();
 
     if (messageLower?.includes('network') || messageLower?.includes('timeout')) {
@@ -160,13 +160,16 @@ export const useServerAuthenticated = () => {
 
                     setReady(AuthState.VALID);
                     return;
-                } catch (getUserInfoError: any) {
+                } catch (getUserInfoError) {
+                    const userInfoError = getUserInfoError as
+                        | undefined
+                        | { message?: string; response?: { status?: number } };
                     // Check if it's a forbidden/authentication error (401 or 403)
                     const isForbiddenError =
-                        getUserInfoError?.response?.status === 401 ||
-                        getUserInfoError?.response?.status === 403 ||
-                        getUserInfoError?.message?.toLowerCase().includes('forbidden') ||
-                        getUserInfoError?.message?.toLowerCase().includes('unauthorized');
+                        userInfoError?.response?.status === 401 ||
+                        userInfoError?.response?.status === 403 ||
+                        userInfoError?.message?.toLowerCase().includes('forbidden') ||
+                        userInfoError?.message?.toLowerCase().includes('unauthorized');
 
                     // Only reauthenticate if it's a forbidden error AND password is saved
                     if (isForbiddenError && serverWithAuth.savePassword && localSettings) {

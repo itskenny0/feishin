@@ -80,7 +80,7 @@ export const MobileFullscreenPlayerHeader = memo(
         const displaySettings = useLyricsDisplaySettings('default');
         const lyricConfig = { ...lyricsSettings, ...displaySettings };
 
-        const handleLyricsSettings = (property: string, value: any) => {
+        const handleLyricsSettings = (property: string, value: boolean | number | string) => {
             const displayProperties = ['fontSize', 'fontSizeUnsync', 'gap', 'gapUnsync'];
             if (displayProperties.includes(property)) {
                 const currentDisplay = useSettingsStore.getState().lyricsDisplay;

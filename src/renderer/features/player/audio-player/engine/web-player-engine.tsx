@@ -87,7 +87,9 @@ export const WebPlayerEngine = (props: WebPlayerEngineProps) => {
     // and momentarily double-route audio.
     const networkRetryTimer1 = useRef<NodeJS.Timeout | null>(null);
     const networkRetryTimer2 = useRef<NodeJS.Timeout | null>(null);
-    const [ReactPlayerComponent, setReactPlayerComponent] = useState<any>(null);
+    const [ReactPlayerComponent, setReactPlayerComponent] = useState<null | typeof ReactPlayer>(
+        null,
+    );
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {

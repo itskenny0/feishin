@@ -277,6 +277,19 @@ export const useTablePaneSync = ({
         const scrollingElements = new Set<HTMLDivElement>();
         const scrollTimeouts = new Map<HTMLDivElement, NodeJS.Timeout>();
 
+        // Re-entrancy guard shared across scroll events. Each pane's
+        // programmatic `scrollTo` below fires its own `scroll` event; these
+        // flags suppress the cascade so a sync from one pane doesn't bounce
+        // back. This MUST persist between events — declaring it inside
+        // `syncScroll` (as it was) reset it every event, making the guards
+        // dead code and causing redundant cross-pane `scrollTo` writes.
+        const isScrolling = {
+            header: false,
+            pinnedLeft: false,
+            pinnedRight: false,
+            row: false,
+        };
+
         const setActiveElement = (e: HTMLElementEventMap['pointermove']) => {
             activeElement.element = e.currentTarget as HTMLDivElement;
         };
@@ -322,13 +335,6 @@ export const useTablePaneSync = ({
 
             const scrollTop = (e.currentTarget as HTMLDivElement).scrollTop;
             const scrollLeft = (e.currentTarget as HTMLDivElement).scrollLeft;
-
-            const isScrolling = {
-                header: false,
-                pinnedLeft: false,
-                pinnedRight: false,
-                row: false,
-            };
 
             const hasRightPinnedColumns = pinnedRightColumnCount > 0;
 

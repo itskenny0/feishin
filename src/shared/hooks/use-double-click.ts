@@ -1,21 +1,21 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { MouseEvent as ReactMouseEvent, useCallback, useEffect, useRef } from 'react';
 
-export const useDoubleClick = ({
+export const useDoubleClick = <E extends ReactMouseEvent = ReactMouseEvent>({
     doubleClickLatency = 300,
     onDoubleClick = () => null,
     onSingleClick = () => null,
     singleClickLatency = 20,
 }: {
     doubleClickLatency?: number;
-    onDoubleClick?: (e: any) => void;
-    onSingleClick?: (e: any) => void;
+    onDoubleClick?: (e: E) => void;
+    onSingleClick?: (e: E) => void;
     singleClickLatency?: number;
 }) => {
     const clickCountRef = useRef(0);
     const singleClickTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const doubleClickTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const singleClickFiredRef = useRef(false);
-    const lastClickEventRef = useRef<any>(null);
+    const lastClickEventRef = useRef<E | null>(null);
 
     // Use latency for backward compatibility, but prefer doubleClickLatency
     const effectiveDoubleClickLatency = doubleClickLatency;
@@ -29,7 +29,7 @@ export const useDoubleClick = ({
     }, []);
 
     const handleClick = useCallback(
-        (e: any) => {
+        (e: E) => {
             clickCountRef.current += 1;
             lastClickEventRef.current = e;
 
@@ -47,7 +47,11 @@ export const useDoubleClick = ({
                 if (effectiveSingleClickLatency > 0) {
                     singleClickTimeoutRef.current = setTimeout(() => {
                         // Only fire if still a single click and double click hasn't been detected
-                        if (clickCountRef.current === 1 && !singleClickFiredRef.current) {
+                        if (
+                            clickCountRef.current === 1 &&
+                            !singleClickFiredRef.current &&
+                            lastClickEventRef.current
+                        ) {
                             singleClickFiredRef.current = true;
                             onSingleClick(lastClickEventRef.current);
                         }
@@ -57,7 +61,7 @@ export const useDoubleClick = ({
                     // Note: If double click comes immediately after, both may fire
                     // For best UX, use a small delay (e.g., 50ms) instead of 0
                     singleClickFiredRef.current = true;
-                    onSingleClick(lastClickEventRef.current);
+                    onSingleClick(e);
                 }
             } else if (clickCountRef.current === 2) {
                 // Second click detected within double-click latency

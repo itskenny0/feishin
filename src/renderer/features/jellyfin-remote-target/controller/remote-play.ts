@@ -87,13 +87,16 @@ export const interpolatePositionMs = (
     durationMs: number | undefined,
 ): number => {
     const { isPaused, positionMs, positionSampledAt } = playState;
-    if (isPaused || positionSampledAt === 0) return positionMs;
+    // Finding 4: floor at 0 — this is the single interpolation authority feeding
+    // the playhead, and a malformed/negative positionMs (or a clock-skewed
+    // anchor) must never surface a sub-zero read.
+    if (isPaused || positionSampledAt === 0) return Math.max(0, positionMs);
     const elapsed = now - positionSampledAt;
     const projected = elapsed > 0 ? positionMs + elapsed : positionMs;
     if (typeof durationMs === 'number' && durationMs > 0) {
-        return Math.min(projected, durationMs);
+        return Math.max(0, Math.min(projected, durationMs));
     }
-    return projected;
+    return Math.max(0, projected);
 };
 
 export type JellyfinRepeatMode = 'RepeatAll' | 'RepeatNone' | 'RepeatOne';

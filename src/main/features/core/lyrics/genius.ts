@@ -19,7 +19,7 @@ export interface GeniusResponse {
 }
 
 export interface Hit {
-    highlights: any[];
+    highlights: unknown[];
     index: string;
     result: Result;
     type: string;
@@ -59,7 +59,7 @@ export interface Result {
     annotation_count: number;
     api_path: string;
     artist_names: string;
-    featured_artists: any[];
+    featured_artists: unknown[];
     full_title: string;
     header_image_thumbnail_url: string;
     header_image_url: string;
@@ -96,7 +96,7 @@ export interface Stats {
 }
 
 export async function getLyricsBySongId(url: string): Promise<null | string> {
-    let result: AxiosResponse<string, any>;
+    let result: AxiosResponse<string>;
     try {
         result = await axios.get<string>(url, { responseType: 'text' });
     } catch (e) {
@@ -131,7 +131,7 @@ export async function getSearchResults(
     }
 
     try {
-        result = await axios.get(SEARCH_URL, {
+        result = await axios.get<GeniusResponse>(SEARCH_URL, {
             params: {
                 per_page: '5',
                 q: searchQuery,
@@ -186,7 +186,7 @@ async function getSongId(
 ): Promise<null | Omit<InternetProviderLyricResponse, 'lyrics'>> {
     let result: AxiosResponse<GeniusResponse>;
     try {
-        result = await axios.get(SEARCH_URL, {
+        result = await axios.get<GeniusResponse>(SEARCH_URL, {
             params: {
                 per_page: '1',
                 q: `${params.artist} ${params.name}`,

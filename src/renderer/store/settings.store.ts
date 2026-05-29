@@ -2238,7 +2238,13 @@ const initialState: SettingsState = {
             audioSampleRateHz: 0,
             gaplessAudio: 'weak',
             replayGainClip: true,
-            replayGainFallbackDB: undefined,
+            // Default fallback gain for tracks with NO ReplayGain tags. Without
+            // this, untagged songs play at raw file loudness while tagged songs
+            // are normalized — the common library-wide consistency gap. -6 dB
+            // roughly matches the loudness of a typical RG-tagged library
+            // (RG reference is ~89 dB / -18 LUFS), so untagged tracks aren't
+            // noticeably louder than their tagged neighbours.
+            replayGainFallbackDB: -6,
             replayGainMode: 'track',
             replayGainPreampDB: 0,
         },
@@ -3241,10 +3247,32 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
+                if (version <= 53) {
+                    // Seed a default ReplayGain fallback gain for existing users
+                    // who never set one (it was previously `undefined`). Untagged
+                    // tracks were playing at raw file loudness while tagged tracks
+                    // were normalized, breaking library-wide loudness consistency.
+                    // -6 dB roughly matches a typical RG-tagged library. Only
+                    // applied when normalization is on, so users with RG disabled
+                    // see no change.
+                    const mpv = state.playback?.mpvProperties;
+                    if (
+                        mpv &&
+                        typeof mpv === 'object' &&
+                        mpv.replayGainMode !== 'no' &&
+                        (mpv.replayGainFallbackDB === undefined ||
+                            mpv.replayGainFallbackDB === null ||
+                            Number.isNaN(mpv.replayGainFallbackDB))
+                    ) {
+                        mpv.replayGainFallbackDB =
+                            initialState.playback.mpvProperties.replayGainFallbackDB;
+                    }
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 53,
+            version: 54,
         },
     ),
 );

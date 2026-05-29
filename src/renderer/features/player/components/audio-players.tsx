@@ -266,7 +266,11 @@ const AudioPlayersContent = ({
             const setSink = async () => {
                 try {
                     if (audioContext.context.state !== 'closed') {
-                        await (audioContext.context as any).setSinkId(audioDeviceId);
+                        await (
+                            audioContext.context as AudioContext & {
+                                setSinkId: (sinkId: string) => Promise<void>;
+                            }
+                        ).setSinkId(audioDeviceId);
                     }
                 } catch (error) {
                     toast.error({ message: `Error setting sink: ${(error as Error).message}` });

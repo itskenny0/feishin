@@ -258,7 +258,7 @@ function createAlphaUpdaterInstance(): AppImageUpdater | MacUpdater | NsisUpdate
 
 protocol.registerSchemesAsPrivileged([{ privileges: { bypassCSP: true }, scheme: 'feishin' }]);
 
-process.on('uncaughtException', (error: any) => {
+process.on('uncaughtException', (error: Error) => {
     console.error('Error in main process', error);
 });
 
@@ -732,7 +732,12 @@ async function createWindow(first = true): Promise<void> {
         }
     });
 
-    (mainWindow as any).on('minimize', (event: any) => {
+    // Electron's typed `.on()` overloads omit 'minimize' in this version (unlike
+    // 'close'), so this event-name cast is load-bearing — keep it.
+    type MinimizeListenable = {
+        on: (event: 'minimize', listener: (event: { preventDefault: () => void }) => void) => void;
+    };
+    (mainWindow as unknown as MinimizeListenable).on('minimize', (event) => {
         if (store.get('window_minimize_to_tray') === true) {
             event.preventDefault();
             mainWindow?.hide();

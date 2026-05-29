@@ -367,14 +367,14 @@ const invalidatePlaylistScopes = (serverId: string, playlistId?: string): void =
 const createFavoriteHandler: OpHandler<FavoriteArgs, FavoriteSnapshot> = {
     apply: (db, args) => applyFavorite(db, args, true),
     invalidate: invalidateFavoriteScopes,
-    remote: (args) => controller.createFavorite(args as any),
+    remote: (args) => controller.createFavorite(args),
     rollback: rollbackFavorite,
 };
 
 const deleteFavoriteHandler: OpHandler<FavoriteArgs, FavoriteSnapshot> = {
     apply: (db, args) => applyFavorite(db, args, false),
     invalidate: invalidateFavoriteScopes,
-    remote: (args) => controller.deleteFavorite(args as any),
+    remote: (args) => controller.deleteFavorite(args),
     rollback: rollbackFavorite,
 };
 
@@ -423,7 +423,7 @@ const setRatingHandler: OpHandler<SetRatingArgs, FavoriteSnapshot> = {
         if (!fn) {
             throw new Error('setRating is not supported by the active server');
         }
-        return fn(args as any);
+        return fn(args);
     },
     rollback: rollbackFavorite,
 };
@@ -470,7 +470,7 @@ const incrementPlayCountHandler: OpHandler<ScrobbleArgs, FavoriteSnapshot> = {
         const serverId = args.apiClientProps.serverId;
         queryClient.invalidateQueries({ exact: false, queryKey: queryKeys.songs.root(serverId) });
     },
-    remote: (args) => controller.scrobble(args as any),
+    remote: (args) => controller.scrobble(args),
     rollback: rollbackFavorite,
 };
 
@@ -503,7 +503,7 @@ const addToPlaylistHandler: OpHandler<AddToPlaylistArgs, PlaylistSongsSnapshot> 
         return snapshot;
     },
     invalidate: (args) => invalidatePlaylistScopes(args.apiClientProps.serverId, args.query.id),
-    remote: (args) => controller.addToPlaylist(args as any),
+    remote: (args) => controller.addToPlaylist(args),
     rollback: restorePlaylistSongs,
 };
 
@@ -528,7 +528,7 @@ const removeFromPlaylistHandler: OpHandler<RemoveFromPlaylistArgs, PlaylistSongs
         return snapshot;
     },
     invalidate: (args) => invalidatePlaylistScopes(args.apiClientProps.serverId, args.query.id),
-    remote: (args) => controller.removeFromPlaylist(args as any),
+    remote: (args) => controller.removeFromPlaylist(args),
     rollback: restorePlaylistSongs,
 };
 
@@ -570,7 +570,7 @@ const reorderPlaylistHandler: OpHandler<MoveItemArgs, PlaylistSongsSnapshot> = {
         if (!fn) {
             throw new Error('movePlaylistItem is not supported by the active server');
         }
-        return fn(args as any);
+        return fn(args);
     },
     rollback: restorePlaylistSongs,
 };
@@ -586,7 +586,7 @@ const createPlaylistHandler: OpHandler<CreatePlaylistArgs, PlaylistRowSnapshot> 
         return { delete: false, previous: undefined };
     },
     invalidate: (args) => invalidatePlaylistScopes(args.apiClientProps.serverId),
-    remote: (args) => controller.createPlaylist(args as any),
+    remote: (args) => controller.createPlaylist(args),
     rollback: async () => {
         // Nothing to undo since apply was a no-op.
     },
@@ -612,7 +612,7 @@ const renamePlaylistHandler: OpHandler<UpdatePlaylistArgs, PlaylistRowSnapshot> 
         return { delete: false, previous: prev };
     },
     invalidate: (args) => invalidatePlaylistScopes(args.apiClientProps.serverId, args.query.id),
-    remote: (args) => controller.updatePlaylist(args as any),
+    remote: (args) => controller.updatePlaylist(args),
     rollback: async (db, snapshot) => {
         if (snapshot.previous) {
             await db.playlists.put(snapshot.previous);
@@ -639,7 +639,7 @@ const deletePlaylistHandler: OpHandler<DeletePlaylistArgs, PlaylistRowSnapshot> 
         return { delete: true, previous: prev, songs };
     },
     invalidate: (args) => invalidatePlaylistScopes(args.apiClientProps.serverId, args.query.id),
-    remote: (args) => controller.deletePlaylist(args as any),
+    remote: (args) => controller.deletePlaylist(args),
     rollback: async (db, snapshot) => {
         if (snapshot.previous) {
             await db.playlists.put(snapshot.previous);

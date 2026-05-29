@@ -16,6 +16,7 @@ import type { LibraryCacheDb } from './db';
 
 import { getActiveCacheDb } from './db';
 import { useCacheStore } from './store';
+import { sumTrackmapBytes } from './trackmap-cache';
 
 import { useSettingsStore } from '/@/renderer/store';
 
@@ -78,6 +79,7 @@ export const estimateBytes = async (): Promise<number | undefined> => {
         try {
             const [
                 thumbnailBytes,
+                trackmapBytes,
                 albums,
                 artists,
                 songs,
@@ -88,6 +90,7 @@ export const estimateBytes = async (): Promise<number | undefined> => {
                 playlistSongs,
             ] = await Promise.all([
                 sumThumbnailBytes(db),
+                sumTrackmapBytes(db),
                 db.albums.count(),
                 db.artists.count(),
                 db.songs.count(),
@@ -111,6 +114,7 @@ export const estimateBytes = async (): Promise<number | undefined> => {
             const playlistSongBytes = playlistSongs * 256;
             return (
                 thumbnailBytes +
+                trackmapBytes +
                 albumBytes +
                 artistBytes +
                 songBytes +
@@ -340,6 +344,7 @@ export const clearAllCacheData = async (): Promise<void> => {
         db.songs.clear(),
         db.syncMeta.clear(),
         db.thumbnails.clear(),
+        db.trackmaps.clear(),
     ]);
     console.info('[cache] eviction: cleared all cache tables');
 };

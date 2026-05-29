@@ -125,6 +125,38 @@ describe('testBrokerConnection', () => {
         expect(opts.password).toBe('sekret');
     });
 
+    // S2-B: with no external username, the probe must send the embedded-scheme
+    // userId/roomKey EXACTLY like the live client, so the gate predicts a live
+    // connect against an auth-enforcing embedded broker (no more anonymous
+    // false-FAIL / false-PASS).
+    it('falls back to the embedded userId/roomKey when no external username (S2-B)', async () => {
+        const { testBrokerConnection } = await importApi();
+        const promise = testBrokerConnection('ws://broker.lan:8083', {
+            roomKey: 'carol',
+            userId: 'user-guid',
+        });
+        fakeClients[0].emit('connect');
+        await promise;
+        const opts = connectSpy.mock.calls[0][1] ?? {};
+        expect(opts.username).toBe('user-guid');
+        expect(opts.password).toBe('carol');
+    });
+
+    it('external username still wins over the embedded scheme (S2-B)', async () => {
+        const { testBrokerConnection } = await importApi();
+        const promise = testBrokerConnection('ws://broker.lan:8083', {
+            password: 'sekret',
+            roomKey: 'carol',
+            userId: 'user-guid',
+            username: 'bob',
+        });
+        fakeClients[0].emit('connect');
+        await promise;
+        const opts = connectSpy.mock.calls[0][1] ?? {};
+        expect(opts.username).toBe('bob');
+        expect(opts.password).toBe('sekret');
+    });
+
     it('does not throw when mqtt.connect throws synchronously', async () => {
         connectSpy.mockImplementationOnce(() => {
             throw new Error('bad url');

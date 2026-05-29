@@ -72,7 +72,7 @@ export interface SubpageDef {
     visible?: (server: null | ServerListItem | undefined) => boolean;
 }
 
-const lazyDefault = <T extends { [key: string]: any }>(
+const lazyDefault = <T extends { [key: string]: unknown }>(
     loader: () => Promise<T>,
     exportName: keyof T,
 ) => lazy(() => loader().then((module) => ({ default: module[exportName] as () => ReactNode })));

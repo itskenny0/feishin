@@ -31,10 +31,10 @@ export interface SimpMusicSearchResponse {
 }
 
 export async function getLyricsBySongId(songId: string): Promise<null | string> {
-    let result: AxiosResponse;
+    let result: AxiosResponse<SimpMusicSearchResponse>;
 
     try {
-        result = await axios.get(`${API_URL}/${songId}`, {
+        result = await axios.get<SimpMusicSearchResponse>(`${API_URL}/${songId}`, {
             timeout: TIMEOUT_MS,
         });
     } catch (e) {
@@ -42,7 +42,7 @@ export async function getLyricsBySongId(songId: string): Promise<null | string> 
         return null;
     }
 
-    const firstLyric = (result.data.data?.[0] ?? null) as null | SimpMusicLyric;
+    const firstLyric = result.data.data?.[0] ?? null;
     if (!firstLyric) return null;
 
     return firstLyric.syncedLyrics || firstLyric.plainLyric || null;

@@ -217,7 +217,7 @@ const getRemoteLyricsById = async (params: LyricGetQuery): Promise<null | string
     return response;
 };
 
-ipcMain.handle('lyric-by-song', async (_event, song: any) => {
+ipcMain.handle('lyric-by-song', async (_event, song: Song) => {
     const lyric = await getRemoteLyrics(song);
     return lyric;
 });

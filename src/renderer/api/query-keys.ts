@@ -26,8 +26,24 @@ import { QueryFunctionContext } from '@tanstack/react-query';
 
 import { LyricSource } from '/@/shared/types/domain-types';
 
-export const splitPaginatedQuery = (key: any) => {
-    const { limit, startIndex, ...filter } = key || {};
+export type QueryPagination = {
+    limit?: number;
+    startIndex?: number;
+};
+
+export const splitPaginatedQuery = <T extends object>(
+    key: null | T | undefined,
+): {
+    filter: Omit<T, 'limit' | 'startIndex'>;
+    pagination: QueryPagination | undefined;
+} => {
+    // `T extends object` (not `Partial<QueryPagination>`) avoids TS's weak-type
+    // rule, which would reject query types that don't happen to declare
+    // limit/startIndex (e.g. PlaylistDetailQuery = { id }). The cast surfaces
+    // the optional pagination fields for destructuring; everything else is the
+    // filter.
+    const { limit, startIndex, ...rest } = (key ?? {}) as Partial<QueryPagination> & T;
+    const filter = rest as Omit<T, 'limit' | 'startIndex'>;
 
     if (startIndex !== undefined || limit !== undefined) {
         return {
@@ -43,11 +59,6 @@ export const splitPaginatedQuery = (key: any) => {
         filter,
         pagination: undefined,
     };
-};
-
-export type QueryPagination = {
-    limit?: number;
-    startIndex?: number;
 };
 
 export const queryKeys: Record<
@@ -283,7 +294,7 @@ export const queryKeys: Record<
         list: (serverId: string) => [serverId, 'musicFolders', 'list'] as const,
     },
     player: {
-        fetch: (meta?: any) => {
+        fetch: (meta?: Record<string, unknown>) => {
             if (meta) {
                 return ['player', 'fetch', meta] as const;
             }

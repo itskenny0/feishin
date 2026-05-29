@@ -59,9 +59,7 @@ export const parseJsonParam = <T = unknown>(
     const value = searchParams.get(key);
     if (value === null) return undefined;
     try {
-        const parsed = JSON.parse(value);
-        // Validate against schema if provided
-        return parsed;
+        return JSON.parse(value) as T;
     } catch {
         return undefined;
     }

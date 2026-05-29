@@ -8,6 +8,7 @@ import {
 } from '/@/renderer/features/jellyfin-remote-target/api/remote-target-api';
 import { sessionsPoller } from '/@/renderer/features/jellyfin-remote-target/controller/sessions-poller';
 import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
+import { useSettingsStore } from '/@/renderer/store/settings.store';
 import { toast } from '/@/shared/components/toast/toast';
 
 interface DispatcherCtx {
@@ -83,7 +84,16 @@ const surfaceError = (label: string, sessionId: string, err: unknown): void => {
     if (status === 401 || status === 403) {
         try {
             const state = useRemoteTargetStore.getState();
-            if (state.sessionId === sessionId) state.actions.clearTarget();
+            if (state.sessionId === sessionId) {
+                state.actions.clearTarget();
+                // J9: also clear the PERSISTED target. clearTarget only resets
+                // the in-memory store; the picker's onRevert/selectLocal clear
+                // both, so mirror that here — otherwise a reload re-hydrates the
+                // dead deviceId from settings (playback.remoteTargetDeviceId).
+                useSettingsStore.getState().actions.setSettings({
+                    playback: { remoteTargetDeviceId: null, remoteTargetDeviceName: null },
+                });
+            }
         } catch (clearErr) {
             console.warn('[remote-target] clearTarget on 401/403 failed', clearErr);
         }
@@ -340,13 +350,37 @@ export const commandDispatcher = {
         ctxKey,
     ),
 
+    // H1: Jellyfin has NO "jump to queue index" PlaystateCommand — the enum is
+    // {Stop,Pause,Unpause,NextTrack,PreviousTrack,Seek,Rewind,FastForward,
+    // PlayPause}. The old `PlaylistIndex` Playstate command was silently ignored
+    // by real servers (and by Feishin-as-target, whose Playstate switch has no
+    // such case), so a queue-row click did nothing while the controller's
+    // optimistic mirror lied. jellyfin-web's "jump to track" re-issues the full
+    // queue with PlayNow + StartIndex; do the same here, sourcing itemIds from
+    // the mirrored queue (default order — same index space the caller uses).
     skipToIndex: wrap('PlaylistIndex', async (ctx: DispatcherCtx, index: number): Promise<void> => {
-        log('PlaylistIndex', { index, sessionId: ctx.sessionId });
-        await remoteTargetApi.sendPlaystate({
-            command: 'PlaylistIndex',
-            playlistIndex: index,
+        log('PlaylistIndex(reissue)', { index, sessionId: ctx.sessionId });
+        const queue = useRemoteTargetStore.getState().mirrored.queue;
+        const itemIds = queue.map((s) => s.id).filter((id): id is string => Boolean(id));
+        if (itemIds.length === 0 || index < 0 || index >= itemIds.length) {
+            // No hydrated queue to re-issue against (or an out-of-range index).
+            // There's no lossless native fallback — drop with a warn rather than
+            // emit a command the server ignores. The MQTT lane carries a real
+            // playIndex verb, so this only affects pure-Jellyfin targets with an
+            // un-hydrated mirror.
+            console.warn('[remote-target] skipToIndex: no mirrored queue to re-issue', {
+                index,
+                queueLen: itemIds.length,
+                sessionId: ctx.sessionId,
+            });
+            return;
+        }
+        await remoteTargetApi.play({
+            itemIds,
+            playCommand: 'PlayNow',
             server: ctx.server,
             sessionId: ctx.sessionId,
+            startIndex: index,
         });
     }),
 

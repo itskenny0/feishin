@@ -1,3 +1,4 @@
+import { useMediaQuery } from '@mantine/hooks';
 import clsx from 'clsx';
 import { motion } from 'motion/react';
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
@@ -11,6 +12,16 @@ import { ExpandedListItem } from '/@/renderer/components/item-list/expanded-list
 import { RouteSkeleton } from '/@/renderer/features/shared/components/route-skeleton';
 import { ScrollToTopButton } from '/@/renderer/features/shared/components/scroll-to-top-button';
 import { useIsTabletRange } from '/@/renderer/hooks/use-breakpoint';
+
+/*
+ * Force-collapse band for the desktop shell — the whole 768–1199px tablet
+ * tier. See left-sidebar.tsx for the rationale (kept in sync there). This is
+ * wider than `useIsTabletRange` (768–834) on purpose: the queue-sidebar
+ * suppression + tablet-shell class below intentionally stay at 768–834,
+ * because 835–1280 already floats the queue as an overlay and clamps the
+ * sidebar to 240px in CSS. Only the left-rail force-collapse widens.
+ */
+const TABLET_SHELL_QUERY = '(min-width: 768px) and (max-width: 1199px)';
 import { FullScreenOverlay } from '/@/renderer/layouts/default-layout/full-screen-overlay';
 import { FullScreenVisualizerOverlay } from '/@/renderer/layouts/default-layout/full-screen-visualizer-overlay';
 import { LeftSidebar } from '/@/renderer/layouts/default-layout/left-sidebar';
@@ -44,18 +55,24 @@ export const MainContent = ({ shell }: { shell?: boolean }) => {
         shallow,
     );
     /*
-     * Tablet-range override (viewport 768–834px): force the left sidebar
-     * to its 80px collapsed rail and suppress the right (queue) sidebar
-     * entirely. At 768–834 the desktop shell renders but the user's
-     * stored 260px+ sidebar plus a 200px+ queue sidebar would crowd the
-     * main content into a 350px sliver — useless for tablet portrait.
+     * Two overlapping tablet overrides, kept separate on purpose:
      *
-     * The store is left alone — only the render-time overrides flip —
-     * so when the viewport leaves the tablet range the user's original
-     * desktop preferences come back without a side-effect on mount.
+     *  - isTabletShell (768–1199): force the left sidebar to its 80px rail
+     *    across the entire desktop-shell tablet tier so the stored 260px+
+     *    sidebar never starves the main content (2-col grid bug at 835–960).
+     *
+     *  - isTabletRange (768–834): additionally suppress the right (queue)
+     *    sidebar entirely — at this narrow width even an overlay queue is
+     *    cramped. From 835–1280 the queue floats as a dismissible overlay
+     *    (handled in right-sidebar + CSS) so it is NOT suppressed there.
+     *
+     * The store is left alone — only the render-time overrides flip — so
+     * when the viewport leaves the tablet tier the user's original desktop
+     * preferences come back without a side-effect on mount.
      */
+    const isTabletShell = useMediaQuery(TABLET_SHELL_QUERY);
     const isTabletRange = useIsTabletRange();
-    const collapsed = isTabletRange ? true : storedCollapsed;
+    const collapsed = isTabletShell ? true : storedCollapsed;
     const rightExpanded = isTabletRange ? false : storedRightExpanded;
     const { setSideBar } = useAppStoreActions();
     const sideQueueType = useSideQueueType();
