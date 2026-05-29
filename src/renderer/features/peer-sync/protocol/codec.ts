@@ -32,14 +32,16 @@ const textDecoder = new TextDecoder();
 const isObject = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null && !Array.isArray(value);
 
-const isValidCommand = (raw: Record<string, unknown>): boolean => {
+const isValidCommand = (
+    raw: Record<string, unknown>,
+): raw is PeerCommand & Record<string, unknown> => {
     if (raw.t !== 'cmd') return false;
     if (typeof raw.k !== 'string') return false;
     if (typeof raw.ts !== 'number') return false;
     return true;
 };
 
-const isValidState = (raw: Record<string, unknown>): boolean => {
+const isValidState = (raw: Record<string, unknown>): raw is PeerState & Record<string, unknown> => {
     if (raw.t !== 'state') return false;
     if (typeof raw.pos !== 'number') return false;
     if (typeof raw.dur !== 'number') return false;
@@ -63,21 +65,23 @@ const isValidState = (raw: Record<string, unknown>): boolean => {
     return true;
 };
 
-const isValidPresence = (raw: Record<string, unknown>): boolean => {
+const isValidPresence = (
+    raw: Record<string, unknown>,
+): raw is PeerPresence & Record<string, unknown> => {
     if (raw.t !== 'presence') return false;
     if (typeof raw.online !== 'boolean') return false;
     if (typeof raw.ts !== 'number') return false;
     return true;
 };
 
-const isValidPing = (raw: Record<string, unknown>): boolean => {
+const isValidPing = (raw: Record<string, unknown>): raw is PeerPing & Record<string, unknown> => {
     if (raw.t !== 'ping') return false;
     if (typeof raw.id !== 'string') return false;
     if (typeof raw.ts !== 'number') return false;
     return true;
 };
 
-const isValidPong = (raw: Record<string, unknown>): boolean => {
+const isValidPong = (raw: Record<string, unknown>): raw is PeerPong & Record<string, unknown> => {
     if (raw.t !== 'pong') return false;
     if (typeof raw.id !== 'string') return false;
     if (typeof raw.ts !== 'number') return false;
@@ -92,11 +96,11 @@ const jsonCodec: PeerCodec = {
             if (!isObject(parsed)) return null;
             // Version gate — drop everything from a future or unknown major.
             if (parsed.v !== PROTOCOL_VERSION) return null;
-            if (isValidCommand(parsed)) return parsed as unknown as PeerCommand;
-            if (isValidState(parsed)) return parsed as unknown as PeerState;
-            if (isValidPresence(parsed)) return parsed as unknown as PeerPresence;
-            if (isValidPing(parsed)) return parsed as unknown as PeerPing;
-            if (isValidPong(parsed)) return parsed as unknown as PeerPong;
+            if (isValidCommand(parsed)) return parsed;
+            if (isValidState(parsed)) return parsed;
+            if (isValidPresence(parsed)) return parsed;
+            if (isValidPing(parsed)) return parsed;
+            if (isValidPong(parsed)) return parsed;
             return null;
         } catch {
             return null;

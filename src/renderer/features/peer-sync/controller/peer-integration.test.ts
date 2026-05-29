@@ -145,6 +145,40 @@ describe('peerDispatcher routing', () => {
         expect(jfCalls).toEqual([{ k: 'pause' }]);
     });
 
+    it('falls back to jellyfin when the ctx.peer.peerId is empty (untargeted)', () => {
+        // No identifiable peer = no MQTT lane is possible. The seam should
+        // short-circuit to the Jellyfin dispatcher without even consulting
+        // the transport selector. This protects callers that haven't yet
+        // resolved a target deviceId from accidentally publishing to the
+        // wildcard.
+        setSyncEnabled(true);
+        recordPresence('peer-target', true);
+        const untargetedCtx = { ...fakeCtx, peer: { peerId: '', userId: 'user-abc' } };
+        peerDispatcher.pause(untargetedCtx);
+        expect(published).toEqual([]);
+        expect(jfCalls).toEqual([{ k: 'pause' }]);
+    });
+
+    it('records setMute and skipToIndex outbound diagnostics on the MQTT lane', async () => {
+        // Regression: an earlier cut of peer-dispatcher called publishCommand
+        // directly for these two verbs, bypassing fireMqtt → the diagnostics
+        // "recent commands" ring missed them. The fix routes both through
+        // fireMqtt; this test asserts the diagnostics entry lands.
+        const { peekDiagnostics, resetDiagnostics } =
+            await import('/@/renderer/features/peer-sync/diagnostics/diagnostics-store');
+        resetDiagnostics();
+        setSyncEnabled(true);
+        recordPresence('peer-target', true);
+
+        peerDispatcher.setMute(fakeCtx, true);
+        peerDispatcher.skipToIndex(fakeCtx, 9);
+
+        const diag = peekDiagnostics();
+        const verbs = diag.commands.map((c) => c.k);
+        expect(verbs).toContain('mute');
+        expect(verbs).toContain('playIndex');
+    });
+
     /**
      * Regression for the audit: the protocol previously only carried the
      * "obvious" verbs (play/pause/seek/volume/shuffle/repeat). `mute` and

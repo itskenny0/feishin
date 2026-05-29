@@ -29,10 +29,6 @@ export const topicFor = (addr: PeerAddress, leaf: TopicLeaf): string =>
 /** Build the subscription wildcard that matches every peer under a user. */
 export const userPeersWildcard = (userId: string): string => `${ROOT}/${sanitize(userId)}/+/+`;
 
-/** Build the subscription wildcard for a single peer. */
-export const peerWildcard = (addr: PeerAddress): string =>
-    `${ROOT}/${sanitize(addr.userId)}/${sanitize(addr.peerId)}/+`;
-
 /**
  * Parse a topic into its parts. Returns null if the topic is not under our
  * namespace or has the wrong shape — callers MUST drop messages with null.
@@ -58,5 +54,3 @@ export const parseTopic = (topic: string): null | { addr: PeerAddress; leaf: Top
         leaf,
     };
 };
-
-export const TOPIC_ROOT = ROOT;

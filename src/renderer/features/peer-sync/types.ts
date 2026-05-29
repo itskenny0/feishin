@@ -13,7 +13,7 @@ export const PROTOCOL_VERSION = 1 as const;
 /** Controller → target command frame. */
 export interface PeerCommand {
     /** Optional payload — shape depends on `k`. e.g. seek carries `{ positionMs }`. */
-    a?: unknown;
+    a?: PeerCommandArgs;
     /** Command verb. */
     k: PeerCommandKind;
     /** Frame type discriminator. */
@@ -23,6 +23,24 @@ export interface PeerCommand {
     /** Wire-format version. */
     v: typeof PROTOCOL_VERSION;
 }
+
+/**
+ * Per-verb args payload. The wire allows any of these shapes; the receiver
+ * narrows by `k` before reading specific properties. We deliberately don't
+ * make `PeerCommand` itself a discriminated union of `(k, a)` pairs — the
+ * codec validates only `k`'s presence, and a producer that ships an unknown
+ * verb is supposed to round-trip cleanly so that older receivers can simply
+ * drop the frame at the verb-switch instead of the codec.
+ */
+export type PeerCommandArgs =
+    | undefined
+    | { index: number } // playIndex
+    | { itemIds: string[]; playCommand?: 'PlayLast' | 'PlayNext' | 'PlayNow'; startIndex?: number } // play
+    | { mode: PeerRepeatMode } // repeat
+    | { mute: boolean } // mute
+    | { positionMs: number } // seek
+    | { shuffle: boolean } // shuffle
+    | { volume: number }; // volume
 
 /**
  * Command verbs that flow controller → target. Mirrors the existing Jellyfin

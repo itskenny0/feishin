@@ -6,6 +6,7 @@
  */
 import {
     PeerCommand,
+    PeerCommandArgs,
     PeerCommandKind,
     PeerPresence,
     PeerRepeatMode,
@@ -14,7 +15,7 @@ import {
     PROTOCOL_VERSION,
 } from '/@/renderer/features/peer-sync/types';
 
-export const buildCommand = (k: PeerCommandKind, a?: unknown): PeerCommand => ({
+export const buildCommand = (k: PeerCommandKind, a?: PeerCommandArgs): PeerCommand => ({
     a,
     k,
     t: 'cmd',

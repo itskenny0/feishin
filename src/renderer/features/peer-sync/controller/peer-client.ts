@@ -79,12 +79,28 @@ interface ActiveSession {
     args: PeerClientStartArgs;
     client: MqttClient;
     events: PeerEvents;
-    /** Most recent retained snapshot we've published — used to clear on stop. */
-    publishedStateTopic: null | string;
     selfAddress: PeerAddress;
 }
 
 let session: ActiveSession | null = null;
+
+/**
+ * Small wrapper that publishes with a callback so a broker-side failure (out
+ * of namespace, ACL denial, transport hiccup mid-publish) gets logged instead
+ * of vanishing. Body is intentionally minimal — no retry, no queue. mqtt.js
+ * already handles in-flight redelivery for QoS≥1.
+ */
+const publishWithErrorLog = (
+    client: MqttClient,
+    topic: string,
+    payload: Buffer,
+    opts: Parameters<MqttClient['publish']>[2],
+    context: string,
+): void => {
+    client.publish(topic, payload, opts, (err) => {
+        if (err) warn(`${context} publish failed`, { err: err.message, topic });
+    });
+};
 
 const buildLwt = (selfAddress: PeerAddress) => ({
     // mqtt.js types require a node Buffer (or string) here; Uint8Array
@@ -141,10 +157,13 @@ const handleMessage = (s: ActiveSession, topic: string, payload: Uint8Array): vo
             ts: Date.now(),
             v: PROTOCOL_VERSION,
         };
-        s.client.publish(topicFor(s.selfAddress, 'pong'), Buffer.from(codec.encode(pong)), {
-            qos: 0,
-            retain: false,
-        });
+        publishWithErrorLog(
+            s.client,
+            topicFor(s.selfAddress, 'pong'),
+            Buffer.from(codec.encode(pong)),
+            { qos: 0, retain: false },
+            'pong',
+        );
         return;
     }
     if (parsed.leaf === 'pong' && frame.t === 'pong') {
@@ -214,7 +233,6 @@ export const startPeerClient = (args: PeerClientStartArgs, events: PeerEvents = 
         args,
         client,
         events,
-        publishedStateTopic: null,
         selfAddress,
     };
     session = newSession;
@@ -238,10 +256,13 @@ export const startPeerClient = (args: PeerClientStartArgs, events: PeerEvents = 
             ts: Date.now(),
             v: PROTOCOL_VERSION,
         });
-        client.publish(presenceTopic, Buffer.from(onlineFrame), {
-            qos: 1,
-            retain: true,
-        });
+        publishWithErrorLog(
+            client,
+            presenceTopic,
+            Buffer.from(onlineFrame),
+            { qos: 1, retain: true },
+            'presence',
+        );
         log('presence published', { topic: presenceTopic });
     });
 
@@ -295,11 +316,16 @@ export const publishCommand = (target: PeerAddress, command: PeerCommand): void 
     const topic = topicFor(target, 'cmd');
     const t0 = performance.now();
     log('publish cmd', { k: command.k, topic });
+    // Command frames are intentionally QoS 0: idempotent on the receiver
+    // and the state echo is the source of truth, so the PUBACK round-trip
+    // was added latency without correctness. We still log broker-side
+    // failures and emit the perf mark so the diagnostic story stays clean.
     session.client.publish(
         topic,
         Buffer.from(codec.encode(command)),
         { qos: 0, retain: false },
         (err) => {
+            if (err) warn('cmd publish failed', { err: err.message, topic });
             perfMark('mqtt.publish.cmd', {
                 durMs: Math.round(performance.now() - t0),
                 k: command.k,
@@ -316,11 +342,13 @@ export const publishCommand = (target: PeerAddress, command: PeerCommand): void 
 export const publishOwnState = (state: PeerState): void => {
     if (!session) return;
     const topic = topicFor(session.selfAddress, 'state');
-    session.publishedStateTopic = topic;
-    session.client.publish(topic, Buffer.from(codec.encode(state)), {
-        qos: 1,
-        retain: true,
-    });
+    publishWithErrorLog(
+        session.client,
+        topic,
+        Buffer.from(codec.encode(state)),
+        { qos: 1, retain: true },
+        'state',
+    );
     recordOutboundState(session.selfAddress.peerId, state);
 };
 
@@ -333,10 +361,13 @@ export const publishPing = (target: PeerAddress): null | string => {
     if (!session) return null;
     const id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     const ping = { id, t: 'ping' as const, ts: Date.now(), v: PROTOCOL_VERSION };
-    session.client.publish(topicFor(target, 'ping'), Buffer.from(codec.encode(ping)), {
-        qos: 0,
-        retain: false,
-    });
+    publishWithErrorLog(
+        session.client,
+        topicFor(target, 'ping'),
+        Buffer.from(codec.encode(ping)),
+        { qos: 0, retain: false },
+        'ping',
+    );
     return id;
 };
 
@@ -350,18 +381,25 @@ export const stopPeerClient = (): void => {
     session = null;
     try {
         // Clear our retained frames so the next install of Feishin doesn't
-        // see ghost presence from us.
+        // see ghost presence from us. Both topics are deterministic from the
+        // self address — no need to remember which ones we actually published.
         const empty = Buffer.alloc(0);
-        s.client.publish(topicFor(s.selfAddress, 'presence'), empty, {
-            qos: 0,
-            retain: true,
-        });
-        if (s.publishedStateTopic) {
-            s.client.publish(s.publishedStateTopic, empty, { qos: 0, retain: true });
-        }
-        // Tell the selector we no longer trust anyone we'd been tracking
-        // through this session.
-        for (const peerId of [s.selfAddress.peerId]) forgetPeer(peerId);
+        publishWithErrorLog(
+            s.client,
+            topicFor(s.selfAddress, 'presence'),
+            empty,
+            { qos: 0, retain: true },
+            'stop-presence',
+        );
+        publishWithErrorLog(
+            s.client,
+            topicFor(s.selfAddress, 'state'),
+            empty,
+            { qos: 0, retain: true },
+            'stop-state',
+        );
+        // Tell the selector we no longer trust ourselves on the MQTT lane.
+        forgetPeer(s.selfAddress.peerId);
     } catch (err) {
         warn('stop publish cleanup failed', { err: (err as Error).message });
     }
@@ -369,6 +407,3 @@ export const stopPeerClient = (): void => {
         log('stopped');
     });
 };
-
-/** Re-export for tests so they can inject without IPC. */
-export const __getSessionForTests = (): ActiveSession | null => session;

@@ -19,6 +19,9 @@ import type { ServerListItemWithCredential } from '/@/shared/types/domain-types'
 import { commandDispatcher } from '/@/renderer/features/jellyfin-remote-target/controller/command-dispatcher';
 import { publishCommand } from '/@/renderer/features/peer-sync/controller/peer-client';
 import { pickTransport } from '/@/renderer/features/peer-sync/controller/transport-selector';
+// `publishCommand` stays imported because `fireMqtt` below uses it; the
+// callers above were inlined to a `route(... fireMqtt(...) ...)` pattern so
+// outbound diagnostics always record.
 import { recordOutboundCommand } from '/@/renderer/features/peer-sync/diagnostics/diagnostics-store';
 import {
     buildCommand,
@@ -112,7 +115,7 @@ export const peerDispatcher = {
     setMute: (ctx: PeerDispatcherCtx, mute: boolean): void =>
         route(
             ctx,
-            () => publishCommand(ctx.peer, buildCommand('mute', { mute })),
+            () => fireMqtt(ctx.peer, buildCommand('mute', { mute })),
             () =>
                 void commandDispatcher.setMute(
                     { server: ctx.server, sessionId: ctx.sessionId },
@@ -160,7 +163,7 @@ export const peerDispatcher = {
     skipToIndex: (ctx: PeerDispatcherCtx, index: number): void =>
         route(
             ctx,
-            () => publishCommand(ctx.peer, buildCommand('playIndex', { index })),
+            () => fireMqtt(ctx.peer, buildCommand('playIndex', { index })),
             () =>
                 void commandDispatcher.skipToIndex(
                     { server: ctx.server, sessionId: ctx.sessionId },

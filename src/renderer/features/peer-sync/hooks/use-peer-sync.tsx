@@ -22,10 +22,7 @@ import {
     startPeerClient,
     stopPeerClient,
 } from '/@/renderer/features/peer-sync/controller/peer-client';
-import {
-    applyPeerStateToStore,
-    peerStateToMirrored,
-} from '/@/renderer/features/peer-sync/controller/peer-state-mirror';
+import { applyPeerStateToStore } from '/@/renderer/features/peer-sync/controller/peer-state-mirror';
 import {
     pickTransport,
     setSyncEnabled,
@@ -215,6 +212,3 @@ export const PeerSyncHook = () => {
     usePeerSync();
     return null;
 };
-
-// Re-exported for tests / non-hook consumers.
-export { peerStateToMirrored };

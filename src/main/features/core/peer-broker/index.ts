@@ -80,6 +80,16 @@ const allowedRoot = (username: string | undefined): null | string => {
 const isUnderRoot = (topic: string, root: string): boolean =>
     topic.startsWith(root) || topic === root.slice(0, -1);
 
+/**
+ * WeakMap from authenticated aedes Client to the Jellyfin user id presented
+ * at CONNECT time. We previously stashed this as a property on the client
+ * itself which forced an `as unknown as Record<string, unknown>` cast at
+ * every ACL hook. The WeakMap keeps the lookup type-safe without retaining
+ * disconnected clients past their natural lifetime.
+ */
+type AedesClient = Parameters<NonNullable<Aedes['authenticate']>>[0];
+const clientUserIds = new WeakMap<AedesClient, string>();
+
 const attachHandlers = (aedes: Aedes, roomKey: string): void => {
     aedes.authenticate = (client, username, password, callback) => {
         const usernameOk = typeof username === 'string' && username.length > 0;
@@ -92,16 +102,13 @@ const attachHandlers = (aedes: Aedes, roomKey: string): void => {
             callback(err, false);
             return;
         }
-        // Stash the userId on the client for the ACL hooks below.
-        (client as unknown as Record<string, unknown>)._feishinUserId = username;
+        clientUserIds.set(client, username);
         log('client authenticated', { clientId: client.id, username });
         callback(null, true);
     };
 
     aedes.authorizePublish = (client, packet, callback) => {
-        const username = client
-            ? ((client as unknown as Record<string, unknown>)._feishinUserId as string | undefined)
-            : undefined;
+        const username = client ? clientUserIds.get(client) : undefined;
         const root = allowedRoot(username);
         if (!root || !isUnderRoot(packet.topic, root)) {
             warn('publish denied', { clientId: client?.id, topic: packet.topic });
@@ -112,9 +119,7 @@ const attachHandlers = (aedes: Aedes, roomKey: string): void => {
     };
 
     aedes.authorizeSubscribe = (client, sub, callback) => {
-        const username = client
-            ? ((client as unknown as Record<string, unknown>)._feishinUserId as string | undefined)
-            : undefined;
+        const username = client ? clientUserIds.get(client) : undefined;
         const root = allowedRoot(username);
         if (!root) {
             callback(new Error('subscribe out of namespace'), null);

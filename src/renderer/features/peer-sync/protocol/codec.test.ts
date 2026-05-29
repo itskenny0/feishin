@@ -216,6 +216,22 @@ describe('peer-sync codec', () => {
         expect(codec.decode(bytes)).toBeNull();
     });
 
+    it('round-trips a ping/pong pair', () => {
+        // Frames pulled straight from the wire shape — the codec is the
+        // boundary that exposes these to the dispatcher, so a regression in
+        // the ping/pong shape (e.g. dropping `id`) would break RTT
+        // measurements silently otherwise.
+        const ping = {
+            id: 'probe-1',
+            t: 'ping' as const,
+            ts: 123,
+            v: PROTOCOL_VERSION,
+        };
+        const pong = { id: 'probe-1', t: 'pong' as const, ts: 456, v: PROTOCOL_VERSION };
+        expect(codec.decode(codec.encode(ping))).toEqual(ping);
+        expect(codec.decode(codec.encode(pong))).toEqual(pong);
+    });
+
     it('round-trips the `mute` and `playIndex` command verbs', () => {
         const muteCmd = buildCommand('mute', { mute: true });
         const decodedMute = codec.decode(codec.encode(muteCmd));
