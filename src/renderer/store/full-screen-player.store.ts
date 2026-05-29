@@ -76,3 +76,33 @@ export const useFullScreenPlayerOverlayState = () =>
         }),
         shallow,
     );
+
+export const useFullScreenPlayerExpanded = () =>
+    useFullScreenPlayerStore((state) => state.expanded);
+
+export const useFullScreenPlayerVisualizerExpanded = () =>
+    useFullScreenPlayerStore((state) => state.visualizerExpanded);
+
+export const useFullScreenPlayerActiveTab = () =>
+    useFullScreenPlayerStore((state) => state.activeTab);
+
+export const useFullScreenPlayerUseImageAspectRatio = () =>
+    useFullScreenPlayerStore((state) => state.useImageAspectRatio);
+
+export const useFullScreenPlayerOpacity = () =>
+    useFullScreenPlayerStore((state) => state.opacity);
+
+export const useFullScreenPlayerDynamicBackground = () =>
+    useFullScreenPlayerStore((state) => state.dynamicBackground);
+
+export const useFullScreenPlayerDynamicImageBlur = () =>
+    useFullScreenPlayerStore((state) => state.dynamicImageBlur);
+
+export const useFullScreenPlayerDynamicIsImage = () =>
+    useFullScreenPlayerStore((state) => state.dynamicIsImage);
+
+export const useFullScreenPlayerVisualizerAsBackground = () =>
+    useFullScreenPlayerStore((state) => state.visualizerAsBackground);
+
+export const useFullScreenPlayerVisualizerLyricsOverlay = () =>
+    useFullScreenPlayerStore((state) => state.visualizerLyricsOverlay);

@@ -28,7 +28,7 @@ import {
     useAppStore,
     useAppStoreActions,
     useBlurExplicitImages,
-    useFullScreenPlayerStore,
+    useFullScreenPlayerExpanded,
     usePlayerSong,
     useSetFullScreenPlayerStore,
 } from '/@/renderer/store';
@@ -244,7 +244,7 @@ const SidebarImage = () => {
     const isSongDefined = Boolean(currentSong?.id);
 
     const setFullScreenPlayerStore = useSetFullScreenPlayerStore();
-    const { expanded: isFullScreenPlayerExpanded } = useFullScreenPlayerStore();
+    const isFullScreenPlayerExpanded = useFullScreenPlayerExpanded();
     const expandFullScreenPlayer = () => {
         setFullScreenPlayerStore({ expanded: !isFullScreenPlayerExpanded });
     };

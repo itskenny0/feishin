@@ -25,7 +25,7 @@ import { TrackmapCanvas } from '/@/renderer/features/trackmap';
 import { triggerHaptic } from '/@/renderer/hooks/use-haptic';
 import { AppRoute } from '/@/renderer/router/routes';
 import {
-    useFullScreenPlayerStore,
+    useFullScreenPlayerExpanded,
     useFullScreenPlayerStoreActions,
     useSetFullScreenPlayerStore,
 } from '/@/renderer/store';
@@ -47,7 +47,7 @@ import { albumFolderFromSongPath } from '/@/shared/utils/album-folder-from-path'
 
 export const MobilePlayerbar = () => {
     const { t } = useTranslation();
-    const { expanded: isFullScreenPlayerExpanded } = useFullScreenPlayerStore();
+    const isFullScreenPlayerExpanded = useFullScreenPlayerExpanded();
     const setFullScreenPlayerStore = useSetFullScreenPlayerStore();
     const { setStore } = useFullScreenPlayerStoreActions();
     // Active source: mirrors the remote device's now-playing/state when a

@@ -16,7 +16,7 @@ const MobilePlayerbar = lazy(() =>
     })),
 );
 import {
-    useFullScreenPlayerStore,
+    useFullScreenPlayerExpanded,
     usePlayerSong,
     useSetFullScreenPlayerStore,
 } from '/@/renderer/store';
@@ -25,7 +25,7 @@ import { PlaybackSelectors } from '/@/shared/constants/playback-selectors';
 
 export const Playerbar = () => {
     const playerbarOpenDrawer = usePlayerbarOpenDrawer();
-    const { expanded: isFullScreenPlayerExpanded } = useFullScreenPlayerStore();
+    const isFullScreenPlayerExpanded = useFullScreenPlayerExpanded();
     const setFullScreenPlayerStore = useSetFullScreenPlayerStore();
     const isMobile = useIsMobile();
     const currentSong = usePlayerSong();

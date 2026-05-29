@@ -30,7 +30,8 @@ const preloadNowPlaying = () => preloadRoute(AppRoute.NOW_PLAYING);
 import {
     useAppStore,
     useAppStoreActions,
-    useFullScreenPlayerStore,
+    useFullScreenPlayerExpanded,
+    useFullScreenPlayerVisualizerExpanded,
     useHotkeySettings,
     useSetFullScreenPlayerStore,
 } from '/@/renderer/store';
@@ -52,10 +53,8 @@ import { isPlausibleReleaseYear } from '/@/shared/utils/release-year';
 export const LeftControls = () => {
     const { t } = useTranslation();
     const { setSideBar } = useAppStoreActions();
-    const {
-        expanded: isFullScreenPlayerExpanded,
-        visualizerExpanded: isFullScreenVisualizerExpanded,
-    } = useFullScreenPlayerStore();
+    const isFullScreenPlayerExpanded = useFullScreenPlayerExpanded();
+    const isFullScreenVisualizerExpanded = useFullScreenPlayerVisualizerExpanded();
     const setFullScreenPlayerStore = useSetFullScreenPlayerStore();
 
     const { collapsed, image } = useAppStore(

@@ -1,5 +1,7 @@
 import {
-    useFullScreenPlayerStore,
+    useFullScreenPlayerActiveTab,
+    useFullScreenPlayerExpanded,
+    useFullScreenPlayerVisualizerExpanded,
     usePlaybackSettings,
     useShowVisualizerInSidebar,
 } from '/@/renderer/store';
@@ -7,7 +9,9 @@ import {
 export function useIsLocalVisualizerSurfaceVisible(): boolean {
     const { webAudio: webAudioEnabled } = usePlaybackSettings();
     const showVisualizerInSidebar = useShowVisualizerInSidebar();
-    const { activeTab, expanded, visualizerExpanded } = useFullScreenPlayerStore();
+    const activeTab = useFullScreenPlayerActiveTab();
+    const expanded = useFullScreenPlayerExpanded();
+    const visualizerExpanded = useFullScreenPlayerVisualizerExpanded();
 
     const sidebarVisualizer = showVisualizerInSidebar && webAudioEnabled;
     const fullScreenPlayerVisualizerTab = expanded && activeTab === 'visualizer' && webAudioEnabled;

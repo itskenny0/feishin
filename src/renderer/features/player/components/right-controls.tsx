@@ -26,7 +26,8 @@ import {
     useAppStoreActions,
     useAutoDJSettings,
     useCurrentServer,
-    useFullScreenPlayerStore,
+    useFullScreenPlayerActiveTab,
+    useFullScreenPlayerExpanded,
     useHotkeySettings,
     usePlayerData,
     usePlayerMuted,
@@ -348,10 +349,10 @@ const QueueButton = () => {
 
 const LyricsButton = () => {
     const setFullScreenPlayerStore = useSetFullScreenPlayerStore();
-    const activeTab = useFullScreenPlayerStore((state) => state.activeTab);
+    const activeTab = useFullScreenPlayerActiveTab();
 
     const { setStore } = useFullScreenPlayerStoreActions();
-    const { expanded: isFullScreenPlayerExpanded } = useFullScreenPlayerStore();
+    const isFullScreenPlayerExpanded = useFullScreenPlayerExpanded();
 
     const expandFullScreenPlayer = () => {
         setFullScreenPlayerStore({ expanded: !isFullScreenPlayerExpanded });
