@@ -14,19 +14,25 @@ const fakeServer = {
     username: 'demo',
 } as unknown as ServerListItemWithCredential;
 
-vi.mock('/@/renderer/features/jellyfin-remote-target/api/remote-target-api', () => ({
-    remoteTargetApi: {
-        hydrateSongs: vi.fn(async ({ itemIds }: { itemIds: string[] }) =>
-            itemIds.map((id) => ({
-                id,
-                name: id,
-                serverId: 'srv',
-                streamUrl: '',
-                uniqueId: id,
-            })),
-        ),
-    },
-}));
+vi.mock('/@/renderer/features/jellyfin-remote-target/api/remote-target-api', async () => {
+    const actual = await vi.importActual<
+        typeof import('/@/renderer/features/jellyfin-remote-target/api/remote-target-api')
+    >('/@/renderer/features/jellyfin-remote-target/api/remote-target-api');
+    return {
+        ...actual,
+        remoteTargetApi: {
+            hydrateSongs: vi.fn(async ({ itemIds }: { itemIds: string[] }) =>
+                itemIds.map((id) => ({
+                    id,
+                    name: id,
+                    serverId: 'srv',
+                    streamUrl: '',
+                    uniqueId: id,
+                })),
+            ),
+        },
+    };
+});
 
 const session = (deviceId: string, queueIds: string[]) => ({
     Capabilities: { SupportsMediaControl: true },
@@ -223,9 +229,13 @@ describe('sessionsSink.apply — target reconciliation', () => {
             deviceName: 'Living Room',
             sessionId: 'sess-1',
         });
-        // setTarget moves us to 'connected'. A push that doesn't include this
-        // device must NOT downgrade to 'reconnecting' — that's the poller's
-        // responsibility because the poller alone knows about time.
+        // setTarget moves us to 'connecting'; the connect-lifecycle promotes to
+        // 'connected' on first matching mirror. Simulate that here so we can
+        // observe the post-promotion behaviour the test cares about.
+        useRemoteTargetStore.getState().actions.setStatus('connected');
+        // A push that doesn't include this device must NOT downgrade to
+        // 'reconnecting' — that's the poller's responsibility because the
+        // poller alone knows about time.
         sessionsSink.apply([sessionRow({ DeviceId: 'other-dev', Id: 'sess-other' })], server);
         expect(useRemoteTargetStore.getState().status).toBe('connected');
     });
