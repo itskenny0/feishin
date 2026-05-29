@@ -22,6 +22,7 @@ import {
     startPeerClient,
     stopPeerClient,
 } from '/@/renderer/features/peer-sync/controller/peer-client';
+import { applyPeerCommand } from '/@/renderer/features/peer-sync/controller/peer-receiver';
 import { applyPeerStateToStore } from '/@/renderer/features/peer-sync/controller/peer-state-mirror';
 import {
     pickTransport,
@@ -106,7 +107,16 @@ export const usePeerSync = () => {
                 userId: currentServer.userId,
             },
             {
-                onCommand: (from, cmd) => recordInboundCommand(from.peerId, cmd),
+                onCommand: (from, cmd) => {
+                    // Diagnostics first — every inbound frame counts
+                    // toward the recent-commands list whether or not we
+                    // actually applied it. The receiver then runs the
+                    // authorisation gate and, if it passes, mutates the
+                    // local player store. See peer-receiver.ts for the
+                    // verb → action mapping table.
+                    recordInboundCommand(from.peerId, cmd);
+                    applyPeerCommand(from, cmd);
+                },
                 onConnectionChange: (status) => {
                     log('connection', { status });
                     recordBrokerStatus(status);

@@ -1,0 +1,370 @@
+/**
+ * Unit tests for the MQTT command receiver.
+ *
+ * Two halves:
+ *
+ *   - Verb → player-store-action mapping: every verb in the protocol
+ *     should produce the correct mutation, and bad payloads should
+ *     drop with `validation`.
+ *
+ *   - Authorisation gate: enabled flag, self-peer guard, presence
+ *     freshness — these are the rules `isAuthorisedSender` enforces.
+ *
+ *   - Re-emission loop protection: applying any verb opens the
+ *     suppression window, so a hypothetical publisher hooked to the
+ *     store would see "skip publish".
+ *
+ * The receiver imports useSettingsStore + useAuthStore + useRemoteTargetStore
+ * indirectly. We don't mock those — we drive their real Zustand stores
+ * with `setState`, which is the same path the app uses at runtime.
+ */
+import { beforeEach, describe, expect, it } from 'vitest';
+
+import {
+    __resetInboundApply,
+    isInboundApplyActive,
+} from '/@/renderer/features/peer-sync/controller/peer-loop-guard';
+import {
+    applyPeerCommand,
+    isAuthorisedSender,
+} from '/@/renderer/features/peer-sync/controller/peer-receiver';
+import {
+    __resetForTests,
+    recordPresence,
+    setSyncEnabled,
+} from '/@/renderer/features/peer-sync/controller/transport-selector';
+import { buildCommand } from '/@/renderer/features/peer-sync/protocol/builders';
+import { PeerAddress } from '/@/renderer/features/peer-sync/protocol/topics';
+import { PeerCommand } from '/@/renderer/features/peer-sync/types';
+import { useAuthStore } from '/@/renderer/store/auth.store';
+import { usePlayerStoreBase } from '/@/renderer/store/player.store';
+import { useSettingsStore } from '/@/renderer/store/settings.store';
+import { ServerType } from '/@/shared/types/domain-types';
+import { PlayerRepeat, PlayerShuffle, PlayerStatus } from '/@/shared/types/types';
+
+const SENDER: PeerAddress = { peerId: 'peer-from', userId: 'user-abc' };
+
+const enableSync = () => {
+    useSettingsStore.setState((state) => ({
+        peerSync: {
+            ...state.peerSync,
+            enabled: true,
+            jellyfinRemoteEnabled: true,
+            peerId: 'peer-self',
+        },
+    }));
+    setSyncEnabled(true);
+    recordPresence(SENDER.peerId, true);
+};
+
+const seedAuth = () => {
+    useAuthStore.setState({
+        currentServer: {
+            credential: 'cred',
+            id: 'srv-1',
+            name: 'demo',
+            ndCredential: '',
+            type: ServerType.JELLYFIN,
+            url: 'https://demo.jellyfin.org/stable',
+            userId: 'user-abc',
+            username: 'demo',
+        } as unknown as ReturnType<typeof useAuthStore.getState>['currentServer'],
+    });
+};
+
+beforeEach(() => {
+    __resetForTests();
+    __resetInboundApply();
+    // Reset relevant slices of the player store between tests so a
+    // mutation from one verb doesn't leak into the next assertion.
+    usePlayerStoreBase.setState((state) => {
+        state.player.status = PlayerStatus.PAUSED;
+        state.player.muted = false;
+        state.player.volume = 50;
+        state.player.repeat = PlayerRepeat.NONE;
+        state.player.shuffle = PlayerShuffle.NONE;
+        state.player.index = 0;
+    });
+    seedAuth();
+    enableSync();
+});
+
+describe('isAuthorisedSender', () => {
+    it('blocks when peer sync is disabled', () => {
+        useSettingsStore.setState((state) => ({
+            peerSync: { ...state.peerSync, enabled: false },
+        }));
+        expect(isAuthorisedSender(SENDER)).toBe(false);
+    });
+
+    it('blocks when jellyfinRemoteEnabled is off', () => {
+        useSettingsStore.setState((state) => ({
+            peerSync: { ...state.peerSync, jellyfinRemoteEnabled: false },
+        }));
+        expect(isAuthorisedSender(SENDER)).toBe(false);
+    });
+
+    it('blocks the self peer', () => {
+        const self: PeerAddress = { peerId: 'peer-self', userId: 'user-abc' };
+        recordPresence(self.peerId, true);
+        expect(isAuthorisedSender(self)).toBe(false);
+    });
+
+    it('blocks an unknown / never-seen peer', () => {
+        const stranger: PeerAddress = { peerId: 'peer-stranger', userId: 'user-abc' };
+        expect(isAuthorisedSender(stranger)).toBe(false);
+    });
+
+    it('allows a peer with fresh presence + sync on', () => {
+        expect(isAuthorisedSender(SENDER)).toBe(true);
+    });
+});
+
+describe('applyPeerCommand verb mapping', () => {
+    it('maps pause to mediaPause (status -> paused)', () => {
+        usePlayerStoreBase.setState((state) => {
+            state.player.status = PlayerStatus.PLAYING;
+        });
+        const r = applyPeerCommand(SENDER, buildCommand('pause'));
+        expect(r.reason).toBe('applied');
+        expect(usePlayerStoreBase.getState().player.status).toBe(PlayerStatus.PAUSED);
+    });
+
+    it('maps play (no args) to mediaPlay (status -> playing)', () => {
+        const r = applyPeerCommand(SENDER, buildCommand('play'));
+        expect(r.reason).toBe('applied');
+        expect(usePlayerStoreBase.getState().player.status).toBe(PlayerStatus.PLAYING);
+    });
+
+    it('maps seek to mediaSeekToTimestamp (ms -> seconds)', () => {
+        const calls: number[] = [];
+        const original = usePlayerStoreBase.getState().mediaSeekToTimestamp;
+        usePlayerStoreBase.setState({
+            mediaSeekToTimestamp: (timestamp: number) => calls.push(timestamp),
+        });
+        try {
+            const r = applyPeerCommand(SENDER, buildCommand('seek', { positionMs: 12_500 }));
+            expect(r.reason).toBe('applied');
+            // 12_500ms → 12.5s
+            expect(calls).toEqual([12.5]);
+        } finally {
+            usePlayerStoreBase.setState({ mediaSeekToTimestamp: original });
+        }
+    });
+
+    it('maps volume to setVolume and clamps to 0-100', () => {
+        const r = applyPeerCommand(SENDER, buildCommand('volume', { volume: 150 }));
+        expect(r.reason).toBe('applied');
+        // clamped
+        expect(usePlayerStoreBase.getState().player.volume).toBe(100);
+
+        const r2 = applyPeerCommand(SENDER, buildCommand('volume', { volume: -10 }));
+        expect(r2.reason).toBe('applied');
+        expect(usePlayerStoreBase.getState().player.volume).toBe(0);
+
+        const r3 = applyPeerCommand(SENDER, buildCommand('volume', { volume: 35 }));
+        expect(r3.reason).toBe('applied');
+        expect(usePlayerStoreBase.getState().player.volume).toBe(35);
+    });
+
+    it('maps mute (true) to a toggle when currently unmuted', () => {
+        // store starts unmuted in beforeEach
+        const r = applyPeerCommand(SENDER, buildCommand('mute', { mute: true }));
+        expect(r.reason).toBe('applied');
+        expect(usePlayerStoreBase.getState().player.muted).toBe(true);
+    });
+
+    it('maps mute (false) to no-op when already unmuted', () => {
+        let calls = 0;
+        const original = usePlayerStoreBase.getState().mediaToggleMute;
+        usePlayerStoreBase.setState({
+            mediaToggleMute: () => {
+                calls += 1;
+            },
+        });
+        try {
+            const r = applyPeerCommand(SENDER, buildCommand('mute', { mute: false }));
+            expect(r.reason).toBe('applied');
+            expect(calls).toBe(0);
+        } finally {
+            usePlayerStoreBase.setState({ mediaToggleMute: original });
+        }
+    });
+
+    it('maps shuffle (true) to setShuffle(TRACK)', () => {
+        const r = applyPeerCommand(SENDER, buildCommand('shuffle', { shuffle: true }));
+        expect(r.reason).toBe('applied');
+        expect(usePlayerStoreBase.getState().player.shuffle).toBe(PlayerShuffle.TRACK);
+    });
+
+    it('maps shuffle (false) to setShuffle(NONE)', () => {
+        usePlayerStoreBase.setState((state) => {
+            state.player.shuffle = PlayerShuffle.TRACK;
+        });
+        const r = applyPeerCommand(SENDER, buildCommand('shuffle', { shuffle: false }));
+        expect(r.reason).toBe('applied');
+        expect(usePlayerStoreBase.getState().player.shuffle).toBe(PlayerShuffle.NONE);
+    });
+
+    it('maps repeat (all|one|off) to PlayerRepeat ALL|ONE|NONE', () => {
+        applyPeerCommand(SENDER, buildCommand('repeat', { mode: 'all' }));
+        expect(usePlayerStoreBase.getState().player.repeat).toBe(PlayerRepeat.ALL);
+
+        applyPeerCommand(SENDER, buildCommand('repeat', { mode: 'one' }));
+        expect(usePlayerStoreBase.getState().player.repeat).toBe(PlayerRepeat.ONE);
+
+        applyPeerCommand(SENDER, buildCommand('repeat', { mode: 'off' }));
+        expect(usePlayerStoreBase.getState().player.repeat).toBe(PlayerRepeat.NONE);
+    });
+
+    it('maps next to mediaNext', () => {
+        let calls = 0;
+        const original = usePlayerStoreBase.getState().mediaNext;
+        usePlayerStoreBase.setState({
+            mediaNext: () => {
+                calls += 1;
+            },
+        });
+        try {
+            const r = applyPeerCommand(SENDER, buildCommand('next'));
+            expect(r.reason).toBe('applied');
+            expect(calls).toBe(1);
+        } finally {
+            usePlayerStoreBase.setState({ mediaNext: original });
+        }
+    });
+
+    it('maps prev to mediaPrevious', () => {
+        let calls = 0;
+        const original = usePlayerStoreBase.getState().mediaPrevious;
+        usePlayerStoreBase.setState({
+            mediaPrevious: () => {
+                calls += 1;
+            },
+        });
+        try {
+            const r = applyPeerCommand(SENDER, buildCommand('prev'));
+            expect(r.reason).toBe('applied');
+            expect(calls).toBe(1);
+        } finally {
+            usePlayerStoreBase.setState({ mediaPrevious: original });
+        }
+    });
+
+    it('maps playIndex to mediaPlayByIndex', () => {
+        const args: number[] = [];
+        const original = usePlayerStoreBase.getState().mediaPlayByIndex;
+        usePlayerStoreBase.setState({
+            mediaPlayByIndex: (index: number) => args.push(index),
+        });
+        try {
+            const r = applyPeerCommand(SENDER, buildCommand('playIndex', { index: 7 }));
+            expect(r.reason).toBe('applied');
+            expect(args).toEqual([7]);
+        } finally {
+            usePlayerStoreBase.setState({ mediaPlayByIndex: original });
+        }
+    });
+
+    it('drops a seek with a non-numeric positionMs as validation', () => {
+        // Construct a deliberately malformed frame — the wire shape allows
+        // it but the receiver should refuse to act.
+        const bad = buildCommand('seek', { positionMs: 'oops' as unknown as number });
+        const r = applyPeerCommand(SENDER, bad);
+        expect(r.reason).toBe('dropped-validation');
+    });
+
+    it('drops a repeat with an unknown mode as validation', () => {
+        const bad = {
+            ...buildCommand('repeat', { mode: 'all' }),
+            a: { mode: 'cha-cha' as 'all' },
+        } as PeerCommand;
+        const r = applyPeerCommand(SENDER, bad);
+        expect(r.reason).toBe('dropped-validation');
+    });
+
+    it('drops an unknown verb as unsupported', () => {
+        const weird = {
+            ...buildCommand('pause'),
+            k: 'rewind3x' as unknown as PeerCommand['k'],
+        } as PeerCommand;
+        const r = applyPeerCommand(SENDER, weird);
+        expect(r.reason).toBe('dropped-unsupported');
+    });
+});
+
+describe('applyPeerCommand authorisation drops', () => {
+    it('drops when sync is disabled', () => {
+        useSettingsStore.setState((state) => ({
+            peerSync: { ...state.peerSync, enabled: false },
+        }));
+        let calls = 0;
+        const original = usePlayerStoreBase.getState().mediaPause;
+        usePlayerStoreBase.setState({
+            mediaPause: () => {
+                calls += 1;
+            },
+        });
+        try {
+            const r = applyPeerCommand(SENDER, buildCommand('pause'));
+            expect(r.reason).toBe('dropped-disabled');
+            expect(calls).toBe(0);
+        } finally {
+            usePlayerStoreBase.setState({ mediaPause: original });
+        }
+    });
+
+    it('drops when the sender is ourselves', () => {
+        const self: PeerAddress = { peerId: 'peer-self', userId: 'user-abc' };
+        recordPresence(self.peerId, true);
+        const r = applyPeerCommand(self, buildCommand('pause'));
+        expect(r.reason).toBe('dropped-self');
+    });
+
+    it('drops when the sender has no fresh presence', () => {
+        const stranger: PeerAddress = { peerId: 'peer-stranger', userId: 'user-abc' };
+        const r = applyPeerCommand(stranger, buildCommand('pause'));
+        expect(r.reason).toBe('dropped-stale-peer');
+    });
+});
+
+describe('re-emission loop protection', () => {
+    it('opens the inbound-apply suppression window when a verb is applied', () => {
+        expect(isInboundApplyActive()).toBe(false);
+        applyPeerCommand(SENDER, buildCommand('pause'));
+        expect(isInboundApplyActive()).toBe(true);
+    });
+
+    it('does NOT open the window for a dropped command', () => {
+        useSettingsStore.setState((state) => ({
+            peerSync: { ...state.peerSync, enabled: false },
+        }));
+        applyPeerCommand(SENDER, buildCommand('pause'));
+        expect(isInboundApplyActive()).toBe(false);
+    });
+
+    it('expires after the configured window', () => {
+        const t0 = 1_000_000;
+        // Open the window at t0.
+        const r = applyPeerCommand(SENDER, buildCommand('pause'));
+        expect(r.reason).toBe('applied');
+        expect(isInboundApplyActive(t0)).toBe(true);
+        // After 250ms we should be back to "publish freely".
+        expect(isInboundApplyActive(Date.now() + 250)).toBe(false);
+    });
+});
+
+describe('integration: inbound play resumes a paused local player', () => {
+    it('moves status from PAUSED to PLAYING when an inbound play arrives', () => {
+        usePlayerStoreBase.setState((state) => {
+            state.player.status = PlayerStatus.PAUSED;
+        });
+        applyPeerCommand(SENDER, buildCommand('play'));
+        expect(usePlayerStoreBase.getState().player.status).toBe(PlayerStatus.PLAYING);
+    });
+
+    it('does not bubble an outbound publish (loop guard set)', () => {
+        applyPeerCommand(SENDER, buildCommand('play'));
+        expect(isInboundApplyActive()).toBe(true);
+    });
+});
