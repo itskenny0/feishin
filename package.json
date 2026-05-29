@@ -106,6 +106,7 @@
         "audiomotion-analyzer": "^4.5.4",
         "axios": "^1.14.0",
         "bonjour-service": "^1.4.0",
+        "buffer": "^6.0.3",
         "butterchurn": "3.0.0-beta.5",
         "butterchurn-presets": "3.0.0-beta.4",
         "cheerio": "^1.2.0",

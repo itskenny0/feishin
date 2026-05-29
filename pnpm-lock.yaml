@@ -96,6 +96,9 @@ importers:
       bonjour-service:
         specifier: ^1.4.0
         version: 1.4.0
+      buffer:
+        specifier: ^6.0.3
+        version: 6.0.3
       butterchurn:
         specifier: 3.0.0-beta.5
         version: 3.0.0-beta.5

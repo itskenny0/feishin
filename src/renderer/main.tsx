@@ -4,12 +4,26 @@ import {
     Persister,
     PersistQueryClientProvider,
 } from '@tanstack/react-query-persist-client';
+import { Buffer as BufferPolyfill } from 'buffer';
 import { del, get, set } from 'idb-keyval';
 import { createRoot } from 'react-dom/client';
 
 import { App } from '/@/renderer/app';
 import { queryClient } from '/@/renderer/lib/react-query';
 import { installConsoleCapture } from '/@/renderer/utils/console-capture';
+
+// mqtt.js v5 (and its `mqtt-packet` dep) reach for `globalThis.Buffer` and
+// `Buffer.from` at runtime. The Electron renderer has Node's Buffer
+// available; the web build does not, so any code path that touches the
+// peer-sync MQTT client (peer-client publish / lwt / encoded frames) used
+// to throw "Buffer is not defined" the moment a user finished the
+// Sync & Connect setup wizard. Polyfill once, eagerly, before anything
+// imports `mqtt`. The cost is a small bundle delta + a single object
+// assignment at boot.
+if (typeof globalThis.Buffer === 'undefined') {
+    (globalThis as unknown as { Buffer: typeof BufferPolyfill }).Buffer = BufferPolyfill;
+    console.info('[boot] installed Buffer polyfill for the web build');
+}
 
 // Capture every console.log/warn/error/info into an in-memory ring buffer
 // so mobile users (Capacitor on Android / iOS) can view logs from the
