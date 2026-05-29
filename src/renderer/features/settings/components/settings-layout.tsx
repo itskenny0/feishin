@@ -312,11 +312,7 @@ const ConnectCategoryPrelude = ({ onLaunchWizard }: ConnectCategoryPreludeProps)
                         })}
                     </p>
                 </div>
-                <button
-                    className={styles.preludeAction}
-                    onClick={onLaunchWizard}
-                    type="button"
-                >
+                <button className={styles.preludeAction} onClick={onLaunchWizard} type="button">
                     {t('page.setting.connectGetStartedCta', {
                         defaultValue: 'Open setup wizard',
                     })}
@@ -340,11 +336,7 @@ const ConnectCategoryPrelude = ({ onLaunchWizard }: ConnectCategoryPreludeProps)
                           })}
                 </p>
             </div>
-            <button
-                className={styles.preludeActionMuted}
-                onClick={onLaunchWizard}
-                type="button"
-            >
+            <button className={styles.preludeActionMuted} onClick={onLaunchWizard} type="button">
                 {t('page.setting.connectReRunWizard', {
                     defaultValue: 'Re-run setup',
                 })}

@@ -82,8 +82,17 @@ describe('diagnostics-store', () => {
         recordInboundState('peer-B', state({ paused: true, pos: 12_000 }));
         const { states } = peekDiagnostics();
         expect(states).toHaveLength(2);
-        expect(states[0]).toMatchObject({ direction: 'outbound', peerId: 'peer-A', trackTitle: 'Bohemian' });
-        expect(states[1]).toMatchObject({ direction: 'inbound', peerId: 'peer-B', paused: true, pos: 12_000 });
+        expect(states[0]).toMatchObject({
+            direction: 'outbound',
+            peerId: 'peer-A',
+            trackTitle: 'Bohemian',
+        });
+        expect(states[1]).toMatchObject({
+            direction: 'inbound',
+            paused: true,
+            peerId: 'peer-B',
+            pos: 12_000,
+        });
     });
 
     it('flips presence per peer keyed by id and preserves the timestamp from the frame', () => {

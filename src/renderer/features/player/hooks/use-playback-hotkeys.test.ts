@@ -22,7 +22,6 @@ import { usePlayerActions, usePlayerStoreBase } from '/@/renderer/store/player.s
 
 describe('usePlayerActions leaf subscription', () => {
     it('returns a stable reference across unrelated player-state mutations', () => {
-        // eslint-disable-next-line perfectionist/sort-objects -- @testing-library destructure order
         const { rerender, result } = renderHook(() => usePlayerActions());
 
         const firstSnapshot = result.current;

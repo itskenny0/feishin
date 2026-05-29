@@ -103,14 +103,16 @@
 }
 
 .lane-badge {
+    display: inline-block;
     flex-shrink: 0;
     padding: 1px 5px;
+    margin-left: 6px;
     font-size: 10px;
     font-weight: 600;
     line-height: 1.2;
     color: var(--mantine-color-white);
     letter-spacing: 0.5px;
-    background: var(--mantine-color-teal-9);
+    background-color: var(--mantine-color-teal-9);
     border-radius: 4px;
 }
 
@@ -163,20 +165,3 @@
     padding: 6px 10px;
 }
 
-/*
- * Tiny lane badge that appears next to a peer's name in the picker when the
- * MQTT lane is live for that peer. Stays legible in both light + dark themes
- * because it's painted with Mantine's teal-9 + white tokens (which the theme
- * inverts for us) rather than a flat hex pair.
- */
-.lane-badge {
-    display: inline-block;
-    padding: 1px 5px;
-    margin-left: 6px;
-    font-size: 10px;
-    font-weight: 600;
-    color: var(--mantine-color-white);
-    letter-spacing: 0.5px;
-    background-color: var(--mantine-color-teal-9);
-    border-radius: 4px;
-}

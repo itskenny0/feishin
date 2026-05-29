@@ -359,11 +359,11 @@
     display: flex;
     gap: 1rem;
     align-items: center;
-    margin: 0 0 1rem;
     padding: 1rem 1.25rem;
+    margin: 0 0 1rem;
+    background: color-mix(in srgb, var(--theme-colors-primary-filled) 8%, transparent);
     border: 1px solid var(--theme-colors-border);
     border-radius: 12px;
-    background: color-mix(in srgb, var(--theme-colors-primary-filled) 8%, transparent);
 }
 
 .prelude-callout[data-tone='muted'] {
