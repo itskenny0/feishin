@@ -13,6 +13,14 @@ import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-targe
 // off) the poll alone keeps things working — at lower fidelity than push,
 // but never broken.
 const POLL_INTERVAL_MS = 2_000;
+/**
+ * Fallback cadence used while the WS push path reports `connected`. We don't
+ * need the 2s tick at all in steady state — the socket pushes every
+ * /Sessions change in real time — but a 10s heartbeat catches bugs like a
+ * silently-dead WebSocket that browsers won't always tear down, plus it
+ * keeps the offline-detection wall clock fed.
+ */
+const FALLBACK_POLL_INTERVAL_MS = 10_000;
 // After a command is dispatched we want truthful state back as soon as the
 // receiver has had a chance to publish PlaybackProgress. A short burst of
 // fast polls covers that gap without flooding the server during idle.
@@ -40,6 +48,15 @@ export interface PollerStartArgs {
 
 export class SessionsPoller {
     private activeUntil = 0;
+    /**
+     * Set by the hook when the WS push channel reports connected. While true
+     * the poll cadence drops from 2s to FALLBACK_POLL_INTERVAL_MS — the push
+     * lane is the primary input and the poll is a heartbeat safety net.
+     * Active-window fast-poll is still honoured (so a command dispatched in
+     * fallback mode still gets the burst), but the steady-state interval is
+     * the slower fallback cadence.
+     */
+    private fallbackMode = false;
     private isRunning = false;
     private mode: 'active' | 'idle' = 'idle';
     private offlineSince = 0;
@@ -68,6 +85,22 @@ export class SessionsPoller {
         this.timer = setTimeout(() => void this.tick(), 150);
     }
 
+    /**
+     * Hook seam: tell the poller whether the WS push channel is currently
+     * healthy. When true, the idle cadence relaxes to FALLBACK_POLL_INTERVAL_MS
+     * because real-time updates land via push and the poll is a heartbeat
+     * safety net. When false, returns to the 2s tick so things keep working
+     * if push is broken.
+     */
+    setFallbackMode(active: boolean): void {
+        if (this.fallbackMode === active) return;
+        this.fallbackMode = active;
+        perfLog('poller.fallbackMode', { active });
+        // Reschedule against the new cadence so we don't sit waiting on a 2s
+        // timer when the socket just came up (or vice versa).
+        if (this.isRunning && this.mode !== 'active') this.rescheduleSoon();
+    }
+
     start(args: PollerStartArgs) {
         this.stop();
         this.isRunning = true;
@@ -85,6 +118,7 @@ export class SessionsPoller {
         this.offlineSince = 0;
         this.mode = 'idle';
         this.activeUntil = 0;
+        this.fallbackMode = false;
         useRemoteTargetStore.getState().actions.setPollerActive(false);
         if (this.timer) {
             clearTimeout(this.timer);
@@ -102,7 +136,7 @@ export class SessionsPoller {
             this.mode = 'idle';
             perfLog('poller.idle', {});
         }
-        return POLL_INTERVAL_MS;
+        return this.fallbackMode ? FALLBACK_POLL_INTERVAL_MS : POLL_INTERVAL_MS;
     }
 
     private handleMissingTarget(onOffline: (name: string) => void) {

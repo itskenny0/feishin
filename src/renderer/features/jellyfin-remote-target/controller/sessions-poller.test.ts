@@ -90,6 +90,51 @@ describe('SessionsPoller adaptive cadence', () => {
         expect(listMock).toHaveBeenCalledTimes(3);
     });
 
+    it('relaxes to the 10s fallback cadence when setFallbackMode(true) is called (push lane healthy)', async () => {
+        poller.start({ onOffline: () => {}, server });
+        await vi.advanceTimersByTimeAsync(0); // initial tick
+        expect(listMock).toHaveBeenCalledTimes(1);
+
+        // Push channel just reported `connected` — poller is now a heartbeat.
+        poller.setFallbackMode(true);
+
+        // 5s passes (well past the 2s default but under the 10s fallback) —
+        // no new tick must land.
+        await vi.advanceTimersByTimeAsync(5_000);
+        expect(listMock).toHaveBeenCalledTimes(1);
+
+        // Cross the 10s threshold — fallback heartbeat lands.
+        await vi.advanceTimersByTimeAsync(6_000);
+        expect(listMock.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('returns to the 2s cadence when setFallbackMode(false) (push channel dropped)', async () => {
+        poller.start({ onOffline: () => {}, server });
+        await vi.advanceTimersByTimeAsync(0);
+        poller.setFallbackMode(true);
+        // Burn time so we're in steady fallback.
+        await vi.advanceTimersByTimeAsync(11_000);
+        listMock.mockClear();
+
+        // Socket drops — fallback mode off, 2s cadence resumes.
+        poller.setFallbackMode(false);
+        await vi.advanceTimersByTimeAsync(2_500);
+        expect(listMock.mock.calls.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('still bursts active-window polls even while in fallback mode (command dispatched during push)', async () => {
+        poller.start({ onOffline: () => {}, server });
+        await vi.advanceTimersByTimeAsync(0);
+        poller.setFallbackMode(true);
+        listMock.mockClear();
+
+        // Command dispatched — the dispatcher fast-poll signal must still
+        // burst even though steady state is the 10s heartbeat.
+        poller.notifyCommandDispatched();
+        await vi.advanceTimersByTimeAsync(200);
+        expect(listMock).toHaveBeenCalledTimes(1);
+    });
+
     it('returns to idle cadence after the active window closes', async () => {
         poller.start({ onOffline: () => {}, server });
         await vi.advanceTimersByTimeAsync(0); // initial

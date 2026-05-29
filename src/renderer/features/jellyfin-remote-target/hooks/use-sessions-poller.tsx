@@ -4,6 +4,11 @@ import { useTranslation } from 'react-i18next';
 import { shallow } from 'zustand/shallow';
 
 import { sessionsPoller } from '/@/renderer/features/jellyfin-remote-target/controller/sessions-poller';
+import { sessionsSink } from '/@/renderer/features/jellyfin-remote-target/controller/sessions-sink';
+import {
+    SessionsSocket,
+    type SessionsSocketState,
+} from '/@/renderer/features/jellyfin-remote-target/controller/sessions-socket';
 import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
 import { useAuthStore } from '/@/renderer/store/auth.store';
 import { usePeerSyncSettings } from '/@/renderer/store/settings.store';
@@ -52,7 +57,46 @@ export const useSessionsPoller = () => {
                 }),
             server: currentServer,
         });
-        return () => sessionsPoller.stop();
+
+        // Native Jellyfin push lane. Real-time per-PlayState frames cut the
+        // click → mirror floor from ~400ms (active-window poll) to ~50ms.
+        // When the socket reports connected, gate the poller down to a 10s
+        // safety-net cadence. When the socket drops, the poller's normal 2s
+        // tick automatically resumes — both lanes feed sessionsSink.apply()
+        // identically, so the two transports are fully interchangeable.
+        let socket: null | SessionsSocket = null;
+        // Capture the server in closure so a late-arriving frame from a
+        // server we've just signed out of doesn't poison the store. The
+        // effect cleanup tears the socket down before the next server gets
+        // wired up.
+        const boundServer = currentServer;
+        try {
+            socket = new SessionsSocket({
+                onSessionsFrame: (rows) => {
+                    try {
+                        sessionsSink.apply(rows, boundServer);
+                    } catch (err) {
+                        console.warn('[remote-target] socket sink apply failed', err);
+                    }
+                },
+                onStateChange: (next: SessionsSocketState) => {
+                    sessionsPoller.setFallbackMode(next === 'connected');
+                },
+                server: boundServer,
+            });
+            socket.start();
+        } catch (err) {
+            // The socket is opt-in extra latency — if construction fails for
+            // any reason (e.g. WebSocket undefined in some embedded webview)
+            // the poller continues to drive Sessions sync at full cadence.
+            console.warn('[remote-target] socket start failed — staying on poll', err);
+            socket = null;
+        }
+
+        return () => {
+            socket?.stop();
+            sessionsPoller.stop();
+        };
     }, [currentServer, isPickerOpen, jellyfinRemoteEnabled, targetDeviceId]);
 };
 
