@@ -139,7 +139,7 @@ export default defineConfig({
             workbox: {
                 cleanupOutdatedCaches: true,
                 clientsClaim: true,
-                maximumFileSizeToCacheInBytes: 1000000 * 5, // 5 MB
+                maximumFileSizeToCacheInBytes: 1000000 * 10, // 10 MB
                 skipWaiting: true,
             },
         }),
