@@ -44,7 +44,8 @@
             "musicbrainz": "Open in MusicBrainz",
             "qobuz": "Open in Qobuz",
             "spotify": "Open in Spotify"
-        }
+        },
+        "clearQueue_confirm": "Clear the current playback queue?"
     },
     "common": {
         "countSelected": "{{count}} selected",
@@ -181,7 +182,39 @@
         "gridRows": "Grid rows",
         "tableColumns": "Table columns",
         "itemsMore": "{{count}} more",
-        "newVersionAvailable": "A new version is available"
+        "newVersionAvailable": "A new version is available",
+        "login": "Login",
+        "sidebar": "Sidebar navigation",
+        "item": "Item",
+        "upload": "Upload image",
+        "apply": "Apply",
+        "dragToReorder": "Drag to reorder",
+        "copied": "Copied",
+        "regenerate": "Regenerate",
+        "copy": "Copy",
+        "hide": "Hide",
+        "show": "Show",
+        "peer": "Peer",
+        "status": "Status",
+        "lastSeen": "Last seen",
+        "rtt": "RTT",
+        "next": "Next",
+        "finish": "Finish",
+        "transportMqtt": "MQTT",
+        "transportJellyfin": "Jellyfin",
+        "transportLocal": "Local",
+        "transportPillTooltip": "Active sync lane",
+        "idle": "Idle",
+        "scrollToTop": "Scroll to top",
+        "pin": "Pin",
+        "previous": "Previous",
+        "open": "Open",
+        "updateAvailable": "Update available",
+        "checkingForUpdates": "Checking for updates…",
+        "updateCheckFailed": "Could not reach the update server.",
+        "upToDate": "You are on the latest version ({{tag}}).",
+        "refreshing": "Refreshing",
+        "primaryNavigation": "Primary navigation"
     },
     "entity": {
         "album_one": "Album",
@@ -270,7 +303,8 @@
         "networkErrorFriendly": "Could not reach the server. Check your network and try again.",
         "authError": "Your session may have expired. Try signing in again.",
         "serverError": "The server had trouble with that request. Try again in a moment.",
-        "unknownError": "Something went wrong."
+        "unknownError": "Something went wrong.",
+        "embeddedBrokerNeedsElectron": "The embedded broker is only available in the desktop app."
     },
     "filter": {
         "album": "$t(entity.album, {\"count\": 1})",
@@ -413,7 +447,8 @@
             "stepProgress": "Step {{current}} of {{total}}",
             "success": "Server added successfully",
             "title": "Add Server",
-            "urlInvalid": "Enter a valid server URL"
+            "urlInvalid": "Enter a valid server URL",
+            "switchedTo": "Switched to {{name}}"
         },
         "largeFetchConfirmation": {
             "title": "Add items to the queue",
@@ -434,7 +469,9 @@
             "input_owner": "$t(common.owner)",
             "input_public": "Public",
             "success": "$t(entity.playlist, {\"count\": 1}) created successfully",
-            "title": "Create $t(entity.playlist, {\"count\": 1})"
+            "title": "Create $t(entity.playlist, {\"count\": 1})",
+            "smartPlaylist": "Is smart playlist?",
+            "queryEditor": "Query Editor"
         },
         "createRadioStation": {
             "success": "Radio station created successfully",
@@ -449,12 +486,14 @@
         "deletePlaylist": {
             "input_confirm": "Type the name of the $t(entity.playlist, {\"count\": 1}) to confirm",
             "success": "$t(entity.playlist, {\"count\": 1}) deleted successfully",
-            "title": "Delete $t(entity.playlist, {\"count\": 1})"
+            "title": "Delete $t(entity.playlist, {\"count\": 1})",
+            "confirm": "Are you sure you want to delete this playlist?"
         },
         "editPlaylist": {
             "publicJellyfinNote": "Jellyfin for some reason does not expose whether a playlist is public or not. If you wish for this to remain public, please have the following input selected",
             "success": "$t(entity.playlist, {\"count\": 1}) updated successfully",
-            "title": "Edit $t(entity.playlist, {\"count\": 1})"
+            "title": "Edit $t(entity.playlist, {\"count\": 1})",
+            "noUploadedCover": "No uploaded image to remove"
         },
         "lyricsExport": {
             "export": "Export lyrics",
@@ -462,7 +501,11 @@
             "input_offset": "$t(setting.lyricOffset)",
             "saveToServer": "Save to server",
             "savedToServer": "Lyrics saved to Jellyfin",
-            "saveFailed": "Couldn't save lyrics to the server"
+            "saveFailed": "Couldn't save lyrics to the server",
+            "saveFailed_auth": "You don't have permission to upload lyrics to this server.",
+            "saveFailed_empty": "Nothing to save — these lyrics are empty.",
+            "saveFailed_network": "Couldn't reach the server. Check your connection and try again.",
+            "saveFailed_tooLarge": "Lyrics are too large to upload."
         },
         "lyricSearch": {
             "input_artist": "$t(entity.artist, {\"count\": 1})",
@@ -515,6 +558,9 @@
             "enabled": "Private mode enabled, playback status is now hidden from external integrations",
             "disabled": "Private mode disabled, playback status is now visible to enabled external integrations",
             "title": "Private Mode"
+        },
+        "restoreQueue": {
+            "empty": "No saved queue on the server"
         }
     },
     "page": {
@@ -587,7 +633,9 @@
             "noMusicFolder": "No music folder selected",
             "multipleMusicFolders": "{{count}} music folders selected",
             "settings": "$t(common.setting, {\"count\": 2})",
-            "version": "Version {{version}}"
+            "version": "Version {{version}}",
+            "checkForUpdates": "Check for updates",
+            "installLatest": "Install latest release"
         },
         "manageServers": {
             "title": "Manage servers",
@@ -655,13 +703,19 @@
                 "showLyricProvider": "Show lyric provider",
                 "synchronized": "Synchronized",
                 "unsynchronized": "Unsynchronized",
-                "useImageAspectRatio": "Use image aspect ratio"
+                "useImageAspectRatio": "Use image aspect ratio",
+                "visualizerLyricsOverlay": "Show lyrics over visualizer",
+                "visualizerAsBackground": "Visualizer as background"
             },
             "lyrics": "Lyrics",
             "related": "Related",
             "upNext": "Up next",
             "visualizer": "Visualizer",
-            "noLyrics": "No lyrics found"
+            "noLyrics": "No lyrics found",
+            "visualizerHint": "Tap to open the fullscreen audio visualizer.",
+            "fromTheAlbum": "From the album",
+            "aboutTheArtist": "About the artist",
+            "openLyrics": "Tap to expand lyrics"
         },
         "remoteTarget": {
             "connectFailed": "Could not connect to {{deviceName}}",
@@ -676,7 +730,10 @@
             "thisComputer": "This computer",
             "thisDevice": "This device",
             "transferring": "Transferring playback to {{deviceName}}…",
-            "wentOffline": "{{deviceName}} went offline — playback moved back to this computer"
+            "wentOffline": "{{deviceName}} went offline — playback moved back to this computer",
+            "commandFailed": "Remote command failed",
+            "pollFailed": "Could not reach the Jellyfin server",
+            "searching": "Searching for devices…"
         },
         "genreList": {
             "showAlbums": "Show $t(entity.genre, {\"count\": 1}) $t(entity.album, {\"count\": 2})",
@@ -795,7 +852,8 @@
                 "favorites": "Syncing favourites",
                 "genres": "Syncing genres",
                 "thumbnails": "Caching thumbnails"
-            }
+            },
+            "newSinceLastVisit_title": "{{count}}+ new since last visit"
         },
         "itemDetail": {
             "copyPath": "Copy path to clipboard",
@@ -873,14 +931,159 @@
                 "thumbnailSize_header": "Detail page header (large)",
                 "thumbnailSize_sidebar": "Sidebar (small)",
                 "thumbnailSize_table": "List table (tiny)",
-                "thumbnailSize_fullScreenPlayer": "Now-playing full-screen (largest)"
+                "thumbnailSize_fullScreenPlayer": "Now-playing full-screen (largest)",
+                "thumbnailsToggleLabel": "Pre-cache thumbnails",
+                "thumbnailConcurrency": "Parallel downloads",
+                "thumbnailConcurrencyHelp": "Number of cover-art fetches the sweep runs in parallel. Raise it to saturate a fast LAN; lower it if the server gets unhappy.",
+                "smoothProgressLabel": "Animate sync progress bar",
+                "smoothProgressHelp": "Interpolates the counter and progress bar between page updates at 20 fps. Smoother visuals but uses slightly more CPU while this page is open.",
+                "statusFetchingPage": "fetching next page…",
+                "lastSynced": "last sync {{when}}",
+                "diagnosticsTitle": "Diagnostics",
+                "diagPlatform": "Platform",
+                "diagOnline": "Network",
+                "diagOnlineYes": "online",
+                "diagOnlineNo": "offline",
+                "diagCacheAvailable": "IndexedDB available",
+                "diagBuild": "Build",
+                "actionForceFullResync": "Force full re-sync",
+                "statsResetConfirm": "Reset cache hit/miss stats? Historical data will be lost.",
+                "statsTitle": "Thumbnail cache stats",
+                "statsSince": "Tracking since {{when}} ago",
+                "statsBlobHits": "Blob hits",
+                "statsMissHits": "Miss-marker hits (404s skipped)",
+                "statsFetched": "Fresh fetches",
+                "statsMissWrites": "Miss markers written",
+                "statsFailed": "Failed fetches",
+                "statsBytesFetched": "Bytes fetched (total)",
+                "statsAvgFetchSize": "Avg fresh-fetch size",
+                "statsHitRatio": "Hit ratio",
+                "statsReset": "Reset stats"
             },
             "librarySync": "Library sync",
             "librarySyncDescription": "Local-first cache for the Jellyfin library so every surface renders instantly.",
             "librarySyncBannerTitle": "Cache your library for instant browsing?",
             "librarySyncBannerSubtitle": "We'll fetch your library and keep it in sync in the background, so every screen renders instantly.",
             "librarySyncBannerYes": "Sync now",
-            "librarySyncBannerNo": "Not now"
+            "librarySyncBannerNo": "Not now",
+            "generalDescription": "Theme, sidebar, home page, scrobbling, paths.",
+            "playbackDescription": "Audio engine, ReplayGain, transitions, queue behaviour.",
+            "connectDescription": "Jellyfin Connect remote-play, peer MQTT sync, and the local library cache.",
+            "connectTab": "Sync & Connect",
+            "hotkeysDescription": "Keyboard bindings for transport, library navigation, ratings.",
+            "windowDescription": "Native window chrome, MPRIS, Discord, updates.",
+            "advancedDescription": "Diagnostics, custom CSS, cache, import/export, logs.",
+            "categoriesLabel": "Setting categories",
+            "contentLabel": "Setting category content",
+            "title": "Settings",
+            "emptyCategory": "No options available for this category in the current build.",
+            "connectDiagnosticsDisabled": "Peer sync is disabled. Turn it on under Connect -> Jellyfin Connect (MQTT) to see live diagnostics here.",
+            "diagnosticsBrokerAutoDiscover": "Auto-discover via mDNS",
+            "diagnosticsBroker": "MQTT client",
+            "diagnosticsEmbeddedOff": "Embedded broker is off",
+            "diagnosticsEmbedded": "Embedded broker",
+            "diagnosticsPeers": "Peers",
+            "diagnosticsNoPeers": "No peers seen yet.",
+            "diagnosticsCommands": "Recent commands",
+            "diagnosticsNoCommands": "No commands yet.",
+            "diagnosticsStates": "Recent state frames",
+            "diagnosticsNoStates": "No state frames yet.",
+            "diagnosticsFlips": "Transport flips",
+            "diagnosticsNoFlips": "No lane changes yet.",
+            "wizardIntroBody": "Feishin can remote-control another Jellyfin player and keep its state in sync with yours. There are two transports: Jellyfin's built-in /Sessions polling (works against jellyfin-web and other Jellyfin clients) and a low-latency MQTT lane between Feishin instances. This wizard sets both up.",
+            "wizardIntroNote": "You can stop at any step — nothing is saved until you finish. You can also re-run this wizard later from Settings -> Sync & Connect -> Setup wizard.",
+            "wizardTierIntro": "Pick a broker. You can change this later from the Jellyfin Connect (MQTT) page.",
+            "wizardTierOwnDescription": "Recommended. You point Feishin at a broker you host (mosquitto, HiveMQ, EMQX, etc.). Private + reliable. Username/password supported.",
+            "wizardTierOwn": "Your own MQTT broker",
+            "wizardTierEmbeddedDescription": "Each desktop Feishin runs a small MQTT broker on the LAN and announces itself via mDNS. Zero setup; peers on the same network auto-pair. Desktop-only on the broker side; web/mobile peers can still connect.",
+            "wizardTierEmbedded": "Zeroconf P2P (embedded broker)",
+            "wizardTierPublicDescription": "Use a public broker. Easiest to try, but the broker operator can see every command and state frame. Don't share sensitive playback data.",
+            "wizardTierPublic": "Public broker",
+            "wizardConfigureOwn": "Enter the WebSocket URL of your broker. If it requires authentication, fill in username and password.",
+            "wizardConfigureEmbedded": "Feishin will start a small MQTT broker on this machine and announce it on the LAN via mDNS. Other Feishins on the same network will auto-discover it.",
+            "wizardConfigurePublicIntro": "Pick one of the public brokers below. Anyone with access can see your room key and playback state — treat the room key like a password and avoid this option for sensitive content.",
+            "wizardBrokerUrl": "Broker URL",
+            "wizardUsername": "Username",
+            "wizardUsernameOptional": "Optional",
+            "wizardPassword": "Password",
+            "wizardPublicWarning": "This is a public broker. Anyone who knows the broker URL and your room key can see your playback state and commands.",
+            "wizardFinishIntro": "All set. Click Finish to enable peer sync and unhide the Connect UI in the rest of the app. You can still tweak everything later from Sync & Connect.",
+            "wizardFinishTier": "Broker tier",
+            "wizardFinished": "Sync & Connect is set up. Look for the Connect button on the player bar.",
+            "wizardAlreadyOnboarded": "Sync & Connect is already set up. Running the wizard again will overwrite the existing settings.",
+            "wizardStepIntro": "About",
+            "wizardStepTier": "Broker tier",
+            "wizardStepConfigure": "Configure",
+            "wizardStepFinish": "Finish",
+            "consoleLogViewer": {
+                "openButton": "Show logs",
+                "copy": "Copy all",
+                "clear": "Clear",
+                "empty": "No log entries yet."
+            },
+            "updateDescription": "Auto-update channel + release source.",
+            "serverInfoDescription": "Connected server diagnostics.",
+            "serverInfo": "Server info",
+            "jellyfinActionsDescription": "Library rescan and other server-side actions.",
+            "jellyfinActions": "Jellyfin actions",
+            "customCssDescription": "User stylesheet for power-users.",
+            "customCss": "Custom CSS",
+            "analyticsDescription": "Opt-in anonymous usage telemetry.",
+            "mobileOverridesDescription": "Force mobile shell on desktop and similar overrides.",
+            "mobileOverrides": "Mobile overrides",
+            "exportImportDescription": "Backup and restore settings.",
+            "loggerDescription": "Inspect runtime logs (debugging only).",
+            "cacheDescription": "Clear cached cover art and stream data.",
+            "touchOnlyHelpDescription": "Where to look on a phone that has no keyboard.",
+            "touchOnlyHelp": "Touch-only help",
+            "connectWizardDescription": "Step-by-step setup for Jellyfin Connect remote-play and peer MQTT sync.",
+            "connectWizard": "Setup wizard",
+            "peerSyncDescription": "Low-latency direct sync between Feishin instances over MQTT.",
+            "peerSync": "Jellyfin Connect (MQTT)",
+            "connectDiagnosticsDescription": "Live transport, peer presence, recent commands, and round-trip latency.",
+            "connectDiagnostics": "Diagnostics",
+            "remoteDescription": "Companion web remote on the LAN.",
+            "applicationDescription": "Language, behaviour, system integrations.",
+            "themeDescription": "Light / dark themes, accent colour, fonts.",
+            "homeDescription": "What sections appear on the home page.",
+            "home": "Home",
+            "sidebarDescription": "Sidebar layout and pinned items.",
+            "controlsDescription": "Player bar layout, transport buttons.",
+            "fullscreenPlayerDescription": "Dynamic backgrounds, image blur, opacity.",
+            "fullscreenPlayer": "Fullscreen player",
+            "trackmapDescription": "Behind-the-music spectrum visual under the mini player.",
+            "lyricsDescription": "Lyric providers, fonts, offsets.",
+            "scrobbleDescription": "Last.fm / Listenbrainz reporting + notifications.",
+            "artistDescription": "Layout and metadata shown on artist pages.",
+            "artist": "Artist page",
+            "artResolutionDescription": "Cover-art image quality per surface.",
+            "artResolution": "Cover art quality",
+            "externalLinksDescription": "Right-click \"open in…\" service links.",
+            "externalLinks": "External links",
+            "pathDescription": "Local download / cache directories.",
+            "paths": "Paths",
+            "queryBuilderDescription": "Smart-playlist query builder defaults.",
+            "windowHotkeysDescription": "OS-level global hotkeys.",
+            "windowHotkeysTab": "Global hotkeys",
+            "mediaSessionDescription": "OS media keys + headphone remote.",
+            "mediaSession": "Media keys",
+            "hotkeyManagerDescription": "Per-action keyboard shortcuts.",
+            "hotkeyManager": "Bindings",
+            "audioDescription": "Engine, web audio, audio device.",
+            "mpvDescription": "MPV engine parameters and extras.",
+            "mpv": "MPV",
+            "transcodeDescription": "Server-side transcoding profiles + bitrate.",
+            "transcode": "Transcoding",
+            "filtersDescription": "ReplayGain, crossfade, gapless.",
+            "filters": "Filters",
+            "autoDjDescription": "Background queue extension via similar tracks.",
+            "autoDj": "Auto DJ",
+            "prefetchDescription": "Preload next track for instant transitions.",
+            "prefetch": "Prefetch",
+            "window": "Window",
+            "discordDescription": "Rich Presence integration.",
+            "passwordDescription": "OS keychain credential storage.",
+            "password": "Keychain"
         },
         "sidebar": {
             "albumArtists": "$t(entity.albumArtist, {\"count\": 2})",
@@ -905,6 +1108,10 @@
             "artistTracks": "Tracks by {{artist}}",
             "genreTracks": "\"{{genre}}\" $t(entity.track, {\"count\": 2})",
             "title": "$t(entity.track, {\"count\": 2})"
+        },
+        "search": {
+            "placeholder": "Songs, albums, artists, playlists…",
+            "commandPaletteLabel": "Global Command Menu"
         }
     },
     "player": {
@@ -962,7 +1169,8 @@
         "sleepTimer_setCustom": "Set timer",
         "sleepTimer_cancel": "Cancel timer",
         "sleepTimer_fadeOut": "Fade out before pausing",
-        "scrobbleForceSubmit": "Force scrobble"
+        "scrobbleForceSubmit": "Force scrobble",
+        "paused": "Paused"
     },
     "queryBuilder": {
         "standardTags": "Standard tags",
@@ -1494,7 +1702,38 @@
         "queryBuilderCustomFields_inputLabel": "Label",
         "queryBuilderCustomFields_inputTag": "Tag",
         "queryBuilderCustomFields": "Custom fields",
-        "queryBuilderCustomFields_description": "Add custom fields to use in query builders"
+        "queryBuilderCustomFields_description": "Add custom fields to use in query builders",
+        "peerSyncBrokerUrl_description": "WebSocket URL of the MQTT broker. Leave blank to auto-discover an embedded broker on the LAN.",
+        "peerSyncBrokerUrl": "Broker URL",
+        "peerSyncBrokerUsername_placeholder": "Leave blank for embedded broker",
+        "peerSyncBrokerUsername_description": "Username for brokers that require authentication. Leave blank when using the embedded broker on the LAN.",
+        "peerSyncBrokerUsername": "Broker username",
+        "peerSyncBrokerPassword_description": "Password for brokers that require authentication. Stored locally; treat it like any other saved password.",
+        "peerSyncBrokerPassword": "Broker password",
+        "peerSyncEmbeddedBroker_description": "Run a local MQTT broker on this machine for other Feishins on your network to use.",
+        "peerSyncEmbeddedBroker": "Embedded broker",
+        "peerSyncBrokerHost_description": "Listen address for the embedded broker. 0.0.0.0 exposes it on every interface.",
+        "peerSyncBrokerHost": "Listen host",
+        "peerSyncBrokerPort_description": "Listen port for the embedded broker.",
+        "peerSyncBrokerPort": "Listen port",
+        "peerSyncTlsCert_description": "Path to a TLS certificate. Pair with a key path to enable WSS.",
+        "peerSyncTlsCert": "TLS certificate",
+        "peerSyncTlsKey_description": "Path to the private key matching the certificate.",
+        "peerSyncTlsKey": "TLS private key",
+        "peerSyncRoomKey": "Shared room key",
+        "peerSyncRoomKey_description": "Every Feishin that joins the same broker with this key is treated as a peer. Keep it secret.",
+        "enableJellyfinRemote_description": "Master kill-switch for Jellyfin Remote. When off: no device picker, no Sessions polling, no remote-control receiver. MQTT is also paused since the picker is its entry point.",
+        "enableJellyfinRemote": "Enable Jellyfin Remote",
+        "enablePeerSync_description": "When two Feishins are reachable via MQTT, commands and state flow over MQTT instead of the polling lane.",
+        "enablePeerSync": "Enable MQTT peer sync",
+        "peerSyncPublicBrokerWarning": "Public brokers can see your playback state and commands. Use TLS and a strong room key, or run your own broker.",
+        "peerSyncShowConnectButton_description": "Hide the Connect button on the player bar to keep the UI tidy. The picker is still reachable from the device list.",
+        "peerSyncShowConnectButton": "Show Connect button",
+        "peerSyncShowStatusPill_description": "Show the Local / Jellyfin / MQTT lane indicator next to the Connect button.",
+        "peerSyncShowStatusPill": "Show transport pill",
+        "peerSyncShowPickerBadges_description": "Show the MQTT badge next to peers in the device picker when MQTT is the live lane.",
+        "peerSyncShowPickerBadges": "Show MQTT lane badges",
+        "peerSyncAdvanced": "Advanced"
     },
     "table": {
         "column": {
@@ -1770,6 +2009,14 @@
                 "d": "D",
                 "z": "Z"
             }
-        }
+        },
+        "documentation": "Documentation"
+    },
+    "serverCredentialRequired": {
+        "message2": "Add your credentials in the 'manage servers' menu or switch to a different server."
+    },
+    "lyrics": {
+        "providedBy": "Provided by {{source}}",
+        "match": "\"{{name}} by {{artist}}\""
     }
 }
