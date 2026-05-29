@@ -27,7 +27,7 @@ import {
 } from '/@/renderer/features/radio/hooks/use-radio-player';
 import { triggerHaptic } from '/@/renderer/hooks/use-haptic';
 import {
-    useFullScreenPlayerStore,
+    useFullScreenPlayerUseImageAspectRatio,
     useImageRes,
     usePlayerData,
     usePlayerSong,
@@ -109,7 +109,11 @@ export const MobileFullscreenPlayerAlbumArt = () => {
     const [mainImageDimensions, setMainImageDimensions] = useState({ idealSize: 1000 });
 
     const { fullScreenPlayer: albumArtRes } = useImageRes();
-    const { useImageAspectRatio } = useFullScreenPlayerStore();
+    // Leaf selector — album-art is the heaviest mount in the mobile player;
+    // re-rendering it on every fullscreen-store change (tab swap, opacity
+    // slider drag, dynamic-background toggle) tore down the crossfade
+    // image stack unnecessarily.
+    const useImageAspectRatio = useFullScreenPlayerUseImageAspectRatio();
     const isRadioActive = useIsRadioActive();
     const { isPlaying: isRadioPlaying } = useRadioPlayer();
     const currentSong = usePlayerSong();

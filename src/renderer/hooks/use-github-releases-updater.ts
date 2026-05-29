@@ -136,7 +136,13 @@ export const useGithubReleasesUpdater = () => {
         queryFn: fetchLatestRelease,
         queryKey: [...QUERY_KEY, currentVersion],
         refetchInterval: POLL_INTERVAL_MS,
-        refetchIntervalInBackground: true,
+        // Leave this off so the poll only fires while the app is foreground.
+        // Capacitor Android puts the WebView into Doze when backgrounded —
+        // a background refetch then both wastes battery AND racks up
+        // throttled GitHub API hits that never reach the user. Foreground
+        // polling at 6h intervals + the manual "Check for updates" path is
+        // plenty for surfacing new releases.
+        refetchIntervalInBackground: false,
         refetchOnWindowFocus: false,
         staleTime: POLL_INTERVAL_MS / 2,
     });

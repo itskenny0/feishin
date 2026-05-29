@@ -120,6 +120,15 @@ const ensureAlbumsIndex = async (): Promise<Fuse<AlbumSearchEntry> | undefined> 
     if (!db) return undefined;
     const start = performance.now();
     const rows = await db.albums.toArray();
+    // Identity check: if the active DB switched while toArray() was in
+    // flight, the rows we just read belong to the previous server.
+    // Caching them under `albumsIndex` would let a search served from
+    // the new server return stale results from the old one. Bail and
+    // let the next caller (running against the new active DB) rebuild.
+    if (db !== getActiveCacheDb()) {
+        console.info('[cache] search: albums index discarded, active db changed mid-build');
+        return undefined;
+    }
     const entries: AlbumSearchEntry[] = new Array(rows.length);
     for (let i = 0; i < rows.length; i += 1) {
         const r = rows[i];
@@ -145,6 +154,10 @@ const ensureArtistsIndex = async (): Promise<Fuse<ArtistSearchEntry> | undefined
     if (!db) return undefined;
     const start = performance.now();
     const rows = await db.artists.where('Kind').equals('AlbumArtist').toArray();
+    if (db !== getActiveCacheDb()) {
+        console.info('[cache] search: artists index discarded, active db changed mid-build');
+        return undefined;
+    }
     const entries: ArtistSearchEntry[] = new Array(rows.length);
     for (let i = 0; i < rows.length; i += 1) {
         const r = rows[i];
@@ -169,6 +182,10 @@ const ensurePlaylistsIndex = async (): Promise<Fuse<PlaylistSearchEntry> | undef
     if (!db) return undefined;
     const start = performance.now();
     const rows = await db.playlists.toArray();
+    if (db !== getActiveCacheDb()) {
+        console.info('[cache] search: playlists index discarded, active db changed mid-build');
+        return undefined;
+    }
     const entries: PlaylistSearchEntry[] = new Array(rows.length);
     for (let i = 0; i < rows.length; i += 1) {
         const r = rows[i];
@@ -193,6 +210,10 @@ const ensureSongsIndex = async (): Promise<Fuse<SongSearchEntry> | undefined> =>
     if (!db) return undefined;
     const start = performance.now();
     const rows = await db.songs.toArray();
+    if (db !== getActiveCacheDb()) {
+        console.info('[cache] search: songs index discarded, active db changed mid-build');
+        return undefined;
+    }
     const entries: SongSearchEntry[] = new Array(rows.length);
     for (let i = 0; i < rows.length; i += 1) {
         const r = rows[i];

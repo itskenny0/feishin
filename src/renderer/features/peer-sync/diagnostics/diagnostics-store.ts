@@ -19,6 +19,10 @@ import { useSyncExternalStore } from 'react';
 import { create } from 'zustand';
 
 const RING_SIZE = 50;
+/** Maximum distinct peers tracked in the presence + latency maps. A misbehaving
+ *  broker that round-robins client IDs could otherwise grow these maps without
+ *  bound; we evict the oldest peer when we cross this threshold. */
+const MAX_PEER_KEYS = 100;
 
 export type BrokerConnectionStatus =
     | 'connected'
@@ -109,6 +113,30 @@ const push = <T>(arr: T[], next: T): T[] => {
     return out;
 };
 
+/** Cap a peer-keyed record at MAX_PEER_KEYS by evicting the entry whose
+ *  `lastSeenAt` / `ts` field is oldest. Used by presence + latency stores so
+ *  a churning peer namespace can't grow the map without bound. */
+const capPeerMap = <T extends { lastSeenAt?: number; ts?: number }>(
+    next: Record<string, T>,
+): Record<string, T> => {
+    const keys = Object.keys(next);
+    if (keys.length <= MAX_PEER_KEYS) return next;
+    let oldestKey: null | string = null;
+    let oldestTs = Number.POSITIVE_INFINITY;
+    for (const k of keys) {
+        const v = next[k];
+        const ts = v.lastSeenAt ?? v.ts ?? 0;
+        if (ts < oldestTs) {
+            oldestTs = ts;
+            oldestKey = k;
+        }
+    }
+    if (oldestKey === null) return next;
+    const trimmed = { ...next };
+    delete trimmed[oldestKey];
+    return trimmed;
+};
+
 export const recordBrokerStatus = (status: BrokerConnectionStatus, errorMessage?: string): void => {
     useDiagnosticsStoreInternal.setState((s) => {
         if (s.broker.clientStatus === status && s.broker.lastErrorMessage === errorMessage) {
@@ -184,10 +212,10 @@ export const recordInboundState = (peerId: string, state: PeerState): void => {
 export const recordPresenceFrame = (peerId: string, presence: PeerPresence): void => {
     useDiagnosticsStoreInternal.setState((s) => ({
         ...s,
-        presence: {
+        presence: capPeerMap({
             ...s.presence,
             [peerId]: { lastSeenAt: presence.ts ?? Date.now(), online: presence.online, peerId },
-        },
+        }),
     }));
 };
 
@@ -204,9 +232,13 @@ export const recordTransportFlip = (
 };
 
 export const recordLatencySample = (peerId: string, rttMs: number): void => {
+    // Guard against a buggy publisher echoing a pong with a ts that produces
+    // a non-finite rtt — the surface UI reads rttMs directly and would render
+    // "NaN ms" if we let it through.
+    if (!Number.isFinite(rttMs)) return;
     useDiagnosticsStoreInternal.setState((s) => ({
         ...s,
-        latency: { ...s.latency, [peerId]: { rttMs, ts: Date.now() } },
+        latency: capPeerMap({ ...s.latency, [peerId]: { rttMs, ts: Date.now() } }),
     }));
 };
 

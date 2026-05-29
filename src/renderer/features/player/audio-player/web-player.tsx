@@ -54,6 +54,38 @@ export function WebPlayer() {
     const [player1Source, setPlayer1Source] = useState<MediaElementAudioSourceNode | null>(null);
     const [player2Source, setPlayer2Source] = useState<MediaElementAudioSourceNode | null>(null);
 
+    // Once the AudioContext is closed (user toggled WebAudio off and back
+    // on, or the parent recreated the context), the stale source nodes
+    // can no longer be re-attached to the new graph — the
+    // HTMLMediaElement is permanently bound to the old context's source.
+    // Drop the bookkeeping so handlePlayerXStart at least attempts a
+    // fresh wiring on the next play, even if Safari rejects the second
+    // createMediaElementSource call. Without this the gain stays
+    // disconnected and replay-gain silently stops applying.
+    useEffect(() => {
+        if (!webAudio) {
+            if (player1Source) {
+                try {
+                    player1Source.disconnect();
+                } catch {
+                    // already detached
+                }
+                setPlayer1Source(null);
+            }
+            if (player2Source) {
+                try {
+                    player2Source.disconnect();
+                } catch {
+                    // already detached
+                }
+                setPlayer2Source(null);
+            }
+        }
+        // Intentionally omit player1Source/player2Source so the cleanup
+        // runs only when webAudio flips, not when we set the sources.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [webAudio]);
+
     const fadeAndSetStatus = useCallback(
         async (startVolume: number, endVolume: number, duration: number, status: PlayerStatus) => {
             // Cancel any in-progress fade
@@ -228,6 +260,14 @@ export function WebPlayer() {
     );
 
     const handleOnEndedPlayer1 = useCallback(() => {
+        // Gate by active slot so a stale player1 (e.g. after the queue
+        // already rotated and player1 is now the next-position element)
+        // can't double-fire mediaAutoNext when its audio element happens
+        // to dispatch a tail-end 'ended'.
+        if (num !== 1) {
+            return;
+        }
+
         const promise = new Promise((resolve) => {
             mediaAutoNext();
             resolve(true);
@@ -246,9 +286,13 @@ export function WebPlayer() {
             }
             setIsTransitioning(false);
         });
-    }, [mediaAutoNext, volume]);
+    }, [mediaAutoNext, num, volume]);
 
     const handleOnEndedPlayer2 = useCallback(() => {
+        if (num !== 2) {
+            return;
+        }
+
         const promise = new Promise((resolve) => {
             mediaAutoNext();
             resolve(true);
@@ -265,7 +309,7 @@ export function WebPlayer() {
             }
             setIsTransitioning(false);
         });
-    }, [mediaAutoNext, volume]);
+    }, [mediaAutoNext, num, volume]);
 
     const player = usePlayer();
 

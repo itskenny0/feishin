@@ -34,11 +34,19 @@ export const userPeersWildcard = (userId: string): string => `${ROOT}/${sanitize
  * namespace or has the wrong shape — callers MUST drop messages with null.
  */
 export const parseTopic = (topic: string): null | { addr: PeerAddress; leaf: TopicLeaf } => {
+    if (typeof topic !== 'string' || topic.length === 0) return null;
     const parts = topic.split('/');
     // root has a `/` in it, so split gives us: feishin, v1, userId, peerId, leaf
     if (parts.length !== 5) return null;
     if (parts[0] !== 'feishin') return null;
     if (parts[1] !== `v${PROTOCOL_VERSION}`) return null;
+    const userId = parts[2];
+    const peerId = parts[3];
+    // Empty userId / peerId segments come from a malformed publish (a leading
+    // // or // collapse) — we treat those as not-ours rather than handing the
+    // empty string downstream and watching the receiver's "is this our own
+    // peerId?" check accidentally match a self-frame with no peerId.
+    if (userId.length === 0 || peerId.length === 0) return null;
     const leaf = parts[4];
     if (
         leaf !== 'cmd' &&
@@ -50,7 +58,7 @@ export const parseTopic = (topic: string): null | { addr: PeerAddress; leaf: Top
         return null;
     }
     return {
-        addr: { peerId: parts[3], userId: parts[2] },
+        addr: { peerId, userId },
         leaf,
     };
 };

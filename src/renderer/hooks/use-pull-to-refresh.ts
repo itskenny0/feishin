@@ -47,9 +47,32 @@ export const usePullToRefresh = (
         let lastDeltaY = 0;
         let active = false;
         let armed = false;
+        let primaryPointerId: null | number = null;
+        // Track every concurrent touch pointer so a second finger landing
+        // mid-pull disarms the gesture cleanly (pinch / two-finger scroll
+        // should NEVER be interpreted as refresh, otherwise the indicator
+        // jitters as one finger drifts vertically while the other anchors).
+        const activePointers = new Set<number>();
+
+        const reset = () => {
+            active = false;
+            armed = false;
+            primaryPointerId = null;
+            lastDeltaY = 0;
+            setDistance(0);
+        };
 
         const handlePointerDown = (event: PointerEvent) => {
             if (event.pointerType !== 'touch') return;
+            activePointers.add(event.pointerId);
+
+            // Multi-touch: never start a refresh from a non-primary pointer,
+            // and if a primary pull was already in flight, abort it.
+            if (activePointers.size > 1) {
+                if (active) reset();
+                return;
+            }
+
             // Only arm when starting at the very top of the scroll area —
             // mid-scroll touches should NOT initiate a refresh.
             if (el.scrollTop > 0) return;
@@ -75,15 +98,24 @@ export const usePullToRefresh = (
             lastDeltaY = 0;
             active = true;
             armed = false;
+            primaryPointerId = event.pointerId;
         };
 
         const handlePointerMove = (event: PointerEvent) => {
             if (!active) return;
+            // Only the pointer that started the gesture drives the indicator —
+            // other pointers (e.g. a second finger laid down before the first
+            // lifted) shouldn't move the spinner.
+            if (event.pointerId !== primaryPointerId) return;
+            // If a second touch landed since pointerdown, bail out.
+            if (activePointers.size > 1) {
+                reset();
+                return;
+            }
             const deltaY = event.clientY - startY;
             // Going up cancels (user is starting a normal scroll).
             if (deltaY < 0) {
-                active = false;
-                setDistance(0);
+                reset();
                 return;
             }
             // Apply a 0.55 resistance factor so the rubber-band feels weighty
@@ -99,10 +131,17 @@ export const usePullToRefresh = (
             }
         };
 
-        const handlePointerUp = async () => {
+        const handlePointerUp = async (event: PointerEvent) => {
+            activePointers.delete(event.pointerId);
             if (!active) return;
+            // Wait for the primary pointer that actually drove the gesture
+            // — releasing a non-primary finger first shouldn't fire refresh.
+            if (event.pointerId !== primaryPointerId) return;
+            const triggered = lastDeltaY >= triggerPx;
             active = false;
-            if (lastDeltaY >= triggerPx) {
+            armed = false;
+            primaryPointerId = null;
+            if (triggered) {
                 setRefreshing(true);
                 triggerHaptic('impact');
                 try {
@@ -110,22 +149,35 @@ export const usePullToRefresh = (
                 } finally {
                     setRefreshing(false);
                     setDistance(0);
+                    lastDeltaY = 0;
                 }
             } else {
                 setDistance(0);
+                lastDeltaY = 0;
             }
+        };
+
+        // pointercancel fires when the browser steals the gesture (e.g. system
+        // back gesture overlay opens, a scroll claim higher up succeeds,
+        // touch-action interrupts). It must NOT trigger refresh — the user
+        // never explicitly released past the threshold.
+        const handlePointerCancel = (event: PointerEvent) => {
+            activePointers.delete(event.pointerId);
+            if (!active) return;
+            if (event.pointerId !== primaryPointerId && activePointers.size > 0) return;
+            reset();
         };
 
         el.addEventListener('pointerdown', handlePointerDown, { passive: true });
         el.addEventListener('pointermove', handlePointerMove, { passive: true });
         el.addEventListener('pointerup', handlePointerUp, { passive: true });
-        el.addEventListener('pointercancel', handlePointerUp, { passive: true });
+        el.addEventListener('pointercancel', handlePointerCancel, { passive: true });
 
         return () => {
             el.removeEventListener('pointerdown', handlePointerDown);
             el.removeEventListener('pointermove', handlePointerMove);
             el.removeEventListener('pointerup', handlePointerUp);
-            el.removeEventListener('pointercancel', handlePointerUp);
+            el.removeEventListener('pointercancel', handlePointerCancel);
         };
     }, [disabled, onRefresh, targetRef, triggerPx]);
 

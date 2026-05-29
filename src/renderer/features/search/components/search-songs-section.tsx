@@ -1,6 +1,6 @@
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { nanoid } from 'nanoid/non-secure';
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createSearchParams, generatePath, useNavigate } from 'react-router';
 
@@ -52,7 +52,9 @@ export function SearchSongsSection({
             }),
         );
 
-    const songs = data?.pages.flatMap((p) => p.songs) ?? [];
+    // Stable reference for the flattened pages so each parent re-render
+    // doesn't realloc the array and propagate fresh refs to memoized rows.
+    const songs = useMemo(() => data?.pages.flatMap((p) => p.songs) ?? [], [data?.pages]);
     const showSection = isHome;
     const numberOfResults = hasNextPage ? `${songs.length}+` : songs.length;
 

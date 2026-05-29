@@ -11,8 +11,15 @@ import {
     SONG_DISPLAY_TYPES,
 } from '/@/renderer/features/shared/components/list-config-menu';
 import {
-    useFullScreenPlayerStore,
+    useFullScreenPlayerDynamicBackground,
+    useFullScreenPlayerDynamicImageBlur,
+    useFullScreenPlayerDynamicIsImage,
+    useFullScreenPlayerOpacity,
     useFullScreenPlayerStoreActions,
+    useFullScreenPlayerUseImageAspectRatio,
+    useFullScreenPlayerVisualizerAsBackground,
+    useFullScreenPlayerVisualizerExpanded,
+    useFullScreenPlayerVisualizerLyricsOverlay,
     useLyricsDisplaySettings,
     useLyricsSettings,
     useSettingsStore,
@@ -39,16 +46,19 @@ interface MobileFullscreenPlayerHeaderProps {
 export const MobileFullscreenPlayerHeader = memo(
     ({ isPageHovered, onClose }: MobileFullscreenPlayerHeaderProps) => {
         const { t } = useTranslation();
-        const {
-            dynamicBackground,
-            dynamicImageBlur,
-            dynamicIsImage,
-            opacity,
-            useImageAspectRatio,
-            visualizerAsBackground,
-            visualizerExpanded,
-            visualizerLyricsOverlay,
-        } = useFullScreenPlayerStore();
+        // Leaf selectors. The header is memo'd but a whole-state read
+        // re-fires it on every fullscreen-store change (active tab swap,
+        // opacity drag) which dragged the popover slider re-renders
+        // along with it. Each leaf is checked with Object.is so unrelated
+        // state changes no longer wake this component.
+        const dynamicBackground = useFullScreenPlayerDynamicBackground();
+        const dynamicImageBlur = useFullScreenPlayerDynamicImageBlur();
+        const dynamicIsImage = useFullScreenPlayerDynamicIsImage();
+        const opacity = useFullScreenPlayerOpacity();
+        const useImageAspectRatio = useFullScreenPlayerUseImageAspectRatio();
+        const visualizerAsBackground = useFullScreenPlayerVisualizerAsBackground();
+        const visualizerExpanded = useFullScreenPlayerVisualizerExpanded();
+        const visualizerLyricsOverlay = useFullScreenPlayerVisualizerLyricsOverlay();
 
         /*
          * Controlled-popover state so we can force-close it when the

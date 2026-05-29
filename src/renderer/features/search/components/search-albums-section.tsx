@@ -1,6 +1,6 @@
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { nanoid } from 'nanoid/non-secure';
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createSearchParams, generatePath, useNavigate } from 'react-router';
 
@@ -56,7 +56,11 @@ export function SearchAlbumsSection({
             }),
         );
 
-    const albums = data?.pages.flatMap((p) => p.albums) ?? [];
+    // Memoize the flattened page list — without this, every parent
+    // re-render (e.g. each keystroke into the palette) allocates a new
+    // array which then propagates a new reference to every memoized child
+    // command item.
+    const albums = useMemo(() => data?.pages.flatMap((p) => p.albums) ?? [], [data?.pages]);
     const showSection = isHome;
     const numberOfResults = hasNextPage ? `${albums.length}+` : albums.length;
 

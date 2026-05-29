@@ -1,4 +1,4 @@
-import { Suspense } from 'react';
+import { Suspense, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams, useSearchParams } from 'react-router';
 
@@ -61,11 +61,17 @@ const AlbumSearch = () => {
     const searchTerm = searchParams.get('query') || '';
     const emptyState = useSearchEmptyState(searchTerm.length > 0);
 
-    const albumQuery: OverrideAlbumListQuery = {
-        searchTerm,
-        sortBy: AlbumListSort.NAME,
-        sortOrder: SortOrder.ASC,
-    };
+    // Stable reference — AlbumListView memoizes its merged query against
+    // this object's identity. A fresh literal each render thrashes the
+    // memo and refetches every keystroke.
+    const albumQuery = useMemo<OverrideAlbumListQuery>(
+        () => ({
+            searchTerm,
+            sortBy: AlbumListSort.NAME,
+            sortOrder: SortOrder.ASC,
+        }),
+        [searchTerm],
+    );
 
     return (
         <AlbumListView
@@ -86,11 +92,14 @@ const SongSearch = () => {
     const searchTerm = searchParams.get('query') || '';
     const emptyState = useSearchEmptyState(searchTerm.length > 0);
 
-    const songQuery: OverrideSongListQuery = {
-        searchTerm,
-        sortBy: SongListSort.NAME,
-        sortOrder: SortOrder.ASC,
-    };
+    const songQuery = useMemo<OverrideSongListQuery>(
+        () => ({
+            searchTerm,
+            sortBy: SongListSort.NAME,
+            sortOrder: SortOrder.ASC,
+        }),
+        [searchTerm],
+    );
 
     return (
         <SongListView
@@ -108,12 +117,16 @@ const SongSearch = () => {
 const ArtistSearch = () => {
     const { display, grid, itemsPerPage, pagination, table } = useListSettings(ItemListKey.ARTIST);
     const [searchParams] = useSearchParams();
+    const searchTerm = searchParams.get('query') || '';
 
-    const albumArtistQuery: OverrideAlbumArtistListQuery = {
-        searchTerm: searchParams.get('query') || '',
-        sortBy: AlbumArtistListSort.NAME,
-        sortOrder: SortOrder.ASC,
-    };
+    const albumArtistQuery = useMemo<OverrideAlbumArtistListQuery>(
+        () => ({
+            searchTerm,
+            sortBy: AlbumArtistListSort.NAME,
+            sortOrder: SortOrder.ASC,
+        }),
+        [searchTerm],
+    );
 
     return (
         <AlbumArtistListView

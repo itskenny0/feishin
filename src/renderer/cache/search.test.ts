@@ -93,13 +93,18 @@ vi.mock('/@/renderer/cache/capability', () => ({
     isCacheAvailableSync: () => true,
 }));
 
+// The real getActiveCacheDb returns the same Dexie handle until closeCacheDb,
+// so the mock must also memoize. search.ts compares handles to detect a
+// server switch mid-build; without memoisation every comparison fails and
+// the index build always discards itself.
+const mockDb = {
+    albums: tableShim(ROWS.albums),
+    artists: tableShim(ROWS.artists),
+    playlists: tableShim(ROWS.playlists),
+    songs: tableShim(ROWS.songs),
+};
 vi.mock('/@/renderer/cache/db', () => ({
-    getActiveCacheDb: () => ({
-        albums: tableShim(ROWS.albums),
-        artists: tableShim(ROWS.artists),
-        playlists: tableShim(ROWS.playlists),
-        songs: tableShim(ROWS.songs),
-    }),
+    getActiveCacheDb: () => mockDb,
 }));
 
 beforeEach(() => {

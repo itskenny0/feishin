@@ -28,7 +28,13 @@ const perfMark = (label: string, payload: Record<string, unknown>): void => {
  * queue when ids actually change. Stateful by design — there's one
  * application-wide sink and both consumers feed it.
  */
+// Cap exponential backoff at ~30s so a flaky network doesn't keep us
+// re-hydrating every tick forever, while still recovering automatically.
+const HYDRATE_MAX_BACKOFF_MS = 30_000;
+
 class SessionsSink {
+    private hydrateBackoff: Record<string, { failures: number; nextAttempt: number }> = {};
+
     private prevQueueIdsByDevice: Record<string, string[]> = {};
 
     /**
@@ -88,6 +94,19 @@ class SessionsSink {
         actions.applyMirrorFromServer(mirror.mirrored);
 
         if (mirror.hydrateQueue) {
+            const now = Date.now();
+            const backoff = this.hydrateBackoff[match.deviceId];
+            if (backoff && now < backoff.nextAttempt) {
+                // Honour the backoff window — skip this hydrate without
+                // pretending the cache is fresh, so we'll try again as
+                // soon as the window opens. The queueIndex below still
+                // updates so the UI tracks the current item even while
+                // the queue list is stale.
+                if (mirror.queueIndex !== -1) {
+                    actions.setMirrored({ queueIndex: mirror.queueIndex });
+                }
+                return;
+            }
             // Cache the requested id set up-front so a hydrate that returns
             // a shorter list (e.g. a few items 404'd) doesn't permanently
             // disagree with subsequent identical /Sessions payloads and
@@ -98,13 +117,33 @@ class SessionsSink {
                 .hydrateQueue()
                 .then((queue) => {
                     actions.setMirrored({ queue, queueIndex: mirror.queueIndex });
+                    delete this.hydrateBackoff[match.deviceId];
                 })
                 .catch((err) => {
                     console.warn('[remote-target] queue hydrate failed', err);
-                    // Roll back the cache so the next tick retries — a
+                    // Roll back the cache so the next tick can retry — a
                     // transient network failure shouldn't masquerade as
                     // "queue successfully hydrated".
                     delete this.prevQueueIdsByDevice[match.deviceId];
+                    // Exponential backoff so a sustained outage doesn't make
+                    // the sink hammer the hydrate endpoint on every tick.
+                    // The first retry fires immediately — that preserves the
+                    // existing contract that a transient single failure
+                    // recovers on the next tick. Subsequent failures back
+                    // off so a persistent outage doesn't burn the API.
+                    const prev = this.hydrateBackoff[match.deviceId];
+                    const failures = (prev?.failures ?? 0) + 1;
+                    const delay =
+                        failures <= 1
+                            ? 0
+                            : Math.min(
+                                  HYDRATE_MAX_BACKOFF_MS,
+                                  500 * 2 ** Math.min(failures - 2, 6),
+                              );
+                    this.hydrateBackoff[match.deviceId] = {
+                        failures,
+                        nextAttempt: Date.now() + delay,
+                    };
                 });
         } else if (mirror.queueIndex !== -1) {
             actions.setMirrored({ queueIndex: mirror.queueIndex });
@@ -114,6 +153,7 @@ class SessionsSink {
     /** Reset per-device queue cache (e.g. server switch). */
     reset(): void {
         this.prevQueueIdsByDevice = {};
+        this.hydrateBackoff = {};
     }
 }
 

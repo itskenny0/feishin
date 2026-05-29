@@ -28,8 +28,13 @@ import {
 import { useFastAverageColor } from '/@/renderer/hooks';
 import { useHotkeys } from '/@/renderer/hooks/use-hotkeys';
 import {
-    useFullScreenPlayerStore,
+    useFullScreenPlayerDynamicBackground,
+    useFullScreenPlayerDynamicImageBlur,
+    useFullScreenPlayerDynamicIsImage,
+    useFullScreenPlayerExpanded,
+    useFullScreenPlayerOpacity,
     useFullScreenPlayerStoreActions,
+    useFullScreenPlayerUseImageAspectRatio,
     useLyricsDisplaySettings,
     useLyricsSettings,
     usePlayerData,
@@ -229,14 +234,15 @@ BackgroundImageOverlay.displayName = 'BackgroundImageOverlay';
 
 const Controls = () => {
     const { t } = useTranslation();
-    const {
-        dynamicBackground,
-        dynamicImageBlur,
-        dynamicIsImage,
-        expanded,
-        opacity,
-        useImageAspectRatio,
-    } = useFullScreenPlayerStore();
+    // Leaf selectors — Controls re-rendered on every fullscreen-store change
+    // when this read the whole state. Each piece used here drives one
+    // Switch/Slider/handler, so subscribe to them individually.
+    const dynamicBackground = useFullScreenPlayerDynamicBackground();
+    const dynamicImageBlur = useFullScreenPlayerDynamicImageBlur();
+    const dynamicIsImage = useFullScreenPlayerDynamicIsImage();
+    const expanded = useFullScreenPlayerExpanded();
+    const opacity = useFullScreenPlayerOpacity();
+    const useImageAspectRatio = useFullScreenPlayerUseImageAspectRatio();
     const { setStore } = useFullScreenPlayerStoreActions();
     const { setSettings } = useSettingsStoreActions();
     const lyricsSettings = useLyricsSettings();
@@ -621,7 +627,12 @@ const PlayerContainer = memo(
 PlayerContainer.displayName = 'PlayerContainer';
 
 export const FullScreenPlayer = () => {
-    const { dynamicBackground, dynamicImageBlur, dynamicIsImage } = useFullScreenPlayerStore();
+    // Leaf selectors — three independent zustand subscriptions are cheaper
+    // than one full-state subscription that re-fires on every unrelated
+    // change to the fullscreen-player store (tab swap, opacity drag, etc.).
+    const dynamicBackground = useFullScreenPlayerDynamicBackground();
+    const dynamicImageBlur = useFullScreenPlayerDynamicImageBlur();
+    const dynamicIsImage = useFullScreenPlayerDynamicIsImage();
     const { setStore } = useFullScreenPlayerStoreActions();
     const { windowBarStyle } = useWindowSettings();
     const isRadioActive = useIsRadioActive();

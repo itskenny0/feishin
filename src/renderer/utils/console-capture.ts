@@ -52,9 +52,17 @@ const safeStringify = (value: unknown): string => {
     }
 };
 
+// Pre-mount entries (anything logged before React has flushed createRoot)
+// get a `[boot]` tag so a crash report makes it obvious whether the failure
+// happened during early bootstrap (Buffer polyfill, store hydration, lazy
+// chunk fetch) or after the app reached steady state. `markConsoleCaptureMounted`
+// is called from app.tsx's AppShell first-mount effect.
+let mounted = false;
+
 const push = (level: ConsoleEntryLevel, args: unknown[]): void => {
+    const tag = mounted ? '' : '[boot] ';
     const entry: ConsoleEntry = {
-        args: `[v${BUILD_VERSION}] ${args.map(safeStringify).join(' ')}`,
+        args: `${tag}[v${BUILD_VERSION}] ${args.map(safeStringify).join(' ')}`,
         level,
         timestamp: Date.now(),
     };
@@ -67,6 +75,10 @@ const push = (level: ConsoleEntryLevel, args: unknown[]): void => {
             /* listener errors must not break console.log itself */
         }
     }
+};
+
+export const markConsoleCaptureMounted = (): void => {
+    mounted = true;
 };
 
 let installed = false;
@@ -117,14 +129,38 @@ export const subscribeToConsoleBuffer = (listener: () => void): (() => void) => 
     };
 };
 
+// Redact obvious secret-bearing query params and known credential field
+// values before the buffer leaves the device. This runs at copy-to-clipboard
+// time only — the in-memory buffer keeps the originals for live viewing —
+// so a user pasting logs into an issue tracker doesn't ship their Jellyfin
+// token or Subsonic salt to the world. The matchers are deliberately
+// conservative: known param names + common JSON key shapes; this isn't a
+// substitute for the API layer not logging credentials in the first place.
+const SECRET_QUERY_PARAMS =
+    /([?&](?:api_?key|token|access_?token|password|t|s|p|u|salt|sessionid|jellyfin-auth(?:orization)?)=)([^&\s"'<>]+)/gi;
+const SECRET_JSON_FIELDS =
+    /("(?:credential|ndCredential|password|token|accessToken|api_?key|salt|sessionId|jellyfin-auth(?:orization)?)"\s*:\s*")([^"]+)(")/gi;
+const SECRET_AUTH_HEADER = /(MediaBrowser\s+(?:[A-Za-z]+="[^"]*"\s*,\s*)*Token=")([^"]+)(")/gi;
+
+const redactSecrets = (text: string): string => {
+    if (!text) return text;
+    return text
+        .replace(SECRET_QUERY_PARAMS, '$1[REDACTED]')
+        .replace(SECRET_JSON_FIELDS, '$1[REDACTED]$3')
+        .replace(SECRET_AUTH_HEADER, '$1[REDACTED]$3');
+};
+
 /**
- * Format the entire buffer as a single string for copy-to-clipboard.
+ * Format the entire buffer as a single string for copy-to-clipboard. Secret
+ * query params (api_key, token, sessionid, …) and credential JSON fields
+ * are redacted to "[REDACTED]" so users sharing logs for debugging don't
+ * accidentally leak their server credentials.
  */
 export const formatConsoleBuffer = (): string => {
     return buffer
         .map((entry) => {
             const iso = new Date(entry.timestamp).toISOString();
-            return `[${iso}] [${entry.level.toUpperCase()}] ${entry.args}`;
+            return `[${iso}] [${entry.level.toUpperCase()}] ${redactSecrets(entry.args)}`;
         })
         .join('\n');
 };

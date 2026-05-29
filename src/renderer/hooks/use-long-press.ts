@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 import { triggerHaptic } from '/@/renderer/hooks/use-haptic';
 
@@ -44,6 +44,13 @@ export const useLongPress = ({ disabled, onLongPress, onPress }: UseLongPressOpt
     // without this the row's onClick would also fire on long-press,
     // adding the song to queue + opening the context menu in one tap.
     const suppressNextClick = useRef(false);
+    // Track concurrent pointers so a second finger landing during the
+    // 500ms timer disarms the gesture — pinch / two-finger taps must NOT
+    // pop a context menu while the user is reaching for a grid item.
+    const activePointers = useRef<Set<number>>(new Set());
+    // Snapshot the active pointer that armed the timer so we don't fire
+    // onPress for an unrelated lift (e.g. lifting a stray second finger).
+    const primaryPointerId = useRef<null | number>(null);
 
     const clear = useCallback(() => {
         if (timer.current !== null) {
@@ -51,6 +58,33 @@ export const useLongPress = ({ disabled, onLongPress, onPress }: UseLongPressOpt
             timer.current = null;
         }
         startPos.current = null;
+        primaryPointerId.current = null;
+    }, []);
+
+    // Hard-cleanup on unmount: any timer still ticking would fire after
+    // the component is gone and try to call onLongPress on a stale
+    // closure, which can dispatch into an unmounted parent menu.
+    useEffect(() => {
+        // Capture refs locally so the lint rule (react-hooks/exhaustive-deps)
+        // is satisfied — at unmount these refs are the same instances we
+        // saw on mount.
+        const timerRef = timer;
+        const activePointersRef = activePointers;
+        const startPosRef = startPos;
+        const primaryPointerIdRef = primaryPointerId;
+        const longPressedRef = longPressed;
+        const suppressNextClickRef = suppressNextClick;
+        return () => {
+            if (timerRef.current !== null) {
+                window.clearTimeout(timerRef.current);
+                timerRef.current = null;
+            }
+            activePointersRef.current.clear();
+            startPosRef.current = null;
+            primaryPointerIdRef.current = null;
+            longPressedRef.current = false;
+            suppressNextClickRef.current = false;
+        };
     }, []);
 
     const onPointerDown = useCallback(
@@ -61,8 +95,17 @@ export const useLongPress = ({ disabled, onLongPress, onPress }: UseLongPressOpt
             // don't double-fire.
             if (event.pointerType !== 'touch' && event.pointerType !== 'pen') return;
 
+            activePointers.current.add(event.pointerId);
+            // Multi-touch: if a second finger lands while a long-press
+            // timer is ticking, that's a pinch / two-finger tap — bail.
+            if (activePointers.current.size > 1) {
+                clear();
+                return;
+            }
+
             longPressed.current = false;
             startPos.current = { x: event.clientX, y: event.clientY };
+            primaryPointerId.current = event.pointerId;
             // Snapshot the event for the timer — React's event pool
             // recycles synthetic events, so we persist the raw fields
             // via a closure copy rather than holding onto the React
@@ -76,12 +119,17 @@ export const useLongPress = ({ disabled, onLongPress, onPress }: UseLongPressOpt
                 onLongPress(persisted);
             }, LONG_PRESS_MS);
         },
-        [disabled, onLongPress],
+        [clear, disabled, onLongPress],
     );
 
     const onPointerMove = useCallback(
         (event: React.PointerEvent<HTMLElement>) => {
             if (!startPos.current || timer.current === null) return;
+            // Only the primary pointer's drift counts — a second finger
+            // moving sideways shouldn't cancel the first finger's press.
+            if (primaryPointerId.current !== null && event.pointerId !== primaryPointerId.current) {
+                return;
+            }
             const dx = Math.abs(event.clientX - startPos.current.x);
             const dy = Math.abs(event.clientY - startPos.current.y);
             // Any meaningful movement cancels the long-press — scrolls
@@ -93,17 +141,28 @@ export const useLongPress = ({ disabled, onLongPress, onPress }: UseLongPressOpt
 
     const onPointerUp = useCallback(
         (event: React.PointerEvent<HTMLElement>) => {
-            if (timer.current !== null && !longPressed.current && onPress) {
+            activePointers.current.delete(event.pointerId);
+            // Only fire onPress when the primary pointer lifts — a stray
+            // second finger releasing first must not trigger onPress.
+            const isPrimary =
+                primaryPointerId.current === null || event.pointerId === primaryPointerId.current;
+            if (isPrimary && timer.current !== null && !longPressed.current && onPress) {
                 onPress(event);
             }
-            clear();
+            if (isPrimary) clear();
         },
         [clear, onPress],
     );
 
-    const onPointerCancel = useCallback(() => {
-        clear();
-    }, [clear]);
+    const onPointerCancel = useCallback(
+        (event: React.PointerEvent<HTMLElement>) => {
+            activePointers.current.delete(event.pointerId);
+            // pointercancel must always abort the long-press timer —
+            // browser stole the gesture or the touch was interrupted.
+            clear();
+        },
+        [clear],
+    );
 
     // Capture-phase click handler that swallows the click immediately
     // after a long-press fire. Capture phase is essential — by the time

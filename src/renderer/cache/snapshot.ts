@@ -128,6 +128,29 @@ const restoreFromStorage = (): void => {
 // the first render after a reload already see the warm map.
 restoreFromStorage();
 
+// Flush on page-hide / tab-close. The 500ms debounce above can otherwise
+// lose the most-recently written snapshot when the user closes the tab
+// or the OS backgrounds the app before the debounced timer fires —
+// exactly the entries the next launch needs for instant-render. We
+// listen for both `visibilitychange:hidden` (fires when the tab is
+// backgrounded) and `pagehide` (fires when the document is being
+// discarded, more reliable on mobile). Both handlers cancel the pending
+// timer and run `persistNow` synchronously so the data hits
+// localStorage before the document is suspended.
+if (isBrowser) {
+    const flushOnHide = (): void => {
+        if (persistTimer !== undefined) {
+            clearTimeout(persistTimer);
+            persistTimer = undefined;
+        }
+        persistNow();
+    };
+    window.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') flushOnHide();
+    });
+    window.addEventListener('pagehide', flushOnHide);
+}
+
 export const clearAllSnapshots = (): void => {
     snapshots.clear();
     schedulePersist();

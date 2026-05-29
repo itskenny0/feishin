@@ -435,7 +435,22 @@ export const useRemoteTargetStore = create<RemoteTargetState>((set) => ({
             }),
         setPickerOpen: (open) => set({ pickerOpen: open }),
         setPollerActive: (active) =>
-            set(active ? {} : { hasPolledOnce: false, holds: {}, pollError: null }),
+            set(
+                active
+                    ? {}
+                    : {
+                          // Drop the device list when the poller stops — by
+                          // the time it restarts (server switch, sign-out,
+                          // settings flip) those device ids belong to a
+                          // different population. Letting them linger leaks
+                          // last-server devices into the picker until the
+                          // next tick lands.
+                          deviceList: [],
+                          hasPolledOnce: false,
+                          holds: {},
+                          pollError: null,
+                      },
+            ),
         setPollError: (error) => set({ pollError: error }),
         setStatus: (status) => set({ status }),
         setTarget: ({ capabilities, deviceId, deviceName, sessionId }) =>

@@ -10,7 +10,8 @@ import { PlayQueue } from '/@/renderer/features/now-playing/components/play-queu
 import { FullScreenSimilarSongs } from '/@/renderer/features/player/components/full-screen-similar-songs';
 import { usePlaybackSettings, useSettingsStore } from '/@/renderer/store';
 import {
-    useFullScreenPlayerStore,
+    useFullScreenPlayerActiveTab,
+    useFullScreenPlayerOpacity,
     useFullScreenPlayerStoreActions,
 } from '/@/renderer/store/full-screen-player.store';
 import { Button } from '/@/shared/components/button/button';
@@ -31,7 +32,12 @@ const ButterchurnVisualizer = lazy(() =>
 
 export const FullScreenPlayerQueue = () => {
     const { t } = useTranslation();
-    const { activeTab, opacity } = useFullScreenPlayerStore();
+    // Leaf selectors so the tab header doesn't re-render on opacity-drag /
+    // dynamicBackground toggles / etc. Opacity only drives a CSS var on
+    // the outer div — small but pulls the whole component into the
+    // re-render with the fat subscription.
+    const activeTab = useFullScreenPlayerActiveTab();
+    const opacity = useFullScreenPlayerOpacity();
     const { setStore } = useFullScreenPlayerStoreActions();
     const { webAudio } = usePlaybackSettings();
     const visualizerType = useSettingsStore((store) => store.visualizer.type);

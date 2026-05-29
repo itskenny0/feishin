@@ -1,7 +1,7 @@
 import clsx from 'clsx';
 import { t } from 'i18next';
 import { AnimatePresence, HTMLMotionProps, motion, Variants } from 'motion/react';
-import { Fragment, useEffect, useRef } from 'react';
+import { Fragment, useEffect, useMemo, useRef } from 'react';
 import { generatePath, Link } from 'react-router';
 
 import styles from './full-screen-player-image.module.css';
@@ -184,39 +184,47 @@ export const FullScreenPlayerImage = () => {
         nextSong?.explicitStatus,
     ]);
 
-    const builtDataItems = {
-        bit_depth: currentSong?.bitDepth && <Badge>{currentSong?.bitDepth} bit</Badge>,
-        bit_rate: currentSong?.bitRate && <Badge>{currentSong?.bitRate} kbps</Badge>,
-        bpm: currentSong?.bpm && (
-            <Badge>
-                {currentSong?.bpm} {t('common.bpm')}
-            </Badge>
-        ),
-        codec: currentSong?.container && <Badge>{currentSong?.container}</Badge>,
-        disc_number: currentSong?.discNumber && (
-            <Badge>
-                {t('common.disc')} {currentSong?.discNumber}
-            </Badge>
-        ),
-        genres:
-            currentSong?.genres &&
-            currentSong?.genres
-                .slice(0, 2)
-                .map((genre) => <Badge key={genre.id}>{genre.name}</Badge>),
-        release_date: currentSong?.releaseDate && <Badge>{currentSong?.releaseDate}</Badge>,
-        release_type: currentSong?.tags?.releasetype && (
-            <Badge>{currentSong?.tags?.releasetype[0]}</Badge>
-        ),
-        release_year: isPlausibleReleaseYear(currentSong?.releaseYear) && (
-            <Badge>{currentSong?.releaseYear}</Badge>
-        ),
-        sample_rate: currentSong?.sampleRate && <Badge>{currentSong?.sampleRate / 1000} kHz</Badge>,
-        track_number: currentSong?.trackNumber && (
-            <Badge>
-                {t('common.trackNumber')} {currentSong?.trackNumber}
-            </Badge>
-        ),
-    };
+    // Memo keyed on the song id — the metadata badges only need to rebuild
+    // when the track actually changes, not on every parent re-render (which
+    // happens whenever the fullscreen-player store ticks anything).
+    const builtDataItems = useMemo(
+        () => ({
+            bit_depth: currentSong?.bitDepth && <Badge>{currentSong?.bitDepth} bit</Badge>,
+            bit_rate: currentSong?.bitRate && <Badge>{currentSong?.bitRate} kbps</Badge>,
+            bpm: currentSong?.bpm && (
+                <Badge>
+                    {currentSong?.bpm} {t('common.bpm')}
+                </Badge>
+            ),
+            codec: currentSong?.container && <Badge>{currentSong?.container}</Badge>,
+            disc_number: currentSong?.discNumber && (
+                <Badge>
+                    {t('common.disc')} {currentSong?.discNumber}
+                </Badge>
+            ),
+            genres:
+                currentSong?.genres &&
+                currentSong?.genres
+                    .slice(0, 2)
+                    .map((genre) => <Badge key={genre.id}>{genre.name}</Badge>),
+            release_date: currentSong?.releaseDate && <Badge>{currentSong?.releaseDate}</Badge>,
+            release_type: currentSong?.tags?.releasetype && (
+                <Badge>{currentSong?.tags?.releasetype[0]}</Badge>
+            ),
+            release_year: isPlausibleReleaseYear(currentSong?.releaseYear) && (
+                <Badge>{currentSong?.releaseYear}</Badge>
+            ),
+            sample_rate: currentSong?.sampleRate && (
+                <Badge>{currentSong?.sampleRate / 1000} kHz</Badge>
+            ),
+            track_number: currentSong?.trackNumber && (
+                <Badge>
+                    {t('common.trackNumber')} {currentSong?.trackNumber}
+                </Badge>
+            ),
+        }),
+        [currentSong],
+    );
 
     return (
         <Flex

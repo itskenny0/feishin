@@ -43,8 +43,13 @@ import { useSetRating } from '/@/renderer/features/shared/hooks/use-set-rating';
 import { useFastAverageColor } from '/@/renderer/hooks';
 import {
     useCurrentServer,
-    useFullScreenPlayerStore,
+    useFullScreenPlayerActiveTab,
+    useFullScreenPlayerDynamicBackground,
+    useFullScreenPlayerDynamicImageBlur,
+    useFullScreenPlayerDynamicIsImage,
     useFullScreenPlayerStoreActions,
+    useFullScreenPlayerVisualizerAsBackground,
+    useFullScreenPlayerVisualizerExpanded,
     usePlayerData,
     usePlayerSong,
     useSetFullScreenPlayerStore,
@@ -82,7 +87,9 @@ const ButterchurnVisualizer = lazyImport(() =>
 const FullscreenVisualizerBackground = memo(() => {
     const { webAudio } = usePlaybackSettings();
     const visualizerType = useSettingsStore((store) => store.visualizer.type);
-    const { visualizerAsBackground, visualizerExpanded } = useFullScreenPlayerStore();
+    // Leaf selectors so this memo doesn't re-render on tab swap / opacity drag.
+    const visualizerAsBackground = useFullScreenPlayerVisualizerAsBackground();
+    const visualizerExpanded = useFullScreenPlayerVisualizerExpanded();
 
     if (!webAudio || !visualizerAsBackground || visualizerExpanded) {
         return null;
@@ -516,13 +523,17 @@ export const MobileFullscreenPlayer = () => {
     const { t } = useTranslation();
     const setFullScreenPlayerStore = useSetFullScreenPlayerStore();
     const { setStore } = useFullScreenPlayerStoreActions();
-    const {
-        activeTab,
-        dynamicBackground,
-        dynamicImageBlur,
-        dynamicIsImage,
-        visualizerAsBackground,
-    } = useFullScreenPlayerStore();
+    // Leaf selectors. Previously a single `useFullScreenPlayerStore()` read
+    // re-rendered the entire mobile fullscreen player on every store change
+    // (expanded toggle, opacity drag, visualizerExpanded flip), which is
+    // catastrophic at this depth (parent of album-art crossfade,
+    // background-image stack, etc.). Each leaf is referentially stable
+    // when its slice doesn't change.
+    const activeTab = useFullScreenPlayerActiveTab();
+    const dynamicBackground = useFullScreenPlayerDynamicBackground();
+    const dynamicImageBlur = useFullScreenPlayerDynamicImageBlur();
+    const dynamicIsImage = useFullScreenPlayerDynamicIsImage();
+    const visualizerAsBackground = useFullScreenPlayerVisualizerAsBackground();
     const currentSong = usePlayerSong();
     // The song to surface on the player face: the remote device's now-playing
     // when a Jellyfin Connect target is active, else the local song (no-op

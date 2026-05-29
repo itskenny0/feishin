@@ -132,3 +132,20 @@ export const subscribeStats = (fn: (s: CacheStats) => void): (() => void) => {
         subscribers.delete(fn);
     };
 };
+
+// Flush on visibilitychange:hidden / pagehide so the 5s interval timer
+// doesn't lose the most-recent counters when the tab is backgrounded or
+// closed. Without this the user can rack up tens of blob hits between
+// flushes and see them disappear on next launch.
+if (typeof window !== 'undefined') {
+    const flushOnHide = (): void => {
+        load();
+        flush();
+    };
+    window.addEventListener('visibilitychange', () => {
+        if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+            flushOnHide();
+        }
+    });
+    window.addEventListener('pagehide', flushOnHide);
+}

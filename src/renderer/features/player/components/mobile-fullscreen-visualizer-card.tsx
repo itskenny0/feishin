@@ -4,8 +4,8 @@ import { RiFullscreenLine } from 'react-icons/ri';
 
 import { triggerHaptic } from '/@/renderer/hooks/use-haptic';
 import {
-    useFullScreenPlayerStore,
     useFullScreenPlayerStoreActions,
+    useFullScreenPlayerVisualizerAsBackground,
 } from '/@/renderer/store/full-screen-player.store';
 import { usePlaybackSettings, useSettingsStoreActions } from '/@/renderer/store/settings.store';
 
@@ -30,7 +30,9 @@ export const MobileFullscreenVisualizerCard = memo(() => {
     const { t } = useTranslation();
     const { webAudio } = usePlaybackSettings();
     const { setSettings } = useSettingsStoreActions();
-    const { visualizerAsBackground } = useFullScreenPlayerStore();
+    // Leaf selector so this memo doesn't redrop on every fullscreen-store
+    // change (opacity drag, dynamic-background toggle, tab swap).
+    const visualizerAsBackground = useFullScreenPlayerVisualizerAsBackground();
     const { setStore } = useFullScreenPlayerStoreActions();
 
     if (visualizerAsBackground) {

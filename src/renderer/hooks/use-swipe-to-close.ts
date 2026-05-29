@@ -35,9 +35,20 @@ export const useSwipeToClose = (
         let startY = 0;
         let active = false;
         let fired = false;
+        let primaryPointerId: null | number = null;
+        // Track concurrent pointers so a second finger (pinch / two-finger
+        // tap) disarms instead of competing for the close gesture.
+        const activePointers = new Set<number>();
 
         const handleDown = (event: PointerEvent) => {
             if (event.pointerType !== 'touch') return;
+            activePointers.add(event.pointerId);
+            if (activePointers.size > 1) {
+                // Multi-touch: abort any pending close gesture.
+                active = false;
+                primaryPointerId = null;
+                return;
+            }
             // Skip if the touch started on a button / link / input / slider
             // - the user is interacting with that element, not closing the
             // drawer.
@@ -53,16 +64,19 @@ export const useSwipeToClose = (
             startY = event.clientY;
             active = true;
             fired = false;
+            primaryPointerId = event.pointerId;
         };
 
         const handleMove = (event: PointerEvent) => {
             if (!active || fired) return;
+            if (primaryPointerId !== null && event.pointerId !== primaryPointerId) return;
             const dx = event.clientX - startX;
             const dy = Math.abs(event.clientY - startY);
             const signedDistance = direction === 'left' ? -dx : dx;
             // Reject mostly-vertical gestures (probably a scroll).
             if (dy > Math.abs(dx) * 1.4) {
                 active = false;
+                primaryPointerId = null;
                 return;
             }
             if (signedDistance >= triggerPx) {
@@ -70,11 +84,16 @@ export const useSwipeToClose = (
                 triggerHaptic('selection');
                 onClose();
                 active = false;
+                primaryPointerId = null;
             }
         };
 
-        const handleEnd = () => {
-            active = false;
+        const handleEnd = (event: PointerEvent) => {
+            activePointers.delete(event.pointerId);
+            if (primaryPointerId === null || event.pointerId === primaryPointerId) {
+                active = false;
+                primaryPointerId = null;
+            }
         };
 
         el.addEventListener('pointerdown', handleDown, { passive: true });
@@ -87,6 +106,7 @@ export const useSwipeToClose = (
             el.removeEventListener('pointermove', handleMove);
             el.removeEventListener('pointerup', handleEnd);
             el.removeEventListener('pointercancel', handleEnd);
+            activePointers.clear();
         };
     }, [direction, disabled, onClose, targetRef, triggerPx]);
 };

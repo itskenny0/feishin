@@ -163,7 +163,6 @@ export const PlaylistRowButton = memo(
                     };
                 },
                 onDrag: () => {
-                    console.log('started drag');
                     return;
                 },
                 onDragLeave: () => {
@@ -443,8 +442,12 @@ export const SidebarPlaylistList = () => {
             .map((id) => idMap.get(id))
             .filter((it): it is Playlist => it !== undefined);
 
-        // Append any new items that weren't in saved order
-        const remaining = ownedPlaylistItems.filter((it) => !playlistOrder.includes(it.id));
+        // Append any new items that weren't in saved order. Use a Set
+        // so the membership test is O(1) instead of O(playlistOrder.length)
+        // — large libraries with hundreds of playlists otherwise pay O(N*M)
+        // every time playlistsQuery or playlistOrder changes.
+        const orderedIdSet = new Set(playlistOrder);
+        const remaining = ownedPlaylistItems.filter((it) => !orderedIdSet.has(it.id));
         const newPlaylistItems = [...ordered, ...remaining];
         return { ...base, items: newPlaylistItems };
     }, [
@@ -705,8 +708,10 @@ export const SidebarSharedPlaylistList = () => {
             .map((id) => idMap.get(id))
             .filter((it): it is Playlist => it !== undefined);
 
-        // Append any new items that weren't in saved order
-        const remaining = sharedPlaylistItems.filter((it) => !playlistOrder.includes(it.id));
+        // Append any new items that weren't in saved order. O(1) Set lookup
+        // mirrors the same fix in SidebarPlaylistList for shared playlists.
+        const orderedIdSet = new Set(playlistOrder);
+        const remaining = sharedPlaylistItems.filter((it) => !orderedIdSet.has(it.id));
         const newPlaylistItems = [...ordered, ...remaining];
         return { ...base, items: newPlaylistItems };
     }, [

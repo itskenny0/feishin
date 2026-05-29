@@ -80,6 +80,13 @@ export const WebPlayerEngine = (props: WebPlayerEngineProps) => {
     const player2Ref = useRef<null | ReactPlayer>(null);
     const networkRetryCount1 = useRef(0);
     const networkRetryCount2 = useRef(0);
+    // Track pending retry timers so a mid-flight retry can be aborted
+    // when the src changes (user skipped past the failing track) or the
+    // component unmounts. Without this, a 2s-delayed audio.play() can
+    // fire against a stale media element after the next song has loaded
+    // and momentarily double-route audio.
+    const networkRetryTimer1 = useRef<NodeJS.Timeout | null>(null);
+    const networkRetryTimer2 = useRef<NodeJS.Timeout | null>(null);
     const [ReactPlayerComponent, setReactPlayerComponent] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(true);
 
@@ -182,6 +189,7 @@ export const WebPlayerEngine = (props: WebPlayerEngineProps) => {
         onEnded: () => void,
         onErrorPause: () => void,
         networkRetryCountRef: React.RefObject<number>,
+        networkRetryTimerRef: React.RefObject<NodeJS.Timeout | null>,
     ) => {
         return ({ target }: ErrorEvent) => {
             const { current: player } = playerRef;
@@ -205,7 +213,11 @@ export const WebPlayerEngine = (props: WebPlayerEngineProps) => {
                 if (networkRetryCountRef.current < MAX_NETWORK_RETRIES) {
                     networkRetryCountRef.current += 1;
                     const audio = target;
-                    setTimeout(() => {
+                    if (networkRetryTimerRef.current) {
+                        clearTimeout(networkRetryTimerRef.current);
+                    }
+                    networkRetryTimerRef.current = setTimeout(() => {
+                        networkRetryTimerRef.current = null;
                         pauseBothPlayers();
                         audio.load();
                         audio.play().catch(() => {
@@ -236,8 +248,37 @@ export const WebPlayerEngine = (props: WebPlayerEngineProps) => {
 
     useEffect(() => {
         networkRetryCount1.current = 0;
+        // Cancel any pending retry: a mid-flight audio.play() against
+        // the previous src would fight the user's skip or the new track
+        // and briefly produce stale-audio bursts.
+        if (networkRetryTimer1.current) {
+            clearTimeout(networkRetryTimer1.current);
+            networkRetryTimer1.current = null;
+        }
+    }, [src1]);
+
+    useEffect(() => {
         networkRetryCount2.current = 0;
-    }, [src1, src2]);
+        if (networkRetryTimer2.current) {
+            clearTimeout(networkRetryTimer2.current);
+            networkRetryTimer2.current = null;
+        }
+    }, [src2]);
+
+    // Cancel any pending retries on unmount so a 2s-delayed play()
+    // doesn't fire against a torn-down audio element.
+    useEffect(() => {
+        return () => {
+            if (networkRetryTimer1.current) {
+                clearTimeout(networkRetryTimer1.current);
+                networkRetryTimer1.current = null;
+            }
+            if (networkRetryTimer2.current) {
+                clearTimeout(networkRetryTimer2.current);
+                networkRetryTimer2.current = null;
+            }
+        };
+    }, []);
 
     // When not transitioning, ensure only the active player can play (e.g. after seek/prev during transition)
     useEffect(() => {
@@ -307,6 +348,7 @@ export const WebPlayerEngine = (props: WebPlayerEngineProps) => {
                     () => onEndedPlayer1(),
                     onErrorPause,
                     networkRetryCount1,
+                    networkRetryTimer1,
                 )}
                 onProgress={onProgressPlayer1}
                 onReady={handleOnReadyPlayer1}
@@ -333,6 +375,7 @@ export const WebPlayerEngine = (props: WebPlayerEngineProps) => {
                     () => onEndedPlayer2(),
                     onErrorPause,
                     networkRetryCount2,
+                    networkRetryTimer2,
                 )}
                 onProgress={onProgressPlayer2}
                 onReady={handleOnReadyPlayer2}

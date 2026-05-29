@@ -2,8 +2,12 @@ import type { RemotePlayCommand } from '/@/renderer/features/jellyfin-remote-tar
 import type { ServerListItemWithCredential } from '/@/shared/types/domain-types';
 
 import i18n from '/@/i18n/i18n';
-import { remoteTargetApi } from '/@/renderer/features/jellyfin-remote-target/api/remote-target-api';
+import {
+    RemoteCommandError,
+    remoteTargetApi,
+} from '/@/renderer/features/jellyfin-remote-target/api/remote-target-api';
 import { sessionsPoller } from '/@/renderer/features/jellyfin-remote-target/controller/sessions-poller';
+import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
 import { toast } from '/@/shared/components/toast/toast';
 
 interface DispatcherCtx {
@@ -48,15 +52,37 @@ const notifyDispatched = (): void => {
 
 // Per-command toast throttling: when an offline device is targeted, every
 // click would otherwise spam a stack of identical error toasts. Limit each
-// unique command label to one toast every 5 seconds.
-const lastToastByLabel: Record<string, number> = {};
+// unique (label, sessionId) tuple to one toast every 5 seconds — keying on
+// sessionId stops a hot error from device A masking a real, distinct error
+// from device B right after a transfer.
+const lastToastByKey: Record<string, number> = {};
 
-const surfaceError = (label: string, err: unknown): void => {
+const errorStatus = (err: unknown): number | undefined => {
+    if (err instanceof RemoteCommandError) return err.status;
+    return undefined;
+};
+
+const surfaceError = (label: string, sessionId: string, err: unknown): void => {
+    const status = errorStatus(err);
+    const key = `${label}@${sessionId}`;
     const now = Date.now();
-    const last = lastToastByLabel[label] ?? 0;
-    console.warn('[remote-target] ×', label, err);
+    const last = lastToastByKey[key] ?? 0;
+    console.warn('[remote-target] ×', label, { sessionId, status }, err);
+
+    // 401/403: token went bad or the user lost control over this session.
+    // Clear the target so the picker can re-pick instead of leaving the user
+    // stuck looking at a "Connected" UI that no longer accepts commands.
+    if (status === 401 || status === 403) {
+        try {
+            const state = useRemoteTargetStore.getState();
+            if (state.sessionId === sessionId) state.actions.clearTarget();
+        } catch (clearErr) {
+            console.warn('[remote-target] clearTarget on 401/403 failed', clearErr);
+        }
+    }
+
     if (now - last < 5_000) return;
-    lastToastByLabel[label] = now;
+    lastToastByKey[key] = now;
     const message = err instanceof Error ? err.message : String(err);
     toast.error({
         message,
@@ -66,12 +92,20 @@ const surfaceError = (label: string, err: unknown): void => {
     });
 };
 
+const isRetryableStatus = (status: number | undefined): boolean =>
+    typeof status === 'number' && status >= 500 && status < 600;
+
 const wrap =
-    <Args extends unknown[]>(label: string, fn: (...args: Args) => Promise<unknown>) =>
+    <Args extends [DispatcherCtx, ...unknown[]]>(
+        label: string,
+        fn: (...args: Args) => Promise<unknown>,
+    ) =>
     async (...args: Args): Promise<void> => {
         const id = ++nextDispatchId;
         const t0 = performance.now();
-        perfMark('dispatch.start', { id, label });
+        const ctx = args[0];
+        const sessionId = ctx?.sessionId ?? '';
+        perfMark('dispatch.start', { id, label, sessionId });
         // Tell the poller to flip into fast-poll mode immediately so the
         // truthful state mirror lands well within the optimistic-hold
         // window. We do this BEFORE the await so the bookkeeping is set
@@ -85,12 +119,37 @@ const wrap =
                 label,
             });
         } catch (err) {
+            // Transient 5xx: one quick retry before surfacing. Receivers
+            // occasionally bounce a control POST while busy applying the
+            // previous one; a single retry under the optimistic-hold window
+            // makes the user-visible UI feel solid without spamming the
+            // server. 4xx/network errors fall straight through to the toast.
+            if (isRetryableStatus(errorStatus(err))) {
+                try {
+                    await new Promise<void>((res) => setTimeout(res, 250));
+                    await fn(...args);
+                    perfMark('dispatch.done.retry', {
+                        durMs: Math.round(performance.now() - t0),
+                        id,
+                        label,
+                    });
+                    return;
+                } catch (retryErr) {
+                    perfMark('dispatch.error.retry', {
+                        durMs: Math.round(performance.now() - t0),
+                        id,
+                        label,
+                    });
+                    surfaceError(label, sessionId, retryErr);
+                    return;
+                }
+            }
             perfMark('dispatch.error', {
                 durMs: Math.round(performance.now() - t0),
                 id,
                 label,
             });
-            surfaceError(label, err);
+            surfaceError(label, sessionId, err);
         }
     };
 

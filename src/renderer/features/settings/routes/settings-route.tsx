@@ -4,6 +4,7 @@ import { SettingsContent } from '/@/renderer/features/settings/components/settin
 import { SettingSearchContext } from '/@/renderer/features/settings/context/search-context';
 import { AnimatedPage } from '/@/renderer/features/shared/components/animated-page';
 import { LibraryContainer } from '/@/renderer/features/shared/components/library-container';
+import { PageErrorBoundary } from '/@/renderer/features/shared/components/page-error-boundary';
 import { Flex } from '/@/shared/components/flex/flex';
 
 const SettingsHeader = lazy(() =>
@@ -31,4 +32,17 @@ const SettingsRoute = () => {
     );
 };
 
-export default SettingsRoute;
+// Wrap with PageErrorBoundary so a broken setting subpanel doesn't blow up
+// the whole router. Every other route in this app does the same — Settings
+// was the lone outlier and a throw inside (e.g. visualizer-settings, cache
+// dashboard) would otherwise bubble to the RouterErrorBoundary and unmount
+// the entire shell.
+const SettingsRouteWithBoundary = () => {
+    return (
+        <PageErrorBoundary>
+            <SettingsRoute />
+        </PageErrorBoundary>
+    );
+};
+
+export default SettingsRouteWithBoundary;

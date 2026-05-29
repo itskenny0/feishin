@@ -98,11 +98,18 @@ export const useAndroidBodyFlag = () => {
  * truly covers the screen; on close, restore it. We subscribe via
  * useFullScreenPlayerStore.getState() + subscribe so the effect doesn't
  * tear down on every store change.
+ *
+ * Also re-applies style/background/overlay settings on app resume — Android
+ * frequently drops them when the user backgrounds the app and the system
+ * recycles the WebView (especially under low-memory or battery saver),
+ * leaving the OS strip with the wrong text colour on next foreground.
  */
 export const useAndroidStatusBar = () => {
     useEffect(() => {
         let cancelled = false;
         let StatusBarApi: null | typeof import('@capacitor/status-bar').StatusBar = null;
+        let StyleEnum: null | typeof import('@capacitor/status-bar').Style = null;
+        let resumeHandle: null | { remove: () => Promise<void> } = null;
 
         const applyStatusBar = async () => {
             try {
@@ -111,6 +118,7 @@ export const useAndroidStatusBar = () => {
                 const { StatusBar, Style } = await import('@capacitor/status-bar');
                 if (cancelled) return;
                 StatusBarApi = StatusBar;
+                StyleEnum = Style;
                 await StatusBar.setStyle({ style: Style.Dark });
                 await StatusBar.setBackgroundColor({ color: '#000000' });
                 await StatusBar.setOverlaysWebView({ overlay: false });
@@ -140,9 +148,54 @@ export const useAndroidStatusBar = () => {
             sync(state.expanded || state.visualizerExpanded);
         });
 
+        // Re-apply status bar settings whenever the app comes back to the
+        // foreground. Several OEM ROMs (and Android 14+ predictive back)
+        // strip the style/background/overlay flags during background, so
+        // the next foreground would show a light-icon strip on dark
+        // chrome unless we re-set them here. Also re-sync visibility to
+        // the current overlay state, since the system bar may have been
+        // shown by the OS while we were paused.
+        const registerLifecycle = async () => {
+            try {
+                if (!(await isNative())) return;
+                if (cancelled) return;
+                const { App: CapApp } = await import('@capacitor/app');
+                if (cancelled) return;
+                const handle = await CapApp.addListener('appStateChange', async ({ isActive }) => {
+                    if (!isActive) return;
+                    try {
+                        if (!StatusBarApi || !StyleEnum) return;
+                        await StatusBarApi.setStyle({ style: StyleEnum.Dark });
+                        await StatusBarApi.setBackgroundColor({ color: '#000000' });
+                        await StatusBarApi.setOverlaysWebView({ overlay: false });
+                        // Force a re-sync against the live overlay state.
+                        const fs = useFullScreenPlayerStore.getState();
+                        const shouldHide = fs.expanded || fs.visualizerExpanded;
+                        lastHidden = !shouldHide; // flip so sync() actually fires
+                        sync(shouldHide);
+                    } catch (error) {
+                        console.warn('[android] status bar resume re-apply failed:', error);
+                    }
+                });
+                if (cancelled) {
+                    void handle.remove();
+                    return;
+                }
+                resumeHandle = handle;
+            } catch (error) {
+                console.warn('[android] status bar lifecycle listener failed:', error);
+            }
+        };
+
+        void registerLifecycle();
+
         return () => {
             cancelled = true;
             unsubFs();
+            if (resumeHandle) {
+                void resumeHandle.remove();
+                resumeHandle = null;
+            }
             try {
                 void StatusBarApi?.show();
             } catch {
@@ -367,6 +420,11 @@ export const useAndroidForceFullVolume = () => {
 /**
  * Wake lock during playback: hold the screen on while audio is PLAYING,
  * release otherwise. Uses the @capacitor-community/keep-awake plugin.
+ *
+ * Also pauses the wake lock when the app goes to the background — holding
+ * keep-awake while paused (no UI visible) is a battery footgun on devices
+ * that don't auto-revoke wake locks for paused apps. On resume we re-arm
+ * if playback is still active.
  */
 export const useAndroidKeepAwake = () => {
     const status = usePlayerStatus();
@@ -397,6 +455,59 @@ export const useAndroidKeepAwake = () => {
             cancelled = true;
         };
     }, [status]);
+
+    // Background / foreground lifecycle. We always release the wake lock
+    // on background (no screen to keep awake when we're hidden) and
+    // re-acquire on foreground if the player is still playing — Android
+    // continues audio playback via the foreground service; only the
+    // screen-on hint needs to follow the WebView's visibility.
+    useEffect(() => {
+        let cancelled = false;
+        let resumeHandle: null | { remove: () => Promise<void> } = null;
+
+        const register = async () => {
+            try {
+                if (!(await isNative())) return;
+                if (cancelled) return;
+                const { App: CapApp } = await import('@capacitor/app');
+                const { KeepAwake } = await import('@capacitor-community/keep-awake');
+                if (cancelled) return;
+                const handle = await CapApp.addListener('appStateChange', async ({ isActive }) => {
+                    try {
+                        if (!isActive) {
+                            await KeepAwake.allowSleep();
+                            return;
+                        }
+                        // Resumed — re-acquire the lock if playback is
+                        // still going. Reading status via a stale closure
+                        // here would be wrong, so pull from the live
+                        // store synchronously.
+                        const { usePlayerStore } = await import('/@/renderer/store');
+                        const live = usePlayerStore.getState();
+                        if (live.player.status === PlayerStatus.PLAYING) {
+                            await KeepAwake.keepAwake();
+                        }
+                    } catch (error) {
+                        console.warn('[android] keep-awake lifecycle transition failed:', error);
+                    }
+                });
+                if (cancelled) {
+                    void handle.remove();
+                    return;
+                }
+                resumeHandle = handle;
+            } catch (error) {
+                console.warn('[android] keep-awake lifecycle listener failed:', error);
+            }
+        };
+
+        void register();
+
+        return () => {
+            cancelled = true;
+            if (resumeHandle) void resumeHandle.remove();
+        };
+    }, []);
 
     useEffect(() => {
         return () => {

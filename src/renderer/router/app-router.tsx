@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { HashRouter, Route, Routes } from 'react-router';
+import { HashRouter, Navigate, Route, Routes } from 'react-router';
 
 import { FolderPlaylistMigrationModal } from '/@/renderer/features/folders/components/folder-playlist-migration-modal';
 import { ShuffleAllContextModal } from '/@/renderer/features/player/components/shuffle-all-modal';
@@ -328,6 +328,20 @@ export const AppRouter = () => {
                                 <Route element={<NoNetworkRoute />} path={AppRoute.NO_NETWORK} />
                             </Route>
                         </Route>
+                        {/*
+                         * Top-level catch-all. The InvalidRoute below sits
+                         * INSIDE the auth gate, so a signed-out user that
+                         * deep-links to a non-existent path would otherwise
+                         * see a blank screen (the no-auth siblings have no
+                         * `*` of their own). Redirecting to ACTION_REQUIRED
+                         * lands them on the recovery flow regardless of
+                         * auth state — once they auth, AppOutlet routes
+                         * them home as normal.
+                         */}
+                        <Route
+                            element={<Navigate replace to={AppRoute.ACTION_REQUIRED} />}
+                            path="*"
+                        />
                     </Routes>
                 </RouterErrorBoundary>
             </ModalsProvider>

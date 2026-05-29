@@ -45,6 +45,14 @@ export interface StartConnectLifecycleArgs {
 const TOAST_ID_PREFIX = 'remote-target-connect-';
 
 /**
+ * Module-level guard so a double-tap of the same device doesn't spawn two
+ * parallel lifecycles racing the same toastId. The second call is a no-op
+ * and returns the first lifecycle's cleanup so the caller can still bail
+ * out symmetrically.
+ */
+const activeLifecycles = new Map<string, () => void>();
+
+/**
  * Drives the picker's connect-toast lifecycle: tap → optional transfer →
  * first /Sessions mirror → "Playing on" (or error on timeout/failure).
  *
@@ -61,6 +69,14 @@ export const startConnectLifecycle = ({
     transfer,
 }: StartConnectLifecycleArgs): (() => void) => {
     const toastId = `${TOAST_ID_PREFIX}${deviceId}`;
+    // Idempotency guard — a double-tap on the same device used to spawn a
+    // second subscription that finishSuccess'd against the same toast on
+    // status='connected', double-firing the toast.update() and any
+    // user-facing instrumentation. Hand the existing cleanup back so the
+    // caller's cleanup signature stays stable.
+    const existing = activeLifecycles.get(toastId);
+    if (existing) return existing;
+
     let settled = false;
     let unsubscribe: (() => void) | null = null;
     let timeoutHandle: null | ReturnType<typeof setTimeout> = null;
@@ -75,7 +91,13 @@ export const startConnectLifecycle = ({
             clearTimeout(timeoutHandle);
             timeoutHandle = null;
         }
+        // Drop the idempotency-guard entry once we're done so the next
+        // legitimate tap (e.g. user switches away and back) can run.
+        if (activeLifecycles.get(toastId) === cleanup) {
+            activeLifecycles.delete(toastId);
+        }
     };
+    activeLifecycles.set(toastId, cleanup);
 
     const finishSuccess = () => {
         if (settled) return;

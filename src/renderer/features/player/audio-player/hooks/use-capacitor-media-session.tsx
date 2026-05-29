@@ -167,7 +167,21 @@ const useCapacitorMediaSession = () => {
         };
 
         const unsubscribeTrack = subscribeCurrentTrack(({ song }) => {
-            if (!song || isRadioActiveRef.current) return;
+            if (isRadioActiveRef.current) return;
+            if (!song) {
+                // Queue cleared / mediaStop — wipe metadata so the
+                // lockscreen / notification doesn't keep showing the
+                // previous track's artwork after playback ends.
+                currentDurationSec = 0;
+                MediaSession.setMetadata({
+                    album: '',
+                    artist: '',
+                    artwork: [],
+                    title: '',
+                }).catch(() => {});
+                MediaSession.setPlaybackState({ playbackState: 'none' }).catch(() => {});
+                return;
+            }
             currentDurationSec = (song.duration ?? 0) / 1000;
             MediaSession.setMetadata(buildMetadata(song)).catch(() => {});
         });

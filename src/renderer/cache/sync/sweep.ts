@@ -270,8 +270,46 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
         }
         lastPageRate = pageRate;
 
-        if (pageItems.length > 0) {
-            await writePage(db, pageItems);
+        // Atomicity: write the page rows AND the syncMeta resume marker
+        // in a single Dexie transaction so a crash mid-write can never
+        // leave the entity table at offset N+1 while the syncMeta resume
+        // marker still says N. Without this, a torn write would either
+        // re-fetch a page on next launch (safe — bulkPut is idempotent)
+        // OR skip rows that the writer thought were persisted (data
+        // loss). The transaction boundary now exactly matches the
+        // checkpoint boundary the resume logic depends on.
+        const nextStart = startIndex + pageItems.length;
+        const metaRow = {
+            EntityType: entity,
+            hydrationState: 'partial' as const,
+            lastFullSyncAt: existingMeta?.lastFullSyncAt,
+            lastSweepAt: pageStartedAt,
+            nextStartIndex: nextStart,
+            pausedUntil: undefined,
+            totalCount: total,
+        };
+        try {
+            // Resolve the entity store by name so the same transaction
+            // boundary works for every sweep regardless of which table
+            // its writePage targets. Listed as `db.table(entity)` so
+            // Dexie sees both stores in the rw scope.
+            const entityTable = db.table(entity);
+            await db.transaction('rw', entityTable, db.syncMeta, async () => {
+                if (pageItems.length > 0) {
+                    await writePage(db, pageItems);
+                }
+                await db.syncMeta.put(metaRow);
+            });
+        } catch (err) {
+            if ((err as Error)?.name === 'AbortError' || signal.aborted) {
+                console.info(`[cache] sweep:${entity} aborted during write`, { startIndex });
+                return;
+            }
+            console.warn(`[cache] sweep:${entity} page transaction failed`, {
+                error: (err as Error)?.message,
+                startIndex,
+            });
+            throw err;
         }
 
         // Live entity-count + hydration-state update so the dashboard
@@ -285,18 +323,6 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
             actions.setEntityCount(entity, itemsDone);
         }
         actions.setHydrationState(entity, 'partial');
-
-        // Persist progress so we can resume on next launch.
-        const nextStart = startIndex + pageItems.length;
-        await db.syncMeta.put({
-            EntityType: entity,
-            hydrationState: 'partial',
-            lastFullSyncAt: existingMeta?.lastFullSyncAt,
-            lastSweepAt: pageStartedAt,
-            nextStartIndex: nextStart,
-            pausedUntil: undefined,
-            totalCount: total,
-        });
 
         const updatedPageTotal = total !== undefined ? Math.ceil(total / pageSize) : undefined;
         actions.setSweep({

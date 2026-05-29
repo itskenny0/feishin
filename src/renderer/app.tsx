@@ -34,6 +34,7 @@ import {
     useSettingsStoreActions,
 } from '/@/renderer/store';
 import { useAppTheme } from '/@/renderer/themes/use-app-theme';
+import { markConsoleCaptureMounted } from '/@/renderer/utils/console-capture';
 import { sanitizeCss } from '/@/renderer/utils/sanitize';
 import { WebAudio } from '/@/shared/types/types';
 import '/@/shared/styles/global.css';
@@ -65,6 +66,13 @@ const ThemedApp = () => {
 
 const AppShell = memo(function AppShell() {
     const [webAudio, setWebAudio] = useState<WebAudio>();
+
+    // First render of the AppShell means React has flushed past createRoot —
+    // flip the console-capture out of `[boot]` mode so subsequent log
+    // entries are tagged at steady-state. Cheap, idempotent, runs once.
+    useEffect(() => {
+        markConsoleCaptureMounted();
+    }, []);
 
     const webAudioProvider = useMemo(() => {
         return { setWebAudio, webAudio };

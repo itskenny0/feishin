@@ -1,6 +1,6 @@
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { nanoid } from 'nanoid/non-secure';
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createSearchParams, generatePath, useNavigate } from 'react-router';
 
@@ -47,7 +47,9 @@ export function SearchAlbumArtistsSection({
             }),
         );
 
-    const artists = data?.pages.flatMap((p) => p.albumArtists) ?? [];
+    // Stable reference for the flattened pages so each keystroke into the
+    // palette doesn't realloc and re-render every CommandItemSelectable below.
+    const artists = useMemo(() => data?.pages.flatMap((p) => p.albumArtists) ?? [], [data?.pages]);
     const showSection = isHome;
     const numberOfResults = hasNextPage ? `${artists.length}+` : artists.length;
 

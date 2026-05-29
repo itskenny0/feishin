@@ -27,39 +27,79 @@ export interface PeerCodec {
 }
 
 const textEncoder = new TextEncoder();
-const textDecoder = new TextDecoder();
+// `fatal: true` makes the decoder throw on invalid UTF-8 instead of inserting
+// replacement characters. We want to drop garbage payloads outright (the catch
+// below returns null), not parse them as JSON-with-replacement-mojibake which
+// could trick the validators into accepting a half-decoded frame.
+const textDecoder = new TextDecoder('utf-8', { fatal: true });
+
+/** Maximum number of queue ids the decoder will accept in a state frame.
+ *  Matches the publisher's MAX_PEER_QUEUE_IDS in builders.ts (200) plus a
+ *  small forward-compat headroom so a slightly larger frame from a future
+ *  publisher still decodes, but a malicious sender can't push us into a
+ *  multi-megabyte allocation by quoting a million ids. */
+const MAX_DECODE_QUEUE_IDS = 1_000;
 
 const isObject = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null && !Array.isArray(value);
+
+/** True when `v` is a number AND finite (rejects NaN, +Infinity, -Infinity).
+ *  `typeof n === 'number'` alone passes NaN, which would smuggle through every
+ *  numeric field on the wire — `Number.isFinite` is what we actually want. */
+const isFiniteNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+
+/** A timestamp on the wire must be non-negative — `Date.now()` never returns
+ *  negative, so a negative `ts` is either a buggy publisher or a tampered
+ *  frame. Either way, drop. */
+const isValidTimestamp = (v: unknown): v is number => isFiniteNumber(v) && v >= 0;
+
+const isValidTrack = (raw: unknown): boolean => {
+    if (raw === null) return true;
+    if (!isObject(raw)) return false;
+    // `id` is the only field downstream code derefs as a string (see
+    // `peer-state-mirror.peerStateToMirrored` — it goes straight into
+    // `Song.id`). Other string fields tolerate null on the wire.
+    if (typeof raw.id !== 'string') return false;
+    if (raw.title !== null && typeof raw.title !== 'string') return false;
+    if (raw.album !== null && typeof raw.album !== 'string') return false;
+    if (raw.artist !== null && typeof raw.artist !== 'string') return false;
+    if (raw.art !== undefined && raw.art !== null && typeof raw.art !== 'string') return false;
+    return true;
+};
 
 const isValidCommand = (
     raw: Record<string, unknown>,
 ): raw is PeerCommand & Record<string, unknown> => {
     if (raw.t !== 'cmd') return false;
     if (typeof raw.k !== 'string') return false;
-    if (typeof raw.ts !== 'number') return false;
+    if (!isValidTimestamp(raw.ts)) return false;
     return true;
 };
 
 const isValidState = (raw: Record<string, unknown>): raw is PeerState & Record<string, unknown> => {
     if (raw.t !== 'state') return false;
-    if (typeof raw.pos !== 'number') return false;
-    if (typeof raw.dur !== 'number') return false;
+    // Required numerics must be finite. `Number.isFinite` rejects NaN /
+    // Infinity which `typeof n === 'number'` otherwise lets pass.
+    if (!isFiniteNumber(raw.pos)) return false;
+    if (!isFiniteNumber(raw.dur)) return false;
+    if (!isFiniteNumber(raw.vol)) return false;
     if (typeof raw.paused !== 'boolean') return false;
-    if (typeof raw.vol !== 'number') return false;
     if (typeof raw.shuf !== 'boolean') return false;
     if (raw.rep !== 'off' && raw.rep !== 'all' && raw.rep !== 'one') return false;
-    if (typeof raw.ts !== 'number') return false;
-    if (raw.track !== null && !isObject(raw.track)) return false;
+    if (!isValidTimestamp(raw.ts)) return false;
+    if (!isValidTrack(raw.track)) return false;
     // Optional v1+ fields — accept when absent, validate when present. A
     // wrong type for any of these drops the whole frame rather than risk
     // delivering garbage downstream.
     if (raw.mut !== undefined && typeof raw.mut !== 'boolean') return false;
     if (raw.lyr !== undefined && typeof raw.lyr !== 'boolean') return false;
-    if (raw.rate !== undefined && typeof raw.rate !== 'number') return false;
-    if (raw.qIdx !== undefined && typeof raw.qIdx !== 'number') return false;
+    if (raw.rate !== undefined && !isFiniteNumber(raw.rate)) return false;
+    if (raw.qIdx !== undefined && !isFiniteNumber(raw.qIdx)) return false;
     if (raw.qIds !== undefined) {
         if (!Array.isArray(raw.qIds)) return false;
+        // Cap array length up front so a million-element qIds array doesn't
+        // force us to iterate every entry just to reject it.
+        if (raw.qIds.length > MAX_DECODE_QUEUE_IDS) return false;
         if (raw.qIds.some((id) => typeof id !== 'string')) return false;
     }
     return true;
@@ -70,21 +110,26 @@ const isValidPresence = (
 ): raw is PeerPresence & Record<string, unknown> => {
     if (raw.t !== 'presence') return false;
     if (typeof raw.online !== 'boolean') return false;
-    if (typeof raw.ts !== 'number') return false;
+    if (!isValidTimestamp(raw.ts)) return false;
+    // `dev` is documented as the publisher's Jellyfin Sessions deviceId; only
+    // accept it when it's a string. A non-string `dev` would still let the
+    // frame through to the transport-selector's reverse map, which expects
+    // strings — drop the whole frame instead so the map can't be poisoned.
+    if (raw.dev !== undefined && typeof raw.dev !== 'string') return false;
     return true;
 };
 
 const isValidPing = (raw: Record<string, unknown>): raw is PeerPing & Record<string, unknown> => {
     if (raw.t !== 'ping') return false;
     if (typeof raw.id !== 'string') return false;
-    if (typeof raw.ts !== 'number') return false;
+    if (!isValidTimestamp(raw.ts)) return false;
     return true;
 };
 
 const isValidPong = (raw: Record<string, unknown>): raw is PeerPong & Record<string, unknown> => {
     if (raw.t !== 'pong') return false;
     if (typeof raw.id !== 'string') return false;
-    if (typeof raw.ts !== 'number') return false;
+    if (!isValidTimestamp(raw.ts)) return false;
     return true;
 };
 

@@ -27,6 +27,16 @@ const FALLBACK_POLL_INTERVAL_MS = 10_000;
 const ACTIVE_POLL_INTERVAL_MS = 400;
 const ACTIVE_POLL_WINDOW_MS = 4_000;
 const OFFLINE_CUTOFF_MS = 60_000;
+/**
+ * How many consecutive polls must miss the target session before we even
+ * start the 60s offline clock. A single transient miss (e.g. the device
+ * just re-registered with a new sessionId, the receiver is mid-restart, or
+ * the response raced a /Sessions refresh server-side) used to instantly
+ * flip status to `reconnecting` and start the timer. With a tiny window of
+ * tolerance the brief blip is invisible and the 60s budget only counts
+ * sustained absences.
+ */
+const MISS_DEBOUNCE_FRAMES = 3;
 
 const perfDebug = (): boolean => {
     try {
@@ -48,6 +58,7 @@ export interface PollerStartArgs {
 
 export class SessionsPoller {
     private activeUntil = 0;
+    private consecutiveMisses = 0;
     /**
      * Set by the hook when the WS push channel reports connected. While true
      * the poll cadence drops from 2s to FALLBACK_POLL_INTERVAL_MS — the push
@@ -136,6 +147,7 @@ export class SessionsPoller {
         this.isRunning = false;
         this.startArgs = null;
         this.offlineSince = 0;
+        this.consecutiveMisses = 0;
         this.mode = 'idle';
         this.activeUntil = 0;
         this.fallbackMode = false;
@@ -167,6 +179,15 @@ export class SessionsPoller {
         // picker's connect-toast lifecycle (with its own ~8s timeout). Don't
         // touch them from here — leave the picker to roll back on failure.
         if (state.status === 'connecting' || state.status === 'transferring') return;
+
+        // Tolerate a brief blip before starting the offline clock — a single
+        // poll missing the target session was enough to flip status to
+        // `reconnecting` and burn into the 60s offline budget, even though
+        // the next tick usually carried the session back. Require the miss
+        // to repeat for MISS_DEBOUNCE_FRAMES before reacting.
+        this.consecutiveMisses += 1;
+        if (this.consecutiveMisses < MISS_DEBOUNCE_FRAMES) return;
+
         if (state.status === 'connected' || state.status === 'idle') {
             actions.setStatus('reconnecting');
             this.offlineSince = Date.now();
@@ -176,6 +197,7 @@ export class SessionsPoller {
             const name = state.targetDeviceName ?? 'Remote device';
             actions.clearTarget();
             this.offlineSince = 0;
+            this.consecutiveMisses = 0;
             onOffline(name);
         }
     }
@@ -195,6 +217,7 @@ export class SessionsPoller {
         if (!this.isRunning || !this.startArgs) return;
         const { onOffline, server } = this.startArgs;
         const actions = useRemoteTargetStore.getState().actions;
+        const targetIdBefore = useRemoteTargetStore.getState().targetDeviceId;
 
         const t0 = performance.now();
         let result: { devices: RemoteDevice[]; raws: Record<string, unknown> };
@@ -202,9 +225,16 @@ export class SessionsPoller {
             result = await remoteTargetApi.listSessionsWithRaw({ server });
         } catch (err) {
             console.warn('[remote-target] poll failed', err);
-            actions.setDeviceList([]);
             actions.setPollError(err instanceof Error ? err.message : String(err));
-            this.handleMissingTarget(onOffline);
+            // A failed poll is NOT a confirmed miss of the target session —
+            // we have no information about who's online. Surface the error
+            // banner but don't wipe the device list when a target is set
+            // (the user is staring at it). On sustained failure the next
+            // successful poll will notice the target is absent and run the
+            // missing-target ladder.
+            if (!targetIdBefore) {
+                actions.setDeviceList([]);
+            }
             this.scheduleNext();
             return;
         }
@@ -222,6 +252,7 @@ export class SessionsPoller {
         const state = useRemoteTargetStore.getState();
         if (!state.targetDeviceId) {
             this.offlineSince = 0;
+            this.consecutiveMisses = 0;
             this.scheduleNext();
             return;
         }
@@ -234,6 +265,7 @@ export class SessionsPoller {
         }
         if (state.status !== 'connected') actions.setStatus('connected');
         this.offlineSince = 0;
+        this.consecutiveMisses = 0;
         this.scheduleNext();
     }
 }
