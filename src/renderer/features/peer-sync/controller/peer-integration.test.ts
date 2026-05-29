@@ -213,6 +213,105 @@ describe('peerDispatcher routing', () => {
         peerDispatcher.skipToIndex(fakeCtx, 2);
         expect(jfCalls.map((c) => c.k)).toContain('skipToIndex');
     });
+
+    /**
+     * MQTT-only verbs (`queueInsert / queueRemove / queueReorder / rate /
+     * lyrics`). Jellyfin's remote-control API has no equivalent, so the
+     * dispatcher's `jfFire` is a documented no-op + `[peer-sync] dropped
+     * <verb> on jellyfin lane` warn. The tests below assert both halves:
+     *
+     *   - MQTT lane: a publish lands with the right verb + args.
+     *   - JF lane: no MQTT publish, no `commandDispatcher` call, and the
+     *     warn fires so the producer can see the drop.
+     */
+    it('publishes rate via mqtt with the wire value', () => {
+        setSyncEnabled(true);
+        recordPresence('peer-target', true);
+
+        peerDispatcher.setRate(fakeCtx, 1.5);
+        expect(published).toEqual([{ a: { rate: 1.5 }, k: 'rate', peerId: 'peer-target' }]);
+        expect(jfCalls).toEqual([]);
+    });
+
+    it('publishes lyrics via mqtt with visible flag', () => {
+        setSyncEnabled(true);
+        recordPresence('peer-target', true);
+
+        peerDispatcher.setLyricsVisible(fakeCtx, true);
+        peerDispatcher.setLyricsVisible(fakeCtx, false);
+
+        expect(published).toEqual([
+            { a: { visible: true }, k: 'lyrics', peerId: 'peer-target' },
+            { a: { visible: false }, k: 'lyrics', peerId: 'peer-target' },
+        ]);
+        expect(jfCalls).toEqual([]);
+    });
+
+    it('publishes queueInsert via mqtt with index + itemIds', () => {
+        setSyncEnabled(true);
+        recordPresence('peer-target', true);
+
+        peerDispatcher.queueInsert(fakeCtx, { index: 2, itemIds: ['x', 'y'] });
+        expect(published).toEqual([
+            {
+                a: { index: 2, itemIds: ['x', 'y'] },
+                k: 'queueInsert',
+                peerId: 'peer-target',
+            },
+        ]);
+        expect(jfCalls).toEqual([]);
+    });
+
+    it('publishes queueRemove via mqtt with indices', () => {
+        setSyncEnabled(true);
+        recordPresence('peer-target', true);
+
+        peerDispatcher.queueRemove(fakeCtx, [0, 3]);
+        expect(published).toEqual([
+            { a: { indices: [0, 3] }, k: 'queueRemove', peerId: 'peer-target' },
+        ]);
+        expect(jfCalls).toEqual([]);
+    });
+
+    it('publishes queueReorder via mqtt with from/to', () => {
+        setSyncEnabled(true);
+        recordPresence('peer-target', true);
+
+        peerDispatcher.queueReorder(fakeCtx, { from: 1, to: 4 });
+        expect(published).toEqual([
+            {
+                a: { from: 1, to: 4 },
+                k: 'queueReorder',
+                peerId: 'peer-target',
+            },
+        ]);
+        expect(jfCalls).toEqual([]);
+    });
+
+    it('warns + no-ops the MQTT-only verbs on the jellyfin lane (no publish, no JF call)', () => {
+        // Sync is on but presence is absent → lane resolves to jellyfin.
+        setSyncEnabled(true);
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        try {
+            peerDispatcher.setRate(fakeCtx, 1.25);
+            peerDispatcher.setLyricsVisible(fakeCtx, true);
+            peerDispatcher.queueInsert(fakeCtx, { index: 0, itemIds: ['a'] });
+            peerDispatcher.queueRemove(fakeCtx, [0]);
+            peerDispatcher.queueReorder(fakeCtx, { from: 0, to: 1 });
+
+            expect(published).toEqual([]);
+            expect(jfCalls).toEqual([]);
+            // Each verb logs its own drop warn — five calls total.
+            const dropWarns = warnSpy.mock.calls.filter((args) =>
+                args.some(
+                    (a) => typeof a === 'string' && a.includes('dropped') && a.includes('jellyfin'),
+                ),
+            );
+            expect(dropWarns.length).toBe(5);
+        } finally {
+            warnSpy.mockRestore();
+        }
+    });
 });
 
 describe('applyPeerStateToStore', () => {

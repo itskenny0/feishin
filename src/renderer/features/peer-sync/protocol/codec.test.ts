@@ -242,6 +242,46 @@ describe('peer-sync codec', () => {
         expect(decodedIndex).toEqual(indexCmd);
     });
 
+    /**
+     * Round-trip every MQTT-only verb's arg shape. Regression: when the
+     * `queueInsert / queueRemove / queueReorder / rate / lyrics` verbs
+     * were added on top of the original Jellyfin parity surface, the
+     * codec had to preserve their arg shapes unmodified — these are
+     * the controller-facing knobs for the queue + transport surface.
+     */
+    it('round-trips the `queueInsert` verb with index + itemIds', () => {
+        const cmd = buildCommand('queueInsert', { index: 3, itemIds: ['a', 'b', 'c'] });
+        const decoded = codec.decode(codec.encode(cmd));
+        expect(decoded).toEqual(cmd);
+    });
+
+    it('round-trips the `queueRemove` verb with a list of indices', () => {
+        const cmd = buildCommand('queueRemove', { indices: [0, 2, 5] });
+        const decoded = codec.decode(codec.encode(cmd));
+        expect(decoded).toEqual(cmd);
+    });
+
+    it('round-trips the `queueReorder` verb with from + to', () => {
+        const cmd = buildCommand('queueReorder', { from: 1, to: 4 });
+        const decoded = codec.decode(codec.encode(cmd));
+        expect(decoded).toEqual(cmd);
+    });
+
+    it('round-trips the `rate` verb', () => {
+        const cmd = buildCommand('rate', { rate: 1.25 });
+        const decoded = codec.decode(codec.encode(cmd));
+        expect(decoded).toEqual(cmd);
+    });
+
+    it('round-trips the `lyrics` verb', () => {
+        const cmd = buildCommand('lyrics', { visible: true });
+        const decoded = codec.decode(codec.encode(cmd));
+        expect(decoded).toEqual(cmd);
+
+        const off = buildCommand('lyrics', { visible: false });
+        expect(codec.decode(codec.encode(off))).toEqual(off);
+    });
+
     it('maps jellyfin repeat strings to the compact enum and back', () => {
         expect(jellyfinToPeerRepeat('RepeatNone')).toBe('off');
         expect(jellyfinToPeerRepeat('RepeatAll')).toBe('all');

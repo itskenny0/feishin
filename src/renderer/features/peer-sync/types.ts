@@ -34,12 +34,17 @@ export interface PeerCommand {
  */
 export type PeerCommandArgs =
     | undefined
+    | { from: number; to: number } // queueReorder
+    | { index: number; itemIds: string[] } // queueInsert
     | { index: number } // playIndex
+    | { indices: number[] } // queueRemove
     | { itemIds: string[]; playCommand?: 'PlayLast' | 'PlayNext' | 'PlayNow'; startIndex?: number } // play
     | { mode: PeerRepeatMode } // repeat
     | { mute: boolean } // mute
     | { positionMs: number } // seek
+    | { rate: number } // rate
     | { shuffle: boolean } // shuffle
+    | { visible: boolean } // lyrics
     | { volume: number }; // volume
 
 /**
@@ -51,8 +56,18 @@ export type PeerCommandArgs =
  * unknown verb through and the dispatcher seam routes it; only the receiver
  * decides whether to act). The legacy verbs (`next`, `pause`, …) still
  * decode unchanged.
+ *
+ * `queueInsert`, `queueRemove`, `queueReorder`, `rate`, and `lyrics` are
+ * MQTT-only verbs added on top of the original Jellyfin parity surface —
+ * Jellyfin's remote-control API has no equivalent for any of them. The
+ * dispatcher's `route()` helper still picks a lane per-verb, and the
+ * jellyfin lane for these verbs is a documented no-op with a `[peer-sync]
+ * dropped … on jellyfin lane` warn so the producer can see the verb didn't
+ * land. Receivers that don't know one of these verbs still drop silently
+ * via the codec → switch-default path.
  */
 export type PeerCommandKind =
+    | 'lyrics'
     | 'mute'
     | 'next'
     | 'pause'
@@ -60,6 +75,10 @@ export type PeerCommandKind =
     | 'playIndex'
     | 'prev'
     | 'queue'
+    | 'queueInsert'
+    | 'queueRemove'
+    | 'queueReorder'
+    | 'rate'
     | 'repeat'
     | 'seek'
     | 'shuffle'

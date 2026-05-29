@@ -31,6 +31,25 @@ import { PeerAddress } from '/@/renderer/features/peer-sync/protocol/topics';
 import { PeerCommand, PeerRepeatMode } from '/@/renderer/features/peer-sync/types';
 
 const log = (...args: unknown[]) => console.info('[peer-sync]', ...args);
+const warn = (...args: unknown[]) => console.warn('[peer-sync]', ...args);
+
+/**
+ * Helper for MQTT-only verbs. Jellyfin's remote-control surface has no
+ * equivalent for queue mutations (insert / remove / reorder), playback
+ * rate, or lyrics-pane visibility, so the dispatcher's `jfFire` for those
+ * verbs is a documented no-op + warn. We keep the verb on the dispatcher
+ * because the transport selector still decides which lane the call lands
+ * on per peer, and a controller paired with a Jellyfin-only target should
+ * see a log line when its action quietly evaporates rather than fail
+ * silently with no diagnostics. The dispatcher itself doesn't refuse to
+ * register the call — that's an explicit product decision so the UI can
+ * still surface the control regardless of the chosen lane.
+ */
+const jfNoop = (verb: string): (() => void) => {
+    return () => {
+        warn(`dropped ${verb} on jellyfin lane`);
+    };
+};
 
 /** Publish + record. Single seam so every MQTT outbound goes through one
  *  helper, which the diagnostics store taps for the recent-commands list. */
@@ -101,6 +120,40 @@ export const peerDispatcher = {
                 }),
         ),
 
+    /**
+     * Insert tracks into the target's queue at the given index. MQTT-only —
+     * Jellyfin's `Playing` command replaces the entire queue (PlayNow /
+     * PlayNext / PlayLast), there's no "insert at index N" verb.
+     */
+    queueInsert: (ctx: PeerDispatcherCtx, args: { index: number; itemIds: string[] }): void =>
+        route(
+            ctx,
+            () => fireMqtt(ctx.peer, buildCommand('queueInsert', args)),
+            jfNoop('queueInsert'),
+        ),
+
+    /**
+     * Remove queue items at the given indices on the target. MQTT-only —
+     * Jellyfin has no granular queue removal verb.
+     */
+    queueRemove: (ctx: PeerDispatcherCtx, indices: number[]): void =>
+        route(
+            ctx,
+            () => fireMqtt(ctx.peer, buildCommand('queueRemove', { indices })),
+            jfNoop('queueRemove'),
+        ),
+
+    /**
+     * Drag-reorder a single queue item on the target. MQTT-only — same
+     * rationale as queueInsert / queueRemove.
+     */
+    queueReorder: (ctx: PeerDispatcherCtx, args: { from: number; to: number }): void =>
+        route(
+            ctx,
+            () => fireMqtt(ctx.peer, buildCommand('queueReorder', args)),
+            jfNoop('queueReorder'),
+        ),
+
     seek: (ctx: PeerDispatcherCtx, positionMs: number): void =>
         route(
             ctx,
@@ -112,6 +165,13 @@ export const peerDispatcher = {
                 ),
         ),
 
+    /**
+     * Toggle the target's lyrics pane. MQTT-only — Jellyfin's remote control
+     * surface has no concept of a per-target lyrics view.
+     */
+    setLyricsVisible: (ctx: PeerDispatcherCtx, visible: boolean): void =>
+        route(ctx, () => fireMqtt(ctx.peer, buildCommand('lyrics', { visible })), jfNoop('lyrics')),
+
     setMute: (ctx: PeerDispatcherCtx, mute: boolean): void =>
         route(
             ctx,
@@ -122,6 +182,13 @@ export const peerDispatcher = {
                     mute,
                 ),
         ),
+
+    /**
+     * Set the target's playback rate. 1.0 = normal; the wire range is
+     * 0.5..2.0. MQTT-only — Jellyfin has no equivalent control verb.
+     */
+    setRate: (ctx: PeerDispatcherCtx, rate: number): void =>
+        route(ctx, () => fireMqtt(ctx.peer, buildCommand('rate', { rate })), jfNoop('rate')),
 
     setRepeat: (ctx: PeerDispatcherCtx, mode: PeerRepeatMode): void =>
         route(

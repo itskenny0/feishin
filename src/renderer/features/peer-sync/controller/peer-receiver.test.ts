@@ -39,7 +39,7 @@ import { PeerCommand } from '/@/renderer/features/peer-sync/types';
 import { useAuthStore } from '/@/renderer/store/auth.store';
 import { usePlayerStoreBase } from '/@/renderer/store/player.store';
 import { useSettingsStore } from '/@/renderer/store/settings.store';
-import { ServerType } from '/@/shared/types/domain-types';
+import { ServerType, Song } from '/@/shared/types/domain-types';
 import { PlayerRepeat, PlayerShuffle, PlayerStatus } from '/@/shared/types/types';
 
 const SENDER: PeerAddress = { peerId: 'peer-from', userId: 'user-abc' };
@@ -290,6 +290,214 @@ describe('applyPeerCommand verb mapping', () => {
         } as PeerCommand;
         const r = applyPeerCommand(SENDER, weird);
         expect(r.reason).toBe('dropped-unsupported');
+    });
+
+    it('maps rate to setSpeed with the wire value', () => {
+        const calls: number[] = [];
+        const original = usePlayerStoreBase.getState().setSpeed;
+        usePlayerStoreBase.setState({
+            setSpeed: (speed: number) => calls.push(speed),
+        });
+        try {
+            const r = applyPeerCommand(SENDER, buildCommand('rate', { rate: 1.5 }));
+            expect(r.reason).toBe('applied');
+            expect(calls).toEqual([1.5]);
+        } finally {
+            usePlayerStoreBase.setState({ setSpeed: original });
+        }
+    });
+
+    it('drops a rate with a non-numeric / non-finite value as validation', () => {
+        const bad = buildCommand('rate', {
+            rate: 'fast' as unknown as number,
+        });
+        expect(applyPeerCommand(SENDER, bad).reason).toBe('dropped-validation');
+        const nan = buildCommand('rate', { rate: Number.NaN });
+        expect(applyPeerCommand(SENDER, nan).reason).toBe('dropped-validation');
+    });
+
+    it('maps lyrics(true|false) to the showLyricsInSidebar setting', () => {
+        // Seed the opposite value so we can prove we actually flipped it.
+        useSettingsStore.setState((state) => {
+            state.general.showLyricsInSidebar = false;
+        });
+        const r = applyPeerCommand(SENDER, buildCommand('lyrics', { visible: true }));
+        expect(r.reason).toBe('applied');
+        expect(useSettingsStore.getState().general.showLyricsInSidebar).toBe(true);
+
+        const r2 = applyPeerCommand(SENDER, buildCommand('lyrics', { visible: false }));
+        expect(r2.reason).toBe('applied');
+        expect(useSettingsStore.getState().general.showLyricsInSidebar).toBe(false);
+    });
+
+    it('drops a lyrics frame with a non-boolean visible field as validation', () => {
+        const bad = buildCommand('lyrics', {
+            visible: 'yes' as unknown as boolean,
+        });
+        expect(applyPeerCommand(SENDER, bad).reason).toBe('dropped-validation');
+    });
+});
+
+/**
+ * Queue mutation verbs (`queueInsert / queueRemove / queueReorder`).
+ *
+ * The receiver translates wire indices into uniqueId-based store actions
+ * (`addToQueueByUniqueId`, `clearSelected`, `moveSelectedTo`). The tests
+ * here seed the store directly via `setQueue` instead of going through the
+ * (async, JF-only) hydrate path so the assertions stay synchronous.
+ */
+const seedQueue = (count: number): void => {
+    const songs: Song[] = Array.from(
+        { length: count },
+        (_, i) =>
+            ({
+                album: 'A',
+                albumArtists: [],
+                artists: [],
+                container: null,
+                duration: 1000,
+                id: `song-${i}`,
+                itemType: 'song',
+                name: `Song ${i}`,
+                // `_uniqueId` is added by toQueueSong inside setQueue. The
+                // shape we pass here mirrors what hydrateSongs would return.
+            }) as unknown as Song,
+    );
+    usePlayerStoreBase.getState().setQueue(songs, 0, 0);
+};
+
+describe('applyPeerCommand queueRemove', () => {
+    it('removes the songs at the given indices from the default queue', () => {
+        seedQueue(5);
+        const initialIds = usePlayerStoreBase
+            .getState()
+            .getQueueOrder()
+            .items.map((s) => s.id);
+        expect(initialIds).toEqual(['song-0', 'song-1', 'song-2', 'song-3', 'song-4']);
+
+        const r = applyPeerCommand(SENDER, buildCommand('queueRemove', { indices: [1, 3] }));
+        expect(r.reason).toBe('applied');
+
+        const after = usePlayerStoreBase
+            .getState()
+            .getQueueOrder()
+            .items.map((s) => s.id);
+        expect(after).toEqual(['song-0', 'song-2', 'song-4']);
+    });
+
+    it('skips out-of-range indices silently when at least one is in range', () => {
+        seedQueue(3);
+        const r = applyPeerCommand(SENDER, buildCommand('queueRemove', { indices: [0, 99, -1] }));
+        expect(r.reason).toBe('applied');
+        const after = usePlayerStoreBase
+            .getState()
+            .getQueueOrder()
+            .items.map((s) => s.id);
+        expect(after).toEqual(['song-1', 'song-2']);
+    });
+
+    it('drops with validation when ALL indices are out of range', () => {
+        seedQueue(3);
+        const r = applyPeerCommand(SENDER, buildCommand('queueRemove', { indices: [99, 100] }));
+        expect(r.reason).toBe('dropped-validation');
+    });
+
+    it('drops a queueRemove with a non-array indices field', () => {
+        const bad = buildCommand('queueRemove', {
+            indices: 'all' as unknown as number[],
+        });
+        expect(applyPeerCommand(SENDER, bad).reason).toBe('dropped-validation');
+    });
+
+    it('drops a queueRemove with an empty indices array', () => {
+        seedQueue(3);
+        const r = applyPeerCommand(SENDER, buildCommand('queueRemove', { indices: [] }));
+        expect(r.reason).toBe('dropped-validation');
+    });
+
+    it('drops a queueRemove whose indices array contains a non-number', () => {
+        const bad = buildCommand('queueRemove', {
+            indices: [0, 'one' as unknown as number, 2],
+        });
+        expect(applyPeerCommand(SENDER, bad).reason).toBe('dropped-validation');
+    });
+});
+
+describe('applyPeerCommand queueReorder', () => {
+    it('moves an item from index 3 forward to index 1', () => {
+        seedQueue(5);
+        const r = applyPeerCommand(SENDER, buildCommand('queueReorder', { from: 3, to: 1 }));
+        expect(r.reason).toBe('applied');
+        const ids = usePlayerStoreBase
+            .getState()
+            .getQueueOrder()
+            .items.map((s) => s.id);
+        // song-3 lands AT index 1; song-1, song-2 shift right by one.
+        expect(ids).toEqual(['song-0', 'song-3', 'song-1', 'song-2', 'song-4']);
+    });
+
+    it('moves an item past the end via moveSelectedToBottom', () => {
+        seedQueue(4);
+        const r = applyPeerCommand(SENDER, buildCommand('queueReorder', { from: 1, to: 99 }));
+        expect(r.reason).toBe('applied');
+        const ids = usePlayerStoreBase
+            .getState()
+            .getQueueOrder()
+            .items.map((s) => s.id);
+        expect(ids).toEqual(['song-0', 'song-2', 'song-3', 'song-1']);
+    });
+
+    it('drops a no-op reorder where from === to as validation', () => {
+        seedQueue(3);
+        const r = applyPeerCommand(SENDER, buildCommand('queueReorder', { from: 1, to: 1 }));
+        expect(r.reason).toBe('dropped-validation');
+    });
+
+    it('drops a reorder with from out of range', () => {
+        seedQueue(3);
+        const r = applyPeerCommand(SENDER, buildCommand('queueReorder', { from: 99, to: 0 }));
+        expect(r.reason).toBe('dropped-validation');
+    });
+
+    it('drops a reorder with non-numeric from/to as validation', () => {
+        const bad = buildCommand('queueReorder', {
+            from: 'a' as unknown as number,
+            to: 'b' as unknown as number,
+        });
+        expect(applyPeerCommand(SENDER, bad).reason).toBe('dropped-validation');
+    });
+});
+
+describe('applyPeerCommand queueInsert', () => {
+    it('drops with validation when the index is negative', () => {
+        const bad = buildCommand('queueInsert', { index: -1, itemIds: ['x'] });
+        expect(applyPeerCommand(SENDER, bad).reason).toBe('dropped-validation');
+    });
+
+    it('drops with validation when itemIds is empty', () => {
+        const bad = buildCommand('queueInsert', { index: 0, itemIds: [] });
+        expect(applyPeerCommand(SENDER, bad).reason).toBe('dropped-validation');
+    });
+
+    it('drops with validation when itemIds is missing', () => {
+        // Missing itemIds entirely.
+        const bad = {
+            ...buildCommand('queueInsert', { index: 0, itemIds: ['x'] }),
+            a: { index: 0 } as unknown as { index: number; itemIds: string[] },
+        } as PeerCommand;
+        expect(applyPeerCommand(SENDER, bad).reason).toBe('dropped-validation');
+    });
+
+    it('returns applied when the validation gate passes (async hydrate path)', () => {
+        // We don't drive the hydrate end-to-end here — the dispatch
+        // contract is: validation passes, the receiver kicks off the
+        // async hydrate, and returns `applied`. The integration test for
+        // the dispatcher → receiver pair will exercise the wire path.
+        const r = applyPeerCommand(
+            SENDER,
+            buildCommand('queueInsert', { index: 0, itemIds: ['song-x'] }),
+        );
+        expect(r.reason).toBe('applied');
     });
 });
 

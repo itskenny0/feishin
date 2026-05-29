@@ -41,8 +41,8 @@ import { PeerCommand, PeerRepeatMode } from '/@/renderer/features/peer-sync/type
 import { useAuthStore } from '/@/renderer/store/auth.store';
 import { usePlayerStoreBase } from '/@/renderer/store/player.store';
 import { useSettingsStore } from '/@/renderer/store/settings.store';
-import { ServerType } from '/@/shared/types/domain-types';
-import { PlayerRepeat, PlayerShuffle } from '/@/shared/types/types';
+import { QueueSong, ServerType } from '/@/shared/types/domain-types';
+import { Play, PlayerRepeat, PlayerShuffle } from '/@/shared/types/types';
 
 const log = (...args: unknown[]) => console.info('[peer-sync]', ...args);
 const warn = (...args: unknown[]) => console.warn('[peer-sync]', ...args);
@@ -68,6 +68,19 @@ const setRepeatFromWire = (mode: PeerRepeatMode): void => {
     else if (mode === 'one') next = PlayerRepeat.ONE;
     else next = PlayerRepeat.NONE;
     usePlayerStoreBase.getState().setRepeat(next);
+};
+
+/**
+ * Map the wire's `{ visible: boolean }` shape onto the
+ * `general.showLyricsInSidebar` settings flag. The setting is the canonical
+ * lyrics-pane visibility toggle — wired into the sidebar play queue and the
+ * full-screen player. Updating the flag is enough; the React tree
+ * re-renders the pane on the next tick.
+ */
+const setLyricsVisibleFromWire = (visible: boolean): void => {
+    useSettingsStore.setState((state) => {
+        state.general.showLyricsInSidebar = visible;
+    });
 };
 
 /**
@@ -149,6 +162,13 @@ export const applyPeerCommand = (from: PeerAddress, cmd: PeerCommand): ApplyResu
 
     const actions = usePlayerStoreBase.getState();
     switch (cmd.k) {
+        case 'lyrics': {
+            if (!cmd.a || !('visible' in cmd.a) || typeof cmd.a.visible !== 'boolean') {
+                return { reason: 'dropped-validation' };
+            }
+            setLyricsVisibleFromWire(cmd.a.visible);
+            return { reason: 'applied' };
+        }
         case 'mute': {
             if (!cmd.a || !('mute' in cmd.a) || typeof cmd.a.mute !== 'boolean') {
                 return { reason: 'dropped-validation' };
@@ -195,6 +215,58 @@ export const applyPeerCommand = (from: PeerAddress, cmd: PeerCommand): ApplyResu
                 return { reason: 'dropped-validation' };
             }
             return applyQueueReplace(cmd.a, from);
+        }
+        case 'queueInsert': {
+            if (
+                !cmd.a ||
+                !('index' in cmd.a) ||
+                !('itemIds' in cmd.a) ||
+                typeof cmd.a.index !== 'number' ||
+                !Array.isArray(cmd.a.itemIds) ||
+                cmd.a.itemIds.length === 0
+            ) {
+                return { reason: 'dropped-validation' };
+            }
+            return applyQueueInsert(cmd.a.index, cmd.a.itemIds, from);
+        }
+        case 'queueRemove': {
+            if (
+                !cmd.a ||
+                !('indices' in cmd.a) ||
+                !Array.isArray(cmd.a.indices) ||
+                cmd.a.indices.length === 0 ||
+                cmd.a.indices.some((i) => typeof i !== 'number' || !Number.isFinite(i))
+            ) {
+                return { reason: 'dropped-validation' };
+            }
+            return applyQueueRemove(cmd.a.indices, from);
+        }
+        case 'queueReorder': {
+            if (
+                !cmd.a ||
+                !('from' in cmd.a) ||
+                !('to' in cmd.a) ||
+                typeof cmd.a.from !== 'number' ||
+                typeof cmd.a.to !== 'number'
+            ) {
+                return { reason: 'dropped-validation' };
+            }
+            return applyQueueReorder(cmd.a.from, cmd.a.to, from);
+        }
+        case 'rate': {
+            // Wire range is 0.5..2.0; the store action clamps but we still
+            // validate the input is a finite number so a buggy publisher
+            // can't trick the store into NaN.
+            if (
+                !cmd.a ||
+                !('rate' in cmd.a) ||
+                typeof cmd.a.rate !== 'number' ||
+                !Number.isFinite(cmd.a.rate)
+            ) {
+                return { reason: 'dropped-validation' };
+            }
+            actions.setSpeed(cmd.a.rate);
+            return { reason: 'applied' };
         }
         case 'repeat': {
             if (!cmd.a || !('mode' in cmd.a)) {
@@ -312,5 +384,155 @@ const applyQueueReplace = (
         .catch((err) => {
             warn('dropped cmd: import failed', { err: (err as Error).message });
         });
+    return { reason: 'applied' };
+};
+
+/**
+ * Queue-insert path. Hydrates the requested ids and threads them through
+ * `addToQueueByUniqueId` at the resolved drop target. When the queue is
+ * empty we fall through to `addToQueueByType(LAST)` which appends to a
+ * cold queue without needing an existing uniqueId anchor. As with the
+ * bulk `queue` verb the hydrate is async — we kick it off and return
+ * `applied` synchronously so the diagnostics counter records the request.
+ */
+const applyQueueInsert = (index: number, itemIds: string[], from: PeerAddress): ApplyResult => {
+    if (!Number.isFinite(index) || index < 0) {
+        return { reason: 'dropped-validation' };
+    }
+    const auth = useAuthStore.getState().currentServer;
+    if (!auth || auth.type !== ServerType.JELLYFIN || !auth.userId) {
+        warn('dropped cmd: no jellyfin session for queueInsert', { from: from.peerId });
+        return { reason: 'dropped-unsupported' };
+    }
+    void import('/@/renderer/features/jellyfin-remote-target/api/remote-target-api')
+        .then(async (mod) => {
+            try {
+                const songs = await mod.remoteTargetApi.hydrateSongs({
+                    itemIds,
+                    server: auth,
+                });
+                if (songs.length === 0) {
+                    warn('dropped cmd: hydrate returned empty (queueInsert)', {
+                        from: from.peerId,
+                    });
+                    return;
+                }
+                markInboundApply();
+                const store = usePlayerStoreBase.getState();
+                const order = store.getQueueOrder().items;
+                // Cold queue: just append. addToQueueByUniqueId needs an
+                // existing anchor uniqueId to slot against, which there
+                // isn't one of in an empty queue.
+                if (order.length === 0) {
+                    store.addToQueueByType(songs, Play.LAST);
+                    log('apply cmd queueInsert (cold)', {
+                        count: songs.length,
+                        peerId: from.peerId,
+                    });
+                    return;
+                }
+                // Bound `index` into [0, order.length] — a publisher that
+                // overshoots gets pinned to the tail rather than dropped.
+                const safe = Math.min(Math.max(0, Math.floor(index)), order.length);
+                if (safe >= order.length) {
+                    const anchor = order[order.length - 1];
+                    store.addToQueueByUniqueId(songs, anchor._uniqueId, 'bottom');
+                } else {
+                    const anchor = order[safe];
+                    store.addToQueueByUniqueId(songs, anchor._uniqueId, 'top');
+                }
+                log('apply cmd queueInsert', {
+                    count: songs.length,
+                    index: safe,
+                    peerId: from.peerId,
+                });
+            } catch (err) {
+                warn('dropped cmd: hydrate failed (queueInsert)', {
+                    err: (err as Error).message,
+                    from: from.peerId,
+                });
+            }
+        })
+        .catch((err) => {
+            warn('dropped cmd: import failed (queueInsert)', { err: (err as Error).message });
+        });
+    return { reason: 'applied' };
+};
+
+/**
+ * Queue-remove path. Maps incoming indices into the target's default
+ * (non-shuffled) queue order to QueueSong objects and delegates to
+ * `clearSelected`, which already handles re-indexing the shuffled list
+ * and bumping the current player index. Out-of-range indices are
+ * skipped silently rather than failing the whole verb so a stale
+ * controller doesn't deadlock on a queue that's already shorter than
+ * it thinks.
+ */
+const applyQueueRemove = (indices: number[], from: PeerAddress): ApplyResult => {
+    const store = usePlayerStoreBase.getState();
+    const order = store.getQueueOrder().items;
+    const targets: QueueSong[] = [];
+    for (const idx of indices) {
+        if (idx < 0 || idx >= order.length) continue;
+        targets.push(order[idx]);
+    }
+    if (targets.length === 0) {
+        warn('dropped cmd: queueRemove no in-range indices', {
+            from: from.peerId,
+            requested: indices.length,
+        });
+        return { reason: 'dropped-validation' };
+    }
+    store.clearSelected(targets);
+    log('apply cmd queueRemove', {
+        peerId: from.peerId,
+        removed: targets.length,
+    });
+    return { reason: 'applied' };
+};
+
+/**
+ * Queue-reorder path. Resolves `from` to a QueueSong in the default queue
+ * order, then calls `moveSelectedTo` against the song currently at the
+ * desired destination index. We use 'top' edge so the moved item lands
+ * AT the destination index (not after it). When `to` is past the end we
+ * fall through to `moveSelectedToBottom`.
+ */
+const applyQueueReorder = (fromIdx: number, toIdx: number, from: PeerAddress): ApplyResult => {
+    if (
+        !Number.isFinite(fromIdx) ||
+        !Number.isFinite(toIdx) ||
+        fromIdx < 0 ||
+        toIdx < 0 ||
+        fromIdx === toIdx
+    ) {
+        return { reason: 'dropped-validation' };
+    }
+    const store = usePlayerStoreBase.getState();
+    const order = store.getQueueOrder().items;
+    if (fromIdx >= order.length) {
+        warn('dropped cmd: queueReorder from out of range', {
+            from: from.peerId,
+            fromIdx,
+            len: order.length,
+        });
+        return { reason: 'dropped-validation' };
+    }
+    const moving = order[fromIdx];
+    if (toIdx >= order.length) {
+        store.moveSelectedToBottom([moving]);
+    } else {
+        const anchor = order[toIdx];
+        // 'top' = before anchor when toIdx < fromIdx (shift right), 'top'
+        // when toIdx > fromIdx still lands the item AT anchor's slot —
+        // moveSelectedTo filters the moving id out first so the offset
+        // math handles the gap automatically.
+        store.moveSelectedTo([moving], anchor._uniqueId, 'top');
+    }
+    log('apply cmd queueReorder', {
+        from: from.peerId,
+        fromIdx,
+        toIdx,
+    });
     return { reason: 'applied' };
 };
