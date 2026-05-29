@@ -29,6 +29,11 @@ export const useSessionsPoller = () => {
     tRef.current = t;
 
     const currentServer = useAuthStore((s) => s.currentServer, shallow);
+    // The local Jellyfin Sessions deviceId — baked into the SessionsSocket
+    // URL at connect time. We watch it here so a deviceId rotation (re-login
+    // on the same server) tears the socket down and re-binds under the new id;
+    // Jellyfin keys sessions by deviceId, so an old subscription leaks.
+    const authDeviceId = useAuthStore((s) => s.deviceId);
     const targetDeviceId = useRemoteTargetStore((s) => s.targetDeviceId);
     const isPickerOpen = useRemoteTargetStore((s) => s.pickerOpen);
     const jellyfinRemoteEnabled = usePeerSyncSettings().jellyfinRemoteEnabled;
@@ -97,7 +102,7 @@ export const useSessionsPoller = () => {
             socket?.stop();
             sessionsPoller.stop();
         };
-    }, [currentServer, isPickerOpen, jellyfinRemoteEnabled, targetDeviceId]);
+    }, [authDeviceId, currentServer, isPickerOpen, jellyfinRemoteEnabled, targetDeviceId]);
 };
 
 export const SessionsPollerHook = () => {

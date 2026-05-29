@@ -51,6 +51,11 @@ const PING_INTERVAL_MS = 8_000;
 export const usePeerSync = () => {
     const peerSync = usePeerSyncSettings();
     const currentServer = useAuthStore((s) => s.currentServer, shallow);
+    // The local Jellyfin Sessions deviceId — same id our server reports in
+    // its /Sessions response under DeviceId. We publish it in our presence
+    // frame so remote pickers can bridge "this Jellyfin device row" to
+    // "this MQTT peer" and upgrade the command lane.
+    const jellyfinDeviceId = useAuthStore((s) => s.deviceId);
 
     useEffect(() => {
         setSyncEnabled(
@@ -106,6 +111,7 @@ export const usePeerSync = () => {
                 brokerPassword: peerSync.brokerPassword,
                 brokerUrl: peerSync.brokerUrl,
                 brokerUsername: peerSync.brokerUsername,
+                jellyfinDeviceId,
                 peerId: peerSync.peerId,
                 roomKey: peerSync.roomKey,
                 tls,
@@ -140,8 +146,9 @@ export const usePeerSync = () => {
                 onState: (from, state) => {
                     // Forward into the existing remote-target store via the
                     // mirror seam — the same path the Jellyfin sessions-sink
-                    // already uses.
-                    applyPeerStateToStore(state);
+                    // already uses. The mirror gates on `from` so a non-target
+                    // peer's frame can't clobber our picked target's state.
+                    applyPeerStateToStore(from, state);
                     recordInboundState(from.peerId, state);
                 },
             },
@@ -175,6 +182,7 @@ export const usePeerSync = () => {
         };
     }, [
         currentServer,
+        jellyfinDeviceId,
         peerSync.brokerPassword,
         peerSync.brokerUrl,
         peerSync.brokerUsername,

@@ -12,11 +12,14 @@
 import type { RemoteMirrorInput } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
 
 import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
+import { getPeerIdForJellyfinDeviceId } from '/@/renderer/features/peer-sync/controller/transport-selector';
 import { peerToJellyfinRepeat } from '/@/renderer/features/peer-sync/protocol/builders';
+import { PeerAddress } from '/@/renderer/features/peer-sync/protocol/topics';
 import { PeerState } from '/@/renderer/features/peer-sync/types';
 import { Song } from '/@/shared/types/domain-types';
 
 const log = (...args: unknown[]) => console.info('[peer-sync]', ...args);
+const warn = (...args: unknown[]) => console.warn('[peer-sync]', ...args);
 
 const perfDebug = (): boolean => {
     try {
@@ -92,15 +95,32 @@ export const peerStateToMirrored = (state: PeerState): RemoteMirrorInput => {
 };
 
 /**
- * Push an incoming MQTT state frame into the store. No-op when the user
- * has not yet picked a target (the mirror represents the *current* remote
- * target, not arbitrary peers).
+ * Push an incoming MQTT state frame into the store. Three gates, in order:
+ *
+ *   1. We must have a target picked. The mirror represents the *current*
+ *      remote target, not arbitrary peers.
+ *   2. The sender must own the picked target — resolved through the
+ *      transport selector's jellyfinDeviceId -> peerId bridge. A peer that
+ *      isn't the one we picked has no business painting our mirror.
+ *   3. If the bridge hasn't seen the target's deviceId yet (older publisher,
+ *      jellyfin-web session), we accept the frame anyway when there's only
+ *      one peer known — this preserves the v1 behaviour for callers that
+ *      haven't migrated to dev-carrying presence frames.
  */
-export const applyPeerStateToStore = (state: PeerState): void => {
+export const applyPeerStateToStore = (from: PeerAddress, state: PeerState): void => {
     const { actions, targetDeviceId } = useRemoteTargetStore.getState();
     if (!targetDeviceId) return;
+    const targetPeerId = getPeerIdForJellyfinDeviceId(targetDeviceId);
+    if (targetPeerId && from.peerId !== targetPeerId) {
+        warn('dropped state from non-target peer', {
+            from: from.peerId,
+            targetPeerId,
+        });
+        return;
+    }
     const mirrored = peerStateToMirrored(state);
     log('apply state', {
+        from: from.peerId,
         mut: state.mut,
         paused: state.paused,
         pos: state.pos,

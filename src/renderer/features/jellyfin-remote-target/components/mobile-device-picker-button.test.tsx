@@ -20,7 +20,12 @@ const seedOnboarded = () => {
         peerSync: {
             ...prev.peerSync,
             onboarded: true,
-            ui: { connectButton: true, pickerBadges: true, statusPill: true },
+            ui: {
+                connectButton: true,
+                hideNonMqttDevices: false,
+                pickerBadges: true,
+                statusPill: true,
+            },
         },
     });
 };

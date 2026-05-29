@@ -340,7 +340,7 @@ describe('applyPeerStateToStore', () => {
         const wire = codec.encode(frame);
         const decoded = codec.decode(wire);
         expect(decoded).not.toBeNull();
-        applyPeerStateToStore(decoded as typeof frame);
+        applyPeerStateToStore({ peerId: 'peer-1', userId: 'user-1' }, decoded as typeof frame);
 
         const state = useRemoteTargetStore.getState();
         expect(state.mirrored.playState.positionMs).toBe(30_000);
@@ -374,7 +374,7 @@ describe('applyPeerStateToStore', () => {
             track: { album: null, art: null, artist: null, id: 'song-x', title: 'x' },
             vol: 50,
         });
-        applyPeerStateToStore(frame);
+        applyPeerStateToStore({ peerId: 'peer-1', userId: 'user-1' }, frame);
         const state = useRemoteTargetStore.getState();
         expect(state.mirrored.playState.isMuted).toBe(true);
         expect(state.mirrored.queueIndex).toBe(4);
@@ -412,7 +412,7 @@ describe('applyPeerStateToStore', () => {
             track: null,
             vol: 100,
         });
-        applyPeerStateToStore(frame);
+        applyPeerStateToStore({ peerId: 'peer-1', userId: 'user-1' }, frame);
         expect(useRemoteTargetStore.getState().mirrored.playState.isMuted).toBe(true);
     });
 
@@ -428,10 +428,74 @@ describe('applyPeerStateToStore', () => {
             track: null,
             vol: 100,
         });
-        applyPeerStateToStore(frame);
+        applyPeerStateToStore({ peerId: 'peer-1', userId: 'user-1' }, frame);
         const state = useRemoteTargetStore.getState();
         // Default playState is paused with positionMs=0 — make sure we didn't
         // accidentally seed a stub track.
         expect(state.mirrored.nowPlayingItem).toBeNull();
+    });
+
+    /**
+     * Authorisation gate: when the bridge maps the picked target's Jellyfin
+     * deviceId to a known peerId, a state frame from any OTHER peer must be
+     * dropped. Without this gate any peer in the room could paint the
+     * controller's mirror.
+     */
+    it('drops state frames from a non-target peer when the bridge is established', () => {
+        useRemoteTargetStore.setState({
+            mirrored: {
+                capabilities: [],
+                nowPlayingItem: null,
+                playState: {
+                    isMuted: false,
+                    isPaused: true,
+                    positionMs: 0,
+                    positionSampledAt: 0,
+                    repeatMode: 'RepeatNone',
+                    shuffle: false,
+                    volume: 100,
+                },
+                queue: [],
+                queueIndex: -1,
+            },
+            targetDeviceId: 'jf-device-target',
+        });
+        // Bridge says the target's Jellyfin deviceId is owned by peer-target.
+        setSyncEnabled(true);
+        recordPresence('peer-target', true, Date.now(), 'jf-device-target');
+        // peer-other publishes a state frame.
+        const frame = buildState({
+            dur: 100,
+            paused: false,
+            pos: 99_999,
+            rep: 'off',
+            shuf: false,
+            track: { album: null, art: null, artist: null, id: 'song-x', title: 'x' },
+            vol: 33,
+        });
+        applyPeerStateToStore({ peerId: 'peer-other', userId: 'user-1' }, frame);
+        // Mirror is untouched — peer-other isn't the bridged target.
+        const state = useRemoteTargetStore.getState();
+        expect(state.mirrored.nowPlayingItem).toBeNull();
+        expect(state.mirrored.playState.positionMs).toBe(0);
+        expect(state.mirrored.playState.volume).toBe(100);
+    });
+
+    it('accepts state from the bridged target peer', () => {
+        useRemoteTargetStore.setState({ targetDeviceId: 'jf-device-target' });
+        setSyncEnabled(true);
+        recordPresence('peer-target', true, Date.now(), 'jf-device-target');
+        const frame = buildState({
+            dur: 100,
+            paused: false,
+            pos: 12_345,
+            rep: 'off',
+            shuf: false,
+            track: null,
+            vol: 42,
+        });
+        applyPeerStateToStore({ peerId: 'peer-target', userId: 'user-1' }, frame);
+        expect(useRemoteTargetStore.getState().mirrored.playState.positionMs).toBe(12_345);
+        expect(useRemoteTargetStore.getState().mirrored.playState.volume).toBe(42);
     });
 });

@@ -116,6 +116,10 @@ export interface PeerClientStartArgs {
      *  default Jellyfin-user-id-as-username used against the embedded
      *  broker. */
     brokerUsername?: string;
+    /** This client's Jellyfin Sessions deviceId. Published in our presence
+     *  frame so remote picker UIs can bridge "this Jellyfin device row" to
+     *  "this MQTT peer" and route commands over MQTT instead of Jellyfin. */
+    jellyfinDeviceId?: string;
     /** Our own peer identifier — published as our presence/state owner. */
     peerId: string;
     /** Shared room key — derived into the MQTT password so an empty/typo'd
@@ -162,11 +166,12 @@ const publishWithErrorLog = (
     });
 };
 
-const buildLwt = (selfAddress: PeerAddress) => ({
+const buildLwt = (selfAddress: PeerAddress, jellyfinDeviceId: string | undefined) => ({
     // mqtt.js types require a node Buffer (or string) here; Uint8Array
     // bytes get rejected even though Buffer is itself a Uint8Array.
     payload: Buffer.from(
         codec.encode({
+            ...(jellyfinDeviceId ? { dev: jellyfinDeviceId } : {}),
             online: false,
             t: 'presence',
             ts: Date.now(),
@@ -193,8 +198,11 @@ const handleMessage = (s: ActiveSession, topic: string, payload: Uint8Array): vo
     if (parsed.leaf === 'presence' && frame.t === 'presence') {
         // Always tell the selector — that's how the dispatcher knows which
         // lane is alive for this peer. The events hook is for UI only.
-        recordPresence(parsed.addr.peerId, frame.online);
-        log('presence', { online: frame.online, peerId: parsed.addr.peerId });
+        // `dev` (publisher's Jellyfin Sessions deviceId, optional) populates
+        // the reverse map so the picker can bridge a Jellyfin device row
+        // back to this peer.
+        recordPresence(parsed.addr.peerId, frame.online, Date.now(), frame.dev);
+        log('presence', { dev: frame.dev, online: frame.online, peerId: parsed.addr.peerId });
         s.events.onPresence?.(parsed.addr, frame);
         return;
     }
@@ -246,6 +254,7 @@ export const startPeerClient = (args: PeerClientStartArgs, events: PeerEvents = 
             session.args.roomKey === args.roomKey &&
             session.args.brokerUsername === args.brokerUsername &&
             session.args.brokerPassword === args.brokerPassword &&
+            session.args.jellyfinDeviceId === args.jellyfinDeviceId &&
             session.args.tls === args.tls;
         if (same) {
             session.events = events;
@@ -284,7 +293,7 @@ export const startPeerClient = (args: PeerClientStartArgs, events: PeerEvents = 
         reconnectPeriod: 4_000,
         rejectUnauthorized: args.tls !== false,
         username: useExternalAuth ? args.brokerUsername : args.userId,
-        will: buildLwt(selfAddress),
+        will: buildLwt(selfAddress, args.jellyfinDeviceId),
     };
 
     const resolvedUrl = normalizeBrokerUrl(args.brokerUrl);
@@ -329,8 +338,11 @@ export const startPeerClient = (args: PeerClientStartArgs, events: PeerEvents = 
             log('subscribed', { topic: sub });
         });
         // Publish our presence as online + retained so peers that arrive
-        // later learn we exist immediately.
+        // later learn we exist immediately. The `dev` field carries our
+        // Jellyfin Sessions deviceId so the receiver can bridge "Jellyfin
+        // device X" to "MQTT peer Y" and upgrade the command lane.
         const onlineFrame = codec.encode({
+            ...(args.jellyfinDeviceId ? { dev: args.jellyfinDeviceId } : {}),
             online: true,
             t: 'presence',
             ts: Date.now(),

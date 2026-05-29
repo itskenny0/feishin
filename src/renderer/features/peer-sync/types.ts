@@ -82,6 +82,8 @@ export type PeerCommandKind =
     | 'repeat'
     | 'seek'
     | 'shuffle'
+    | 'stop'
+    | 'togglePause'
     | 'volume';
 
 export type PeerFrame = PeerCommand | PeerPing | PeerPong | PeerPresence | PeerState;
@@ -115,6 +117,11 @@ export interface PeerPong {
 
 /** Retained presence frame. LWT publishes `{ online: false }` on disconnect. */
 export interface PeerPresence {
+    /** Publisher's Jellyfin Sessions deviceId, when known. Lets remote picker
+     *  UIs bridge a Jellyfin device row to its MQTT peer so the command lane
+     *  can upgrade to MQTT for that target. Optional for backward compat —
+     *  older publishers omit it and stay on the Jellyfin lane. */
+    dev?: string;
     online: boolean;
     /** Frame type discriminator. */
     t: 'presence';

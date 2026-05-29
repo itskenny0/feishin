@@ -58,15 +58,19 @@ const SESSIONS_HEARTBEAT_MS = 1_500;
 const LIVENESS_TIMEOUT_MS = 30_000;
 
 /**
- * Compute exponential reconnect delay for a given attempt count (0-based).
- * Exported for unit tests so the backoff math is locked down.
+ * Compute exponential reconnect delay for a given attempt count (0-based)
+ * with full jitter (50%-100% of the computed value). The jitter prevents
+ * a fleet of clients reconnecting on the same deterministic schedule after
+ * a server hiccup, which would otherwise thunder-herd the /socket endpoint.
  *
- * attempt 0 → 1s, 1 → 2s, 2 → 4s, 3 → 8s, 4 → 16s, 5+ → 30s.
+ * attempt 0 → 0.5..1s, 1 → 1..2s, 2 → 2..4s, ..., 5+ → 15..30s.
+ *
+ * Exported for unit tests; the `rng` arg lets tests seed Math.random.
  */
-export const reconnectDelayMs = (attempt: number): number => {
-    if (attempt <= 0) return RECONNECT_BASE_MS;
-    const raw = RECONNECT_BASE_MS * 2 ** attempt;
-    return Math.min(raw, RECONNECT_MAX_MS);
+export const reconnectDelayMs = (attempt: number, rng: () => number = Math.random): number => {
+    const base = attempt <= 0 ? RECONNECT_BASE_MS : RECONNECT_BASE_MS * 2 ** attempt;
+    const ceiling = Math.min(base, RECONNECT_MAX_MS);
+    return ceiling * (0.5 + rng() * 0.5);
 };
 
 /**

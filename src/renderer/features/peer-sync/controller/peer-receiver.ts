@@ -299,6 +299,14 @@ export const applyPeerCommand = (from: PeerAddress, cmd: PeerCommand): ApplyResu
             setShuffleFromWire(cmd.a.shuffle);
             return { reason: 'applied' };
         }
+        case 'stop': {
+            actions.mediaStop();
+            return { reason: 'applied' };
+        }
+        case 'togglePause': {
+            actions.mediaTogglePlayPause();
+            return { reason: 'applied' };
+        }
         case 'volume': {
             if (!cmd.a || !('volume' in cmd.a) || typeof cmd.a.volume !== 'number') {
                 return { reason: 'dropped-validation' };

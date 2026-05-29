@@ -18,7 +18,8 @@ import { useTranslation } from 'react-i18next';
 
 import { useRemoteTarget } from '/@/renderer/features/jellyfin-remote-target/hooks/use-remote-target';
 import {
-    pickTransport,
+    getPeerIdForJellyfinDeviceId,
+    pickTransportByJellyfinDeviceId,
     subscribe as subscribeTransport,
 } from '/@/renderer/features/peer-sync/controller/transport-selector';
 import { usePeerSyncSettings } from '/@/renderer/store';
@@ -38,17 +39,27 @@ export const TransportPill = memo(() => {
     const [lane, setLane] = useState<Lane>('local');
 
     // Resolve the lane reactively. When there's no remote target it's
-    // always "local"; otherwise we ask the transport selector and listen
-    // for flips.
+    // always "local"; otherwise we ask the transport selector — via the
+    // Jellyfin-deviceId bridge, since `target.deviceId` is the Jellyfin
+    // Sessions deviceId, not the MQTT peerId. We subscribe to flips and
+    // re-resolve when ANY peer flips, since the bridge may have been
+    // populated by the target's first retained-presence frame arriving
+    // after we mounted.
     useEffect(() => {
-        const peerId = target.isRemote ? (target.deviceId ?? '') : '';
-        if (!peerId) {
+        const jfDeviceId = target.isRemote ? (target.deviceId ?? '') : '';
+        if (!jfDeviceId) {
             setLane('local');
             return;
         }
-        setLane(pickTransport(peerId));
-        return subscribeTransport((flippedPeer, kind) => {
-            if (flippedPeer === peerId) setLane(kind);
+        setLane(pickTransportByJellyfinDeviceId(jfDeviceId));
+        return subscribeTransport((flippedPeer) => {
+            // Re-resolve when the flip concerns OUR target (current
+            // mapping) OR when there's no mapping yet — the flip may
+            // be the one that establishes it.
+            const targetPeerId = getPeerIdForJellyfinDeviceId(jfDeviceId);
+            if (!targetPeerId || flippedPeer === targetPeerId) {
+                setLane(pickTransportByJellyfinDeviceId(jfDeviceId));
+            }
         });
     }, [target.isRemote, target.deviceId]);
 

@@ -94,22 +94,41 @@ const installMockWS = () => {
 };
 
 describe('reconnectDelayMs', () => {
-    it('starts at 1s on the first attempt', () => {
-        expect(reconnectDelayMs(0)).toBe(1_000);
+    // Full-jitter: each value is the ceiling * (0.5 + rng * 0.5), so the
+    // computed delay lands in [ceiling/2, ceiling]. The tests seed `rng` via
+    // the optional second arg so behaviour is deterministic.
+
+    it('starts in [0.5s, 1s] on the first attempt', () => {
+        expect(reconnectDelayMs(0, () => 0)).toBe(500);
+        expect(reconnectDelayMs(0, () => 1)).toBe(1_000);
+        expect(reconnectDelayMs(0, () => 0.5)).toBe(750);
     });
 
-    it('doubles each attempt: 1s, 2s, 4s, 8s, 16s', () => {
-        expect(reconnectDelayMs(1)).toBe(2_000);
-        expect(reconnectDelayMs(2)).toBe(4_000);
-        expect(reconnectDelayMs(3)).toBe(8_000);
-        expect(reconnectDelayMs(4)).toBe(16_000);
+    it('doubles the ceiling each attempt: 2s, 4s, 8s, 16s with jitter floor at half', () => {
+        expect(reconnectDelayMs(1, () => 1)).toBe(2_000);
+        expect(reconnectDelayMs(1, () => 0)).toBe(1_000);
+        expect(reconnectDelayMs(2, () => 1)).toBe(4_000);
+        expect(reconnectDelayMs(2, () => 0)).toBe(2_000);
+        expect(reconnectDelayMs(3, () => 1)).toBe(8_000);
+        expect(reconnectDelayMs(4, () => 1)).toBe(16_000);
     });
 
-    it('caps at 30s once the doubled value would exceed it', () => {
-        // 2^5 * 1000 = 32_000 → clipped to 30_000.
-        expect(reconnectDelayMs(5)).toBe(30_000);
-        expect(reconnectDelayMs(6)).toBe(30_000);
-        expect(reconnectDelayMs(20)).toBe(30_000);
+    it('caps the ceiling at 30s once the doubled value would exceed it', () => {
+        // 2^5 * 1000 = 32_000 → clipped to 30_000 before jitter.
+        expect(reconnectDelayMs(5, () => 1)).toBe(30_000);
+        expect(reconnectDelayMs(6, () => 1)).toBe(30_000);
+        expect(reconnectDelayMs(20, () => 1)).toBe(30_000);
+        // Even at the jitter floor, attempt >=5 stays at >=15s.
+        expect(reconnectDelayMs(5, () => 0)).toBe(15_000);
+    });
+
+    it('with the real Math.random, every sampled delay is within [ceiling/2, ceiling]', () => {
+        // Spot-check the live behaviour without seeding the rng.
+        for (let i = 0; i < 50; i++) {
+            const d = reconnectDelayMs(2);
+            expect(d).toBeGreaterThanOrEqual(2_000);
+            expect(d).toBeLessThanOrEqual(4_000);
+        }
     });
 });
 

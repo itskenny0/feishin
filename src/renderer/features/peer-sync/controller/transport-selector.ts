@@ -11,6 +11,14 @@
  * recent (within `MQTT_PRESENCE_TTL_MS`), MQTT is the chosen lane.
  * Otherwise we fall back to Jellyfin Sessions polling. The flip is logged.
  *
+ * The picker UI talks in Jellyfin Sessions deviceIds — a server-generated
+ * id from the `/Sessions` response — but the dispatcher routes by MQTT
+ * peerId. The two id spaces never matched before, so even when both peers
+ * had MQTT happily online the picker always read lane='jellyfin'. To bridge
+ * them, each peer carries its own Jellyfin deviceId in the published
+ * presence frame, and the selector maintains a parallel `jfDeviceId -> peerId`
+ * map. `pickTransportByJellyfinDeviceId` resolves the bridge in one call.
+ *
  * Implemented as a tiny observable so the dispatcher can publish via the
  * current lane synchronously and the mirror can switch input sources when
  * the lane flips.
@@ -23,6 +31,10 @@ export const MQTT_PRESENCE_TTL_MS = 12_000;
 type Listener = (peerId: string, kind: TransportKind) => void;
 
 interface PeerPresenceRecord {
+    /** Publisher's Jellyfin Sessions deviceId, when carried on the wire.
+     *  Used to bridge a picker row (keyed on Jellyfin deviceId) back to its
+     *  MQTT peer. Optional: older publishers omit it. */
+    jellyfinDeviceId?: string;
     /** epoch ms when we last saw this peer announce online. */
     lastSeenAt: number;
     /** explicit offline (LWT) — overrides freshness. */
@@ -30,6 +42,9 @@ interface PeerPresenceRecord {
 }
 
 interface TransportSelectorState {
+    /** `jellyfinDeviceId -> peerId` reverse index built from presence
+     *  frames. Last-writer-wins on collision. */
+    jfDeviceIdToPeerId: Map<string, string>;
     /** Per-peerId presence records. */
     presence: Map<string, PeerPresenceRecord>;
     /** True when the user has flipped the master Peer Sync toggle on. */
@@ -39,6 +54,7 @@ interface TransportSelectorState {
 const log = (...args: unknown[]) => console.info('[peer-sync]', ...args);
 
 const state: TransportSelectorState = {
+    jfDeviceIdToPeerId: new Map(),
     presence: new Map(),
     syncEnabled: false,
 };
@@ -60,6 +76,30 @@ export const pickTransport = (peerId: string, now: number = Date.now()): Transpo
     return isFresh(rec, now) ? 'mqtt' : 'jellyfin';
 };
 
+/**
+ * Look up the MQTT peerId for a Jellyfin Sessions deviceId. Returns
+ * undefined when no peer has claimed this deviceId (older publishers,
+ * jellyfin-web sessions, peers we haven't received presence for yet).
+ */
+export const getPeerIdForJellyfinDeviceId = (jellyfinDeviceId: string): string | undefined => {
+    if (!jellyfinDeviceId) return undefined;
+    return state.jfDeviceIdToPeerId.get(jellyfinDeviceId);
+};
+
+/**
+ * Convenience: pick the transport for a Jellyfin Sessions deviceId by
+ * resolving through the bridge. Returns 'jellyfin' when the deviceId has
+ * no known MQTT peer or sync is disabled.
+ */
+export const pickTransportByJellyfinDeviceId = (
+    jellyfinDeviceId: string,
+    now: number = Date.now(),
+): TransportKind => {
+    const peerId = getPeerIdForJellyfinDeviceId(jellyfinDeviceId);
+    if (!peerId) return 'jellyfin';
+    return pickTransport(peerId, now);
+};
+
 const notifyIfChanged = (peerId: string, now: number): void => {
     const next = pickTransport(peerId, now);
     const prev = lastChosen.get(peerId);
@@ -71,17 +111,46 @@ const notifyIfChanged = (peerId: string, now: number): void => {
     for (const l of listeners) l(peerId, next);
 };
 
-/** Record a presence frame for `peerId`. */
-export const recordPresence = (peerId: string, online: boolean, now: number = Date.now()): void => {
-    state.presence.set(peerId, { lastSeenAt: now, online });
+/**
+ * Record a presence frame for `peerId`. When `jellyfinDeviceId` is supplied
+ * the reverse map is updated so the picker can bridge from a Jellyfin row
+ * to this peer.
+ */
+export const recordPresence = (
+    peerId: string,
+    online: boolean,
+    now: number = Date.now(),
+    jellyfinDeviceId?: string,
+): void => {
+    const prev = state.presence.get(peerId);
+    // If this peer was previously bound to a *different* jellyfinDeviceId,
+    // clear the stale reverse entry — but only when it still points to us
+    // (another peer may have since claimed the same deviceId, in which case
+    // we don't want to clobber the new mapping).
+    if (prev?.jellyfinDeviceId && prev.jellyfinDeviceId !== jellyfinDeviceId) {
+        if (state.jfDeviceIdToPeerId.get(prev.jellyfinDeviceId) === peerId) {
+            state.jfDeviceIdToPeerId.delete(prev.jellyfinDeviceId);
+        }
+    }
+    if (jellyfinDeviceId) {
+        state.jfDeviceIdToPeerId.set(jellyfinDeviceId, peerId);
+    }
+    state.presence.set(peerId, { jellyfinDeviceId, lastSeenAt: now, online });
     notifyIfChanged(peerId, now);
 };
 
 /**
  * Forget a peer entirely — e.g. when the user clears the target or the
- * client disconnects.
+ * client disconnects. Drops the reverse-map entry too if it still points
+ * to this peer.
  */
 export const forgetPeer = (peerId: string): void => {
+    const rec = state.presence.get(peerId);
+    if (rec?.jellyfinDeviceId) {
+        if (state.jfDeviceIdToPeerId.get(rec.jellyfinDeviceId) === peerId) {
+            state.jfDeviceIdToPeerId.delete(rec.jellyfinDeviceId);
+        }
+    }
     state.presence.delete(peerId);
     const prev = lastChosen.get(peerId);
     lastChosen.delete(peerId);
@@ -124,6 +193,7 @@ export const subscribe = (listener: Listener): (() => void) => {
 /** Reset everything — used by tests. */
 export const __resetForTests = (): void => {
     state.presence.clear();
+    state.jfDeviceIdToPeerId.clear();
     state.syncEnabled = false;
     lastChosen.clear();
     listeners.clear();

@@ -7,13 +7,15 @@ import { useTranslation } from 'react-i18next';
 import { queryKeys } from '/@/renderer/api/query-keys';
 import { albumQueries } from '/@/renderer/features/albums/api/album-api';
 import { artistsQueries } from '/@/renderer/features/artists/api/artists-api';
-import { commandDispatcher } from '/@/renderer/features/jellyfin-remote-target/controller/command-dispatcher';
 import {
     computeRemotePlay,
     nextJellyfinRepeat,
     playerRepeatToJellyfin,
 } from '/@/renderer/features/jellyfin-remote-target/controller/remote-play';
 import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
+import { peerDispatcher } from '/@/renderer/features/peer-sync/controller/peer-dispatcher';
+import { getPeerIdForJellyfinDeviceId } from '/@/renderer/features/peer-sync/controller/transport-selector';
+import { jellyfinToPeerRepeat } from '/@/renderer/features/peer-sync/protocol/builders';
 import {
     fetchPlaylistSongsBatch,
     filterSongsByPlayerFilters,
@@ -155,6 +157,12 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
      * Build a dispatcher context only when we're in remote mode. Used by every
      * branched method below. Reads at call time so we don't subscribe and
      * re-render the provider on every Sessions tick.
+     *
+     * `peer.peerId` is resolved through the transport-selector bridge from the
+     * picked Jellyfin Sessions deviceId. When the bridge has no mapping (the
+     * target hasn't published MQTT presence, e.g. jellyfin-web) the empty
+     * peerId makes `peerDispatcher.route` fall back to the Jellyfin lane
+     * unconditionally — same behaviour as before the bridge existed.
      */
     const getRemoteCtx = useCallback(() => {
         const target = useRemoteTargetStore.getState();
@@ -163,7 +171,14 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
         }
         const server = useAuthStore.getState().currentServer;
         if (!server?.credential) return null;
-        return { server, sessionId: target.sessionId };
+        return {
+            peer: {
+                peerId: getPeerIdForJellyfinDeviceId(target.targetDeviceId) ?? '',
+                userId: server.userId ?? '',
+            },
+            server,
+            sessionId: target.sessionId,
+        };
     }, []);
 
     /**
@@ -177,7 +192,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
             if (!remote) return false;
             const push = computeRemotePlay(songs, type, playSongId);
             if (!push) return false;
-            void commandDispatcher.play(remote, {
+            peerDispatcher.play(remote, {
                 itemIds: push.itemIds,
                 playCommand: push.playCommand,
                 startIndex: push.startIndex,
@@ -659,7 +674,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
         });
         const remote = getRemoteCtx();
         if (remote) {
-            void commandDispatcher.next(remote);
+            peerDispatcher.next(remote);
             // Optimistic local mirror flip + hold so a stale poll can't snap
             // us back to the just-finished song.
             useRemoteTargetStore.getState().actions.optimisticNext();
@@ -675,7 +690,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
 
         const remote = getRemoteCtx();
         if (remote) {
-            void commandDispatcher.pause(remote);
+            peerDispatcher.pause(remote);
             useRemoteTargetStore.getState().actions.setPaused(true);
             return;
         }
@@ -691,7 +706,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
 
             const remote = getRemoteCtx();
             if (remote) {
-                void commandDispatcher.unpause(remote);
+                peerDispatcher.unpause(remote);
                 useRemoteTargetStore.getState().actions.setPaused(false);
                 return;
             }
@@ -709,7 +724,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
 
             const remote = getRemoteCtx();
             if (remote) {
-                void commandDispatcher.skipToIndex(remote, index);
+                peerDispatcher.skipToIndex(remote, index);
                 // Move the mirror to the target index immediately so the now-
                 // playing card / queue highlight don't lag the click.
                 const s = useRemoteTargetStore.getState();
@@ -721,7 +736,11 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
                         nowPlayingItem: item,
                         queueIndex: index,
                     });
-                    useRemoteTargetStore.getState().actions.hold('nowPlayingItemId', item.id, 2000);
+                    // No third-arg override — the receiver's DEFAULT_HOLD_MS
+                    // (~6s) covers the next PlaybackProgress frame's cadence.
+                    // A shorter hold expired before truthful state arrived and
+                    // snapped the queue highlight back to the previous index.
+                    useRemoteTargetStore.getState().actions.hold('nowPlayingItemId', item.id);
                     useRemoteTargetStore.getState().actions.patchPlayState({
                         isPaused: false,
                         positionMs: 0,
@@ -741,7 +760,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
         });
         const remote = getRemoteCtx();
         if (remote) {
-            void commandDispatcher.previous(remote);
+            peerDispatcher.previous(remote);
             useRemoteTargetStore.getState().actions.optimisticPrevious();
             return;
         }
@@ -756,7 +775,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
             });
             const remote = getRemoteCtx();
             if (remote) {
-                void commandDispatcher.stop(remote);
+                peerDispatcher.stop(remote);
                 return;
             }
             storeActions.mediaStop(options);
@@ -773,7 +792,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
             const remote = getRemoteCtx();
             if (remote) {
                 const positionMs = Math.max(0, Math.round(timestamp * 1000));
-                void commandDispatcher.seek(remote, positionMs);
+                peerDispatcher.seek(remote, positionMs);
                 useRemoteTargetStore.getState().actions.optimisticSeek(positionMs);
                 return;
             }
@@ -832,8 +851,13 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
         });
         const remote = getRemoteCtx();
         if (remote) {
-            const wasMuted = useRemoteTargetStore.getState().mirrored.playState.volume === 0;
-            void commandDispatcher.setMute(remote, !wasMuted);
+            // Jellyfin reports IsMuted independently of VolumeLevel — a
+            // session can be muted at vol 50. Read the mirrored isMuted flag,
+            // not volume===0. Then patch optimistically so the icon doesn't
+            // wait for the next PlaybackProgress frame to settle.
+            const wasMuted = useRemoteTargetStore.getState().mirrored.playState.isMuted;
+            peerDispatcher.setMute(remote, !wasMuted);
+            useRemoteTargetStore.getState().actions.patchPlayState({ isMuted: !wasMuted });
             return;
         }
         storeActions.mediaToggleMute();
@@ -847,7 +871,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
         const remote = getRemoteCtx();
         if (remote) {
             const wasPaused = useRemoteTargetStore.getState().mirrored.playState.isPaused;
-            void commandDispatcher.togglePause(remote);
+            peerDispatcher.togglePause(remote);
             useRemoteTargetStore.getState().actions.setPaused(!wasPaused);
             return;
         }
@@ -910,7 +934,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
             });
             const remote = getRemoteCtx();
             if (remote) {
-                void commandDispatcher.setVolume(remote, volume);
+                peerDispatcher.setVolume(remote, volume);
                 useRemoteTargetStore.getState().actions.patchPlayState({
                     volume: Math.max(0, Math.min(100, Math.round(volume))),
                 });
@@ -931,7 +955,9 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
             const remote = getRemoteCtx();
             if (remote) {
                 const jf = playerRepeatToJellyfin(repeat);
-                void commandDispatcher.setRepeat(remote, jf);
+                // peerDispatcher.setRepeat takes the compact PeerRepeatMode
+                // (the Jellyfin string is re-derived inside its jellyfin lane).
+                peerDispatcher.setRepeat(remote, jellyfinToPeerRepeat(jf));
                 useRemoteTargetStore.getState().actions.patchPlayState({ repeatMode: jf });
                 return;
             }
@@ -950,7 +976,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
             const remote = getRemoteCtx();
             if (remote) {
                 const on = shuffle === PlayerShuffle.TRACK;
-                void commandDispatcher.setShuffle(remote, on);
+                peerDispatcher.setShuffle(remote, on);
                 useRemoteTargetStore.getState().actions.patchPlayState({ shuffle: on });
                 return;
             }
@@ -996,7 +1022,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
         if (remote) {
             const current = useRemoteTargetStore.getState().mirrored.playState.repeatMode;
             const next = nextJellyfinRepeat(current);
-            void commandDispatcher.setRepeat(remote, next);
+            peerDispatcher.setRepeat(remote, jellyfinToPeerRepeat(next));
             useRemoteTargetStore.getState().actions.patchPlayState({ repeatMode: next });
             return;
         }
@@ -1011,7 +1037,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
         const remote = getRemoteCtx();
         if (remote) {
             const isShuffled = useRemoteTargetStore.getState().mirrored.playState.shuffle;
-            void commandDispatcher.setShuffle(remote, !isShuffled);
+            peerDispatcher.setShuffle(remote, !isShuffled);
             useRemoteTargetStore.getState().actions.patchPlayState({ shuffle: !isShuffled });
             return;
         }

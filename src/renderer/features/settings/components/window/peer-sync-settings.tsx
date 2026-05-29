@@ -580,6 +580,33 @@ export const PeerSyncSettings = memo(() => {
                                 defaultValue: 'Show MQTT lane badges',
                             }),
                         },
+                        {
+                            control: (
+                                <Switch
+                                    aria-label={t('setting.peerSyncHideNonMqttDevices', {
+                                        defaultValue: 'Hide devices without MQTT',
+                                    })}
+                                    checked={settings.ui.hideNonMqttDevices}
+                                    onChange={(e) =>
+                                        setSettings({
+                                            peerSync: {
+                                                ui: {
+                                                    hideNonMqttDevices: e.currentTarget.checked,
+                                                },
+                                            },
+                                        })
+                                    }
+                                />
+                            ),
+                            description: t('setting.peerSyncHideNonMqttDevices', {
+                                context: 'description',
+                                defaultValue:
+                                    'Filter the device picker to only show Feishin peers reachable over MQTT. The currently-connected device stays visible regardless.',
+                            }),
+                            title: t('setting.peerSyncHideNonMqttDevices', {
+                                defaultValue: 'Hide devices without MQTT',
+                            }),
+                        },
                     ]}
                 />
             )}

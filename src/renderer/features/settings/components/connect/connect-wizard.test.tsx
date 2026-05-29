@@ -45,7 +45,12 @@ const resetPeerSync = () => {
             onboarded: false,
             peerId: '',
             roomKey: '',
-            ui: { connectButton: true, pickerBadges: true, statusPill: true },
+            ui: {
+                connectButton: true,
+                hideNonMqttDevices: false,
+                pickerBadges: true,
+                statusPill: true,
+            },
         },
     });
 };

@@ -874,6 +874,12 @@ const PeerSyncBrokerSettingsSchema = z.object({
 const PeerSyncUiVisibilitySchema = z.object({
     /** The "Connect to a device" button in the player bar. */
     connectButton: z.boolean().default(true),
+    /** Filter the picker to only show devices whose MQTT presence we've
+     *  received (i.e. another Feishin running peer-sync). Off = the picker
+     *  also lists jellyfin-web, jellyfin-android-tv, and other clients
+     *  reachable only via the Jellyfin Sessions API. The currently-selected
+     *  target always remains visible so toggling on doesn't drop it. */
+    hideNonMqttDevices: z.boolean().default(false),
     /** Lane badge (MQTT / Jellyfin) next to each peer row in the picker. */
     pickerBadges: z.boolean().default(true),
     /** Compact transport pill near the player bar. */
@@ -919,6 +925,7 @@ const PeerSyncSettingsSchema = z.object({
      *  particular Connect-related chrome can switch it off here. */
     ui: PeerSyncUiVisibilitySchema.default({
         connectButton: true,
+        hideNonMqttDevices: false,
         pickerBadges: true,
         statusPill: true,
     }),
@@ -2186,6 +2193,7 @@ const initialState: SettingsState = {
         roomKey: '',
         ui: {
             connectButton: true,
+            hideNonMqttDevices: false,
             pickerBadges: true,
             statusPill: true,
         },
@@ -3135,9 +3143,17 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                         if (!state.peerSync.ui || typeof state.peerSync.ui !== 'object') {
                             state.peerSync.ui = {
                                 connectButton: true,
+                                hideNonMqttDevices: false,
                                 pickerBadges: true,
                                 statusPill: true,
                             };
+                        } else if (typeof state.peerSync.ui.hideNonMqttDevices !== 'boolean') {
+                            // v48 -> v49 upgraders already have a `ui` block
+                            // but it was created before this field existed;
+                            // backfill the default so the picker filter
+                            // doesn't read undefined and silently treat it
+                            // as "hide everything".
+                            state.peerSync.ui.hideNonMqttDevices = false;
                         }
                     }
                 }

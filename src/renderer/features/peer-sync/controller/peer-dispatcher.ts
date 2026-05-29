@@ -96,7 +96,7 @@ export const peerDispatcher = {
 
     play: (
         ctx: PeerDispatcherCtx,
-        args: {
+        args?: {
             itemIds: string[];
             playCommand?: 'PlayLast' | 'PlayNext' | 'PlayNow';
             startIndex?: number;
@@ -105,8 +105,20 @@ export const peerDispatcher = {
         route(
             ctx,
             () => fireMqtt(ctx.peer, buildCommand('play', args)),
-            () =>
-                void commandDispatcher.play({ server: ctx.server, sessionId: ctx.sessionId }, args),
+            () => {
+                // No args = "resume current playback" — Jellyfin needs the
+                // explicit Unpause verb. The MQTT lane carries it inside
+                // the bare-`play` shape (receiver's `case 'play'` handles
+                // both: itemIds present = queue-replace, absent = resume).
+                if (!args) {
+                    void commandDispatcher.unpause({
+                        server: ctx.server,
+                        sessionId: ctx.sessionId,
+                    });
+                    return;
+                }
+                void commandDispatcher.play({ server: ctx.server, sessionId: ctx.sessionId }, args);
+            },
         ),
 
     previous: (ctx: PeerDispatcherCtx): void =>
@@ -236,5 +248,41 @@ export const peerDispatcher = {
                     { server: ctx.server, sessionId: ctx.sessionId },
                     index,
                 ),
+        ),
+
+    /** Stop playback and clear the queue on the target. */
+    stop: (ctx: PeerDispatcherCtx): void =>
+        route(
+            ctx,
+            () => fireMqtt(ctx.peer, buildCommand('stop')),
+            () => void commandDispatcher.stop({ server: ctx.server, sessionId: ctx.sessionId }),
+        ),
+
+    /**
+     * Toggle play/pause on the target. MQTT carries this as its own verb so
+     * the receiver doesn't have to consult the controller's mirrored state
+     * (which could race with the user's tap when the lane has been flipped
+     * mid-command).
+     */
+    togglePause: (ctx: PeerDispatcherCtx): void =>
+        route(
+            ctx,
+            () => fireMqtt(ctx.peer, buildCommand('togglePause')),
+            () =>
+                void commandDispatcher.togglePause({
+                    server: ctx.server,
+                    sessionId: ctx.sessionId,
+                }),
+        ),
+
+    /**
+     * Resume current playback on the target. MQTT shares the wire shape with
+     * `play` (no itemIds), so the receiver's `case 'play'` handles both.
+     */
+    unpause: (ctx: PeerDispatcherCtx): void =>
+        route(
+            ctx,
+            () => fireMqtt(ctx.peer, buildCommand('play')),
+            () => void commandDispatcher.unpause({ server: ctx.server, sessionId: ctx.sessionId }),
         ),
 };

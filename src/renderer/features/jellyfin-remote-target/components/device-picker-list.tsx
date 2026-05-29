@@ -13,7 +13,10 @@ import { sessionsPoller } from '/@/renderer/features/jellyfin-remote-target/cont
 import { useRemoteDevices } from '/@/renderer/features/jellyfin-remote-target/hooks/use-remote-devices';
 import { useRemoteTarget } from '/@/renderer/features/jellyfin-remote-target/hooks/use-remote-target';
 import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
-import { pickTransport } from '/@/renderer/features/peer-sync/controller/transport-selector';
+import {
+    pickTransportByJellyfinDeviceId,
+    subscribe as subscribeTransport,
+} from '/@/renderer/features/peer-sync/controller/transport-selector';
 import { useAuthStore } from '/@/renderer/store/auth.store';
 import { usePlayerActions, usePlayerStoreBase } from '/@/renderer/store/player.store';
 import { usePeerSyncSettings, useSettingsStoreActions } from '/@/renderer/store/settings.store';
@@ -108,6 +111,16 @@ export const DevicePickerList = ({ onClose, variant = 'desktop' }: DevicePickerL
         return () => {
             if (refreshTimer.current) clearTimeout(refreshTimer.current);
         };
+    }, []);
+
+    /**
+     * Force-re-render on any transport flip so the lane badge (and the
+     * hide-non-MQTT filter below) stays current as retained MQTT presence
+     * frames arrive after the picker opens.
+     */
+    const [, setTransportRev] = useState(0);
+    useEffect(() => {
+        return subscribeTransport(() => setTransportRev((r) => r + 1));
     }, []);
 
     const selectLocal = () => {
@@ -282,67 +295,80 @@ export const DevicePickerList = ({ onClose, variant = 'desktop' }: DevicePickerL
                 )
             ) : null}
 
-            {devices.map((d) => {
-                const active = target.deviceId === d.deviceId;
-                const subtitle = d.nowPlayingTitle
-                    ? `${d.nowPlayingTitle}${d.nowPlayingArtist ? ` — ${d.nowPlayingArtist}` : ''}`
-                    : active
-                      ? t('page.remoteTarget.currentDevice', { defaultValue: 'Current device' })
-                      : d.isPaused
-                        ? t('player.paused', { defaultValue: 'Paused' })
-                        : t('common.idle', { defaultValue: 'Idle' });
-                // Lane = whichever transport would be used to drive this peer
-                // right now. Only meaningful for Feishin peers; jellyfin-web
-                // sessions stay on the Jellyfin lane forever.
-                const lane = pickTransport(d.deviceId);
-                const showLaneBadge =
-                    peerSync.onboarded &&
-                    peerSync.jellyfinRemoteEnabled &&
-                    peerSync.ui.pickerBadges &&
-                    lane === 'mqtt';
-                return (
-                    <UnstyledButton
-                        className={`${styles.row} ${active ? styles.rowActive : ''}`}
-                        key={d.deviceId}
-                        onClick={() => selectDevice(d)}
-                    >
-                        <span className={styles.iconWrap}>
-                            <Icon
-                                fill={active ? 'primary' : undefined}
-                                icon={deviceTypeIcon(d)}
-                                size="lg"
-                            />
-                        </span>
-                        <span className={styles.rowText}>
-                            <span className={styles.titleLine}>
-                                <Text className={styles.rowTitle}>{d.deviceName}</Text>
-                                {showLaneBadge && (
-                                    <span
-                                        aria-label={t('page.remoteTarget.laneBadgeAriaLabel', {
-                                            defaultValue: 'MQTT lane active',
-                                        })}
-                                        className={styles.laneBadge}
-                                    >
-                                        {t('common.transportMqtt', { defaultValue: 'MQTT' })}
-                                    </span>
-                                )}
+            {devices
+                .filter((d) => {
+                    // "Hide devices without MQTT" — opt-in filter that removes
+                    // Jellyfin-only rows (jellyfin-web, jellyfin-android-tv,
+                    // other Feishins that haven't published presence yet)
+                    // from the picker. The currently-selected target always
+                    // stays visible so the user doesn't lose it mid-toggle.
+                    if (!peerSync.ui.hideNonMqttDevices) return true;
+                    if (target.deviceId === d.deviceId) return true;
+                    return pickTransportByJellyfinDeviceId(d.deviceId) === 'mqtt';
+                })
+                .map((d) => {
+                    const active = target.deviceId === d.deviceId;
+                    const subtitle = d.nowPlayingTitle
+                        ? `${d.nowPlayingTitle}${d.nowPlayingArtist ? ` — ${d.nowPlayingArtist}` : ''}`
+                        : active
+                          ? t('page.remoteTarget.currentDevice', { defaultValue: 'Current device' })
+                          : d.isPaused
+                            ? t('player.paused', { defaultValue: 'Paused' })
+                            : t('common.idle', { defaultValue: 'Idle' });
+                    // Lane = whichever transport would be used to drive this
+                    // device right now. Bridges via the Jellyfin deviceId so a
+                    // Feishin peer that's published its `dev` in MQTT presence
+                    // lights up the MQTT badge; jellyfin-web and other clients
+                    // that don't publish stay on Jellyfin.
+                    const lane = pickTransportByJellyfinDeviceId(d.deviceId);
+                    const showLaneBadge =
+                        peerSync.onboarded &&
+                        peerSync.jellyfinRemoteEnabled &&
+                        peerSync.ui.pickerBadges &&
+                        lane === 'mqtt';
+                    return (
+                        <UnstyledButton
+                            className={`${styles.row} ${active ? styles.rowActive : ''}`}
+                            key={d.deviceId}
+                            onClick={() => selectDevice(d)}
+                        >
+                            <span className={styles.iconWrap}>
+                                <Icon
+                                    fill={active ? 'primary' : undefined}
+                                    icon={deviceTypeIcon(d)}
+                                    size="lg"
+                                />
                             </span>
-                            <Text
-                                c={active ? 'var(--theme-colors-primary)' : 'dimmed'}
-                                className={styles.rowSubtitle}
-                            >
-                                {subtitle}
-                            </Text>
-                        </span>
-                        {active &&
-                            (d.nowPlayingItemId && !d.isPaused ? (
-                                <Equalizer />
-                            ) : (
-                                <Icon fill="primary" icon="check" />
-                            ))}
-                    </UnstyledButton>
-                );
-            })}
+                            <span className={styles.rowText}>
+                                <span className={styles.titleLine}>
+                                    <Text className={styles.rowTitle}>{d.deviceName}</Text>
+                                    {showLaneBadge && (
+                                        <span
+                                            aria-label={t('page.remoteTarget.laneBadgeAriaLabel', {
+                                                defaultValue: 'MQTT lane active',
+                                            })}
+                                            className={styles.laneBadge}
+                                        >
+                                            {t('common.transportMqtt', { defaultValue: 'MQTT' })}
+                                        </span>
+                                    )}
+                                </span>
+                                <Text
+                                    c={active ? 'var(--theme-colors-primary)' : 'dimmed'}
+                                    className={styles.rowSubtitle}
+                                >
+                                    {subtitle}
+                                </Text>
+                            </span>
+                            {active &&
+                                (d.nowPlayingItemId && !d.isPaused ? (
+                                    <Equalizer />
+                                ) : (
+                                    <Icon fill="primary" icon="check" />
+                                ))}
+                        </UnstyledButton>
+                    );
+                })}
         </div>
     );
 };
