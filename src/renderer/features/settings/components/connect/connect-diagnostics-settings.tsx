@@ -70,6 +70,16 @@ export const ConnectDiagnosticsSettings = memo(() => {
 
     const presenceList = useMemo(() => Object.values(presence), [presence]);
 
+    if (!settings.jellyfinRemoteEnabled) {
+        return (
+            <Alert color="gray" variant="light">
+                {t('page.setting.connectDiagnosticsMasterOff', {
+                    defaultValue:
+                        'Jellyfin Remote is turned off. Re-enable it under Connect -> Jellyfin Connect (MQTT) to see live diagnostics here.',
+                })}
+            </Alert>
+        );
+    }
     if (!settings.enabled) {
         return (
             <Alert color="gray" variant="light">
@@ -160,47 +170,58 @@ export const ConnectDiagnosticsSettings = memo(() => {
                 {presenceList.length === 0 ? (
                     <Text isMuted size="sm">
                         {t('page.setting.diagnosticsNoPeers', {
-                            defaultValue: 'No peers seen yet.',
+                            defaultValue:
+                                'No peers seen yet. Other Feishins on the same broker + room key will appear here once they come online.',
                         })}
                     </Text>
                 ) : (
-                    <Table withTableBorder>
-                        <Table.Thead>
-                            <Table.Tr>
-                                <Table.Th>{t('common.peer', { defaultValue: 'Peer' })}</Table.Th>
-                                <Table.Th>
-                                    {t('common.status', { defaultValue: 'Status' })}
-                                </Table.Th>
-                                <Table.Th>
-                                    {t('common.lastSeen', { defaultValue: 'Last seen' })}
-                                </Table.Th>
-                                <Table.Th>{t('common.rtt', { defaultValue: 'RTT' })}</Table.Th>
-                            </Table.Tr>
-                        </Table.Thead>
-                        <Table.Tbody>
-                            {presenceList.map((p) => {
-                                const lat = latency[p.peerId];
-                                return (
-                                    <Table.Tr key={p.peerId}>
-                                        <Table.Td>{peerLabel(p.peerId)}</Table.Td>
-                                        <Table.Td>
-                                            <Badge
-                                                color={p.online ? 'teal' : 'gray'}
-                                                size="sm"
-                                                variant={p.online ? 'filled' : 'outline'}
-                                            >
-                                                {p.online ? 'online' : 'offline'}
-                                            </Badge>
-                                        </Table.Td>
-                                        <Table.Td>{formatRelative(p.lastSeenAt, now)}</Table.Td>
-                                        <Table.Td>
-                                            {lat ? `${Math.round(lat.rttMs)} ms` : '—'}
-                                        </Table.Td>
-                                    </Table.Tr>
-                                );
-                            })}
-                        </Table.Tbody>
-                    </Table>
+                    <ScrollArea offsetScrollbars type="auto">
+                        <Table miw={420} withTableBorder>
+                            <Table.Thead>
+                                <Table.Tr>
+                                    <Table.Th>
+                                        {t('common.peer', { defaultValue: 'Peer' })}
+                                    </Table.Th>
+                                    <Table.Th>
+                                        {t('common.status', { defaultValue: 'Status' })}
+                                    </Table.Th>
+                                    <Table.Th>
+                                        {t('common.lastSeen', { defaultValue: 'Last seen' })}
+                                    </Table.Th>
+                                    <Table.Th>{t('common.rtt', { defaultValue: 'RTT' })}</Table.Th>
+                                </Table.Tr>
+                            </Table.Thead>
+                            <Table.Tbody>
+                                {presenceList.map((p) => {
+                                    const lat = latency[p.peerId];
+                                    return (
+                                        <Table.Tr key={p.peerId}>
+                                            <Table.Td>{peerLabel(p.peerId)}</Table.Td>
+                                            <Table.Td>
+                                                <Badge
+                                                    color={p.online ? 'teal' : 'gray'}
+                                                    size="sm"
+                                                    variant={p.online ? 'filled' : 'outline'}
+                                                >
+                                                    {p.online
+                                                        ? t('common.online', {
+                                                              defaultValue: 'online',
+                                                          })
+                                                        : t('common.offline', {
+                                                              defaultValue: 'offline',
+                                                          })}
+                                                </Badge>
+                                            </Table.Td>
+                                            <Table.Td>{formatRelative(p.lastSeenAt, now)}</Table.Td>
+                                            <Table.Td>
+                                                {lat ? `${Math.round(lat.rttMs)} ms` : '—'}
+                                            </Table.Td>
+                                        </Table.Tr>
+                                    );
+                                })}
+                            </Table.Tbody>
+                        </Table>
+                    </ScrollArea>
                 )}
             </Stack>
 
@@ -222,8 +243,8 @@ export const ConnectDiagnosticsSettings = memo(() => {
                         })}
                     </Text>
                 ) : (
-                    <ScrollArea h={180} type="auto">
-                        <Table>
+                    <ScrollArea h={180} offsetScrollbars type="auto">
+                        <Table miw={360}>
                             <Table.Tbody>
                                 {[...commands].reverse().map((c, i) => (
                                     <Table.Tr key={`${c.ts}-${i}`}>
@@ -235,7 +256,9 @@ export const ConnectDiagnosticsSettings = memo(() => {
                                                 size="sm"
                                                 variant="light"
                                             >
-                                                {c.direction === 'outbound' ? 'OUT' : 'IN'}
+                                                {c.direction === 'outbound'
+                                                    ? t('common.outbound', { defaultValue: 'OUT' })
+                                                    : t('common.inbound', { defaultValue: 'IN' })}
                                             </Badge>
                                         </Table.Td>
                                         <Table.Td style={{ width: 100 }}>{c.k}</Table.Td>
@@ -269,8 +292,8 @@ export const ConnectDiagnosticsSettings = memo(() => {
                         })}
                     </Text>
                 ) : (
-                    <ScrollArea h={180} type="auto">
-                        <Table>
+                    <ScrollArea h={180} offsetScrollbars type="auto">
+                        <Table miw={420}>
                             <Table.Tbody>
                                 {[...states].reverse().map((s, i) => (
                                     <Table.Tr key={`${s.ts}-${i}`}>
@@ -282,11 +305,23 @@ export const ConnectDiagnosticsSettings = memo(() => {
                                                 size="sm"
                                                 variant="light"
                                             >
-                                                {s.direction === 'outbound' ? 'OUT' : 'IN'}
+                                                {s.direction === 'outbound'
+                                                    ? t('common.outbound', { defaultValue: 'OUT' })
+                                                    : t('common.inbound', { defaultValue: 'IN' })}
                                             </Badge>
                                         </Table.Td>
                                         <Table.Td>{peerLabel(s.peerId)}</Table.Td>
-                                        <Table.Td>{s.paused ? '⏸' : '▶'}</Table.Td>
+                                        <Table.Td
+                                            aria-label={
+                                                s.paused
+                                                    ? t('player.paused', { defaultValue: 'Paused' })
+                                                    : t('player.playing', {
+                                                          defaultValue: 'Playing',
+                                                      })
+                                            }
+                                        >
+                                            {s.paused ? '⏸' : '▶'}
+                                        </Table.Td>
                                         <Table.Td>
                                             {s.trackTitle ? (
                                                 <Text isNoSelect size="sm">
@@ -325,8 +360,8 @@ export const ConnectDiagnosticsSettings = memo(() => {
                         })}
                     </Text>
                 ) : (
-                    <ScrollArea h={140} type="auto">
-                        <Table>
+                    <ScrollArea h={140} offsetScrollbars type="auto">
+                        <Table miw={360}>
                             <Table.Tbody>
                                 {[...flips].reverse().map((f, i) => (
                                     <Table.Tr key={`${f.ts}-${i}`}>
@@ -352,8 +387,17 @@ export const ConnectDiagnosticsSettings = memo(() => {
             </Stack>
 
             <Group justify="flex-end">
-                <Button onClick={() => resetDiagnostics()} size="compact-sm" variant="default">
-                    {t('common.clear', { defaultValue: 'Clear' })}
+                <Button
+                    aria-label={t('page.setting.diagnosticsClearAriaLabel', {
+                        defaultValue: 'Clear diagnostics history',
+                    })}
+                    onClick={() => resetDiagnostics()}
+                    size="compact-sm"
+                    variant="default"
+                >
+                    {t('page.setting.diagnosticsClear', {
+                        defaultValue: 'Clear history',
+                    })}
                 </Button>
             </Group>
         </Stack>

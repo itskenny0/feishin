@@ -251,7 +251,10 @@ export const DevicePickerList = ({ onClose, variant = 'desktop' }: DevicePickerL
                 // sessions stay on the Jellyfin lane forever.
                 const lane = pickTransport(d.deviceId);
                 const showLaneBadge =
-                    peerSync.onboarded && peerSync.ui.pickerBadges && lane === 'mqtt';
+                    peerSync.onboarded &&
+                    peerSync.jellyfinRemoteEnabled &&
+                    peerSync.ui.pickerBadges &&
+                    lane === 'mqtt';
                 return (
                     <UnstyledButton
                         className={`${styles.row} ${active ? styles.rowActive : ''}`}
@@ -270,18 +273,12 @@ export const DevicePickerList = ({ onClose, variant = 'desktop' }: DevicePickerL
                                 {d.deviceName}
                                 {showLaneBadge && (
                                     <span
-                                        style={{
-                                            background: 'var(--mantine-color-teal-9)',
-                                            borderRadius: 4,
-                                            color: 'var(--mantine-color-white)',
-                                            fontSize: 10,
-                                            fontWeight: 600,
-                                            letterSpacing: 0.5,
-                                            marginLeft: 6,
-                                            padding: '1px 5px',
-                                        }}
+                                        aria-label={t('page.remoteTarget.laneBadgeAriaLabel', {
+                                            defaultValue: 'MQTT lane active',
+                                        })}
+                                        className={styles.laneBadge}
                                     >
-                                        MQTT
+                                        {t('common.transportMqtt', { defaultValue: 'MQTT' })}
                                     </span>
                                 )}
                             </Text>

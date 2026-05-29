@@ -8,10 +8,10 @@
  * Connect-related UI chrome (device-picker buttons, status pill, lane
  * badges) is hidden from the rest of the app.
  */
-import { Alert, Group, Radio, Stack, Stepper } from '@mantine/core';
+import { Alert, Group, Radio, ScrollArea, Stack, Stepper } from '@mantine/core';
 import isElectron from 'is-electron';
 import { nanoid } from 'nanoid';
-import { memo, useCallback, useEffect, useState } from 'react';
+import { memo, useCallback, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { isPublicBrokerUrl } from '/@/renderer/features/settings/components/window/peer-sync-settings';
@@ -325,7 +325,7 @@ const StepFinish = ({
                 <Button disabled={saving} onClick={onBack} variant="default">
                     {t('common.back', { defaultValue: 'Back' })}
                 </Button>
-                <Button loading={saving} onClick={onFinish} variant="filled">
+                <Button disabled={saving} loading={saving} onClick={onFinish} variant="filled">
                     {t('common.finish', { defaultValue: 'Finish' })}
                 </Button>
             </Group>
@@ -339,24 +339,49 @@ export const ConnectWizard = memo(() => {
     const { setSettings } = useSettingsStoreActions();
 
     const [step, setStep] = useState(0);
-    const [tier, setTier] = useState<BrokerTier>('own');
+    // Seed the tier from existing settings ONCE on mount. A subsequent
+    // setSettings (e.g. the user typing in the broker URL field — which
+    // round-trips through the store) must not clobber the tier the user
+    // is actively configuring inside the wizard.
+    const [tier, setTier] = useState<BrokerTier>(() => {
+        if (settings.broker.enabled) return 'embedded';
+        if (settings.brokerUrl && isPublicBrokerUrl(settings.brokerUrl)) return 'public';
+        return 'own';
+    });
     const [brokerUrl, setBrokerUrl] = useState(settings.brokerUrl);
     const [username, setUsername] = useState(settings.brokerUsername);
     const [password, setPassword] = useState(settings.brokerPassword);
     const [saving, setSaving] = useState(false);
+    // Guard against a double-tap on Finish racing two concurrent save flows
+    // (Mantine's `loading` prop doesn't disable the underlying button, so
+    // a fast pointer + slow IPC round-trip could fire `setEnabled` twice).
+    const finishingRef = useRef(false);
 
-    // If the user already finished the wizard, default the tier to whatever
-    // their current settings imply so re-running it doesn't reset the choice.
-    useEffect(() => {
-        if (settings.broker.enabled) setTier('embedded');
-        else if (settings.brokerUrl && isPublicBrokerUrl(settings.brokerUrl)) setTier('public');
-        else if (settings.brokerUrl) setTier('own');
-    }, [settings.broker.enabled, settings.brokerUrl]);
+    // Track the highest step the user has reached so we can let them
+    // click *back* to any visited step but not skip forward past
+    // validation (e.g. clicking "Finish" before filling broker fields).
+    const [maxStepReached, setMaxStepReached] = useState(0);
 
-    const goNext = useCallback(() => setStep((s) => s + 1), []);
+    const goNext = useCallback(
+        () =>
+            setStep((s) => {
+                const next = s + 1;
+                setMaxStepReached((m) => Math.max(m, next));
+                return next;
+            }),
+        [],
+    );
     const goBack = useCallback(() => setStep((s) => Math.max(0, s - 1)), []);
+    const handleStepClick = useCallback(
+        (index: number) => {
+            if (index <= maxStepReached) setStep(index);
+        },
+        [maxStepReached],
+    );
 
     const handleFinish = useCallback(async () => {
+        if (finishingRef.current) return;
+        finishingRef.current = true;
         setSaving(true);
         try {
             // Make sure the identity is seeded so the client has something
@@ -375,7 +400,6 @@ export const ConnectWizard = memo(() => {
                 });
                 if (errorMsg) {
                     toast.error({ message: errorMsg });
-                    setSaving(false);
                     return;
                 }
             }
@@ -390,6 +414,7 @@ export const ConnectWizard = memo(() => {
                     brokerUrl: tier === 'embedded' ? '' : brokerUrl.trim(),
                     brokerUsername: tier === 'own' ? username : '',
                     enabled: true,
+                    jellyfinRemoteEnabled: true,
                     onboarded: true,
                     peerId,
                     roomKey,
@@ -401,9 +426,14 @@ export const ConnectWizard = memo(() => {
                         'Sync & Connect is set up. Look for the Connect button on the player bar.',
                 }),
             });
+            // Reset back to the first step so a re-run starts clean — but
+            // hold onto the tier/URL/credentials so the user sees what
+            // they just confirmed instead of a blank form.
             setStep(0);
+            setMaxStepReached(0);
         } finally {
             setSaving(false);
+            finishingRef.current = false;
         }
     }, [
         brokerUrl,
@@ -427,42 +457,48 @@ export const ConnectWizard = memo(() => {
                     })}
                 </Alert>
             )}
-            <Stepper active={step} onStepClick={setStep}>
-                <Stepper.Step label={t('page.setting.wizardStepIntro', { defaultValue: 'About' })}>
-                    <StepIntro onNext={goNext} />
-                </Stepper.Step>
-                <Stepper.Step
-                    label={t('page.setting.wizardStepTier', { defaultValue: 'Broker tier' })}
-                >
-                    <StepTier onBack={goBack} onNext={goNext} onTier={setTier} tier={tier} />
-                </Stepper.Step>
-                <Stepper.Step
-                    label={t('page.setting.wizardStepConfigure', { defaultValue: 'Configure' })}
-                >
-                    <StepConfigure
-                        brokerUrl={brokerUrl}
-                        onBack={goBack}
-                        onBrokerUrl={setBrokerUrl}
-                        onNext={goNext}
-                        onPassword={setPassword}
-                        onUsername={setUsername}
-                        password={password}
-                        tier={tier}
-                        username={username}
-                    />
-                </Stepper.Step>
-                <Stepper.Step
-                    label={t('page.setting.wizardStepFinish', { defaultValue: 'Finish' })}
-                >
-                    <StepFinish
-                        brokerUrl={brokerUrl}
-                        onBack={goBack}
-                        onFinish={handleFinish}
-                        saving={saving}
-                        tier={tier}
-                    />
-                </Stepper.Step>
-            </Stepper>
+            <ScrollArea offsetScrollbars type="auto">
+                <Stepper active={step} allowNextStepsSelect={false} onStepClick={handleStepClick}>
+                    <Stepper.Step
+                        label={t('page.setting.wizardStepIntro', { defaultValue: 'About' })}
+                    >
+                        <StepIntro onNext={goNext} />
+                    </Stepper.Step>
+                    <Stepper.Step
+                        label={t('page.setting.wizardStepTier', { defaultValue: 'Broker tier' })}
+                    >
+                        <StepTier onBack={goBack} onNext={goNext} onTier={setTier} tier={tier} />
+                    </Stepper.Step>
+                    <Stepper.Step
+                        label={t('page.setting.wizardStepConfigure', {
+                            defaultValue: 'Configure',
+                        })}
+                    >
+                        <StepConfigure
+                            brokerUrl={brokerUrl}
+                            onBack={goBack}
+                            onBrokerUrl={setBrokerUrl}
+                            onNext={goNext}
+                            onPassword={setPassword}
+                            onUsername={setUsername}
+                            password={password}
+                            tier={tier}
+                            username={username}
+                        />
+                    </Stepper.Step>
+                    <Stepper.Step
+                        label={t('page.setting.wizardStepFinish', { defaultValue: 'Finish' })}
+                    >
+                        <StepFinish
+                            brokerUrl={brokerUrl}
+                            onBack={goBack}
+                            onFinish={handleFinish}
+                            saving={saving}
+                            tier={tier}
+                        />
+                    </Stepper.Step>
+                </Stepper>
+            </ScrollArea>
         </Stack>
     );
 });

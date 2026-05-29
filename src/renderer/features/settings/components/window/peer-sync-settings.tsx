@@ -18,6 +18,7 @@ import { nanoid } from 'nanoid';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
 import { SettingsSection } from '/@/renderer/features/settings/components/settings-section';
 import { usePeerSyncSettings, useSettingsStoreActions } from '/@/renderer/store';
 import { Button } from '/@/shared/components/button/button';
@@ -95,9 +96,45 @@ export const PeerSyncSettings = memo(() => {
             // Auto-seed peerId + roomKey on first opt-in so the user never
             // has to think about either to get the happy path working.
             if (enabled) ensureIdentity();
+            // Flipping the MQTT lane off while the embedded broker is still
+            // running would leave a zombie listener with no client behind it.
+            // Stop it here so the user gets a fully-quiet system back.
+            if (!enabled && peerBrokerApi && settings.broker.enabled) {
+                void peerBrokerApi.setEnabled(null);
+                setSettings({ peerSync: { broker: { enabled: false }, enabled } });
+                return;
+            }
             setSettings({ peerSync: { enabled } });
         },
-        [ensureIdentity, setSettings],
+        [ensureIdentity, setSettings, settings.broker.enabled],
+    );
+
+    /**
+     * Master kill-switch for the whole Jellyfin Remote subsystem. Flipping
+     * it off mid-session has to clean up everything the user was running:
+     * the live remote target (otherwise the player would stay wedged on a
+     * device the picker can no longer reach) and the embedded broker (which
+     * the picker is also the entry point for).
+     */
+    const handleJellyfinRemoteEnabled = useCallback(
+        (enabled: boolean) => {
+            if (!enabled) {
+                // Drop the current Connect session so the player snaps back
+                // to local before the UI surfaces disappear.
+                useRemoteTargetStore.getState().actions.clearTarget();
+                setSettings({
+                    peerSync: { jellyfinRemoteEnabled: false },
+                    playback: { remoteTargetDeviceId: null, remoteTargetDeviceName: null },
+                });
+                if (peerBrokerApi && settings.broker.enabled) {
+                    void peerBrokerApi.setEnabled(null);
+                    setSettings({ peerSync: { broker: { enabled: false } } });
+                }
+                return;
+            }
+            setSettings({ peerSync: { jellyfinRemoteEnabled: true } });
+        },
+        [setSettings, settings.broker.enabled],
     );
 
     const handleBrokerToggle = useCallback(
@@ -234,6 +271,9 @@ export const PeerSyncSettings = memo(() => {
                       {
                           control: (
                               <Switch
+                                  aria-label={t('setting.peerSyncEmbeddedBroker', {
+                                      defaultValue: 'Embedded broker',
+                                  })}
                                   checked={settings.broker.enabled}
                                   onChange={(e) => handleBrokerToggle(e.currentTarget.checked)}
                               />
@@ -251,6 +291,7 @@ export const PeerSyncSettings = memo(() => {
                           control: (
                               <TextInput
                                   defaultValue={settings.broker.host}
+                                  key={`broker-host-${settings.broker.host}`}
                                   onBlur={(e) => {
                                       const host = e.currentTarget.value.trim();
                                       if (host === settings.broker.host) return;
@@ -270,6 +311,8 @@ export const PeerSyncSettings = memo(() => {
                       {
                           control: (
                               <NumberInput
+                                  defaultValue={settings.broker.port}
+                                  key={`broker-port-${settings.broker.port}`}
                                   max={65_535}
                                   min={1}
                                   onBlur={(e) => {
@@ -279,7 +322,6 @@ export const PeerSyncSettings = memo(() => {
                                           return;
                                       setSettings({ peerSync: { broker: { port } } });
                                   }}
-                                  value={settings.broker.port}
                               />
                           ),
                           description: t('setting.peerSyncBrokerPort', {
@@ -293,6 +335,7 @@ export const PeerSyncSettings = memo(() => {
                           control: (
                               <TextInput
                                   defaultValue={settings.broker.tlsCertPath ?? ''}
+                                  key={`tls-cert-${settings.broker.tlsCertPath ?? ''}`}
                                   onBlur={(e) => {
                                       const tlsCertPath = e.currentTarget.value.trim() || undefined;
                                       if (tlsCertPath === settings.broker.tlsCertPath) return;
@@ -315,6 +358,7 @@ export const PeerSyncSettings = memo(() => {
                           control: (
                               <TextInput
                                   defaultValue={settings.broker.tlsKeyPath ?? ''}
+                                  key={`tls-key-${settings.broker.tlsKeyPath ?? ''}`}
                                   onBlur={(e) => {
                                       const tlsKeyPath = e.currentTarget.value.trim() || undefined;
                                       if (tlsKeyPath === settings.broker.tlsKeyPath) return;
@@ -403,13 +447,12 @@ export const PeerSyncSettings = memo(() => {
                     {
                         control: (
                             <Switch
+                                aria-label={t('setting.enableJellyfinRemote', {
+                                    defaultValue: 'Enable Jellyfin Remote',
+                                })}
                                 checked={settings.jellyfinRemoteEnabled}
                                 onChange={(e) =>
-                                    setSettings({
-                                        peerSync: {
-                                            jellyfinRemoteEnabled: e.currentTarget.checked,
-                                        },
-                                    })
+                                    handleJellyfinRemoteEnabled(e.currentTarget.checked)
                                 }
                             />
                         ),
@@ -425,16 +468,24 @@ export const PeerSyncSettings = memo(() => {
                     {
                         control: (
                             <Switch
+                                aria-label={t('setting.enablePeerSync', {
+                                    defaultValue: 'Enable MQTT peer sync',
+                                })}
                                 checked={settings.enabled}
                                 disabled={!settings.jellyfinRemoteEnabled}
                                 onChange={(e) => handleEnable(e.currentTarget.checked)}
                             />
                         ),
-                        description: t('setting.enablePeerSync', {
-                            context: 'description',
-                            defaultValue:
-                                'When two Feishins are reachable via MQTT, commands and state flow over MQTT instead of the polling lane.',
-                        }),
+                        description: settings.jellyfinRemoteEnabled
+                            ? t('setting.enablePeerSync', {
+                                  context: 'description',
+                                  defaultValue:
+                                      'When two Feishins are reachable via MQTT, commands and state flow over MQTT instead of the polling lane.',
+                              })
+                            : t('setting.enablePeerSyncDisabledHint', {
+                                  defaultValue:
+                                      'Re-enable Jellyfin Remote above to use the MQTT lane. MQTT piggy-backs on the same picker.',
+                              }),
                         title: t('setting.enablePeerSync', {
                             defaultValue: 'Enable MQTT peer sync',
                         }),
@@ -451,12 +502,15 @@ export const PeerSyncSettings = memo(() => {
                 </Alert>
             )}
 
-            {settings.enabled && settings.onboarded && (
+            {settings.onboarded && (
                 <SettingsSection
                     options={[
                         {
                             control: (
                                 <Switch
+                                    aria-label={t('setting.peerSyncShowConnectButton', {
+                                        defaultValue: 'Show Connect button',
+                                    })}
                                     checked={settings.ui.connectButton}
                                     onChange={(e) =>
                                         setSettings({
@@ -479,6 +533,9 @@ export const PeerSyncSettings = memo(() => {
                         {
                             control: (
                                 <Switch
+                                    aria-label={t('setting.peerSyncShowStatusPill', {
+                                        defaultValue: 'Show transport pill',
+                                    })}
                                     checked={settings.ui.statusPill}
                                     onChange={(e) =>
                                         setSettings({
@@ -501,6 +558,9 @@ export const PeerSyncSettings = memo(() => {
                         {
                             control: (
                                 <Switch
+                                    aria-label={t('setting.peerSyncShowPickerBadges', {
+                                        defaultValue: 'Show MQTT lane badges',
+                                    })}
                                     checked={settings.ui.pickerBadges}
                                     onChange={(e) =>
                                         setSettings({
@@ -527,10 +587,12 @@ export const PeerSyncSettings = memo(() => {
             {settings.enabled && (
                 <Stack gap="xs">
                     <Group justify="space-between">
-                        <Text fw={500}>
+                        <Text fw={500} id="peer-sync-advanced-label">
                             {t('setting.peerSyncAdvanced', { defaultValue: 'Advanced' })}
                         </Text>
                         <Button
+                            aria-controls="peer-sync-advanced-panel"
+                            aria-expanded={advancedOpen}
                             onClick={advancedHandlers.toggle}
                             size="compact-sm"
                             variant="default"
@@ -541,7 +603,13 @@ export const PeerSyncSettings = memo(() => {
                         </Button>
                     </Group>
                     <Collapse expanded={advancedOpen}>
-                        <SettingsSection options={advancedOptions} />
+                        <div
+                            aria-labelledby="peer-sync-advanced-label"
+                            id="peer-sync-advanced-panel"
+                            role="region"
+                        >
+                            <SettingsSection options={advancedOptions} />
+                        </div>
                     </Collapse>
                 </Stack>
             )}

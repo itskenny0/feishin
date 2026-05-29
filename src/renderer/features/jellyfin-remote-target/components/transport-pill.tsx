@@ -52,7 +52,9 @@ export const TransportPill = memo(() => {
         });
     }, [target.isRemote, target.deviceId]);
 
-    if (!peerSync.onboarded || !peerSync.ui.statusPill) return null;
+    if (!peerSync.onboarded || !peerSync.jellyfinRemoteEnabled || !peerSync.ui.statusPill) {
+        return null;
+    }
 
     const label =
         lane === 'mqtt'
