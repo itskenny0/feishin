@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-    type CoverSwipeCommitInput,
     COVER_SWIPE_COMMIT_FRACTION,
     COVER_SWIPE_FLICK_VELOCITY_PX_PER_SEC,
+    type CoverSwipeCommitInput,
     decideCoverSwipeCommit,
 } from '/@/renderer/features/player/utils/cover-swipe-signal';
 
@@ -60,9 +60,7 @@ describe('decideCoverSwipeCommit', () => {
     it('flick-commits next on tiny offset + high leftward velocity', () => {
         // 5 px offset is way under the 90 px commit threshold, but a
         // -800 px/s flick is past the 500 px/s flick threshold.
-        expect(decideCoverSwipeCommit({ ...baseInput, offsetX: -5, velocityX: -800 })).toBe(
-            'next',
-        );
+        expect(decideCoverSwipeCommit({ ...baseInput, offsetX: -5, velocityX: -800 })).toBe('next');
     });
 
     it('flick-commits prev on tiny offset + high rightward velocity', () => {

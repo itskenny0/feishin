@@ -335,8 +335,7 @@ export const MobileFullscreenPlayerAlbumArt = () => {
     // radio stream that's loaded but paused still has no meaningful
     // prev/next, and we don't want a swipe on it to fire mediaNext().
     const nextImageSrc = !isRadioActive && nextSong?._uniqueId ? nextImageUrl : null;
-    const previousImageSrc =
-        !isRadioActive && previousSong?._uniqueId ? previousImageUrl : null;
+    const previousImageSrc = !isRadioActive && previousSong?._uniqueId ? previousImageUrl : null;
 
     // Remote mode: static cover of the mirrored now-playing item. The local
     // queue's prev/next aren't the remote's, so we skip the swipe-preview

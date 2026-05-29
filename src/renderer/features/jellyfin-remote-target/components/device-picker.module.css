@@ -14,12 +14,25 @@
 /*
  * On mobile the BottomSheet owns the title + close button, so the
  * list only carries the refresh affordance. Aligned right so it sits
- * roughly under the BottomSheet's X button.
+ * roughly under the BottomSheet's X button. Adds a flex gap so the
+ * "Refreshing…" label can render alongside the icon for clear feedback.
  */
 .mobile-toolbar {
     display: flex;
+    gap: 6px;
+    align-items: center;
     justify-content: flex-end;
     padding: 0 4px 4px;
+}
+
+.refresh-label {
+    color: var(--theme-colors-text-muted, var(--mantine-color-gray-5));
+}
+
+.searching-row {
+    display: inline-flex;
+    gap: 8px;
+    align-items: center;
 }
 
 .header-title {
@@ -67,11 +80,38 @@
     min-width: 0;
 }
 
+/*
+ * Wraps the device name + (optional) lane badge so the badge stays put
+ * while the name truncates with an ellipsis. Without this row layout the
+ * badge was nested inside the truncating <Text> and got eaten by the
+ * ellipsis on narrow viewports (Pixel-style 360px width).
+ */
+.title-line {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    min-width: 0;
+}
+
 .row-title {
+    flex: 1 1 auto;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     font-weight: 600;
     white-space: nowrap;
+}
+
+.lane-badge {
+    flex-shrink: 0;
+    padding: 1px 5px;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1.2;
+    color: var(--mantine-color-white);
+    letter-spacing: 0.5px;
+    background: var(--mantine-color-teal-9);
+    border-radius: 4px;
 }
 
 .row-subtitle {

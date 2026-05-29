@@ -2,7 +2,7 @@ import type { RemoteDevice } from '/@/renderer/features/jellyfin-remote-target/t
 
 import { UnstyledButton } from '@mantine/core';
 import isElectron from 'is-electron';
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import styles from './device-picker.module.css';
@@ -84,6 +84,33 @@ export const DevicePickerList = ({ onClose, variant = 'desktop' }: DevicePickerL
         return () => setPickerOpen(false);
     }, [setPickerOpen]);
 
+    /**
+     * "Refreshing…" affordance state. When the user taps the refresh
+     * action we flip this true, then clear it the moment the next poll
+     * lands (devices reference changes) or after a hard cap. Without
+     * this, the icon was a no-op visually — there was no signal that the
+     * tap had done anything, especially on a 360x800 mobile viewport.
+     */
+    const [refreshing, setRefreshing] = useState(false);
+    const refreshTimer = useRef<null | ReturnType<typeof setTimeout>>(null);
+    useEffect(() => {
+        if (!refreshing) return;
+        // Flip false as soon as a fresh poll lands. The devices array is
+        // a new reference per setDeviceList, so equality on the slice is
+        // a faithful "we got something new" signal.
+        setRefreshing(false);
+        if (refreshTimer.current) {
+            clearTimeout(refreshTimer.current);
+            refreshTimer.current = null;
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [devices]);
+    useEffect(() => {
+        return () => {
+            if (refreshTimer.current) clearTimeout(refreshTimer.current);
+        };
+    }, []);
+
     const selectLocal = () => {
         clearTarget();
         setSettings({ playback: { remoteTargetDeviceId: null, remoteTargetDeviceName: null } });
@@ -140,6 +167,11 @@ export const DevicePickerList = ({ onClose, variant = 'desktop' }: DevicePickerL
     const handleRefresh = () => {
         const server = useAuthStore.getState().currentServer;
         if (!server || server.type !== ServerType.JELLYFIN || !server.credential) return;
+        setRefreshing(true);
+        // Hard cap so the spinner can't sit forever if the poll fires and
+        // returns the same deviceList reference.
+        if (refreshTimer.current) clearTimeout(refreshTimer.current);
+        refreshTimer.current = setTimeout(() => setRefreshing(false), 2500);
         sessionsPoller.start({
             onOffline: (deviceName) =>
                 toast.info({ message: t('page.remoteTarget.wentOffline', { deviceName }) }),
@@ -159,9 +191,11 @@ export const DevicePickerList = ({ onClose, variant = 'desktop' }: DevicePickerL
                         })}
                     </Text>
                     <ActionIcon
+                        aria-busy={refreshing}
                         aria-label={t('common.refresh')}
-                        icon="refresh"
-                        iconProps={{ size: 'sm' }}
+                        disabled={refreshing}
+                        icon={refreshing ? 'spinner' : 'refresh'}
+                        iconProps={{ animate: refreshing ? 'spin' : undefined, size: 'sm' }}
                         onClick={handleRefresh}
                         size="sm"
                         tooltip={{ label: t('common.refresh'), openDelay: 400 }}
@@ -170,10 +204,19 @@ export const DevicePickerList = ({ onClose, variant = 'desktop' }: DevicePickerL
                 </div>
             ) : (
                 <div className={styles.mobileToolbar}>
+                    {refreshing && (
+                        <Text className={styles.refreshLabel} size="xs">
+                            {t('page.remoteTarget.refreshing', {
+                                defaultValue: 'Refreshing…',
+                            })}
+                        </Text>
+                    )}
                     <ActionIcon
+                        aria-busy={refreshing}
                         aria-label={t('common.refresh')}
-                        icon="refresh"
-                        iconProps={{ size: 'sm' }}
+                        disabled={refreshing}
+                        icon={refreshing ? 'spinner' : 'refresh'}
+                        iconProps={{ animate: refreshing ? 'spin' : undefined, size: 'sm' }}
                         onClick={handleRefresh}
                         size="sm"
                         variant="subtle"
@@ -228,11 +271,14 @@ export const DevicePickerList = ({ onClose, variant = 'desktop' }: DevicePickerL
                     </div>
                 ) : (
                     <div className={styles.empty}>
-                        <Text c="dimmed" size="sm">
-                            {t('page.remoteTarget.searching', {
-                                defaultValue: 'Searching for devices…',
-                            })}
-                        </Text>
+                        <span className={styles.searchingRow}>
+                            <Icon animate="spin" icon="spinner" size="sm" />
+                            <Text c="dimmed" size="sm">
+                                {t('page.remoteTarget.searching', {
+                                    defaultValue: 'Searching for devices…',
+                                })}
+                            </Text>
+                        </span>
                     </div>
                 )
             ) : null}
@@ -269,8 +315,8 @@ export const DevicePickerList = ({ onClose, variant = 'desktop' }: DevicePickerL
                             />
                         </span>
                         <span className={styles.rowText}>
-                            <Text className={styles.rowTitle}>
-                                {d.deviceName}
+                            <span className={styles.titleLine}>
+                                <Text className={styles.rowTitle}>{d.deviceName}</Text>
                                 {showLaneBadge && (
                                     <span
                                         aria-label={t('page.remoteTarget.laneBadgeAriaLabel', {
@@ -281,7 +327,7 @@ export const DevicePickerList = ({ onClose, variant = 'desktop' }: DevicePickerL
                                         {t('common.transportMqtt', { defaultValue: 'MQTT' })}
                                     </span>
                                 )}
-                            </Text>
+                            </span>
                             <Text
                                 c={active ? 'var(--theme-colors-primary)' : 'dimmed'}
                                 className={styles.rowSubtitle}

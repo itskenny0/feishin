@@ -178,4 +178,43 @@ describe('MobileDevicePickerButton', () => {
 
         await waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
     });
+
+    it('locks body scroll while open and restores it on close', async () => {
+        useAuthStore.setState({ currentServer: jellyfinServer });
+        seedOnboarded();
+        const { container } = renderButton();
+        // Baseline: body has no inline overflow style.
+        expect(document.body.style.overflow).toBe('');
+
+        await openSheet(container);
+        await waitFor(() => expect(document.body.style.overflow).toBe('hidden'));
+        // Position:fixed pinning is what actually stops iOS Safari from
+        // scrolling — verify we set it too, not just overflow:hidden.
+        expect(document.body.style.position).toBe('fixed');
+
+        fireEvent.click(await screen.findByTestId('bottom-sheet-close'));
+        await waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
+        // Inline styles restored to empty.
+        expect(document.body.style.overflow).toBe('');
+        expect(document.body.style.position).toBe('');
+    });
+
+    it('returns focus to the trigger button after close', async () => {
+        useAuthStore.setState({ currentServer: jellyfinServer });
+        seedOnboarded();
+        const { container } = renderButton();
+        const trigger = container.querySelector('button') as HTMLButtonElement;
+        trigger.focus();
+        expect(document.activeElement).toBe(trigger);
+        await openSheet(container);
+        // While open, focus should be inside the dialog, not on the
+        // trigger anymore — useFocusTrap pulls it in.
+        const dialog = document.querySelector('[role="dialog"]') as HTMLElement;
+        expect(dialog.contains(document.activeElement)).toBe(true);
+
+        fireEvent.keyDown(document, { code: 'Escape', key: 'Escape' });
+        await waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
+        // Focus restored to the original trigger.
+        expect(document.activeElement).toBe(trigger);
+    });
 });

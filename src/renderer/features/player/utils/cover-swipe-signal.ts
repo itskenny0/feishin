@@ -58,10 +58,10 @@ export type CoverSwipeCommit = 'next' | 'previous' | 'snap-back';
 export interface CoverSwipeCommitInput {
     /** Width of the cover element. Commit threshold is 25% of this. */
     coverWidth: number;
-    /** True iff there is a previousSong in the queue. */
-    hasPrevious: boolean;
     /** True iff there is a nextSong in the queue. */
     hasNext: boolean;
+    /** True iff there is a previousSong in the queue. */
+    hasPrevious: boolean;
     /** True if a radio stream is loaded (any state). Cover swipe is off. */
     isRadioActive: boolean;
     /** True iff the player has a current song. */
@@ -78,15 +78,8 @@ export const COVER_SWIPE_FLICK_VELOCITY_PX_PER_SEC = 500;
 export const COVER_SWIPE_COMMIT_FRACTION = 0.25;
 
 export const decideCoverSwipeCommit = (input: CoverSwipeCommitInput): CoverSwipeCommit => {
-    const {
-        coverWidth,
-        hasNext,
-        hasPrevious,
-        isRadioActive,
-        isSongDefined,
-        offsetX,
-        velocityX,
-    } = input;
+    const { coverWidth, hasNext, hasPrevious, isRadioActive, isSongDefined, offsetX, velocityX } =
+        input;
 
     if (!isSongDefined || isRadioActive) {
         return 'snap-back';

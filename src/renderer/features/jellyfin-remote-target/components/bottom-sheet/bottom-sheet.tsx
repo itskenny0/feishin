@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 
+import { useFocusTrap, useMergedRef } from '@mantine/hooks';
 import { animate, AnimatePresence, motion, useMotionValue } from 'motion/react';
 import { useEffect, useId, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -41,6 +42,23 @@ export const BottomSheet = ({ ariaLabel, children, onClose, opened, title }: Bot
     const { t } = useTranslation();
     const sheetRef = useRef<HTMLDivElement | null>(null);
     const bodyRef = useRef<HTMLDivElement | null>(null);
+    /**
+     * Keep a reference to the element that had focus before we opened so
+     * we can restore it on close — without this, screen-reader / keyboard
+     * users land focus on `document.body` and have to re-tab from the top
+     * of the page back to the trigger button.
+     */
+    const previouslyFocused = useRef<HTMLElement | null>(null);
+    /**
+     * Trap Tab cycling inside the sheet while it's open. Mantine's hook
+     * returns a callback ref; we merge it with our own sheetRef so we can
+     * still drive the swipe gesture from the same element. The merge
+     * itself must be stable (memoised) — useMergedRef from @mantine/hooks
+     * already returns a stable callback, so an additional useCallback is
+     * not needed here.
+     */
+    const focusTrapRef = useFocusTrap(opened);
+    const mergedSheetRef = useMergedRef(sheetRef, focusTrapRef);
     /**
      * Vertical translate of the sheet, in pixels. 0 = fully on-screen,
      * positive = pulled down (toward dismiss). We seed it with the
@@ -188,6 +206,70 @@ export const BottomSheet = ({ ariaLabel, children, onClose, opened, title }: Bot
         return () => document.removeEventListener('keydown', onKey);
     }, [opened, onClose]);
 
+    /**
+     * Body scroll lock. Without this, swiping or scrolling inside the
+     * backdrop region of the sheet (or fast momentum scrolling that hits
+     * the edges of the sheet body) can scroll the page underneath, which
+     * leaks the page state and feels broken on iOS Safari + Android.
+     *
+     * We snapshot the previous body styles so multiple stacked sheets
+     * each restore the right value on unmount (last-out wins). We also
+     * pin scrollY via `position: fixed; top: -<scrollY>` so iOS Safari —
+     * which ignores `overflow: hidden` on `<body>` — actually stays put.
+     */
+    useEffect(() => {
+        if (!opened) return;
+        const body = document.body;
+        const prevOverflow = body.style.overflow;
+        const prevPosition = body.style.position;
+        const prevTop = body.style.top;
+        const prevWidth = body.style.width;
+        const scrollY = window.scrollY;
+        body.style.overflow = 'hidden';
+        body.style.position = 'fixed';
+        body.style.top = `-${scrollY}px`;
+        body.style.width = '100%';
+        return () => {
+            body.style.overflow = prevOverflow;
+            body.style.position = prevPosition;
+            body.style.top = prevTop;
+            body.style.width = prevWidth;
+            // Restore the scroll offset that the position:fixed dance
+            // burned off. Without this the page snaps back to 0,0.
+            // Guard against jsdom (which throws "Not implemented" for
+            // scrollTo) and any host that strips the method.
+            if (typeof window.scrollTo === 'function') {
+                try {
+                    window.scrollTo(0, scrollY);
+                } catch {
+                    // ignore — best-effort restore
+                }
+            }
+        };
+    }, [opened]);
+
+    /**
+     * Focus management. Snapshot the active element on open, restore it
+     * on close. Mantine's useFocusTrap handles the on-open focus pull,
+     * but it deliberately doesn't restore focus on tear-down so we own
+     * that step here.
+     */
+    useEffect(() => {
+        if (!opened) return;
+        previouslyFocused.current = (document.activeElement as HTMLElement) ?? null;
+        return () => {
+            const target = previouslyFocused.current;
+            if (target && typeof target.focus === 'function' && document.contains(target)) {
+                try {
+                    target.focus({ preventScroll: true });
+                } catch {
+                    // ignore — focus can throw on disabled / detached elements
+                }
+            }
+            previouslyFocused.current = null;
+        };
+    }, [opened]);
+
     return (
         <AnimatePresence>
             {opened && (
@@ -207,7 +289,7 @@ export const BottomSheet = ({ ariaLabel, children, onClose, opened, title }: Bot
                         aria-modal="true"
                         className={styles.sheet}
                         data-testid="bottom-sheet"
-                        ref={sheetRef}
+                        ref={mergedSheetRef}
                         role="dialog"
                         style={{ y: swipeY }}
                         {...(ariaLabel ? { 'aria-label': ariaLabel } : {})}
