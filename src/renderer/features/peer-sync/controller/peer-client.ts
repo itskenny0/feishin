@@ -46,6 +46,28 @@ import {
 const log = (...args: unknown[]) => console.info('[peer-sync]', ...args);
 const warn = (...args: unknown[]) => console.warn('[peer-sync]', ...args);
 
+/**
+ * Accept a bare host, host:port, or full ws/wss/mqtt/mqtts URL and return
+ * a URL mqtt.js can parse. The previous code passed the raw setting straight
+ * to mqtt.connect, so a user typing `192.168.1.5` on the Android settings
+ * page (without a scheme) crashed the renderer with an unhandled URL parse
+ * throw — visible as a blackscreen after the wizard finished.
+ *
+ * Rules:
+ *   - already has a scheme? pass through verbatim.
+ *   - looks like `host:port`? default to `ws://` (mqtt.js will pick
+ *     port 8083 / 8084 if absent).
+ *   - everything else? default to `ws://<input>:8083`.
+ */
+export const normalizeBrokerUrl = (raw: string): string => {
+    const trimmed = (raw ?? '').trim();
+    if (!trimmed) return trimmed;
+    if (/^(ws|wss|mqtt|mqtts):\/\//i.test(trimmed)) return trimmed;
+    // Bare IPv6 must be bracketed inside a URL — caller responsible.
+    if (/^[a-z0-9.-]+:\d{2,5}(\/.*)?$/i.test(trimmed)) return `ws://${trimmed}`;
+    return `ws://${trimmed}:8083`;
+};
+
 export interface PeerClientStartArgs {
     /** External broker password — only used when non-empty. Overrides the
      *  default room-key-as-password used against the embedded broker. */
@@ -221,13 +243,26 @@ export const startPeerClient = (args: PeerClientStartArgs, events: PeerEvents = 
         will: buildLwt(selfAddress),
     };
 
+    const resolvedUrl = normalizeBrokerUrl(args.brokerUrl);
     log('connecting', {
         auth: useExternalAuth ? 'external' : 'embedded',
-        brokerUrl: args.brokerUrl,
+        brokerUrl: resolvedUrl,
         peerId: args.peerId,
     });
 
-    const client = mqtt.connect(args.brokerUrl, opts);
+    // Guard mqtt.connect — a malformed URL throws synchronously and the
+    // previous code let that bubble up through the React effect, crashing
+    // the renderer to a blackscreen. Surface the failure as a normal
+    // disconnected event instead so the diagnostics page + UI banner can
+    // show it without taking the whole app down.
+    let client: MqttClient;
+    try {
+        client = mqtt.connect(resolvedUrl, opts);
+    } catch (err) {
+        warn('connect failed', { brokerUrl: resolvedUrl, err: (err as Error).message });
+        events.onConnectionChange?.('disconnected');
+        return;
+    }
 
     const newSession: ActiveSession = {
         args,
