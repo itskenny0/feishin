@@ -89,8 +89,7 @@ export const useFullScreenPlayerActiveTab = () =>
 export const useFullScreenPlayerUseImageAspectRatio = () =>
     useFullScreenPlayerStore((state) => state.useImageAspectRatio);
 
-export const useFullScreenPlayerOpacity = () =>
-    useFullScreenPlayerStore((state) => state.opacity);
+export const useFullScreenPlayerOpacity = () => useFullScreenPlayerStore((state) => state.opacity);
 
 export const useFullScreenPlayerDynamicBackground = () =>
     useFullScreenPlayerStore((state) => state.dynamicBackground);
