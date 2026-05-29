@@ -53,11 +53,16 @@ export const usePeerSync = () => {
     const currentServer = useAuthStore((s) => s.currentServer, shallow);
 
     useEffect(() => {
-        setSyncEnabled(Boolean(peerSync.enabled && peerSync.jellyfinRemoteEnabled));
-    }, [peerSync.enabled, peerSync.jellyfinRemoteEnabled]);
+        setSyncEnabled(
+            Boolean(peerSync.enabled && peerSync.jellyfinRemoteEnabled && peerSync.onboarded),
+        );
+    }, [peerSync.enabled, peerSync.jellyfinRemoteEnabled, peerSync.onboarded]);
 
     useEffect(() => {
-        if (!peerSync.enabled || !peerSync.jellyfinRemoteEnabled) {
+        // The wizard is the single source of truth — boot only after the user
+        // explicitly completed onboarding, regardless of how `enabled` flipped
+        // true (settings restore, migration, etc).
+        if (!peerSync.enabled || !peerSync.jellyfinRemoteEnabled || !peerSync.onboarded) {
             if (isPeerClientConnected()) stopPeerClient();
             return;
         }
@@ -175,6 +180,7 @@ export const usePeerSync = () => {
         peerSync.brokerUsername,
         peerSync.enabled,
         peerSync.jellyfinRemoteEnabled,
+        peerSync.onboarded,
         peerSync.peerId,
         peerSync.roomKey,
     ]);

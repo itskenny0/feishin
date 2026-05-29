@@ -2,8 +2,9 @@ import { t } from 'i18next';
 import isElectron from 'is-electron';
 import { useCallback, useEffect } from 'react';
 
+import { usePlayer } from '/@/renderer/features/player/context/player-context';
 import { useIsRadioActive } from '/@/renderer/features/radio/hooks/use-radio-player';
-import { usePlayerActions, useVolumeWheelStep } from '/@/renderer/store';
+import { useVolumeWheelStep } from '/@/renderer/store';
 import { toast } from '/@/shared/components/toast/toast';
 
 const mpvPlayer = isElectron() ? window.api.mpvPlayer : null;
@@ -13,10 +14,13 @@ const ipc = isElectron() ? window.api.ipc : null;
 export const useMainPlayerListener = () => {
     const isRadioActive = useIsRadioActive();
     const volumeWheelStep = useVolumeWheelStep();
+    // Use PlayerContext so hardware media keys / OS-level mpv IPC route
+    // through the same remote/local branching the on-screen buttons use.
+    // Without this, the OS keyboard's next/prev drives the local mpv engine
+    // even when a Jellyfin Connect target is active.
     const {
         decreaseVolume,
         increaseVolume,
-        mediaAutoNext,
         mediaNext,
         mediaPause,
         mediaPlay,
@@ -28,7 +32,7 @@ export const useMainPlayerListener = () => {
         mediaTogglePlayPause,
         toggleRepeat,
         toggleShuffle,
-    } = usePlayerActions();
+    } = usePlayer();
 
     const handleMpvError = useCallback(
         (message: string) => {
@@ -137,7 +141,6 @@ export const useMainPlayerListener = () => {
         handleMpvError,
         increaseVolume,
         isRadioActive,
-        mediaAutoNext,
         mediaNext,
         mediaPause,
         mediaPlay,

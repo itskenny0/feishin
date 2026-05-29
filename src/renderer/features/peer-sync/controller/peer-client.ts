@@ -54,7 +54,9 @@ const warn = (...args: unknown[]) => console.warn('[peer-sync]', ...args);
  * throw — visible as a blackscreen after the wizard finished.
  *
  * Rules:
- *   - already has a scheme? pass through verbatim.
+ *   - already has a scheme? parse via URL() and strip embedded
+ *     username/password so credentials never leak into the diagnostics
+ *     ring buffer when we log the URL verbatim.
  *   - looks like `host:port`? default to `ws://` (mqtt.js will pick
  *     port 8083 / 8084 if absent).
  *   - everything else? default to `ws://<input>:8083`.
@@ -62,10 +64,46 @@ const warn = (...args: unknown[]) => console.warn('[peer-sync]', ...args);
 export const normalizeBrokerUrl = (raw: string): string => {
     const trimmed = (raw ?? '').trim();
     if (!trimmed) return trimmed;
-    if (/^(ws|wss|mqtt|mqtts):\/\//i.test(trimmed)) return trimmed;
+    if (/^(ws|wss|mqtt|mqtts):\/\//i.test(trimmed)) {
+        // Only re-serialise when we actually need to drop creds — round-tripping
+        // through `URL` lowercases the scheme and tacks on a trailing slash,
+        // which would surprise callers that compare strings.
+        try {
+            const parsed = new URL(trimmed);
+            if (!parsed.username && !parsed.password) return trimmed;
+            parsed.username = '';
+            parsed.password = '';
+            return parsed.toString();
+        } catch {
+            // Malformed scheme'd URL — let mqtt.connect throw with its
+            // own error; the caller already catches connect failures.
+            return trimmed;
+        }
+    }
     // Bare IPv6 must be bracketed inside a URL — caller responsible.
     if (/^[a-z0-9.-]+:\d{2,5}(\/.*)?$/i.test(trimmed)) return `ws://${trimmed}`;
     return `ws://${trimmed}:8083`;
+};
+
+/**
+ * Mask embedded credentials in a URL for log output. Returns the URL with
+ * `user:pass@` replaced by `***:***@` if present so log lines can show that
+ * credentials are configured without revealing them. Pure log helper — the
+ * value passed to mqtt.connect always goes through normalizeBrokerUrl.
+ */
+export const redactBrokerUrl = (url: string): string => {
+    const trimmed = (url ?? '').trim();
+    if (!trimmed) return trimmed;
+    if (!/^(ws|wss|mqtt|mqtts):\/\//i.test(trimmed)) return trimmed;
+    try {
+        const parsed = new URL(trimmed);
+        if (!parsed.username && !parsed.password) return trimmed;
+        parsed.username = '***';
+        parsed.password = '***';
+        return parsed.toString();
+    } catch {
+        return trimmed;
+    }
 };
 
 export interface PeerClientStartArgs {
@@ -211,6 +249,12 @@ export const startPeerClient = (args: PeerClientStartArgs, events: PeerEvents = 
             session.args.tls === args.tls;
         if (same) {
             session.events = events;
+            // The new consumer missed the original connect/disconnect
+            // events that fired against the previous events object — without
+            // this synthetic replay the broker status pill stays blank after
+            // a React remount (HMR, settings UI side trip) until the next
+            // reconnect.
+            events.onConnectionChange?.(session.client.connected ? 'connected' : 'disconnected');
             return;
         }
         stopPeerClient();
@@ -244,9 +288,10 @@ export const startPeerClient = (args: PeerClientStartArgs, events: PeerEvents = 
     };
 
     const resolvedUrl = normalizeBrokerUrl(args.brokerUrl);
+    const loggedUrl = redactBrokerUrl(args.brokerUrl);
     log('connecting', {
         auth: useExternalAuth ? 'external' : 'embedded',
-        brokerUrl: resolvedUrl,
+        brokerUrl: loggedUrl,
         peerId: args.peerId,
     });
 
@@ -259,7 +304,7 @@ export const startPeerClient = (args: PeerClientStartArgs, events: PeerEvents = 
     try {
         client = mqtt.connect(resolvedUrl, opts);
     } catch (err) {
-        warn('connect failed', { brokerUrl: resolvedUrl, err: (err as Error).message });
+        warn('connect failed', { brokerUrl: loggedUrl, err: (err as Error).message });
         events.onConnectionChange?.('disconnected');
         return;
     }
@@ -273,7 +318,7 @@ export const startPeerClient = (args: PeerClientStartArgs, events: PeerEvents = 
     session = newSession;
 
     client.on('connect', () => {
-        log('connected', { brokerUrl: args.brokerUrl });
+        log('connected', { brokerUrl: loggedUrl });
         events.onConnectionChange?.('connected');
         const sub = userPeersWildcard(args.userId);
         client.subscribe(sub, { qos: 1 }, (err) => {
@@ -308,11 +353,11 @@ export const startPeerClient = (args: PeerClientStartArgs, events: PeerEvents = 
     });
 
     client.on('reconnect', () => {
-        log('reconnect attempt', { brokerUrl: args.brokerUrl });
+        log('reconnect attempt', { brokerUrl: loggedUrl });
     });
 
     client.on('close', () => {
-        log('disconnected', { brokerUrl: args.brokerUrl });
+        log('disconnected', { brokerUrl: loggedUrl });
         events.onConnectionChange?.('disconnected');
     });
 
@@ -414,6 +459,16 @@ export const stopPeerClient = (): void => {
     const s = session;
     if (!s) return;
     session = null;
+    // Detach our event handlers before end() so the close/error/offline
+    // events mqtt.js fires during teardown can't race a fresh
+    // startPeerClient and flicker the new session's UI to 'disconnected'.
+    // Done before the retained-clear publishes below, which use their own
+    // per-publish callbacks rather than client-level listeners.
+    try {
+        s.client.removeAllListeners();
+    } catch (err) {
+        warn('stop listener cleanup failed', { err: (err as Error).message });
+    }
     try {
         // Clear our retained frames so the next install of Feishin doesn't
         // see ghost presence from us. Both topics are deterministic from the

@@ -235,21 +235,55 @@ export const evict = async (): Promise<void> => {
         console.warn('[cache] eviction: phase 1 query failed', { err });
     }
 
-    // Phase 2 — if still over, walk all remaining thumbnails by
-    // LastUsed ascending and keep deleting.
+    // Phase 2 — if still over, stream remaining thumbnails by
+    // `LastUsed` ascending via a Dexie cursor and queue deletions.
+    // The previous implementation used `.toArray()`, which is the
+    // exact anti-pattern `sumThumbnailBytes` warns against:
+    // materialising every row pulls each `Blob` into the JS heap
+    // (tens to hundreds of MB on a hydrated library) purely to read
+    // the indexed `ItemId` + `ByteSize` columns. The cursor walk
+    // keeps at most one row resident at a time and we null the
+    // `Blob` reference immediately so V8 can reclaim it before the
+    // cursor advances; deletes are flushed in chunks via
+    // `bulkDelete()` after iteration to avoid mutating the table
+    // we're traversing.
+    //
+    // Note: the current schema (see `db.ts`) indexes `LastUsed` and
+    // `ByteSize` separately but has no compound index that would let
+    // us read both via a Blob-free `.keys()` projection. Until such
+    // an index exists, the row IS read briefly during traversal —
+    // but the Blob reference is dropped before the next step, so
+    // peak heap occupancy is O(1) row, not O(N).
     if (used - dropped > cap) {
         try {
-            const remaining = await db.thumbnails.orderBy('LastUsed').toArray();
-            for (const row of remaining) {
-                if (used - dropped <= cap) break;
-                try {
-                    await db.thumbnails.delete(row.ItemId);
-                    dropped += row.ByteSize;
+            const FLUSH_AT = 256;
+            const toDelete: string[] = [];
+            await db.thumbnails
+                .orderBy('LastUsed')
+                .until(() => used - dropped <= cap)
+                .each((row) => {
+                    const itemId = row.ItemId;
+                    const byteSize = row.ByteSize;
+                    // Drop the Blob ref ASAP — see comment block
+                    // above. The row object is about to go out of
+                    // scope but the Blob is by far its heaviest
+                    // field, so explicit nulling lets the GC reclaim
+                    // it without waiting for the cursor microtask.
+                    (row as { Blob?: Blob }).Blob = undefined;
+                    toDelete.push(itemId);
+                    dropped += byteSize;
                     droppedCount += 1;
+                });
+            // Flush in fixed-size chunks so very large evictions
+            // don't fire a single multi-thousand-row write txn.
+            for (let i = 0; i < toDelete.length; i += FLUSH_AT) {
+                const chunk = toDelete.slice(i, i + FLUSH_AT);
+                try {
+                    await db.thumbnails.bulkDelete(chunk);
                 } catch (err) {
-                    console.warn('[cache] eviction: failed to delete row', {
+                    console.warn('[cache] eviction: bulkDelete failed', {
+                        count: chunk.length,
                         err,
-                        itemId: row.ItemId,
                     });
                 }
             }

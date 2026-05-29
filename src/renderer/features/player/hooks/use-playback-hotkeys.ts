@@ -1,15 +1,16 @@
 import { useMemo } from 'react';
 
+import { usePlayer } from '/@/renderer/features/player/context/player-context';
 import { HotkeyItem, useHotkeys } from '/@/renderer/hooks/use-hotkeys';
-import { useHotkeySettings, usePlayerActions } from '/@/renderer/store';
+import { useHotkeySettings } from '/@/renderer/store';
 
 export const usePlaybackHotkeys = () => {
     const { bindings } = useHotkeySettings();
-    // Leaf subscription: only the action references matter. Previously this
-    // hook subscribed to the *entire* player store, so every timestamp tick
-    // / queue mutation / volume change rebuilt the hotkey items array and
-    // re-registered the global keydown handler.
-    const player = usePlayerActions();
+    // Go through PlayerContext (not usePlayerActions directly) so hotkeys are
+    // routed through the same remote/local branching the on-screen buttons
+    // use. Otherwise Space / N / P drive the local mpv engine even when a
+    // Jellyfin Connect target is selected.
+    const player = usePlayer();
 
     const playbackHotkeysItems = useMemo(() => {
         const hotkeyItems: HotkeyItem[] = [];

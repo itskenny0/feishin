@@ -1,11 +1,13 @@
 import { useEffect } from 'react';
 
 import { useBottomSheetStore } from '/@/renderer/features/jellyfin-remote-target/components/bottom-sheet/bottom-sheet-store';
+import { MOBILE_SHELL_QUERY } from '/@/renderer/hooks/use-breakpoint';
 import {
     useAppStore,
     useFullScreenPlayerStore,
     usePlayerActions,
     usePlayerStatus,
+    useSettingsStore,
 } from '/@/renderer/store';
 import { PlayerStatus } from '/@/shared/types/types';
 
@@ -161,6 +163,10 @@ export const useAndroidStatusBar = () => {
  *   2. Visualizer overlay — collapse via the FullScreenPlayer store.
  *   3. Fullscreen player overlay — collapse via the same store.
  *   4. Command palette — close via the AppStore opener.
+ *   4b. Settings drill-down — when on `/settings`, walk the in-page
+ *       `tab` / `tabSubpage` zustand drill (subpage → subpages list →
+ *       category list on mobile) instead of falling through to
+ *       history.back() and exiting Settings entirely.
  *   5. Router history — if any back-stack exists, pop it.
  *   6. Exit the app — only when the user is at the root with nothing
  *      else open.
@@ -250,6 +256,38 @@ export const useAndroidBackButton = () => {
                     if (app.commandPalette.opened) {
                         app.commandPalette.close();
                         return;
+                    }
+
+                    // 4b. Settings drill-down. The mobile Settings UI is
+                    //     a two-level drill (category list → subpages list
+                    //     → subpage content) driven by zustand `tab` /
+                    //     `tabSubpage`, NOT router history. Without this
+                    //     step the hardware back gesture would fall
+                    //     through to history.back() and exit Settings
+                    //     entirely, instead of walking up one drill level
+                    //     as the visible chrome implies. The HashRouter
+                    //     puts the route in `location.hash` (e.g.
+                    //     `#/settings` or `#/settings?foo=bar`), so we
+                    //     match on the prefix after the leading `#`.
+                    const hashPath = window.location.hash.replace(/^#/, '').split('?')[0];
+                    if (hashPath === '/settings' || hashPath.startsWith('/settings/')) {
+                        const settings = useSettingsStore.getState();
+                        if (settings.tabSubpage) {
+                            settings.actions.setSettings({ tabSubpage: '' });
+                            return;
+                        }
+                        if (settings.tab) {
+                            // Mobile only — desktop renders the category
+                            // list as a permanent sidebar, so there's
+                            // nothing to drill back into.
+                            const isMobile =
+                                window.matchMedia(MOBILE_SHELL_QUERY).matches ||
+                                settings.general.mobileShellForce;
+                            if (isMobile) {
+                                settings.actions.setSettings({ tab: '' });
+                                return;
+                            }
+                        }
                     }
 
                     // 5. Router history.

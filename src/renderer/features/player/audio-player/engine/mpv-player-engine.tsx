@@ -243,7 +243,10 @@ export const MpvPlayerEngine = (props: MpvPlayerEngineProps) => {
         updateProgress();
 
         return () => {
-            isMountedRef.current = false;
+            // Don't touch isMountedRef here — the component-level mount/unmount
+            // effect owns it. Flipping it false in this per-status cleanup
+            // strands updateProgress's guard true→false on the first pause and
+            // the seek slider freezes for the rest of the session.
             if (progressIntervalRef.current) {
                 clearInterval(progressIntervalRef.current);
                 progressIntervalRef.current = null;

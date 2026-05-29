@@ -76,31 +76,31 @@
                     disabled = true;
                 }
                 overlay.addEventListener('click', hide);
-                window.addEventListener(
-                    'error',
-                    function (e) {
-                        if (e.target && e.target !== window && e.target.tagName) {
-                            var src = e.target.src || e.target.href || '(no src)';
-                            show('RESOURCE LOAD FAILED', e.target.tagName + ' :: ' + src);
-                            return;
-                        }
-                        var msg = (e.error && (e.error.stack || e.error.message)) || e.message || String(e);
-                        show('ERROR', msg);
-                    },
-                    true,
-                );
-                window.addEventListener('unhandledrejection', function (e) {
+                var onError = function (e) {
+                    if (e.target && e.target !== window && e.target.tagName) {
+                        var src = e.target.src || e.target.href || '(no src)';
+                        show('RESOURCE LOAD FAILED', e.target.tagName + ' :: ' + src);
+                        return;
+                    }
+                    var msg = (e.error && (e.error.stack || e.error.message)) || e.message || String(e);
+                    show('ERROR', msg);
+                };
+                var onRejection = function (e) {
                     var reason = e.reason;
                     var msg =
                         (reason && (reason.stack || reason.message)) || String(reason);
                     show('UNHANDLED REJECTION', msg);
-                });
+                };
+                window.addEventListener('error', onError, true);
+                window.addEventListener('unhandledrejection', onRejection);
 
                 // Poll for React mount. As soon as #root has a child node
                 // we know createRoot has run and the rest of the app is
                 // the right place to surface errors (toasts, etc.). The
-                // overlay disables itself, which keeps later runtime
-                // rejections from re-covering the UI.
+                // overlay disables itself AND detaches the global listeners
+                // so post-boot rejections never accumulate handlers (dev
+                // HMR re-runs this script repeatedly) and never trap
+                // reason strings that may include broker credentials.
                 var mountInterval = setInterval(function () {
                     var root = document.getElementById('root');
                     if (root && root.childNodes.length > 0) {
@@ -109,6 +109,8 @@
                         // still read what went wrong — they can tap to
                         // dismiss. We only stop *accepting new errors*.
                         disabled = true;
+                        window.removeEventListener('error', onError, true);
+                        window.removeEventListener('unhandledrejection', onRejection);
                         clearInterval(mountInterval);
                     }
                 }, 100);

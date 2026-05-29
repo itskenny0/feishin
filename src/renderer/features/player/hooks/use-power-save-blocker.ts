@@ -14,6 +14,10 @@ export const usePowerSaveBlocker = () => {
         if (!utils) return;
 
         try {
+            // `full=true` maps to 'prevent-display-sleep' (covers app suspension
+            // too); `full=false` maps to 'prevent-app-suspension'. If the user
+            // only enabled display-sleep prevention, pass full=true; otherwise
+            // fall back to the lighter app-suspension blocker.
             await utils.startPowerSaveBlocker(preventSleepOnPlayback);
         } catch (error) {
             console.error('Failed to start power save blocker:', error);
@@ -31,7 +35,10 @@ export const usePowerSaveBlocker = () => {
     }, []);
 
     useEffect(() => {
-        if (!preventSleepOnPlayback || !preventSuspendOnPlayback) return;
+        // Either setting on its own should keep the system awake during
+        // playback. Previously this AND-gated the two, so anyone who turned
+        // only one of them on got no blocker at all.
+        if (!preventSleepOnPlayback && !preventSuspendOnPlayback) return;
 
         if (status === PlayerStatus.PLAYING) {
             startPowerSaveBlocker();
@@ -65,7 +72,7 @@ export const PowerSaveBlockerHook = () => {
         (state) => state.window.preventSuspendOnPlayback,
     );
 
-    if (!isElectronEnv || !preventSleepOnPlayback || !preventSuspendOnPlayback) {
+    if (!isElectronEnv || (!preventSleepOnPlayback && !preventSuspendOnPlayback)) {
         return null;
     }
 

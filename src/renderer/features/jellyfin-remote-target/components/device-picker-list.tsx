@@ -21,7 +21,6 @@ import { useTimestampStoreBase } from '/@/renderer/store/timestamp.store';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { AppIcon, Icon } from '/@/shared/components/icon/icon';
 import { Text } from '/@/shared/components/text/text';
-import { toast } from '/@/shared/components/toast/toast';
 import { ServerListItemWithCredential, ServerType } from '/@/shared/types/domain-types';
 
 /**
@@ -172,11 +171,11 @@ export const DevicePickerList = ({ onClose, variant = 'desktop' }: DevicePickerL
         // returns the same deviceList reference.
         if (refreshTimer.current) clearTimeout(refreshTimer.current);
         refreshTimer.current = setTimeout(() => setRefreshing(false), 2500);
-        sessionsPoller.start({
-            onOffline: (deviceName) =>
-                toast.info({ message: t('page.remoteTarget.wentOffline', { deviceName }) }),
-            server,
-        });
+        // refresh() forces an immediate tick on the running poller without
+        // going through stop()/start() — that path resets hasPolledOnce,
+        // clears optimistic holds, and drops the WS-driven fallbackMode
+        // flag, none of which we want here.
+        sessionsPoller.refresh();
     };
 
     const thisDeviceIcon = isElectron() ? 'deviceComputer' : 'devicePhone';

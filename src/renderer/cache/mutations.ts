@@ -58,6 +58,33 @@ export const idempotencyKey = (op: MutationOp, args: unknown, userId: string): s
 
 export const backoffMs = (attempts: number): number => Math.min(30_000, 1_000 * 2 ** attempts);
 
+// Cap retries for a single mutation. The backoff sequence (1s, 2s, 4s, ..., capped
+// at 30s) means MAX_ATTEMPTS=8 spans roughly ~2 minutes of total wait before we
+// give up and surface a single toast. Without this cap, a permanently-down server
+// stalls the FIFO queue forever because every new mutation queues behind a sleep
+// that never resolves.
+const MAX_ATTEMPTS = 8;
+
+// Apply ±25% jitter to the backoff so a burst of failing rows doesn't
+// synchronise their retry storms across worker iterations.
+const jitteredBackoffMs = (attempts: number): number =>
+    Math.round(backoffMs(attempts) * (0.75 + Math.random() * 0.5));
+
+// Throttle the "gave up after N retries" toast so a chain of mutations failing
+// back-to-back against the same dead server only nags the user once per window.
+const GIVE_UP_TOAST_THROTTLE_MS = 30_000;
+let lastGiveUpToastAt = 0;
+const maybeNotifyGaveUp = (): void => {
+    const now = Date.now();
+    if (now - lastGiveUpToastAt < GIVE_UP_TOAST_THROTTLE_MS) {
+        return;
+    }
+    lastGiveUpToastAt = now;
+    toast.error({
+        message: 'Failed to sync a change after several retries — your library may be out of date.',
+    });
+};
+
 const httpStatusOf = (err: unknown): number | undefined => {
     if (err && typeof err === 'object') {
         const e = err as { response?: { status?: number }; status?: number };
@@ -967,18 +994,56 @@ export const startWorker = async (): Promise<void> => {
                     await handleConflict(db, next.op, next.args);
                 } else if (isRetryable(err)) {
                     const attempts = next.attempts + 1;
-                    console.warn('[mutations] retryable error', {
-                        attempts,
-                        error: String(err),
-                        id: next.id,
-                        op: next.op,
-                    });
-                    await db.mutationQueue.update(next.id, {
-                        attempts,
-                        lastError: String(err),
-                        status: 'pending',
-                    });
-                    await sleep(backoffMs(attempts));
+                    if (attempts >= MAX_ATTEMPTS) {
+                        // Exhausted retries against a (likely) dead server. Treat
+                        // this exactly like the hard-failure path below — roll
+                        // back the optimistic patch, mark the row `failed` so
+                        // the dashboard can surface it, and emit a single
+                        // throttled toast instead of nagging per-row.
+                        console.error('[mutations] giving up after max retries', {
+                            attempts,
+                            error: String(err),
+                            id: next.id,
+                            op: next.op,
+                        });
+                        try {
+                            await handlers[next.op].rollback(db, next.snapshot);
+                        } catch (rbErr) {
+                            console.error('[mutations] rollback failed', {
+                                error: String(rbErr),
+                                id: next.id,
+                                op: next.op,
+                            });
+                        }
+                        await db.mutationQueue.update(next.id, {
+                            attempts,
+                            lastError: String(err),
+                            status: 'failed',
+                        });
+                        try {
+                            handlers[next.op].invalidate(next.args);
+                        } catch (invErr) {
+                            console.error('[mutations] post-failure invalidate failed', {
+                                error: String(invErr),
+                                id: next.id,
+                                op: next.op,
+                            });
+                        }
+                        maybeNotifyGaveUp();
+                    } else {
+                        console.warn('[mutations] retryable error', {
+                            attempts,
+                            error: String(err),
+                            id: next.id,
+                            op: next.op,
+                        });
+                        await db.mutationQueue.update(next.id, {
+                            attempts,
+                            lastError: String(err),
+                            status: 'pending',
+                        });
+                        await sleep(jitteredBackoffMs(attempts));
+                    }
                 } else {
                     console.error('[mutations] hard failure — rolling back', {
                         error: String(err),

@@ -86,6 +86,26 @@ export class SessionsPoller {
     }
 
     /**
+     * Force an immediate poll against the currently-running poller without
+     * tearing it down. Unlike `start()` this preserves `hasPolledOnce`,
+     * `holds`, `fallbackMode`, `pollError`, etc. — refreshing the picker
+     * mustn't flash "Searching…" or drop optimistic holds, and mustn't
+     * undo the WS-driven fallback-cadence gating.
+     *
+     * The next normal tick is rescheduled from "now" so the user-visible
+     * behaviour is: we just polled, the next scheduled poll is the current
+     * interval from now.
+     */
+    refresh(): void {
+        if (!this.isRunning || !this.startArgs) return;
+        if (this.timer) {
+            clearTimeout(this.timer);
+            this.timer = null;
+        }
+        void this.tick();
+    }
+
+    /**
      * Hook seam: tell the poller whether the WS push channel is currently
      * healthy. When true, the idle cadence relaxes to FALLBACK_POLL_INTERVAL_MS
      * because real-time updates land via push and the poll is a heartbeat
