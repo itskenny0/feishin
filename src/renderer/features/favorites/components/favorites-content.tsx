@@ -1,4 +1,5 @@
 import { Suspense } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { useListContext } from '/@/renderer/context/list-context';
 import {
@@ -36,6 +37,7 @@ export const FavoritesContent = ({ itemType }: FavoritesContentProps) => {
 };
 
 const AlbumFavorites = () => {
+    const { t } = useTranslation();
     const { display, grid, itemsPerPage, pagination, table } = useListSettings(ItemListKey.ALBUM);
     const { customFilters } = useListContext();
 
@@ -46,6 +48,14 @@ const AlbumFavorites = () => {
     return (
         <AlbumListView
             display={display}
+            emptyState={{
+                description: t('emptyState.favoriteAlbumsDescription', {
+                    defaultValue: 'Albums you favorite will appear here.',
+                }),
+                title: t('emptyState.favoriteAlbumsTitle', {
+                    defaultValue: 'No favorite albums yet',
+                }),
+            }}
             grid={grid}
             itemsPerPage={itemsPerPage}
             overrideQuery={albumQuery}
@@ -56,6 +66,7 @@ const AlbumFavorites = () => {
 };
 
 const SongFavorites = () => {
+    const { t } = useTranslation();
     const { display, grid, itemsPerPage, pagination, table } = useListSettings(ItemListKey.SONG);
     const { customFilters } = useListContext();
 
@@ -66,6 +77,14 @@ const SongFavorites = () => {
     return (
         <SongListView
             display={display}
+            emptyState={{
+                description: t('emptyState.favoriteSongsDescription', {
+                    defaultValue: 'Songs you favorite will appear here.',
+                }),
+                title: t('emptyState.favoriteSongsTitle', {
+                    defaultValue: 'No favorite songs yet',
+                }),
+            }}
             grid={grid}
             itemsPerPage={itemsPerPage}
             overrideQuery={songQuery}
@@ -76,6 +95,7 @@ const SongFavorites = () => {
 };
 
 const ArtistFavorites = () => {
+    const { t } = useTranslation();
     const { display, grid, itemsPerPage, pagination, table } = useListSettings(ItemListKey.ARTIST);
     const { customFilters } = useListContext();
 
@@ -86,6 +106,14 @@ const ArtistFavorites = () => {
     return (
         <AlbumArtistListView
             display={display}
+            emptyState={{
+                description: t('emptyState.favoriteAlbumArtistsDescription', {
+                    defaultValue: 'Album artists you favorite will appear here.',
+                }),
+                title: t('emptyState.favoriteAlbumArtistsTitle', {
+                    defaultValue: 'No favorite album artists yet',
+                }),
+            }}
             grid={grid}
             itemsPerPage={itemsPerPage}
             overrideQuery={albumArtistQuery}

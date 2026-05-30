@@ -16,7 +16,7 @@ import type { LibraryCacheDb } from './db';
 
 import { getActiveCacheDb } from './db';
 import { useCacheStore } from './store';
-import { sumTrackmapBytes } from './trackmap-cache';
+import { clearTrackmaps, sumTrackmapBytes } from './trackmap-cache';
 
 import { useSettingsStore } from '/@/renderer/store';
 
@@ -344,7 +344,7 @@ export const clearAllCacheData = async (): Promise<void> => {
         db.songs.clear(),
         db.syncMeta.clear(),
         db.thumbnails.clear(),
-        db.trackmaps.clear(),
+        clearTrackmaps(),
     ]);
     console.info('[cache] eviction: cleared all cache tables');
 };

@@ -274,6 +274,12 @@
         "genresDescription": "Genres will appear here once your library is scanned.",
         "playlistsTitle": "No playlists yet",
         "playlistsDescription": "Create a playlist to start organizing your music.",
+        "favoriteAlbumsTitle": "No favorite albums yet",
+        "favoriteAlbumsDescription": "Albums you favorite will appear here.",
+        "favoriteSongsTitle": "No favorite songs yet",
+        "favoriteSongsDescription": "Songs you favorite will appear here.",
+        "favoriteAlbumArtistsTitle": "No favorite album artists yet",
+        "favoriteAlbumArtistsDescription": "Album artists you favorite will appear here.",
         "createPlaylist": "Create playlist"
     },
     "error": {

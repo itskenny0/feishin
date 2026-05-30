@@ -21,10 +21,12 @@ export interface WaveSurferPlayerEngineHandle extends AudioPlayer {
 
 interface WaveSurferPlayerEngineProps {
     /**
-     * Linear ReplayGain multiplier for player 1's current track (1 = no change).
-     * Folded into the wavesurfer volume so loudness normalization stays
-     * consistent with the web-audio engine. wavesurfer.js does not expose a
-     * separate gain stage, so we apply gain * userVolume.
+     * Linear ReplayGain multiplier for player 1's current track (1 = no change),
+     * folded into the wavesurfer volume because wavesurfer.js exposes no
+     * separate gain stage (we apply gain * userVolume). NOTE: this engine is
+     * not currently mounted by the app — the web-audio engine is the active
+     * one. The prop exists so the wavesurfer engine keeps loudness-normalization
+     * parity if it is ever re-enabled.
      */
     gain1?: number;
     /** Linear ReplayGain multiplier for player 2's current track (1 = no change). */
@@ -106,7 +108,9 @@ export const WaveSurferPlayerEngine = (props: WaveSurferPlayerEngineProps) => {
     useEffect(() => {
         if (wavesurfer1) {
             const logVolume1 = convertToLogVolume(internalVolume1);
-            const withGain = Math.max(0, Math.min(1, logVolume1 * (gain1 || 1)));
+            // gain1 already defaults to 1; multiply directly so a legitimate
+            // 0 gain (full attenuation) stays 0 instead of being coerced to 1.
+            const withGain = Math.max(0, Math.min(1, logVolume1 * gain1));
             wavesurfer1.setVolume(isMuted ? 0 : withGain);
         }
     }, [wavesurfer1, internalVolume1, isMuted, gain1]);
@@ -114,7 +118,7 @@ export const WaveSurferPlayerEngine = (props: WaveSurferPlayerEngineProps) => {
     useEffect(() => {
         if (wavesurfer2) {
             const logVolume2 = convertToLogVolume(internalVolume2);
-            const withGain = Math.max(0, Math.min(1, logVolume2 * (gain2 || 1)));
+            const withGain = Math.max(0, Math.min(1, logVolume2 * gain2));
             wavesurfer2.setVolume(isMuted ? 0 : withGain);
         }
     }, [wavesurfer2, internalVolume2, isMuted, gain2]);

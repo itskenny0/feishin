@@ -368,8 +368,13 @@ export const useTablePaneSync = ({
                         pinnedRight.scrollTo({ behavior: 'instant', top: scrollTop });
                     }
                 }
+                // Reset every guard this branch may have set. `isScrolling` now
+                // persists across events, so a flag left latched here would
+                // permanently disable row->pane sync — clear pinnedRight too
+                // (the else-branch above sets it but doesn't reset inline).
                 isScrolling.header = false;
                 isScrolling.pinnedLeft = false;
+                isScrolling.pinnedRight = false;
             }
 
             if (pinnedLeft && e.currentTarget === pinnedLeft && !isScrolling.row) {

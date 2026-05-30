@@ -10,14 +10,13 @@ import {
     AlbumArtistListView,
     OverrideAlbumArtistListQuery,
 } from '/@/renderer/features/artists/components/album-artist-list-content';
-import { useAlbumArtistListQuery } from '/@/renderer/features/artists/queries/artists-queries';
 import { AnimatedPage } from '/@/renderer/features/shared/components/animated-page';
 import { EmptyState, EmptyStateProps } from '/@/renderer/features/shared/components/empty-state';
 import {
     OverrideSongListQuery,
     SongListView,
 } from '/@/renderer/features/songs/components/song-list-content';
-import { useCurrentServer, useListSettings } from '/@/renderer/store';
+import { useListSettings } from '/@/renderer/store';
 import { Spinner } from '/@/shared/components/spinner/spinner';
 import {
     AlbumArtistListSort,
@@ -146,7 +145,6 @@ const ArtistSearch = () => {
     const { display, grid, itemsPerPage, pagination, table } = useListSettings(ItemListKey.ARTIST);
     const [searchParams] = useSearchParams();
     const searchTerm = searchParams.get('query') || '';
-    const server = useCurrentServer();
     const emptyState = useSearchEmptyState(searchTerm.length > 0);
 
     const albumArtistQuery = useMemo<OverrideAlbumArtistListQuery>(
@@ -158,23 +156,13 @@ const ArtistSearch = () => {
         [searchTerm],
     );
 
-    // AlbumArtistListView doesn't accept an `emptyState` prop (unlike the
-    // album/song views), so surface the "no results" state here. A
-    // limit-1 probe just reads totalRecordCount cheaply; the list view
-    // fetches its own pages independently.
-    const countProbe = useAlbumArtistListQuery({
-        query: { ...albumArtistQuery, limit: 1, startIndex: 0 },
-        serverId: server.id,
-    });
-    const resultCount = countProbe.data?.totalRecordCount;
-
-    if (resultCount === 0 && emptyState) {
-        return <EmptyState {...emptyState} />;
-    }
-
+    // AlbumArtistListView runs its own limit-1 count probe and renders the
+    // supplied emptyState when the result set is empty, so we just hand it the
+    // "no results" state — same as AlbumSearch / SongSearch.
     return (
         <AlbumArtistListView
             display={display}
+            emptyState={emptyState}
             grid={grid}
             itemsPerPage={itemsPerPage}
             overrideQuery={albumArtistQuery}

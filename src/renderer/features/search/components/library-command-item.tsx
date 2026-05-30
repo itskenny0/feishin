@@ -80,13 +80,21 @@ export const LibraryCommandItem = ({
             if (itemType === LibraryItem.SONG && song) {
                 addToQueueByData([song], playType);
 
-                // Confirm the enqueue. Play Next / Last add the track to the
-                // queue without it being the obvious "music started" feedback
-                // that Play Now gives, and the command palette closes on
-                // select — so without this toast the user has no signal the
-                // track actually reached the queue. addToQueueByData is
+                // Confirm the enqueue. The enqueue actions — Play Next / Last
+                // and their long-press shuffled variants (Next/Last Shuffle) —
+                // add the track to the queue without the obvious "music
+                // started" feedback that Play Now gives, and the command
+                // palette closes on select — so without this toast the user has
+                // no signal the track actually reached the queue. Play Now and
+                // its long-press Shuffle start playback immediately and provide
+                // their own feedback, so they stay silent. addToQueueByData is
                 // synchronous, so by here the add has genuinely happened.
-                if (playType === Play.NEXT || playType === Play.LAST) {
+                if (
+                    playType === Play.NEXT ||
+                    playType === Play.LAST ||
+                    playType === Play.NEXT_SHUFFLE ||
+                    playType === Play.LAST_SHUFFLE
+                ) {
                     toast.success({
                         message: t('player.addedToQueue', {
                             defaultValue: 'Added "{{item}}" to the queue',

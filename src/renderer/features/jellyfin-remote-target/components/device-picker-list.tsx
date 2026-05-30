@@ -147,11 +147,14 @@ export const DevicePickerList = ({ onClose, variant = 'desktop' }: DevicePickerL
             deviceId: d.deviceId,
             deviceName: d.deviceName,
             // E1/J3: bind the target to the server that established it so
-            // commands can't leak to a different server after a switch. Use
-            // `undefined` (reducer maps it to null) — NOT `''`. The getRemoteCtx
-            // guard is `target.ownerServerId && target.ownerServerId !== id`, so
-            // an empty string is falsy and would DISABLE the cross-server guard
-            // for a target picked while no Jellyfin server was current.
+            // commands can't leak to a different server after a switch. Store
+            // the canonical "no owner" as `undefined` (the reducer maps it to
+            // null) rather than '' — a normalization tidy, not a behavior
+            // change: the getRemoteCtx guard
+            // (`target.ownerServerId && target.ownerServerId !== id`) treats
+            // '', null, and undefined identically (all falsy → guard skipped).
+            // When no Jellyfin server is current the owner is genuinely unknown
+            // and the cross-server guard stays disabled either way.
             ownerServerId: server?.id ?? undefined,
             sessionId: d.sessionId,
         });

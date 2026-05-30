@@ -12,16 +12,6 @@ import { ExpandedListItem } from '/@/renderer/components/item-list/expanded-list
 import { RouteSkeleton } from '/@/renderer/features/shared/components/route-skeleton';
 import { ScrollToTopButton } from '/@/renderer/features/shared/components/scroll-to-top-button';
 import { useIsTabletRange } from '/@/renderer/hooks/use-breakpoint';
-
-/*
- * Force-collapse band for the desktop shell — the whole 768–1199px tablet
- * tier. See left-sidebar.tsx for the rationale (kept in sync there). This is
- * wider than `useIsTabletRange` (768–834) on purpose: the queue-sidebar
- * suppression + tablet-shell class below intentionally stay at 768–834,
- * because 835–1280 already floats the queue as an overlay and clamps the
- * sidebar to 240px in CSS. Only the left-rail force-collapse widens.
- */
-const TABLET_SHELL_QUERY = '(min-width: 768px) and (max-width: 1199px)';
 import { FullScreenOverlay } from '/@/renderer/layouts/default-layout/full-screen-overlay';
 import { FullScreenVisualizerOverlay } from '/@/renderer/layouts/default-layout/full-screen-visualizer-overlay';
 import { LeftSidebar } from '/@/renderer/layouts/default-layout/left-sidebar';
@@ -34,6 +24,16 @@ import {
     useSideQueueType,
 } from '/@/renderer/store';
 import { constrainRightSidebarWidth, constrainSidebarWidth } from '/@/renderer/utils';
+
+/*
+ * Force-collapse band for the desktop shell — the whole 768–1199px tablet
+ * tier. See left-sidebar.tsx for the rationale (kept in sync there). This is
+ * wider than `useIsTabletRange` (768–834) on purpose: the queue-sidebar
+ * suppression + tablet-shell class below intentionally stay at 768–834,
+ * because 835–1280 already floats the queue as an overlay and clamps the
+ * sidebar to 240px in CSS. Only the left-rail force-collapse widens.
+ */
+const TABLET_SHELL_QUERY = '(min-width: 768px) and (max-width: 1199px)';
 
 const MINIMUM_SIDEBAR_WIDTH = 260;
 

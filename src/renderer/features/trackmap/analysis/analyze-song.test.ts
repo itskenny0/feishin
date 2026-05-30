@@ -10,6 +10,10 @@
 // delegate, and global fetch / OfflineAudioContext so the test stays on the
 // orchestration logic rather than real DSP.
 
+import type {
+    TrackmapWorkerRequest,
+    TrackmapWorkerResponse,
+} from '/@/renderer/features/trackmap/analysis/trackmap-worker';
 import type { TrackmapData } from '/@/renderer/features/trackmap/types';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -134,5 +138,55 @@ describe('analyzeSong — lazy cache behaviour', () => {
         expect(result).toBeNull();
         expect(globalThis.fetch).not.toHaveBeenCalled();
         expect(mocks.workerCtor).not.toHaveBeenCalled();
+    });
+
+    it('on a cache miss, runs the worker once and persists the result (generate-then-persist)', async () => {
+        mocks.cacheGet.mockResolvedValue(null);
+        (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+            arrayBuffer: () => Promise.resolve(new ArrayBuffer(8)),
+            ok: true,
+            status: 200,
+        });
+        // decodeAudioData yields a 1-channel buffer the downmix can read.
+        mocks.decodeAudioData.mockResolvedValue({
+            getChannelData: () => new Float32Array(8),
+            length: 8,
+            numberOfChannels: 1,
+            sampleRate: 8000,
+        });
+
+        // Wire the fake worker: capture the 'message' listener, then echo a
+        // 'result' on the SAME requestId as soon as the job posts its request.
+        let onMessage: ((e: MessageEvent<TrackmapWorkerResponse>) => void) | null = null;
+        mocks.workerInstance.addEventListener.mockImplementation(
+            (type: string, handler: (e: MessageEvent<TrackmapWorkerResponse>) => void) => {
+                if (type === 'message') onMessage = handler;
+            },
+        );
+        const produced = sampleData();
+        mocks.workerInstance.postMessage.mockImplementation((req: TrackmapWorkerRequest) => {
+            onMessage?.({
+                data: { data: produced, requestId: req.requestId, type: 'result' },
+            } as MessageEvent<TrackmapWorkerResponse>);
+        });
+
+        const ac = new AbortController();
+        const result = await analyzeSong({
+            allowNetwork: true,
+            sensitivity: 3,
+            serverId: 'srv',
+            signal: ac.signal,
+            songId: 'song-4',
+            streamUrl: 'https://example/stream',
+        });
+
+        // The worker spun up and ran exactly once...
+        expect(mocks.workerCtor).toHaveBeenCalledTimes(1);
+        expect(mocks.workerInstance.postMessage).toHaveBeenCalledTimes(1);
+        // ...the analysis came back to the caller...
+        expect(result).toBe(produced);
+        // ...and the lazy generate-then-persist write landed under the song key.
+        expect(mocks.cacheSet).toHaveBeenCalledTimes(1);
+        expect(mocks.cacheSet).toHaveBeenCalledWith('srv', 'song-4', 3, produced);
     });
 });

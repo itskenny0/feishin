@@ -639,6 +639,17 @@ export const startPeerClient = (args: PeerClientStartArgs, events: PeerEvents = 
                 }
             })
             .catch((err) => {
+                // Defensive teardown guard mirroring the .then success path
+                // (S2-C). buildNativeTcpStreamBuilder already swallows its own
+                // failures (logs + returns null, which the .then guard above
+                // handles), so this .catch only fires on an UNEXPECTED throw in
+                // the chain (e.g. a synchronous throw from the .then handler).
+                // Even then, never resurrect a session that was torn down or
+                // superseded while we were off the synchronous path.
+                if (session?.args !== args) {
+                    log('native-tcp setup failed but session superseded/torn-down; dropping');
+                    return;
+                }
                 warn('native-tcp transport setup failed; falling back to ws', {
                     brokerUrl: loggedUrl,
                     err: (err as Error).message,
