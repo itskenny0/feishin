@@ -1596,7 +1596,7 @@
         "serverInfo_version_value": "Version {{version}}",
         "jellyfinRemoteControl": "Allow Jellyfin remote control",
         "jellyfinRemoteControl_description": "When connected to a Jellyfin server, allow other Jellyfin clients (such as Home Assistant or the Jellyfin web 'play on' picker) to control playback",
-        "mediaSession_description": "Enables media session integration, displaying media controls and metadata in the system volume overlay and lock screen",
+        "mediaSession_description": "Enables media session integration, displaying media controls and metadata in the system volume overlay and lock screen. Requires the Web Audio Player.",
         "mediaSession": "Enable media session",
         "sidePlayQueueStyle": "Side play queue style",
         "skipDuration_description": "Sets the duration to skip when using the skip buttons on the player bar",

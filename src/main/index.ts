@@ -1056,12 +1056,13 @@ if (!singleInstance) {
                         ...details.responseHeaders,
                         // 'unsafe-eval' is required by the butterchurn music
                         // visualizer, which compiles Milkdrop preset equations
-                        // at runtime via `new Function()`. Without it the CSP
-                        // blocks preset compilation and the visualizer fails to
-                        // load on desktop (Electron is the only platform that
+                        // at runtime via `new Function()`. 'wasm-unsafe-eval'
+                        // covers its WebAssembly compilation. Without these the
+                        // CSP blocks preset compilation and the visualizer fails
+                        // to load on desktop (Electron is the only platform that
                         // applies this header).
                         'Content-Security-Policy': [
-                            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://umami.jeffvli.org; style-src 'self' 'unsafe-inline'; media-src 'self' http: https: data: blob:; img-src 'self' http: https: data: blob:; connect-src 'self' http: https: ws: wss:; default-src 'self';",
+                            "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https://umami.jeffvli.org; style-src 'self' 'unsafe-inline'; media-src 'self' http: https: data: blob:; img-src 'self' http: https: data: blob:; connect-src 'self' http: https: ws: wss:; default-src 'self';",
                         ],
                     },
                 });
