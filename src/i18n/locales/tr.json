@@ -730,8 +730,6 @@
         "hotkey_navigateHome": "Ana sayfaya git",
         "preventSleepOnPlayback": "Oynatma sırasında uykuyu önle",
         "preventSleepOnPlayback_description": "Müzik çalarken ekranın uyku moduna geçmesini önle",
-        "releaseChannel_optionBeta": "Beta",
-        "releaseChannel_optionLatest": "En son",
         "language": "Dil",
         "notify": "Müzik bildirimi aktivleştir"
     },

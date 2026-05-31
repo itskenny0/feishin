@@ -613,8 +613,6 @@
         "autoDJ_timing": "Tempo",
         "customCss_description": "Conteúdo CSS personalizado. Observação: conteúdo e urls remotas são propriedades não permitidas. Uma pré-visualização do seu conteúdo é exibida abaixo. Campos adicionais que não definiu estão presentes devido à sanitização",
         "automaticUpdates": "Atualizações automáticas",
-        "releaseChannel_optionBeta": "Beta",
-        "releaseChannel_optionLatest": "Mais recente",
         "discordApplicationId_description": "O ID da aplicação para o rich presence do {{discord}} (defaults: {{defaultId}})",
         "discordDisplayType_artistname": "Nome(s) do(s) artista(s)",
         "discordDisplayType": "Tipo de exibição da presença do {{discord}}",

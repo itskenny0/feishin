@@ -90,7 +90,6 @@ type SettingsProperties = {
     'settings.nativeAspectRatio': boolean;
     'settings.playerbarSliderType': PlayerbarSliderType;
     'settings.preventSleepOnPlayback': boolean;
-    'settings.releaseChannel': string;
     'settings.resume': boolean;
     'settings.scrobble.enabled': boolean;
     'settings.scrobble.notify': boolean;
@@ -184,7 +183,6 @@ const getSettingsProperties = (): SettingsProperties => {
         // 'settings.playerbarWaveformGap': settings.general.playerbarSlider.barGap,
         // 'settings.playerbarWaveformRadius': settings.general.playerbarSlider.barRadius,
         'settings.preventSleepOnPlayback': ignoreWeb(settings.window.preventSleepOnPlayback),
-        'settings.releaseChannel': ignoreWeb(settings.window.releaseChannel),
         'settings.resume': settings.general.resume,
         'settings.scrobble.enabled': settings.playback.scrobble.enabled,
         'settings.scrobble.notify': ignoreWeb(settings.playback.scrobble.notify),

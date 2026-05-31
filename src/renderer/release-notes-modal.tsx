@@ -29,22 +29,7 @@ const UPSTREAM_REPO = 'jeffvli/feishin';
 const GITHUB_REPO = FORK_TAG_PATTERN.test(packageJson.version) ? FORK_REPO : UPSTREAM_REPO;
 
 const GITHUB_RELEASES_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases`;
-const GITHUB_COMPARE_URL = `https://api.github.com/repos/${GITHUB_REPO}/compare`;
 const RELEASES_TO_FETCH = 30;
-
-interface GitHubCompareCommit {
-    commit: {
-        author: { date: string; name: string };
-        message: string;
-    };
-    html_url: string;
-    sha: string;
-}
-
-interface GitHubCompareResponse {
-    commits: GitHubCompareCommit[];
-    total_commits: number;
-}
 
 interface GitHubRelease {
     body: null | string;
@@ -59,10 +44,6 @@ interface ReleaseNotesContentProps {
     version: string;
 }
 
-function isAlphaVersion(version: string): boolean {
-    return version.includes('-alpha');
-}
-
 function parseVersionFromTag(tagName: string): string {
     return tagName.startsWith('v') ? tagName.slice(1) : tagName;
 }
@@ -74,7 +55,6 @@ function toTag(version: string): string {
 const ReleaseNotesContent = ({ onDismiss, version }: ReleaseNotesContentProps) => {
     const { t } = useTranslation();
     const [selectedVersion, setSelectedVersion] = useState(version);
-    const isAlpha = isAlphaVersion(selectedVersion);
 
     // Fetch list of recent releases for the selector
     const { data: releasesList = [] } = useQuery({
@@ -87,10 +67,6 @@ const ReleaseNotesContent = ({ onDismiss, version }: ReleaseNotesContentProps) =
         queryKey: ['github-releases-list'],
         retry: 2,
     });
-
-    const latestStableRelease = useMemo(() => {
-        return releasesList.find((r) => !r.prerelease);
-    }, [releasesList]);
 
     const releaseOptions = useMemo(() => {
         const options = releasesList.slice(0, RELEASES_TO_FETCH).map((r) => {
@@ -108,33 +84,12 @@ const ReleaseNotesContent = ({ onDismiss, version }: ReleaseNotesContentProps) =
         return options;
     }, [releasesList, version]);
 
-    // For alpha: fetch commits between latest stable and development branch
-    const {
-        data: compareData,
-        isError: isCompareError,
-        isLoading: isCompareLoading,
-    } = useQuery({
-        enabled: isAlpha && !!latestStableRelease,
-        queryFn: async () => {
-            const base = latestStableRelease!.tag_name;
-            const head = 'development';
-            const response = await axios.get<GitHubCompareResponse>(
-                `${GITHUB_COMPARE_URL}/${base}...${head}`,
-                { params: { per_page: 100 } },
-            );
-            return response.data;
-        },
-        queryKey: ['github-compare', latestStableRelease?.tag_name, 'development'],
-        retry: 2,
-    });
-
-    // For non-alpha: fetch release by tag
+    // Fetch the selected release by tag
     const {
         data: releaseData,
         isError,
         isLoading,
     } = useQuery({
-        enabled: !isAlpha,
         queryFn: async () => {
             const response = await axios.get<GitHubRelease>(
                 `${GITHUB_RELEASES_URL}/tags/${toTag(selectedVersion)}`,
@@ -147,7 +102,7 @@ const ReleaseNotesContent = ({ onDismiss, version }: ReleaseNotesContentProps) =
 
     // Convert markdown to HTML using GitHub's markdown API
     const { data: htmlContent, isLoading: isConverting } = useQuery({
-        enabled: !isAlpha && !!releaseData?.body,
+        enabled: !!releaseData?.body,
         queryFn: async () => {
             const response = await axios.post(
                 'https://api.github.com/markdown',
@@ -196,8 +151,8 @@ const ReleaseNotesContent = ({ onDismiss, version }: ReleaseNotesContentProps) =
         });
     }, [htmlContent]);
 
-    const isLoadingState = isAlpha ? isCompareLoading : isLoading || isConverting;
-    const isErrorState = isAlpha ? isCompareError : isError || !releaseData;
+    const isLoadingState = isLoading || isConverting;
+    const isErrorState = isError || !releaseData;
 
     if (isLoadingState) {
         return (
@@ -208,7 +163,6 @@ const ReleaseNotesContent = ({ onDismiss, version }: ReleaseNotesContentProps) =
     }
 
     if (isErrorState) {
-        const showCompareError = isAlpha && latestStableRelease;
         return (
             <Stack gap="md">
                 {releaseOptions.length > 1 && (
@@ -222,11 +176,7 @@ const ReleaseNotesContent = ({ onDismiss, version }: ReleaseNotesContentProps) =
                 <Group justify="flex-end">
                     <Button
                         component="a"
-                        href={
-                            showCompareError
-                                ? `https://github.com/${GITHUB_REPO}/compare/${latestStableRelease.tag_name}...${toTag(selectedVersion)}`
-                                : `https://github.com/${GITHUB_REPO}/releases/tag/${toTag(selectedVersion)}`
-                        }
+                        href={`https://github.com/${GITHUB_REPO}/releases/tag/${toTag(selectedVersion)}`}
                         onClick={onDismiss}
                         rightSection={<Icon icon="externalLink" />}
                         target="_blank"
@@ -235,123 +185,6 @@ const ReleaseNotesContent = ({ onDismiss, version }: ReleaseNotesContentProps) =
                         {t('common.viewReleaseNotes')}
                     </Button>
                     <Button onClick={onDismiss} variant="default">
-                        {t('common.dismiss')}
-                    </Button>
-                </Group>
-            </Stack>
-        );
-    }
-
-    if (isAlpha && !latestStableRelease) {
-        return (
-            <Stack gap="md">
-                {releaseOptions.length > 1 && (
-                    <Select
-                        data={releaseOptions}
-                        onChange={(v) => v && setSelectedVersion(v)}
-                        value={selectedVersion}
-                    />
-                )}
-                <Text isMuted size="sm">
-                    {t('page.releasenotes.noStableReleaseToCompare')}
-                </Text>
-                <Group justify="flex-end">
-                    <Button
-                        component="a"
-                        href={`https://github.com/${GITHUB_REPO}/releases/tag/${toTag(selectedVersion)}`}
-                        onClick={onDismiss}
-                        rightSection={<Icon icon="externalLink" />}
-                        target="_blank"
-                        variant="subtle"
-                    >
-                        {t('action.viewMore')}
-                    </Button>
-                    <Button onClick={onDismiss} variant="filled">
-                        {t('common.dismiss')}
-                    </Button>
-                </Group>
-            </Stack>
-        );
-    }
-
-    if (isAlpha && compareData) {
-        const commits = compareData.commits ?? [];
-        const compareUrl = `https://github.com/${GITHUB_REPO}/compare/${latestStableRelease?.tag_name}...development`;
-        return (
-            <Stack gap="md">
-                {releaseOptions.length > 1 && (
-                    <Select
-                        data={releaseOptions}
-                        onChange={(v) => v && setSelectedVersion(v)}
-                        value={selectedVersion}
-                    />
-                )}
-                <Text isMuted size="sm">
-                    {t('page.releasenotes.commitsSinceStable', {
-                        stable: latestStableRelease
-                            ? parseVersionFromTag(latestStableRelease.tag_name)
-                            : '',
-                    })}
-                </Text>
-                <ScrollArea
-                    style={{
-                        height: '400px',
-                    }}
-                >
-                    <Stack gap="xs">
-                        {commits.length === 0 ? (
-                            <Text isMuted size="sm">
-                                {t('page.releasenotes.noNewCommits')}
-                            </Text>
-                        ) : (
-                            commits.map((c) => {
-                                const firstLine = c.commit.message.split('\n')[0];
-                                return (
-                                    <Group
-                                        gap="sm"
-                                        key={c.sha}
-                                        style={{ alignItems: 'flex-start' }}
-                                        wrap="nowrap"
-                                    >
-                                        <Text
-                                            size="sm"
-                                            style={{ flex: 1 }}
-                                            title={c.commit.message}
-                                            truncate
-                                        >
-                                            {firstLine}
-                                        </Text>
-                                        <Text isMuted size="xs">
-                                            {formatHrDateTime(c.commit.author.date)}
-                                        </Text>
-                                        <Button
-                                            component="a"
-                                            href={c.html_url}
-                                            rightSection={<Icon icon="externalLink" />}
-                                            size="compact-xs"
-                                            target="_blank"
-                                            variant="subtle"
-                                        >
-                                            {t('common.view')}
-                                        </Button>
-                                    </Group>
-                                );
-                            })
-                        )}
-                    </Stack>
-                </ScrollArea>
-                <Group justify="flex-end">
-                    <Button
-                        component="a"
-                        href={compareUrl}
-                        onClick={onDismiss}
-                        rightSection={<Icon icon="externalLink" />}
-                        target="_blank"
-                        variant="subtle"
-                    >
-                        {t('action.viewMore')}
-                    </Button>
-                    <Button onClick={onDismiss} variant="filled">
                         {t('common.dismiss')}
                     </Button>
                 </Group>

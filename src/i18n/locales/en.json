@@ -619,11 +619,6 @@
         "radioList": {
             "title": "Radio stations"
         },
-        "releasenotes": {
-            "commitsSinceStable": "Commits since {{stable}}",
-            "noNewCommits": "No new commits in this range",
-            "noStableReleaseToCompare": "No stable release available to compare with"
-        },
         "favorites": {
             "title": "$t(entity.favorite, {\"count\": 2})"
         },
@@ -1296,11 +1291,6 @@
         "customFontPath": "Custom font path",
         "automaticUpdates": "Automatic updates",
         "automaticUpdates_description": "Check for and install updates automatically",
-        "releaseChannel_optionAlpha": "Alpha (nightly)",
-        "releaseChannel_optionBeta": "Beta",
-        "releaseChannel_optionLatest": "Latest",
-        "releaseChannel": "Release channel",
-        "releaseChannel_description": "Choose between stable, beta, or alpha (nightly) releases for automatic updates",
         "disableLibraryUpdateOnStartup": "Disable checking for new versions on startup",
         "discordApplicationId_description": "The application ID for {{discord}} rich presence (defaults to {{defaultId}})",
         "discordApplicationId": "{{discord}} application ID",

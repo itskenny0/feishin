@@ -761,7 +761,6 @@ const WindowSettingsSchema = z.object({
     minimizeToTray: z.boolean(),
     preventSleepOnPlayback: z.boolean(),
     preventSuspendOnPlayback: z.boolean(),
-    releaseChannel: z.enum(['alpha', 'beta', 'latest']),
     startMinimized: z.boolean(),
     tray: z.boolean(),
     windowBarStyle: z.nativeEnum(Platform),
@@ -2348,7 +2347,6 @@ const initialState: SettingsState = {
         minimizeToTray: false,
         preventSleepOnPlayback: false,
         preventSuspendOnPlayback: false,
-        releaseChannel: 'latest',
         startMinimized: false,
         tray: true,
         windowBarStyle: platformDefaultWindowBarStyle,
@@ -2534,10 +2532,6 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                 }
 
                 if (version <= 9) {
-                    if (!state.window.releaseChannel) {
-                        state.window.releaseChannel = initialState.window.releaseChannel;
-                    }
-
                     if (!state.playback.mediaSession) {
                         state.playback.mediaSession = initialState.playback.mediaSession;
                     }
@@ -2623,12 +2617,6 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                         label: i18n.t('page.sidebar.radio'),
                         route: AppRoute.RADIO,
                     });
-                }
-
-                // Version 16 introduced a bug where the release channel may have been reset
-                // to the latest channel. This is to revert it.
-                if (version === 16) {
-                    state.window.releaseChannel = 'beta';
                 }
 
                 if (version <= 17) {
@@ -3269,10 +3257,16 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
+                if (version <= 54) {
+                    // Release channels (alpha/beta/latest) were removed: the fork
+                    // is a single rolling release. Drop the obsolete persisted key.
+                    delete (state.window as { releaseChannel?: unknown }).releaseChannel;
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 54,
+            version: 55,
         },
     ),
 );
