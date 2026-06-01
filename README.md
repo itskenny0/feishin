@@ -83,7 +83,7 @@
 > - Visualizer settings render as a full-screen sheet on mobile (was a tiny clipped popover).
 > - Command palette drops desktop key-hint glyphs (ESC / ↑ / ↓ / ⏎) on touch and bumps row heights to 48dp.
 >
-> Last sync with upstream: 2026-05-21, jeffvli/feishin@8f408949.
+> Last sync with upstream: 2026-06-01, jeffvli/feishin@7243ed7f.
 
 Rewrite of [Sonixd](https://github.com/jeffvli/sonixd).
 
