@@ -3,7 +3,6 @@ import { useMemo } from 'react';
 import { AddToPlaylistAction } from '/@/renderer/features/context-menu/actions/add-to-playlist-action';
 import { DownloadAction } from '/@/renderer/features/context-menu/actions/download-action';
 import { GetInfoAction } from '/@/renderer/features/context-menu/actions/get-info-action';
-import { GoToAction } from '/@/renderer/features/context-menu/actions/go-to-action';
 import { OfflineDownloadAction } from '/@/renderer/features/context-menu/actions/offline-download-action';
 import { PlayAction } from '/@/renderer/features/context-menu/actions/play-action';
 import { PlayArtistRadioAction } from '/@/renderer/features/context-menu/actions/play-artist-radio-action';
@@ -41,8 +40,6 @@ export const ArtistContextMenu = ({ items, type }: ArtistContextMenuProps) => {
             <OfflineDownloadAction items={items} itemType={LibraryItem.ARTIST} />
             <DownloadAction ids={ids} />
             <ShareAction ids={ids} itemType={LibraryItem.ARTIST} />
-            <ContextMenu.Divider />
-            <GoToAction items={items} />
             <ContextMenu.Divider />
             <RefreshMetadataAction disabled={items.length === 0} ids={ids} />
             <GetInfoAction disabled={items.length === 0} items={items} />
