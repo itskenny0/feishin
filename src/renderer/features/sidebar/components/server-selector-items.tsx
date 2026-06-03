@@ -123,7 +123,9 @@ export const ServerSelectorItems = () => {
                     <DropdownMenu.Item
                         isSelected={currentServer?.id === server.id}
                         key={`server-${server.id}`}
-                        leftSection={<img src={logo} style={{ height: '1rem', width: '1rem' }} />}
+                        leftSection={
+                            <img alt="" src={logo} style={{ height: '1rem', width: '1rem' }} />
+                        }
                         onClick={() => {
                             if (!isSessionExpired) {
                                 handleSetCurrentServer(server);

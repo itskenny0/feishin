@@ -287,7 +287,12 @@ const SidebarImage = () => {
         >
             <Tooltip label={t('player.toggleFullscreenPlayer')}>
                 {isRadioActive && radioImageUrl ? (
-                    <img className={styles.sidebarImage} loading="eager" src={radioImageUrl} />
+                    <img
+                        alt={currentSong?.name ?? ''}
+                        className={styles.sidebarImage}
+                        loading="eager"
+                        src={radioImageUrl}
+                    />
                 ) : isRadioActive ? (
                     <Center
                         className={styles.sidebarImage}
@@ -302,6 +307,7 @@ const SidebarImage = () => {
                     </Center>
                 ) : imageUrl && currentSong?.id ? (
                     <CachedImage
+                        alt={currentSong?.name ?? ''}
                         className={clsx(styles.sidebarImage, {
                             [styles.censored]:
                                 currentSong?.explicitStatus === ExplicitStatus.EXPLICIT &&

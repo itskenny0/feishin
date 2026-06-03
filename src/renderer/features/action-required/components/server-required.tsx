@@ -121,6 +121,7 @@ function ServerSelector() {
                         <Group justify="space-between" w="100%">
                             <Group>
                                 <img
+                                    alt=""
                                     src={logo}
                                     style={{
                                         height: 'var(--theme-font-size-2xl)',

@@ -49,6 +49,7 @@ export const ServerList = () => {
                                 <Accordion.Control>
                                     <Group>
                                         <img
+                                            alt=""
                                             src={
                                                 server.type === ServerType.NAVIDROME
                                                     ? NavidromeLogo

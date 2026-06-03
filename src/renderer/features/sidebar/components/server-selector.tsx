@@ -67,7 +67,7 @@ export const ServerSelector = () => {
                 <div className={styles.popoverTarget}>
                     <Box className={styles.buttonContainer}>
                         <Group className={styles.buttonGroup} gap="sm">
-                            <img className={styles.logo} src={logo} />
+                            <img alt="" className={styles.logo} src={logo} />
                             <Stack className={styles.buttonStack} gap={2}>
                                 <Text fw={600} size="sm" truncate>
                                     {currentServer.name}
