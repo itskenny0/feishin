@@ -5,7 +5,7 @@
  * centered full-page spinner.
  */
 
-.skeletonStack {
+.skeleton-stack {
     display: flex;
     flex-direction: column;
     gap: var(--theme-spacing-2xl);
@@ -15,14 +15,14 @@
 }
 
 @media (width >= 600px) {
-    .skeletonStack {
+    .skeleton-stack {
         padding-right: 1.5rem;
         padding-left: 1.5rem;
     }
 }
 
 @media (width >= 835px) {
-    .skeletonStack {
+    .skeleton-stack {
         padding-right: 2rem;
         padding-left: 2rem;
     }
@@ -38,7 +38,7 @@
  * feature card / feature carousel occupy so swapping in real content does
  * not shift everything below it.
  */
-.featureCard {
+.feature-card {
     width: 100%;
     height: 300px;
     min-height: 300px;
@@ -46,21 +46,21 @@
 }
 
 @media (width <= 720px) {
-    .featureCard {
+    .feature-card {
         height: 280px;
         min-height: 280px;
     }
 }
 
 /* Carousel row placeholder: title strip + a single row of poster cards. */
-.carouselRow {
+.carousel-row {
     display: flex;
     flex-direction: column;
     gap: var(--theme-spacing-md);
     width: 100%;
 }
 
-.carouselCards {
+.carousel-cards {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: var(--theme-spacing-md);
@@ -68,51 +68,51 @@
 }
 
 @media (width >= 520px) {
-    .carouselCards {
+    .carousel-cards {
         grid-template-columns: repeat(3, 1fr);
     }
 }
 
 @media (width >= 720px) {
-    .carouselCards {
+    .carousel-cards {
         grid-template-columns: repeat(4, 1fr);
     }
 }
 
 @media (width >= 960px) {
-    .carouselCards {
+    .carousel-cards {
         grid-template-columns: repeat(5, 1fr);
     }
 }
 
 @media (width >= 1152px) {
-    .carouselCards {
+    .carousel-cards {
         grid-template-columns: repeat(6, 1fr);
     }
 }
 
-.posterCard {
+.poster-card {
     display: flex;
     flex-direction: column;
     gap: var(--theme-spacing-xs);
     width: 100%;
 }
 
-.posterImage {
+.poster-image {
     width: 100%;
     aspect-ratio: 1;
     border-radius: var(--theme-radius-sm);
 }
 
 /* Genre grid placeholder: title strip + tile grid matching featured-genres. */
-.genreSection {
+.genre-section {
     display: flex;
     flex-direction: column;
     gap: var(--theme-spacing-md);
     width: 100%;
 }
 
-.genreGrid {
+.genre-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
     gap: var(--theme-spacing-md);

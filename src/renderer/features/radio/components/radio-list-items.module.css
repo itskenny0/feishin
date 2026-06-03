@@ -85,7 +85,7 @@
 /* Phones: tighter rows, smaller thumbnail, fewer gaps. The full stream URL
    is noise on a narrow screen, so it gets hidden (see radio-list-items.tsx)
    and we lean on name + homepage for the secondary line. */
-@media (max-width: 767px) {
+@media (width <= 767px) {
     .radio-item {
         padding: var(--mantine-spacing-sm) !important;
     }
@@ -97,7 +97,7 @@
     }
 }
 
-@media (max-width: 360px) {
+@media (width <= 360px) {
     .radio-item {
         padding: var(--mantine-spacing-xs) var(--mantine-spacing-sm) !important;
     }

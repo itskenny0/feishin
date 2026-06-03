@@ -104,8 +104,8 @@
     align-items: center;
     justify-content: center;
     padding: var(--theme-spacing-md);
-    color: var(--theme-colors-foreground-muted);
     font-size: var(--theme-font-size-sm);
+    color: var(--theme-colors-foreground-muted);
     text-align: center;
     pointer-events: none;
 }

@@ -43,9 +43,9 @@ describe('withPhysicalKeys', () => {
         expect(options).toEqual({ preventDefault: true, usePhysicalKeys: true });
     });
 
-    it('adds usePhysicalKeys even when no options were supplied', () => {
+    it('adds usePhysicalKeys and preventDefault even when no options were supplied', () => {
         const handler = vi.fn();
         const result = withPhysicalKeys([['mod+K', handler]]);
-        expect(result[0][2]).toEqual({ usePhysicalKeys: true });
+        expect(result[0][2]).toEqual({ preventDefault: true, usePhysicalKeys: true });
     });
 });

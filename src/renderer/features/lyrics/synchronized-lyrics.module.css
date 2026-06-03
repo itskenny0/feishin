@@ -6,12 +6,12 @@
     padding: 10vh 0 50vh;
     overflow-x: hidden;
     overflow-y: scroll;
+    overscroll-behavior: contain;
+    word-break: normal;
 
     /* Break on word boundaries (with a hyphenation fallback for very long
        tokens) instead of mid-character: far more readable than break-all. */
     overflow-wrap: break-word;
-    word-break: normal;
-    overscroll-behavior: contain;
     transform: translateY(-2rem);
 
     /* Promote to its own layer so the smooth auto-scroll is GPU-composited and

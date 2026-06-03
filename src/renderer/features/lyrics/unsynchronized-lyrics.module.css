@@ -6,9 +6,9 @@
     padding: 10vh 0 6vh;
     overflow-x: hidden;
     overflow-y: scroll;
-    overflow-wrap: break-word;
-    word-break: normal;
     overscroll-behavior: contain;
+    word-break: normal;
+    overflow-wrap: break-word;
     transform: translateY(-2rem);
 
     @media screen and (orientation: portrait) {

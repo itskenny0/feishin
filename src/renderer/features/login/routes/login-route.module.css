@@ -8,11 +8,11 @@
  * the field font to 16px on phones only — desktop keeps the denser 14px.
  */
 .card {
-    max-width: 420px;
     width: 100%;
+    max-width: 420px;
 }
 
-@media (max-width: 767px), (orientation: landscape) and (max-height: 480px) {
+@media (width <= 767px), (orientation: landscape) and (height <= 480px) {
     .form input {
         font-size: 16px;
     }

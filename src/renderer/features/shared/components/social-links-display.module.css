@@ -18,9 +18,9 @@
  * mechanism.
  */
 .scroll-aware-slot {
-    opacity: 1;
     max-height: 4rem;
     overflow: hidden;
+    opacity: 1;
     transition:
         opacity 150ms ease,
         max-height 150ms ease;
@@ -28,6 +28,6 @@
 
 :global([data-scrolled='true']) .scroll-aware-slot {
     max-height: 0;
-    opacity: 0;
     pointer-events: none;
+    opacity: 0;
 }
