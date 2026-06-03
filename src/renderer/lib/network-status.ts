@@ -14,6 +14,8 @@
 // for the `feishin:connectivity-change` CustomEvent on `window`, matching the
 // existing `feishin:*` event convention used across the cache subsystem.
 
+import { useSyncExternalStore } from 'react';
+
 const CONNECTIVITY_EVENT = 'feishin:connectivity-change';
 
 const hasWindow = typeof window !== 'undefined';
@@ -111,5 +113,14 @@ export const subscribeIsOnline = (cb: Listener): (() => void) => {
         listeners.delete(cb);
     };
 };
+
+/**
+ * React hook returning the current combined connectivity snapshot. Re-renders
+ * the consuming component on every offline↔online transition. Backed by
+ * `subscribeIsOnline` / `getIsOnline` so it shares the single window listener
+ * and tears down cleanly when the component unmounts.
+ */
+export const useIsOnline = (): boolean =>
+    useSyncExternalStore(subscribeIsOnline, getIsOnline, getIsOnline);
 
 export { CONNECTIVITY_EVENT };

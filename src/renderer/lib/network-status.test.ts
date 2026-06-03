@@ -1,3 +1,4 @@
+import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -5,6 +6,8 @@ import {
     getIsOnline,
     markServerReachable,
     markServerUnreachable,
+    subscribeIsOnline,
+    useIsOnline,
 } from './network-status';
 
 // The module reads navigator.onLine and emits on the window. jsdom provides
@@ -67,5 +70,74 @@ describe('network-status combined online signal', () => {
         markServerUnreachable();
         expect(handler).not.toHaveBeenCalled();
         window.removeEventListener(CONNECTIVITY_EVENT, handler);
+    });
+});
+
+describe('subscribeIsOnline', () => {
+    beforeEach(() => {
+        setNavigatorOnline(true);
+        markServerReachable();
+    });
+
+    afterEach(() => {
+        setNavigatorOnline(true);
+        markServerReachable();
+    });
+
+    it('notifies subscribers on a transition and stops after unsubscribe', () => {
+        const cb = vi.fn();
+        const unsubscribe = subscribeIsOnline(cb);
+
+        markServerUnreachable();
+        expect(cb).toHaveBeenCalledTimes(1);
+
+        markServerReachable();
+        expect(cb).toHaveBeenCalledTimes(2);
+
+        // Cleanup: after unsubscribe no further notifications arrive.
+        unsubscribe();
+        markServerUnreachable();
+        expect(cb).toHaveBeenCalledTimes(2);
+    });
+});
+
+describe('useIsOnline', () => {
+    beforeEach(() => {
+        setNavigatorOnline(true);
+        markServerReachable();
+    });
+
+    afterEach(() => {
+        setNavigatorOnline(true);
+        markServerReachable();
+    });
+
+    it('reflects the current snapshot and re-renders on offline→online transitions', () => {
+        const { result } = renderHook(() => useIsOnline());
+        expect(result.current).toBe(true);
+
+        act(() => {
+            markServerUnreachable();
+        });
+        expect(result.current).toBe(false);
+
+        act(() => {
+            markServerReachable();
+        });
+        expect(result.current).toBe(true);
+    });
+
+    it('removes its listener on unmount (no leak)', () => {
+        const { result, unmount } = renderHook(() => useIsOnline());
+        expect(result.current).toBe(true);
+
+        unmount();
+
+        // A transition after unmount must not throw or keep the component
+        // subscribed; the snapshot stays at whatever the last render captured.
+        act(() => {
+            markServerUnreachable();
+        });
+        expect(result.current).toBe(true);
     });
 });

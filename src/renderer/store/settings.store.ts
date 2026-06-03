@@ -2730,7 +2730,7 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                         state.lyrics = mainSettings;
                         state.lyricsDisplay = {
                             default: {
-                                ...state.lyricsDisplay.default,
+                                ...(state.lyricsDisplay?.default || {}),
                                 ...displaySettings,
                             },
                         };
