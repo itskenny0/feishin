@@ -1,10 +1,28 @@
 .container {
     position: relative;
     display: flex;
+
+    /*
+     * Take the space left over below the page header instead of claiming
+     * the full parent height. The host (AnimatedPage) is a flex column with
+     * `overflow: hidden`, holding a header sibling above this container.
+     *
+     * With `height: 100%` the container resolved to the FULL parent height
+     * and overflowed the header's box, getting clipped at the bottom. For
+     * routes with a short filter-bar header (song/album/folder lists) the
+     * clipped sliver was unnoticeable, but the playlist-detail route stacks
+     * a tall ~280px hero header above it — there the clip pushed the lower
+     * portion of the virtualized track-list viewport entirely off-screen, so
+     * on the mobile page-scroll shell the playlist appeared to render no
+     * songs at all. `flex: 1 1 0` + `min-height: 0` makes the container fill
+     * exactly the remaining height regardless of header size, which is the
+     * correct flexbox behaviour for every consumer.
+     */
+    flex: 1 1 0;
     flex-direction: row;
     width: 100%;
     min-width: 0;
-    height: 100%;
+    min-height: 0;
     container-type: inline-size;
     overflow: hidden;
 }

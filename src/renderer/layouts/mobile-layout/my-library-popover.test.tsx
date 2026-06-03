@@ -70,8 +70,7 @@ describe('MyLibraryPopover', () => {
 
         // The enabled, routed, non-Collections entries from the default
         // sidebar item list — i.e. exactly what the sidebar's "My Library"
-        // section shows. Collections (no route) and the disabled entries
-        // (Now Playing / Search / Playlists / Settings) must be absent.
+        // section shows.
         expect(screen.getByTestId('my-library-entry-Albums')).toBeTruthy();
         expect(screen.getByTestId('my-library-entry-Tracks')).toBeTruthy();
         expect(screen.getByTestId('my-library-entry-Favorites')).toBeTruthy();
@@ -79,10 +78,17 @@ describe('MyLibraryPopover', () => {
         expect(screen.getByTestId('my-library-entry-Genres')).toBeTruthy();
         expect(screen.getByTestId('my-library-entry-Folders')).toBeTruthy();
 
+        // Playlists is `disabled` in the default sidebar list because the
+        // desktop sidebar shows it via a dedicated playlist-tree section.
+        // Mobile has no such section, so the popover must still surface it.
+        expect(screen.getByTestId('my-library-entry-Playlists')).toBeTruthy();
+
         // Collections has no route → never rendered.
         expect(screen.queryByTestId('my-library-entry-Collections')).toBeNull();
-        // Disabled-by-default entries are filtered out.
+        // Disabled-by-default navigation entries (not library sections) stay
+        // filtered out.
         expect(screen.queryByTestId('my-library-entry-Settings')).toBeNull();
+        expect(screen.queryByTestId('my-library-entry-Search')).toBeNull();
     });
 
     it('navigates to the entry route and closes the popover on selection', async () => {

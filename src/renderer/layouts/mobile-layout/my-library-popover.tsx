@@ -62,17 +62,32 @@ export const MyLibraryPopover = ({ onClose, opened }: MyLibraryPopoverProps) => 
 
     // Library entries, mirroring the sidebar's `libraryItemsWithRoute`:
     // enabled, has a route, and not the Collections pseudo-section.
+    //
+    // Exception: sidebar-pinned library sections (Playlists) are marked
+    // `disabled` in the default sidebar item list because the desktop
+    // sidebar surfaces them through a dedicated section (the playlist
+    // tree) rather than the "My Library" accordion. Mobile has no such
+    // persistent sidebar, so those sections must still appear here —
+    // otherwise they'd be unreachable from the mobile Library tab. We
+    // therefore keep them regardless of the `disabled` flag.
+    const alwaysIncludeIds = useMemo(() => new Set<SidebarItemType['id']>(['Playlists']), []);
+
     const entries: SidebarItemType[] = useMemo(() => {
         if (!sidebarItems) return [];
         return sidebarItems
-            .filter((item) => !item.disabled && item.id !== 'Collections' && item.route)
+            .filter(
+                (item) =>
+                    (!item.disabled || alwaysIncludeIds.has(item.id)) &&
+                    item.id !== 'Collections' &&
+                    item.route,
+            )
             .map((item) => ({
                 ...item,
                 label:
                     translatedSidebarItemMap[item.id as keyof typeof translatedSidebarItemMap] ??
                     item.label,
             }));
-    }, [sidebarItems, translatedSidebarItemMap]);
+    }, [sidebarItems, translatedSidebarItemMap, alwaysIncludeIds]);
 
     const handleSelect = useCallback(
         (route: string) => {
