@@ -33,6 +33,7 @@ import { DragDropZone } from '/@/shared/components/drag-drop-zone/drag-drop-zone
 import { Group } from '/@/shared/components/group/group';
 import { Icon } from '/@/shared/components/icon/icon';
 import { BaseImage } from '/@/shared/components/image/image';
+import { OfflineIndicator } from '/@/shared/components/offline-indicator/offline-indicator';
 import { Rating } from '/@/shared/components/rating/rating';
 import { Spinner } from '/@/shared/components/spinner/spinner';
 import { Text } from '/@/shared/components/text/text';
@@ -55,6 +56,10 @@ interface LibraryHeaderProps {
         type?: LibraryItem;
     };
     loading?: boolean;
+    // When true, a green "available offline" glyph is rendered before the
+    // hero title. Callers derive this from the offline-availability store
+    // (useIsEntityOfflineAvailable).
+    offlineAvailable?: boolean;
     onImageFileDrop?: (file: File) => Promise<void> | void;
     title: string;
     topRight?: ReactNode;
@@ -69,6 +74,7 @@ export const LibraryHeader = forwardRef(
             imageOverlay,
             imageUrl,
             item,
+            offlineAvailable,
             onImageFileDrop,
             title,
             topRight,
@@ -273,6 +279,7 @@ export const LibraryHeader = forwardRef(
                                 fontSize: calculateTitleSize(title),
                             }}
                         >
+                            <OfflineIndicator size="lg" visible={Boolean(offlineAvailable)} />
                             {title}
                         </h1>
                         {children}

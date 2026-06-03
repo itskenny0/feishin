@@ -34,6 +34,7 @@ import {
     syncTarget,
 } from '/@/renderer/cache/offline-media';
 import { useCacheStore } from '/@/renderer/cache/store';
+import { useSmoothOfflineSync } from '/@/renderer/cache/use-smooth-offline-sync';
 import { useAuthStore, useSettingsStore } from '/@/renderer/store';
 import { toast } from '/@/shared/components/toast/toast';
 import {
@@ -68,56 +69,6 @@ interface PickResult {
     id: string;
     name: string;
 }
-
-/**
- * Live offline-download progress with rAF interpolation between per-item
- * store updates (≥20 fps). Mirrors the cache-sweep smoothing precedent.
- */
-const useSmoothOfflineSync = () => {
-    const sync = useCacheStore((s) => s.offlineSync);
-    const smoothing = useSettingsStore((s) => s.localCache?.sweepProgressSmoothing ?? false);
-    const [view, setView] = useState(sync);
-
-    useEffect(() => {
-        if (!sync) {
-            setView(undefined);
-            return undefined;
-        }
-        if (!smoothing) {
-            setView(sync);
-            return undefined;
-        }
-        const baselineNow = performance.now();
-        const baseDone = sync.done;
-        const baseBytes = sync.bytesDownloaded;
-        const { bytesPerSec, estimatedTotalBytes, itemsPerSec, total } = sync;
-        const RENDER_INTERVAL_MS = 1000 / 20;
-        const CAP_SEC = 2;
-        let raf = 0;
-        let last = 0;
-        const tick = (now: number) => {
-            raf = requestAnimationFrame(tick);
-            if (now - last < RENDER_INTERVAL_MS) return;
-            last = now;
-            const elapsed = Math.min(CAP_SEC, (now - baselineNow) / 1000);
-            const done =
-                total !== undefined
-                    ? Math.min(
-                          baseDone >= total ? total : total - 1,
-                          baseDone + elapsed * itemsPerSec,
-                      )
-                    : baseDone + elapsed * itemsPerSec;
-            const bytes = estimatedTotalBytes
-                ? Math.min(estimatedTotalBytes, baseBytes + elapsed * bytesPerSec)
-                : baseBytes + elapsed * bytesPerSec;
-            setView({ ...sync, bytesDownloaded: bytes, done });
-        };
-        raf = requestAnimationFrame(tick);
-        return () => cancelAnimationFrame(raf);
-    }, [sync, smoothing]);
-
-    return smoothing ? view : sync;
-};
 
 export const OfflineMediaSettings = () => {
     const { t } = useTranslation();

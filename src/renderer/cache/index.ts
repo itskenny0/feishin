@@ -72,12 +72,14 @@ export {
     targetKey,
 } from './media-store';
 export { enqueueMutation } from './mutations';
+export { OfflineDownloadBanner } from './offline-download-banner';
 export {
     addAndSyncOfflineTarget,
     addOfflineTarget,
     cancelOfflineSync,
     enumerateTargetSongs,
     isSyncing as isOfflineSyncing,
+    refreshOfflineAvailability,
     refreshOfflineStats,
     removeAllTargets,
     removeOfflineTarget,
@@ -114,5 +116,7 @@ export {
 } from './sync';
 export { SyncChip } from './sync-chip';
 export type * from './types';
+export { useIsEntityOfflineAvailable, useIsSongOfflineAvailable } from './use-offline-availability';
+export { useSmoothOfflineSync } from './use-smooth-offline-sync';
 export { useSmoothSweep } from './use-smooth-sweep';
 export type { SmoothSweepView } from './use-smooth-sweep';

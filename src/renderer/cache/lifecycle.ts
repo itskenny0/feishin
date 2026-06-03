@@ -11,6 +11,7 @@ import {
 import { estimateBytes, evict } from './eviction';
 import { resolveThumbnail } from './images';
 import { startWorker } from './mutations';
+import { refreshOfflineAvailability, refreshOfflineStats } from './offline-media';
 import { resetSearchIndexes } from './search';
 import { clearAllSnapshots, dropSnapshotsForServer } from './snapshot';
 import { useCacheActions, useCacheStore } from './store';
@@ -172,6 +173,12 @@ export const useCacheLifecycle = (): void => {
                 // Run an eviction pass on activation in case quotas changed
                 // between sessions (best-effort, no-op when under cap).
                 void evict();
+                // Seed the offline-media aggregate stats + availability index
+                // from Dexie so the settings panel, the download banner, and
+                // the green "available offline" indicators reflect what's
+                // already on disk immediately after a cold start.
+                void refreshOfflineStats();
+                void refreshOfflineAvailability();
                 // Restore the cache store from the persistent layer so the
                 // dashboard shows accurate counts + hydration states after
                 // a cold start. Both fields live in memory only; without

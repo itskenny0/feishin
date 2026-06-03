@@ -12,6 +12,7 @@ export interface CacheStoreActions {
         setCacheAvailable: (v: boolean) => void;
         setEntityCount: (e: EntityType, n: number) => void;
         setHydrationState: (e: EntityType, s: HydrationState) => void;
+        setOfflineAvailability: (a: OfflineAvailability) => void;
         setOfflineMedia: (s: Partial<OfflineMediaStats>) => void;
         setOfflineSync: (s: CacheStoreState['offlineSync']) => void;
         setPendingMutations: (n: number) => void;
@@ -25,6 +26,12 @@ export interface CacheStoreState {
     cacheAvailable: boolean | undefined;
     entityCounts: Partial<Record<EntityType, number>>;
     hydrationStates: Partial<Record<EntityType, HydrationState>>;
+    // Snapshot of which entities/songs are downloaded for offline playback.
+    // Held in memory so list/detail surfaces can render the "available
+    // offline" indicator without each row hitting Dexie. Refreshed by the
+    // offline-media subsystem whenever a download finishes or a target is
+    // removed (see refreshOfflineAvailability).
+    offlineAvailability: OfflineAvailability;
     // Aggregate offline-media stats, kept in the store so the settings panel
     // and any future home-page chip can subscribe without each polling Dexie.
     offlineMedia: OfflineMediaStats;
@@ -33,6 +40,21 @@ export interface CacheStoreState {
     offlineSync: OfflineSyncProgress | undefined;
     pendingMutations: number;
     sweep: undefined | { entity: EntityType; progress: SweepProgress };
+}
+
+/**
+ * In-memory index of what's available offline. `entityKeys` holds the
+ * `${serverId}:${entityType}:${entityId}` key of every offline target that
+ * has at least one downloaded song (so a partially-downloaded album still
+ * reads as "available"). `songKeys` holds every downloaded blob's
+ * `${serverId}:${songId}` key. Both are plain Sets — identity changes on
+ * each refresh so equality-fn subscribers re-render only when membership
+ * actually changes (see refreshOfflineAvailability, which skips the set
+ * when nothing changed).
+ */
+export interface OfflineAvailability {
+    entityKeys: Set<string>;
+    songKeys: Set<string>;
 }
 
 export interface OfflineMediaStats {
@@ -108,6 +130,10 @@ export const useCacheStore = createWithEqualityFn<CacheStoreActions & CacheStore
                     set((st) => {
                         st.hydrationStates[e] = s;
                     }),
+                setOfflineAvailability: (a) =>
+                    set((st) => {
+                        st.offlineAvailability = a;
+                    }),
                 setOfflineMedia: (s) =>
                     set((st) => {
                         st.offlineMedia = { ...st.offlineMedia, ...s };
@@ -130,6 +156,7 @@ export const useCacheStore = createWithEqualityFn<CacheStoreActions & CacheStore
             cacheAvailable: undefined,
             entityCounts: {},
             hydrationStates: {},
+            offlineAvailability: { entityKeys: new Set(), songKeys: new Set() },
             offlineMedia: { bytesUsed: 0, itemsDownloaded: 0, targetCount: 0 },
             offlineSync: undefined,
             pendingMutations: 0,

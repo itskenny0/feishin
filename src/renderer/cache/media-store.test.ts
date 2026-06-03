@@ -326,4 +326,50 @@ describe('LocalMediaStore targets', () => {
         expect(await store.count()).toBe(0);
         expect(await store.listTargets()).toEqual([]);
     });
+
+    it('listSongKeys returns every downloaded blob key', async () => {
+        await store.save({
+            blob: blob(10),
+            container: 'mp3',
+            entityKey: 'srv:album:al1',
+            serverId: 'srv',
+            songId: 's1',
+        });
+        await store.save({
+            blob: blob(10),
+            container: 'mp3',
+            entityKey: 'srv:album:al1',
+            serverId: 'srv',
+            songId: 's2',
+        });
+        const keys = await store.listSongKeys();
+        expect(keys.sort()).toEqual(['srv:s1', 'srv:s2']);
+    });
+
+    it('listAvailableEntityKeys returns each owning target once (deduped)', async () => {
+        // s1 belongs to BOTH an album and a playlist; s2 only the album.
+        await store.save({
+            blob: blob(10),
+            container: 'mp3',
+            entityKey: 'srv:album:al1',
+            serverId: 'srv',
+            songId: 's1',
+        });
+        await store.save({
+            blob: blob(10),
+            container: 'mp3',
+            entityKey: 'srv:playlist:pl1',
+            serverId: 'srv',
+            songId: 's1',
+        });
+        await store.save({
+            blob: blob(10),
+            container: 'mp3',
+            entityKey: 'srv:album:al1',
+            serverId: 'srv',
+            songId: 's2',
+        });
+        const keys = await store.listAvailableEntityKeys();
+        expect(keys.sort()).toEqual(['srv:album:al1', 'srv:playlist:pl1']);
+    });
 });

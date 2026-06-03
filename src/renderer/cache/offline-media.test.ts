@@ -24,11 +24,18 @@ const mocks = vi.hoisted(() => {
         getStreamUrl: vi.fn(),
     };
     const cacheActions = {
+        setOfflineAvailability: vi.fn(),
         setOfflineMedia: vi.fn(),
         setOfflineSync: vi.fn(),
     };
+    // Mutable mirror of the store's availability slice so refreshOfflineAvailability's
+    // "skip when unchanged" equality check has a previous value to compare against.
+    const cacheState = {
+        offlineAvailability: { entityKeys: new Set<string>(), songKeys: new Set<string>() },
+    };
     const ref = {
         cacheActions,
+        cacheState,
         controller,
         settingsState: {
             localCache: {
@@ -46,7 +53,12 @@ vi.mock('/@/renderer/store', () => ({
     useSettingsStore: { getState: () => mocks.settingsState },
 }));
 vi.mock('/@/renderer/cache/store', () => ({
-    useCacheStore: { getState: () => ({ actions: mocks.cacheActions }) },
+    useCacheStore: {
+        getState: () => ({
+            actions: mocks.cacheActions,
+            offlineAvailability: mocks.cacheState.offlineAvailability,
+        }),
+    },
 }));
 
 import { LocalMediaStore } from '/@/renderer/cache/media-store';
@@ -54,6 +66,7 @@ import {
     addOfflineTarget,
     cancelOfflineSync,
     enumerateTargetSongs,
+    refreshOfflineAvailability,
     removeOfflineTarget,
     syncTarget,
 } from '/@/renderer/cache/offline-media';
@@ -112,6 +125,10 @@ const song = (id: string, size = 1000) => ({ container: 'mp3', id, name: id, siz
 
 beforeEach(() => {
     vi.clearAllMocks();
+    mocks.cacheState.offlineAvailability = { entityKeys: new Set(), songKeys: new Set() };
+    mocks.cacheActions.setOfflineAvailability.mockImplementation((a: any) => {
+        mocks.cacheState.offlineAvailability = a;
+    });
     mocks.settingsState = {
         localCache: {
             offlineMedia: { downloadOriginal: true, maxBytes: Number.POSITIVE_INFINITY },
@@ -313,5 +330,88 @@ describe('target lifecycle', () => {
         await removeOfflineTarget('srv:album:al1', store);
         expect(await store.listTargets()).toHaveLength(0);
         expect(await store.count()).toBe(0);
+    });
+});
+
+describe('refreshOfflineAvailability', () => {
+    it('publishes downloaded song keys + owning entity keys to the store', async () => {
+        const store = makeStore();
+        await store.save({
+            blob: new Blob([new Uint8Array(100)]),
+            container: 'mp3',
+            entityKey: 'srv:album:al1',
+            serverId: 'srv',
+            songId: 's1',
+        });
+
+        await refreshOfflineAvailability(store);
+
+        expect(mocks.cacheActions.setOfflineAvailability).toHaveBeenCalledTimes(1);
+        const published = mocks.cacheActions.setOfflineAvailability.mock.calls[0][0];
+        expect([...published.songKeys]).toEqual(['srv:s1']);
+        expect([...published.entityKeys]).toEqual(['srv:album:al1']);
+    });
+
+    it('skips the store write when membership is unchanged', async () => {
+        const store = makeStore();
+        await store.save({
+            blob: new Blob([new Uint8Array(100)]),
+            container: 'mp3',
+            entityKey: 'srv:album:al1',
+            serverId: 'srv',
+            songId: 's1',
+        });
+
+        await refreshOfflineAvailability(store); // first call publishes
+        await refreshOfflineAvailability(store); // second is a no-op
+
+        expect(mocks.cacheActions.setOfflineAvailability).toHaveBeenCalledTimes(1);
+    });
+
+    it('is refreshed automatically after a target download completes', async () => {
+        controller.getAlbumDetail.mockResolvedValue({ songs: [song('s1'), song('s2')] });
+        const store = makeStore();
+        await store.putTarget(target());
+
+        await syncTarget({ store, target: target() });
+
+        // syncTarget → finish → refreshOfflineStats → refreshOfflineAvailability.
+        expect(mocks.cacheActions.setOfflineAvailability).toHaveBeenCalled();
+        const last = mocks.cacheActions.setOfflineAvailability.mock.calls.at(-1)![0];
+        expect([...last.songKeys].sort()).toEqual(['srv:s1', 'srv:s2']);
+        expect([...last.entityKeys]).toEqual(['srv:album:e1']);
+    });
+});
+
+describe('byte-cap reservation accounting', () => {
+    it('counts only NEW bytes (a blob shared with another target adds zero)', async () => {
+        // s1 is already on disk under a DIFFERENT target (playlist). The album
+        // sync re-references it (membership only, no new bytes) then downloads
+        // s2. With the reservation released for the shared blob, the album's
+        // tracked Bytes reflects only the genuinely-new s2 download — the
+        // shared s1 does not inflate the album's byte accounting or eat cap
+        // headroom it never used.
+        controller.getAlbumDetail.mockResolvedValue({ songs: [song('s1'), song('s2')] });
+        const store = makeStore();
+        await store.putTarget(target());
+        await store.save({
+            blob: new Blob([new Uint8Array(1000)]),
+            container: 'mp3',
+            entityKey: 'srv:playlist:pl1',
+            serverId: 'srv',
+            songId: 's1',
+        });
+
+        const result = await syncTarget({ store, target: target() });
+
+        // Both songs are now referenced by the album, but only s2's 1000
+        // bytes are attributed as NEW to this target.
+        expect(await store.has('srv', 's1')).toBe(true);
+        expect(await store.has('srv', 's2')).toBe(true);
+        expect(result.Bytes).toBe(1000);
+        expect(result.Status).toBe('complete');
+        // s1's blob is now shared by both the playlist and the album target.
+        const s1 = await store.get('srv', 's1');
+        expect(s1?.EntityKeys.sort()).toEqual(['srv:album:e1', 'srv:playlist:pl1']);
     });
 });

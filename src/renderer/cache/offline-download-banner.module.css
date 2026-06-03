@@ -1,0 +1,19 @@
+/* App-wide offline-download progress banner. Floats above page content,
+ * clear of the player bar, and respects the bottom safe-area inset on mobile
+ * WebViews. Self-gated by the component (renders nothing when idle). */
+.banner {
+    position: fixed;
+    right: 1rem;
+    bottom: calc(6.5rem + var(--safe-bottom, 0px));
+    z-index: 200;
+    width: min(22rem, calc(100vw - 2rem));
+    padding: 0.75rem 1rem;
+    background: var(--theme-colors-surface);
+    border: 1px solid var(--theme-colors-border);
+    border-radius: 0.5rem;
+    box-shadow: 0 8px 24px rgb(0 0 0 / 35%);
+}
+
+.title {
+    color: var(--theme-colors-foreground);
+}

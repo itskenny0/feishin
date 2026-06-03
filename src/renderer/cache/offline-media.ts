@@ -162,6 +162,47 @@ const fetchSongBlob = async (url: string, signal?: AbortSignal): Promise<Blob> =
 };
 
 /**
+ * Rebuild the in-memory offline-availability index (downloaded song keys +
+ * offline-target keys that have at least one downloaded song) and publish it
+ * to the cache store so list/detail surfaces can render the green "available
+ * offline" indicator without per-row Dexie lookups. Cheap key scans only — no
+ * blob bytes are materialised. Skips the store write when membership is
+ * unchanged so equality-fn subscribers don't re-render needlessly.
+ */
+export const refreshOfflineAvailability = async (
+    store: LocalMediaStore = localMediaStore,
+): Promise<void> => {
+    try {
+        const [songKeys, entityKeys] = await Promise.all([
+            store.listSongKeys(),
+            store.listAvailableEntityKeys(),
+        ]);
+        const nextSongs = new Set(songKeys);
+        const nextEntities = new Set(entityKeys);
+
+        const prev = useCacheStore.getState().offlineAvailability;
+        const sameSet = (a: Set<string>, b: Set<string>): boolean => {
+            if (a.size !== b.size) return false;
+            for (const v of a) if (!b.has(v)) return false;
+            return true;
+        };
+        if (sameSet(prev.songKeys, nextSongs) && sameSet(prev.entityKeys, nextEntities)) {
+            return;
+        }
+        console.info(`${TAG} availability refreshed`, {
+            entities: nextEntities.size,
+            songs: nextSongs.size,
+        });
+        useCacheStore.getState().actions.setOfflineAvailability({
+            entityKeys: nextEntities,
+            songKeys: nextSongs,
+        });
+    } catch (err) {
+        console.warn(`${TAG} refreshOfflineAvailability failed`, err);
+    }
+};
+
+/**
  * Refresh the aggregate offline-media stats in the cache store from the
  * persisted rows. Cheap enough to run after each target sync / removal.
  */
@@ -182,6 +223,9 @@ export const refreshOfflineStats = async (
     } catch (err) {
         console.warn(`${TAG} refreshOfflineStats failed`, err);
     }
+    // Keep the availability index in lock-step with the aggregate stats so a
+    // freshly-downloaded entity lights up its green indicator immediately.
+    await refreshOfflineAvailability(store);
 };
 
 /**
@@ -376,6 +420,11 @@ export const syncTarget = async (args: SyncTargetArgs): Promise<OfflineTargetRow
                         total,
                     });
                 } else {
+                    // The blob was already on disk under another offline
+                    // target — we only added a membership reference, no new
+                    // bytes. Release this song's reservation so a shared
+                    // album/playlist doesn't eat cap headroom it never used.
+                    reservedBytes -= blob.size;
                     done += 1;
                 }
                 await store.patchTarget(key, { Bytes: bytesDownloaded, DownloadedCount: done });

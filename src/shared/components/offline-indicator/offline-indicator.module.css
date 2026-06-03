@@ -1,0 +1,9 @@
+.root {
+    display: inline-flex;
+    align-items: center;
+    vertical-align: middle;
+}
+
+.with-space {
+    padding-right: var(--theme-spacing-xs);
+}

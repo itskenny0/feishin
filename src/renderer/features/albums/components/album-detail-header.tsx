@@ -6,6 +6,7 @@ import { Link, useParams } from 'react-router';
 import styles from './album-detail-header.module.css';
 
 import { queryKeys } from '/@/renderer/api/query-keys';
+import { useIsEntityOfflineAvailable } from '/@/renderer/cache';
 import { JoinedArtists } from '/@/renderer/features/albums/components/joined-artists';
 import { useAlbumDetailQuery } from '/@/renderer/features/albums/queries/albums-queries';
 import { ContextMenuController } from '/@/renderer/features/context-menu/context-menu-controller';
@@ -55,6 +56,8 @@ export const AlbumDetailHeader = forwardRef<HTMLDivElement>((_props, ref) => {
         query: { id: albumId },
         serverId: server?.id,
     });
+
+    const offlineAvailable = useIsEntityOfflineAvailable(server?.id, 'album', albumId);
 
     const showRating =
         showRatings &&
@@ -298,6 +301,7 @@ export const AlbumDetailHeader = forwardRef<HTMLDivElement>((_props, ref) => {
                     route: AppRoute.LIBRARY_ALBUMS,
                     type: LibraryItem.ALBUM,
                 }}
+                offlineAvailable={offlineAvailable}
                 title={displayTitle}
             >
                 <Stack gap="md" w="100%">

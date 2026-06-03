@@ -182,6 +182,27 @@ export class LocalMediaStore {
         }
     }
 
+    /**
+     * Every offline-target key that currently owns at least one downloaded
+     * blob. Used to drive the entity-level "available offline" indicator
+     * (an album/playlist/artist/genre reads as available once any of its
+     * songs is on disk). Cheap: walks blob index keys only, no blob bytes.
+     */
+    async listAvailableEntityKeys(): Promise<string[]> {
+        const db = this.dbOrUndefined();
+        if (!db) return [];
+        try {
+            const keys = new Set<string>();
+            await db.mediaBlobs.each((row) => {
+                for (const k of row.EntityKeys ?? []) keys.add(k);
+            });
+            return [...keys];
+        } catch (err) {
+            console.warn(`${TAG} listAvailableEntityKeys() failed`, err);
+            return [];
+        }
+    }
+
     /** Every blob row that belongs to the given offline-target key. */
     async listByEntity(entityKey: string): Promise<CachedMediaBlob[]> {
         const db = this.dbOrUndefined();
@@ -190,6 +211,25 @@ export class LocalMediaStore {
             return await db.mediaBlobs.where('EntityKeys').equals(entityKey).toArray();
         } catch (err) {
             console.warn(`${TAG} listByEntity() failed`, err);
+            return [];
+        }
+    }
+
+    /**
+     * Every downloaded blob's `${serverId}:${songId}` key. Drives the
+     * song-level "available offline" indicator. Cheap primary-key scan.
+     */
+    async listSongKeys(): Promise<string[]> {
+        const db = this.dbOrUndefined();
+        if (!db) return [];
+        try {
+            const out: string[] = [];
+            await db.mediaBlobs.each((row) => {
+                out.push(row.Key);
+            });
+            return out;
+        } catch (err) {
+            console.warn(`${TAG} listSongKeys() failed`, err);
             return [];
         }
     }

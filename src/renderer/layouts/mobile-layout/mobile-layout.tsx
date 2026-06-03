@@ -7,6 +7,7 @@ import { Outlet, useLocation } from 'react-router';
 
 import styles from './mobile-layout.module.css';
 
+import { OfflineDownloadBanner } from '/@/renderer/cache';
 import { ContextMenuController } from '/@/renderer/features/context-menu/context-menu-controller';
 import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
 import { FullScreenVisualizer } from '/@/renderer/features/player/components/full-screen-visualizer';
@@ -225,6 +226,7 @@ export const MobileLayout = ({ shell }: MobileLayoutProps) => {
                     </div>
                 )}
             </AnimatePresence>
+            <OfflineDownloadBanner />
             <ContextMenuController.Root />
         </>
     );
