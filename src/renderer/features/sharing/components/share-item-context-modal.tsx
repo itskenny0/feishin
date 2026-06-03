@@ -127,7 +127,7 @@ export const ShareItemContextModal = ({
 
                             // Make sure we weren't clicking close (otherwise clicking close /also/ opens the url)
                             if (a.target.nodeName !== 'svg') {
-                                window.open(shareUrl);
+                                window.open(shareUrl, '_blank', 'noopener,noreferrer');
                                 toast.hide('share-item-toast');
                             }
                         },

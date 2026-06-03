@@ -27,7 +27,7 @@ export const DownloadAction = ({ ids }: DownloadActionProps) => {
                 if (isElectron()) {
                     utils?.download(downloadUrl);
                 } else {
-                    window.open(downloadUrl, '_blank');
+                    window.open(downloadUrl, '_blank', 'noopener,noreferrer');
                 }
             }
         } catch (error) {
