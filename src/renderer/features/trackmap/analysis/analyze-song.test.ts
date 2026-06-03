@@ -188,5 +188,12 @@ describe('analyzeSong — lazy cache behaviour', () => {
         // ...and the lazy generate-then-persist write landed under the song key.
         expect(mocks.cacheSet).toHaveBeenCalledTimes(1);
         expect(mocks.cacheSet).toHaveBeenCalledWith('srv', 'song-4', 3, produced);
+        // ...and the success path tore down BOTH worker listeners so the
+        // abort handler (and the closure it captures) isn't retained for
+        // the lifetime of a caller-held AbortSignal.
+        expect(mocks.workerInstance.removeEventListener).toHaveBeenCalledWith(
+            'message',
+            expect.any(Function),
+        );
     });
 });

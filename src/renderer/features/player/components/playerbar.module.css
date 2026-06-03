@@ -66,6 +66,19 @@
         grid-template-columns: minmax(0, 0.75fr) minmax(0, 1.5fr) minmax(0, 0.85fr);
         gap: 0.5rem;
     }
+
+    /*
+     * Desktop (≥1281px) — Spotify biases the now-playing bar to "narrow
+     * sides, wide middle": the left metadata + right control clusters are
+     * pinned to ~30% each and the transport + seek bar own the remaining
+     * ~40% centered against the whole bar width. The equal 1:1:1 split
+     * let the center cluster float left-of-true-center on wide screens
+     * and gave the left metadata more room than Spotify's. Scoped to
+     * ≥1281px so it never fights the hand-tuned tablet overrides above.
+     */
+    @media (width >= 1281px) {
+        grid-template-columns: minmax(180px, 30%) minmax(0, 1fr) minmax(180px, 30%);
+    }
 }
 
 .right-grid-item {

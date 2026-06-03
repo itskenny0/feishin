@@ -8,6 +8,30 @@
     position: relative;
 }
 
+.create-button {
+    width: 32px;
+    min-width: 32px;
+    height: 32px;
+    border-radius: 9999px;
+    transition:
+        transform 150ms ease-out,
+        background-color 150ms ease-out;
+}
+
+.create-button:hover {
+    transform: scale(1.06);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .create-button {
+        transition: none;
+    }
+
+    .create-button:hover {
+        transform: none;
+    }
+}
+
 .row {
     position: relative;
     display: flex;

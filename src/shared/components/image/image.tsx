@@ -20,7 +20,30 @@ import { useDebouncedValue } from '/@/shared/hooks/use-debounced-value';
 import { useInViewport } from '/@/shared/hooks/use-in-viewport';
 import { ImageRequest } from '/@/shared/types/domain-types';
 
-const loadedImageCacheKeys = new Set<string>();
+// Bounded, insertion-order LRU of cacheKeys we've already loaded this
+// session. Used only to suppress the load animation for already-seen
+// images, so eviction is harmless (a stale cover merely re-animates
+// once). Capped so a long session over a large library doesn't let the
+// set grow without bound for the life of the renderer.
+const MAX_LOADED_IMAGE_CACHE_KEYS = 2000;
+const loadedImageCacheKeysMap = new Map<string, true>();
+
+const loadedImageCacheKeys = {
+    add(key: string): void {
+        // Refresh recency on a repeat hit so frequently-seen covers
+        // aren't evicted ahead of one-off ones.
+        if (loadedImageCacheKeysMap.has(key)) {
+            loadedImageCacheKeysMap.delete(key);
+        } else if (loadedImageCacheKeysMap.size >= MAX_LOADED_IMAGE_CACHE_KEYS) {
+            const oldest = loadedImageCacheKeysMap.keys().next().value;
+            if (oldest !== undefined) loadedImageCacheKeysMap.delete(oldest);
+        }
+        loadedImageCacheKeysMap.set(key, true);
+    },
+    has(key: string): boolean {
+        return loadedImageCacheKeysMap.has(key);
+    },
+};
 
 export interface ImageProps extends Omit<ImgHTMLAttributes<HTMLImageElement>, 'src'> {
     containerClassName?: string;

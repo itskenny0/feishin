@@ -50,6 +50,7 @@ export const ActionBar = () => {
                             }
                         }}
                         placeholder={t('common.search')}
+                        radius="xl"
                         readOnly
                         // Permanent hint so users discover the command-
                         // palette shortcut without trawling the settings.
@@ -58,16 +59,18 @@ export const ActionBar = () => {
                         // Windows/Linux, ⌘ on macOS).
                         rightSection={<Kbd size="xs">Mod+K</Kbd>}
                         rightSectionWidth={70}
+                        size="md"
                     />
                 </Grid.Col>
                 <Grid.Col span={5}>
-                    <Group gap="sm" grow wrap="nowrap">
+                    <Group gap="sm" justify="flex-end" wrap="nowrap">
                         <DropdownMenu position="bottom-start">
                             <DropdownMenu.Target>
                                 <Button
                                     aria-label={t('common.menu')}
                                     className={styles.actionBarButton}
                                     p="0"
+                                    radius="xl"
                                 >
                                     <Icon icon="menu" size="lg" />
                                 </Button>
@@ -95,6 +98,7 @@ const NavigateButtons = () => {
                 className={styles.actionBarButton}
                 onClick={() => navigate(-1)}
                 p="0"
+                radius="xl"
             >
                 <Icon icon="arrowLeftS" size="lg" />
             </Button>
@@ -103,6 +107,7 @@ const NavigateButtons = () => {
                 className={styles.actionBarButton}
                 onClick={() => navigate(1)}
                 p="0"
+                radius="xl"
             >
                 <Icon icon="arrowRightS" size="lg" />
             </Button>

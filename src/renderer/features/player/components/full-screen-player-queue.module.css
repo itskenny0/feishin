@@ -61,7 +61,7 @@
         height: 100%;
         content: '';
         background: var(--theme-colors-background);
-        border-radius: 5px;
+        border-radius: 8px;
         opacity: var(--opacity, 1);
     }
 }

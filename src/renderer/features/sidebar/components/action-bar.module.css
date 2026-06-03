@@ -11,13 +11,21 @@
 }
 
 .action-bar-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    min-width: 40px;
+    height: 40px;
+    border-radius: 9999px;
     transition:
         transform 150ms ease-out,
         background-color 150ms ease-out;
 }
 
 .action-bar-button:hover {
-    transform: scale(1.05);
+    background-color: var(--mantine-color-default-hover, rgb(255 255 255 / 8%));
+    transform: scale(1.06);
 }
 
 @media (prefers-reduced-motion: reduce) {

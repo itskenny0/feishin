@@ -4,6 +4,7 @@ import qs from 'qs';
 import { z } from 'zod';
 
 import i18n from '/@/i18n/i18n';
+import { markServerReachable, markServerUnreachable } from '/@/renderer/lib/network-status';
 import { getServerUrl } from '/@/renderer/utils/normalize-server-url';
 import { ssType } from '/@/shared/api/subsonic/subsonic-types';
 import { hasFeature } from '/@/shared/api/utils';
@@ -355,7 +356,14 @@ export const contract = c.router({
     },
 });
 
-const axiosClient = axios.create({});
+// Transport-level ceiling so a hung TCP connection can't pin a request
+// forever (axios has no default timeout). 30s is generous enough for slow
+// library scans / large playlist fetches but bounded enough that the UI and
+// cache layer recover. Applies only to these JSON API/metadata calls — audio
+// stream URLs are plain string URLs handled by the <audio> element, untouched.
+const REQUEST_TIMEOUT_MS = 30_000;
+
+const axiosClient = axios.create({ timeout: REQUEST_TIMEOUT_MS });
 
 axiosClient.defaults.paramsSerializer = (params) => {
     return qs.stringify(params, { arrayFormat: 'repeat' });
@@ -363,6 +371,9 @@ axiosClient.defaults.paramsSerializer = (params) => {
 
 axiosClient.interceptors.response.use(
     (response) => {
+        // A real response means the server is reachable — clear any prior
+        // unreachable override so connectivity-gated work can resume.
+        markServerReachable();
         const data = response.data;
         if (data['subsonic-response'].status !== 'ok') {
             // Suppress code related to non-linked lastfm or spotify from Navidrome
@@ -531,7 +542,14 @@ export const ssApiClient = (args: {
                 };
             } catch (e: unknown) {
                 if (isAxiosError(e)) {
-                    if (e.code === 'ERR_NETWORK') {
+                    if (
+                        e.code === 'ERR_NETWORK' ||
+                        e.code === 'ECONNABORTED' ||
+                        e.code === 'ETIMEDOUT'
+                    ) {
+                        // Transport failure (connection refused / timeout) — the
+                        // server is unreachable, not merely returning an error.
+                        markServerUnreachable();
                         throw new Error(i18n.t('error.networkError') as string);
                     }
 

@@ -71,10 +71,18 @@ const lastRevalidateAt = new Map<string, number>();
 const REVALIDATE_TTL_MS = 60_000;
 
 const shouldRevalidate = (queryKey: QueryKey): boolean => {
+    const now = Date.now();
+    // Lazy TTL prune (mirrors toast.tsx's recentToasts cleanup). Entries
+    // older than the TTL can never gate again — they'd pass the freshness
+    // check below regardless — so dropping them here is semantically free
+    // and bounds the map to "queryKeys revalidated within the last TTL".
+    for (const [k, ts] of lastRevalidateAt) {
+        if (now - ts > REVALIDATE_TTL_MS) lastRevalidateAt.delete(k);
+    }
     const hash = JSON.stringify(queryKey);
     const last = lastRevalidateAt.get(hash) ?? 0;
-    if (Date.now() - last < REVALIDATE_TTL_MS) return false;
-    lastRevalidateAt.set(hash, Date.now());
+    if (now - last < REVALIDATE_TTL_MS) return false;
+    lastRevalidateAt.set(hash, now);
     return true;
 };
 

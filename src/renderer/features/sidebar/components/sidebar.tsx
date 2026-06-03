@@ -171,7 +171,7 @@ export const Sidebar = () => {
                 >
                     <Accordion.Item value="library">
                         <Accordion.Control>
-                            <Text fw={500} variant="secondary">
+                            <Text fw={700} fz="md">
                                 {t('page.sidebar.myLibrary')}
                             </Text>
                         </Accordion.Control>

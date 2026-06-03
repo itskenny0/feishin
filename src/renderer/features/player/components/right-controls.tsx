@@ -84,12 +84,18 @@ const calculateVolumeDown = (volume: number, volumeWheelStep: number) => {
 export const RightControls = () => {
     const showRatings = useShowRatings();
     return (
-        <Flex align="flex-end" direction="column" h="100%" px="1rem" py="0.5rem">
-            <Group h="calc(100% / 3)">
+        // Spotify's right cluster is a single vertically-centered row
+        // right-aligned against the bar edge. Feishin previously stacked
+        // three Flex rows (rating row / controls row / empty 1/3 spacer)
+        // purely to vertically center the controls; collapsing them into
+        // one centered Group reads cleaner and matches Spotify, while the
+        // rating + Auto-DJ controls (fork features) ride inline at the
+        // left of the cluster. px tightened 1rem→0.75rem so the volume
+        // slider sits closer to the bar edge like Spotify's.
+        <Flex align="center" h="100%" justify="flex-end" px="0.75rem" py="0.5rem">
+            <Group align="center" gap="xs" wrap="nowrap">
                 {showRatings && <RatingButton />}
                 <AutoDJButton />
-            </Group>
-            <Group align="center" gap="xs" wrap="nowrap">
                 <SleepTimerButton />
                 <PlayerConfig />
                 <LyricsButton />
@@ -98,7 +104,6 @@ export const RightControls = () => {
                 <DevicePickerButton />
                 <VolumeButton />
             </Group>
-            <Group h="calc(100% / 3)" />
         </Flex>
     );
 };
@@ -652,7 +657,7 @@ const VolumeButton = () => {
                 }
                 iconProps={{
                     color: muted ? 'muted' : undefined,
-                    size: 'xl',
+                    size: 'lg',
                 }}
                 onClick={(e) => {
                     e.stopPropagation();

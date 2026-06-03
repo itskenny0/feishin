@@ -54,21 +54,29 @@
 }
 
 .category-list {
+    /*
+     * gap 0.35rem (not the old 0.15rem ~2px) gives the primary drill-down
+     * rows real breathing room so they read as discrete navigation targets
+     * rather than a crammed group. padding-top 1rem aligns the rail's top
+     * rhythm with .content-inner so the two panes share a baseline.
+     */
     display: flex;
     flex-direction: column;
-    gap: 0.15rem;
-    padding: 0.75rem 0.5rem;
+    gap: 0.35rem;
+    padding: 1rem 0.85rem;
     margin: 0;
     list-style: none;
 }
 
 .category-item {
+    position: relative;
     display: flex;
     gap: 0.85rem;
     align-items: flex-start;
     width: 100%;
     min-height: 64px;
     padding: 0.75rem 0.85rem;
+    overflow: hidden;
     color: var(--theme-colors-foreground);
     text-align: left;
     cursor: pointer;
@@ -92,21 +100,53 @@
 }
 
 .category-item.active {
-    background: color-mix(in srgb, var(--theme-colors-primary-filled) 18%, transparent);
+    /*
+     * Stronger fill (22% vs the old barely-visible 18%) plus a 3px primary
+     * left accent so the selected row is unmistakable even on dark themes
+     * where the tint alone washed out. The accent echoes the back button's
+     * left-edge affordance for a consistent "where am I" cue.
+     */
+    background: color-mix(in srgb, var(--theme-colors-primary-filled) 22%, transparent);
+}
+
+.category-item.active::before {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    width: 3px;
+    height: 60%;
+    content: '';
+    background: var(--theme-colors-primary-filled);
+    border-radius: 0 3px 3px 0;
+    transform: translateY(-50%);
+}
+
+.category-item.active .category-label {
+    font-weight: 700;
 }
 
 .category-icon {
+    /*
+     * Tinted "icon chip" even at the base tier (the big-phone tier upsizes
+     * it to a full Material-You circle below). The low-opacity primary
+     * background gives the primary drill-down level more visual weight than
+     * the secondary subpage rows so the two levels read as a hierarchy
+     * rather than peers.
+     */
     display: flex;
     flex-shrink: 0;
     align-items: center;
     justify-content: center;
-    width: 1.6rem;
-    height: 1.6rem;
+    width: 2rem;
+    height: 2rem;
     color: var(--theme-colors-primary-filled);
+    background: color-mix(in srgb, var(--theme-colors-primary-filled) 12%, transparent);
+    border-radius: 8px;
 }
 
 .category-item:not(.active) .category-icon {
     color: color-mix(in srgb, var(--theme-colors-foreground) 78%, transparent);
+    background: color-mix(in srgb, var(--theme-colors-foreground) 7%, transparent);
 }
 
 .category-meta {
@@ -120,8 +160,8 @@
 .category-label {
     overflow: hidden;
     text-overflow: ellipsis;
-    font-size: 0.95rem;
-    font-weight: 600;
+    font-size: 1rem;
+    font-weight: 700;
     line-height: 1.25;
     white-space: nowrap;
 }
@@ -156,9 +196,16 @@
 }
 
 .content-inner {
+    /*
+     * padding-bottom uses max(1rem, env(safe-area-inset-bottom)) so the
+     * last row of a subpage (the final theme option, a "Re-run setup"
+     * button, etc.) is never swallowed by the Android gesture pill / iOS
+     * home indicator on notched phones. env() resolves to 0 on devices
+     * without an inset, so desktop keeps the original 1rem.
+     */
     flex: 1 1 auto;
     min-height: 0;
-    padding: 1rem 1.25rem;
+    padding: 1rem 1.25rem max(1rem, env(safe-area-inset-bottom, 0px));
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
 }
@@ -181,8 +228,20 @@
     cursor: pointer;
     background: var(--theme-colors-background-alternate, transparent);
     border: none;
+
+    /*
+     * 3px primary left accent is the Material back-affordance convention —
+     * an immediate "this row moves you up a level" cue that the bottom
+     * border alone didn't carry on small phones. The accented icon colour
+     * reinforces it.
+     */
     border-bottom: 1px solid var(--theme-colors-border);
+    border-left: 3px solid var(--theme-colors-primary-filled);
     -webkit-tap-highlight-color: transparent;
+}
+
+.back-button > svg {
+    color: var(--theme-colors-primary-filled);
 }
 
 .back-button:hover,
@@ -200,6 +259,43 @@
 @media (pointer: coarse) {
     .back-hotkey-hint {
         display: none;
+    }
+}
+
+/*
+ * Small-phone tier (≤360px — Pixel 4a, iPhone SE). Every pixel counts, so
+ * tighten the row height and padding to surface one or two more categories
+ * per screen, scale the type down a notch to match the shorter rows, and
+ * give the back button an explicit 48px Material touch target (the desktop
+ * 0.75rem padding read as cramped relative to the big-phone tier here).
+ */
+@media (width <= 360px) {
+    .category-list {
+        gap: 0.3rem;
+        padding: 0.85rem 0.7rem;
+    }
+
+    .category-item {
+        min-height: 56px;
+        padding: 0.65rem 0.75rem;
+    }
+
+    .category-icon {
+        width: 1.85rem;
+        height: 1.85rem;
+    }
+
+    .category-label {
+        font-size: 0.95rem;
+    }
+
+    .category-description {
+        font-size: 0.75rem;
+    }
+
+    .back-button {
+        min-height: 48px;
+        padding: 0.65rem 0.85rem;
     }
 }
 
@@ -242,7 +338,7 @@
     }
 
     .category-label {
-        font-size: 1rem;
+        font-size: 1.05rem;
     }
 
     .category-description {
@@ -356,8 +452,14 @@
         height: 40px;
     }
 
+    /*
+     * Subpage rows are the secondary drill-down level, so keep the label a
+     * touch lighter than the category rail (which is 1–1.05rem / 700) to
+     * preserve the parent→child hierarchy on mobile.
+     */
     .subpage-label {
-        font-size: 1rem;
+        font-size: 0.95rem;
+        font-weight: 600;
     }
 
     .subpage-description {
@@ -409,8 +511,17 @@
 }
 
 .prelude-action {
+    /*
+     * min-height 44px meets the Material / iOS minimum touch target; the
+     * old 0.55rem padding gave roughly a 32px-tall pill that was fiddly to
+     * tap on phones where this button stretches full width.
+     */
+    display: inline-flex;
     flex-shrink: 0;
-    padding: 0.55rem 0.95rem;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    padding: 0.7rem 1.1rem;
     font-size: 0.9rem;
     font-weight: 600;
     color: var(--theme-colors-primary-contrast);
@@ -425,8 +536,12 @@
 }
 
 .prelude-action-muted {
+    display: inline-flex;
     flex-shrink: 0;
-    padding: 0.45rem 0.85rem;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    padding: 0.6rem 1rem;
     font-size: 0.85rem;
     font-weight: 500;
     color: var(--theme-colors-foreground);

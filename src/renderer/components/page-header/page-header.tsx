@@ -103,7 +103,15 @@ const BasePageHeader = ({
                 className={styles.container}
                 data-visible="false"
                 ref={ref}
-                style={{ height, position: position as CSSProperties['position'] }}
+                style={
+                    {
+                        height,
+                        position: position as CSSProperties['position'],
+                        // Spotify fades the bar to the page's extracted accent
+                        // color; expose it to the CSS color-fade transition.
+                        ...(backgroundColor ? { '--page-header-bg': backgroundColor } : {}),
+                    } as CSSProperties
+                }
                 {...props}
             >
                 <div

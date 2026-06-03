@@ -24,6 +24,12 @@ import {
 } from '/@/shared/types/domain-types';
 import { ItemListKey, TableColumn } from '/@/shared/types/types';
 
+// Spotify-style detail tracklist density (56px). Scoped to the playlist
+// detail route; the shared TableItemSize.DEFAULT (64px) is untouched. On
+// mobile ItemTableList overrides this to 64px tap targets via
+// useMobileTrackRows.
+const DETAIL_TRACKLIST_ROW_HEIGHT = 56;
+
 interface PlaylistDetailSongListTableProps extends Omit<
     ItemListTableComponentProps<PlaylistSongListQuery>,
     'query'
@@ -168,6 +174,7 @@ export const PlaylistDetailSongListTable = forwardRef<any, PlaylistDetailSongLis
                 onScrollEnd={handleOnScrollEnd}
                 overrideControls={overrideControls}
                 ref={ref}
+                rowHeight={DETAIL_TRACKLIST_ROW_HEIGHT}
                 size={size}
             />
         );
@@ -277,6 +284,7 @@ export const PlaylistDetailSongListEditTable = forwardRef<any, PlaylistDetailSon
                 onScrollEnd={handleOnScrollEnd}
                 overrideControls={overrideControls}
                 ref={ref}
+                rowHeight={DETAIL_TRACKLIST_ROW_HEIGHT}
                 size={size}
             />
         );

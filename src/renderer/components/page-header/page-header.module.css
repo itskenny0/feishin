@@ -1,25 +1,39 @@
 .container {
     position: relative;
     z-index: 190;
-    visibility: hidden;
     width: 100%;
     height: 65px;
     overflow: hidden;
     pointer-events: none;
-    background: var(--theme-colors-background);
+    background-color: transparent;
     opacity: 0;
+
+    /* Spotify fades the top bar from transparent to the page's extracted
+       accent color over 0.25s as you scroll, rather than a binary opacity
+       flip. The accent is supplied via --page-header-bg (falls back to the
+       theme background when no accent is passed). The slid-in title child
+       still fades via the motion variants in page-header.tsx. */
+    transition:
+        background-color 0.25s ease-out,
+        opacity 0.25s ease-out;
 }
 
 .container[data-visible='true'] {
-    visibility: visible;
     pointer-events: auto;
+    background-color: var(--page-header-bg, var(--theme-colors-background));
     opacity: 1;
 }
 
 .container.visible {
-    visibility: visible;
     pointer-events: auto;
+    background-color: var(--page-header-bg, var(--theme-colors-background));
     opacity: 1;
+}
+
+.container[data-visible='true'] .header,
+.container.visible .header {
+    pointer-events: auto;
+    user-select: auto;
 }
 
 .header {
@@ -27,8 +41,13 @@
     z-index: 15;
     width: 100%;
     height: 100%;
-    pointer-events: auto;
-    user-select: auto;
+
+    /* Off by default so a transparent (top-of-scroll) bar doesn't intercept
+       clicks meant for the content beneath it. Re-enabled only once the
+       container is revealed (rules below). The container's own
+       pointer-events:none is not enough because .header would re-enable them. */
+    pointer-events: none;
+    user-select: none;
 
     button {
         -webkit-app-region: no-drag;

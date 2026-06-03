@@ -210,18 +210,22 @@ const AlbumArtistMetadataBiography = ({
     routeId,
 }: AlbumArtistMetadataBiographyProps) => {
     const { t } = useTranslation();
-    const server = useCurrentServer();
+    // Use the same serverId selector as the route + header so all
+    // subscribers share one query key and React Query dedups onto the
+    // route's parallel prefetch (no extra network round-trip when this
+    // child mounts).
+    const serverId = useCurrentServerId();
 
     const artistInfoQuery = useAlbumArtistInfoQuery({
-        options: { enabled: Boolean(server?.id && routeId) },
+        options: { enabled: Boolean(serverId && routeId) },
         query: { id: routeId, limit: 10 },
-        serverId: server?.id,
+        serverId,
     });
 
     const detailQuery = useAlbumArtistDetailQuery({
-        options: { enabled: Boolean(server?.id && routeId) },
+        options: { enabled: Boolean(serverId && routeId) },
         query: { id: routeId },
-        serverId: server?.id,
+        serverId,
     });
 
     const biography = artistInfoQuery.data?.biography || detailQuery.data?.biography;
@@ -990,10 +994,12 @@ const AlbumArtistMetadataSimilarArtists = ({
     const server = useCurrentServer();
     const serverId = useCurrentServerId();
 
+    // Share the route's serverId source + query key so this subscriber
+    // dedups onto the route's parallel `info` prefetch.
     const artistInfoQuery = useAlbumArtistInfoQuery({
-        options: { enabled: Boolean(server?.id && routeId) },
+        options: { enabled: Boolean(serverId && routeId) },
         query: { id: routeId, limit: 10 },
-        serverId: server?.id,
+        serverId,
     });
 
     const relatedArtists = artistInfoQuery.data?.similarArtists ?? null;

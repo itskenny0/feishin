@@ -1,6 +1,30 @@
 import { useEffect, useRef, useState } from 'react';
 
-const cache = new Map<string, null | string>();
+// Bounded, insertion-order LRU keyed by album-art URL. This is a render
+// optimization for the now-playing hero gradient, not a correctness
+// store, so a small cap is ample and eviction merely re-extracts a color
+// once. Capping stops the map from growing for every distinct cover
+// played across a long session.
+const MAX_DOMINANT_COLOR_ENTRIES = 500;
+const colorMap = new Map<string, null | string>();
+
+const cache = {
+    get(url: string): null | string | undefined {
+        return colorMap.get(url);
+    },
+    has(url: string): boolean {
+        return colorMap.has(url);
+    },
+    set(url: string, value: null | string): void {
+        if (colorMap.has(url)) {
+            colorMap.delete(url);
+        } else if (colorMap.size >= MAX_DOMINANT_COLOR_ENTRIES) {
+            const oldest = colorMap.keys().next().value;
+            if (oldest !== undefined) colorMap.delete(oldest);
+        }
+        colorMap.set(url, value);
+    },
+};
 
 interface UseDominantColorResult {
     color: null | string;

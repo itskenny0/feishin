@@ -44,10 +44,13 @@
     display: grid;
     grid-template-rows: minmax(0, 1fr);
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: 2rem;
+    gap: 1.5rem;
     width: 100%;
     max-width: 2560px;
-    margin-top: 5rem;
+
+    /* Spotify top-aligns its now-playing panel content; the old 5rem push
+       dropped the cover/metadata oddly low. 2.5rem sits it higher/balanced. */
+    margin-top: 2.5rem;
 
     @media screen and (orientation: portrait) {
         grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);

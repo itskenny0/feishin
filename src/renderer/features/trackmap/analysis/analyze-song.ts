@@ -130,6 +130,16 @@ export const analyzeSong = async (args: AnalyzeArgs): Promise<null | TrackmapDat
         const thisJob = { aborted: false, reject, requestId, resolve };
         currentJob = thisJob;
 
+        // Remove BOTH listeners on every terminal path. Previously the
+        // 'abort' listener was only detached when the AbortSignal was
+        // GC'd, so a caller holding the controller for the track's
+        // lifetime would retain this closure (and `thisJob`, `w`,
+        // `onMessage`) until then.
+        const cleanup = () => {
+            w.removeEventListener('message', onMessage);
+            signal.removeEventListener('abort', onAbort);
+        };
+
         const onMessage = (event: MessageEvent<TrackmapWorkerResponse>) => {
             const res = event.data;
             // Ignore late responses from a superseded job. Without this
@@ -140,22 +150,24 @@ export const analyzeSong = async (args: AnalyzeArgs): Promise<null | TrackmapDat
             // current job's response).
             if (res.requestId !== thisJob.requestId) return;
             if (thisJob.aborted) return;
-            w.removeEventListener('message', onMessage);
+            cleanup();
             if (res.type === 'result' && res.data) {
                 resolve(res.data);
             } else {
                 reject(new Error(res.message ?? 'worker error'));
             }
         };
-        w.addEventListener('message', onMessage);
 
-        signal.addEventListener('abort', () => {
+        const onAbort = () => {
             if (!thisJob.aborted) {
                 thisJob.aborted = true;
-                w.removeEventListener('message', onMessage);
+                cleanup();
                 reject(new DOMException('aborted', 'AbortError'));
             }
-        });
+        };
+
+        w.addEventListener('message', onMessage);
+        signal.addEventListener('abort', onAbort);
 
         const req: TrackmapWorkerRequest = {
             monoSamples,

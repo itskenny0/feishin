@@ -7,6 +7,7 @@ import qs from 'qs';
 
 import i18n from '/@/i18n/i18n';
 import { authenticationFailure } from '/@/renderer/api/utils';
+import { markServerReachable, markServerUnreachable } from '/@/renderer/lib/network-status';
 import { useAuthStore } from '/@/renderer/store';
 import { getServerUrl } from '/@/renderer/utils/normalize-server-url';
 import { ndType } from '/@/shared/api/navidrome/navidrome-types';
@@ -297,7 +298,15 @@ export const contract = c.router({
     },
 });
 
-const axiosClient = axios.create({});
+// Transport-level ceiling so a hung TCP connection can't pin a request
+// forever (axios has no default timeout). 30s is generous for slow library
+// scans / large fetches but bounded enough that the UI recovers. Applies only
+// to these JSON API/metadata calls — audio stream URLs are plain string URLs
+// handled by the <audio> element and are untouched. The bespoke 401 re-auth
+// `axios.post(.../auth/login)` below intentionally keeps no timeout override.
+const REQUEST_TIMEOUT_MS = 30_000;
+
+const axiosClient = axios.create({ timeout: REQUEST_TIMEOUT_MS });
 
 axiosClient.defaults.paramsSerializer = (params) => {
     return qs.stringify(params, { arrayFormat: 'repeat' });
@@ -366,6 +375,10 @@ axiosClient.interceptors.response.use(
         }
 
         authSuccess = true;
+
+        // A real response means the server is reachable — clear any prior
+        // unreachable override so connectivity-gated work can resume.
+        markServerReachable();
 
         return response;
     },
@@ -514,7 +527,14 @@ export const ndApiClient = (args: {
                 };
             } catch (e: unknown) {
                 if (isAxiosError(e)) {
-                    if (e.code === 'ERR_NETWORK') {
+                    if (
+                        e.code === 'ERR_NETWORK' ||
+                        e.code === 'ECONNABORTED' ||
+                        e.code === 'ETIMEDOUT'
+                    ) {
+                        // Transport failure (connection refused / timeout) — the
+                        // server is unreachable, not merely returning an error.
+                        markServerUnreachable();
                         throw new Error(i18n.t('error.networkError') as string);
                     }
 

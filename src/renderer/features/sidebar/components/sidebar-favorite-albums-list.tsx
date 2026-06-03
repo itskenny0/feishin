@@ -268,7 +268,7 @@ export const SidebarFavoriteAlbumsList = () => {
         <Accordion.Item value="favorite-albums">
             <Accordion.Control component="div" role="button" style={{ userSelect: 'none' }}>
                 <Group justify="space-between" pr="var(--theme-spacing-md)">
-                    <Text fw={500}>
+                    <Text fw={700} fz="md">
                         {t('page.sidebar.favoriteAlbums', { postProcess: 'titleCase' })}
                     </Text>
                     <Group gap="xs">

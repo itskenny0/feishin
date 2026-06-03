@@ -15,6 +15,7 @@ import { useDeletePlaylist } from '/@/renderer/features/playlists/mutations/dele
 import { useUpdatePlaylist } from '/@/renderer/features/playlists/mutations/update-playlist-mutation';
 import { usePlaylistDetailSuspenseQuery } from '/@/renderer/features/playlists/queries/playlists-queries';
 import { AnimatedPage } from '/@/renderer/features/shared/components/animated-page';
+import { EmptyState } from '/@/renderer/features/shared/components/empty-state';
 import { ListWithSidebarContainer } from '/@/renderer/features/shared/components/list-with-sidebar-container';
 import { PageErrorBoundary } from '/@/renderer/features/shared/components/page-error-boundary';
 import { AppRoute } from '/@/renderer/router/routes';
@@ -269,6 +270,28 @@ const PlaylistDetailSongListRoute = () => {
         mode,
         setIsSidebarOpen,
     ]);
+
+    // The suspense query can legitimately resolve to `null` when a cold
+    // network fetch fails or times out with nothing cached (cachedSwr's
+    // fallback path) — common on flaky mobile connections. Render a
+    // graceful empty state instead of mounting the full header/content
+    // tree against null data (mirrors the album-detail guard). All hooks
+    // above run unconditionally and already null-guard their inputs, so
+    // this early return doesn't violate the rules of hooks.
+    if (!detailQuery?.data) {
+        return (
+            <AnimatedPage key={`playlist-detail-songList-${playlistId}`}>
+                <EmptyState
+                    description={t('error.networkError', {
+                        defaultValue:
+                            'Could not load this playlist. Check your connection and retry.',
+                    })}
+                    icon="emptySongImage"
+                    title={t('error.genericError', { defaultValue: 'Something went wrong' })}
+                />
+            </AnimatedPage>
+        );
+    }
 
     return (
         <AnimatedPage key={`playlist-detail-songList-${playlistId}`}>

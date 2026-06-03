@@ -561,23 +561,25 @@ export const SidebarPlaylistList = () => {
                                 variant="subtle"
                             />
                         )}
-                        <Text className={styles.name} fw={500}>
+                        <Text className={styles.name} fw={700} fz="md">
                             {inNavigation ? navigation.currentName : t('page.sidebar.playlists')}
                         </Text>
                     </Group>
                     <Group gap="xs" wrap="nowrap">
                         <ActionIcon
+                            className={styles.createButton}
                             icon="add"
                             iconProps={{
                                 size: 'lg',
                             }}
                             onClick={handleCreatePlaylistModal}
+                            radius="xl"
                             size="xs"
                             tooltip={{
                                 label: t('action.createPlaylist'),
                                 openDelay: 400,
                             }}
-                            variant="subtle"
+                            variant="filled"
                         />
                         {showExpandAll && (
                             <ActionIcon

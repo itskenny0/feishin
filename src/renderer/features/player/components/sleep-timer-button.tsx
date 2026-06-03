@@ -69,6 +69,10 @@ const useSleepTimer = () => {
     setVolumeRef.current = setVolume;
     const fadeSecondsRef = useRef(fadeSeconds);
     fadeSecondsRef.current = fadeSeconds;
+    // Tracks the in-flight fade interval so we can clear it if the owner
+    // unmounts mid-fade — otherwise the self-clearing interval keeps
+    // firing setVolume against an unmounted owner until it self-terminates.
+    const fadeIntervalRef = useRef<null | number>(null);
 
     /**
      * Smoothly fade volume to 0 over {@link fadeSecondsRef} seconds, then pause
@@ -89,17 +93,34 @@ const useSleepTimer = () => {
         const tickMs = 100;
         const totalTicks = Math.max(1, Math.round((fade * 1000) / tickMs));
         let tick = 0;
+        // Clear any prior fade before starting a new one so we never leak a
+        // second concurrent interval.
+        if (fadeIntervalRef.current !== null) {
+            window.clearInterval(fadeIntervalRef.current);
+        }
         const id = window.setInterval(() => {
             tick += 1;
             const remainingFraction = Math.max(0, 1 - tick / totalTicks);
             setVolumeRef.current(Math.max(0, Math.round(startingVolume * remainingFraction)));
             if (tick >= totalTicks) {
                 window.clearInterval(id);
+                fadeIntervalRef.current = null;
                 mediaPauseRef.current();
                 // Give the engine one tick to apply pause, then restore volume.
                 window.setTimeout(() => setVolumeRef.current(startingVolume), tickMs);
             }
         }, tickMs);
+        fadeIntervalRef.current = id;
+    }, []);
+
+    // Clear an in-flight fade if the hook unmounts mid-fade.
+    useEffect(() => {
+        return () => {
+            if (fadeIntervalRef.current !== null) {
+                window.clearInterval(fadeIntervalRef.current);
+                fadeIntervalRef.current = null;
+            }
+        };
     }, []);
 
     const handleOnCurrentSongChange = useCallback(() => {

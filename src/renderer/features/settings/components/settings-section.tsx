@@ -62,7 +62,14 @@ export const SettingsSection = ({ extra, options, title }: SettingsSectionProps)
     return (
         <>
             {titleNode}
-            <Stack gap="xl" px={isMobileShell ? 0 : 'xl'}>
+            {/*
+             * Mobile keeps a small horizontal gutter ('sm') instead of going
+             * edge-flush (px=0) so labels and descriptions don't run into the
+             * screen edge. Between-row spacing relaxes to 'lg' (was 'xl') so
+             * section separation no longer dwarfs the within-row 'xs' gap —
+             * a more balanced reading rhythm.
+             */}
+            <Stack gap="lg" px={isMobileShell ? 'sm' : 'xl'}>
                 {values.map((option) => (
                     <SettingsOptions key={`option-${option.title}`} {...option} />
                 ))}

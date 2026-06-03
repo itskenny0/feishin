@@ -312,18 +312,19 @@
     margin: 0;
 
     /* Spotify-style display title: large, dense, tight tracking.
-       3.5rem ceiling lets desktop hero pages read as editorial cover-
-       art labels rather than UI chrome; 1.75rem floor keeps phone
-       titles readable without crushing into the album-art on portrait.
-       The sizes calculated by calculateTitleSize() in
-       library-header.tsx override this baseline when the title is
-       unusually long. overflow-wrap: anywhere + text-wrap: pretty lets
-       the browser break long words and balance lines on bigger widths,
-       so titles never spill off the page edge on narrow viewports. */
-    font-size: clamp(1.75rem, 4dvw, 3.5rem);
+       6rem ceiling lets wide desktop hero pages read ~86–96px like
+       Spotify's encore-headline-large rather than UI chrome; 1.75rem
+       floor keeps phone titles readable without crushing into the
+       album-art on portrait. The per-title sizes from calculateTitleSize()
+       in library-header.tsx override this baseline (they ramp both the
+       dvw multiplier and the ceiling down for long names).
+       overflow-wrap: anywhere + text-wrap: pretty lets the browser break
+       long words and balance lines on bigger widths, so titles never
+       spill off the page edge on narrow viewports. */
+    font-size: clamp(1.75rem, 6dvw, 6rem);
     font-weight: 800;
     line-height: 1.1;
-    letter-spacing: -0.02em;
+    letter-spacing: -0.035em;
     text-wrap: pretty;
     overflow-wrap: anywhere;
 }

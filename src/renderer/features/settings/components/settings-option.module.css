@@ -33,10 +33,22 @@
     }
 }
 
+/*
+ * Conditional / dependent option rows (e.g. the accent colour picker that's
+ * only meaningful while "use theme accent" is on). The bare 2px border read
+ * as a generic divider; a compound treatment — a primary-tinted accent rail
+ * plus a faint background wash and rounded right edge — makes the master →
+ * detail relationship explicit without adding visual clutter.
+ */
 .row-indented {
+    padding-top: var(--theme-spacing-xs);
+    padding-right: var(--theme-spacing-sm);
+    padding-bottom: var(--theme-spacing-xs);
     padding-left: var(--theme-spacing-lg);
     margin-left: var(--theme-spacing-md);
-    border-left: 2px solid var(--theme-colors-border);
+    background: color-mix(in srgb, var(--theme-colors-primary-filled) 4%, transparent);
+    border-left: 3px solid color-mix(in srgb, var(--theme-colors-primary-filled) 45%, transparent);
+    border-radius: 0 8px 8px 0;
 }
 
 /*
@@ -79,10 +91,11 @@
 .subheader,
 .subheader-indented {
     align-items: center;
+    padding-top: var(--theme-spacing-xs);
     padding-bottom: var(--theme-spacing-xs);
-    letter-spacing: 0.04em;
-    border-bottom: 1px solid var(--theme-colors-border);
-    opacity: 0.75;
+    letter-spacing: 0.06em;
+    border-bottom: 1px solid color-mix(in srgb, var(--theme-colors-foreground) 22%, transparent);
+    opacity: 0.9;
 }
 
 .subheader-indented {

@@ -41,7 +41,10 @@ export const SettingsOptions = memo(
         // right pair for fast scanning.
         if (isMobileShell) {
             return (
-                <Stack className={indent ? styles.rowIndented : styles.row} gap="xs">
+                // gap 'sm' (12px) on mobile gives the stacked label /
+                // description / control rows breathing room — at 'xs' (8px)
+                // the muted description crowded the title and control.
+                <Stack className={indent ? styles.rowIndented : styles.row} gap="sm">
                     <Group gap="xs" wrap="nowrap">
                         <Text isNoSelect size="md">
                             {title}

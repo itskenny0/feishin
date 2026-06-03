@@ -45,6 +45,18 @@ const MAX_URL_LENGTH = 256;
 const truncate = (field: string) =>
     field.length <= MAX_FIELD_LENGTH ? field : field.substring(0, MAX_FIELD_LENGTH - 1) + '…';
 
+// Discord requires details/state/largeImageText fields to be at least 2
+// characters. For normal-length values we return them untouched (the old
+// `padEnd(2, ' ')` leaked a trailing space into every card). Only sub-2-char,
+// non-empty values are padded, and we pad with a zero-width space so no visible
+// trailing whitespace appears in the Discord UI. Empty values fall through to
+// the caller's `|| 'Fallback'` (already ≥2 chars).
+const minLen2 = (value: null | string | undefined): string => {
+    if (!value) return '';
+    if (value.length >= 2) return value;
+    return value + '​';
+};
+
 export const useDiscordRpc = () => {
     const discordSettings = useDiscordSettings();
     const lastfmApiKey = useLastfmApiKey();
@@ -64,6 +76,12 @@ export const useDiscordRpc = () => {
     });
 
     const imageUrlRef = useRef<null | string | undefined>(imageUrl);
+    // Memoized large-image (cover art) lookup keyed by the playing track's
+    // _uniqueId. The album-art URL is static for a given track, so we resolve it
+    // once (on track change / first activity) and reuse it for every subsequent
+    // interval/seek/status tick — avoiding a redundant getAlbumInfo / last.fm
+    // network fetch every ~15s for the whole duration of the song.
+    const largeImageCacheRef = useRef<null | { id: string; key: string }>(null);
     const previousEnabledRef = useRef<boolean>(discordSettings.enabled);
     const intervalRef = useRef<NodeJS.Timeout | null>(null);
     const discordEnabledRef = useRef<boolean>(discordSettings.enabled);
@@ -80,6 +98,13 @@ export const useDiscordRpc = () => {
     useEffect(() => {
         privateModeRef.current = privateMode;
     }, [privateMode]);
+
+    // Invalidate the memoized cover when a setting that affects which image is
+    // resolved changes, so toggling these mid-track re-resolves on the next tick
+    // instead of serving a stale cached key.
+    useEffect(() => {
+        largeImageCacheRef.current = null;
+    }, [discordSettings.showServerImage, lastfmApiKey]);
 
     const setActivity = useCallback(
         async (current: ActivityState, trigger: ActivityTrigger) => {
@@ -193,15 +218,13 @@ export const useDiscordRpc = () => {
             };
 
             const activity: SetActivity = {
-                details: truncate((song?.name && song.name.padEnd(2, ' ')) || 'Idle'),
+                details: truncate(minLen2(song?.name) || 'Idle'),
                 instance: false,
                 largeImageKey: undefined,
-                largeImageText: truncate(
-                    (song?.album && song.album.padEnd(2, ' ')) || 'Unknown album',
-                ),
+                largeImageText: truncate(minLen2(song?.album) || 'Unknown album'),
                 smallImageKey: undefined,
                 smallImageText: undefined,
-                state: truncate((artists && artists.padEnd(2, ' ')) || 'Unknown artist'),
+                state: truncate(minLen2(artists) || 'Unknown artist'),
                 statusDisplayType: statusDisplayMap[discordSettings.displayType],
                 // I would love to use the actual type as opposed to hardcoding to 2,
                 // but manually installing the discord-types package appears to break things
@@ -257,53 +280,73 @@ export const useDiscordRpc = () => {
                 activity.smallImageText = sentenceCase(current[2]);
             }
 
-            if (discordSettings.showServerImage && song) {
-                if (song._uniqueId === currentSong?._uniqueId && imageUrlRef.current) {
-                    if (song._serverType === ServerType.JELLYFIN) {
-                        activity.largeImageKey = imageUrlRef.current;
-                    } else if (
-                        song._serverType === ServerType.NAVIDROME ||
-                        song._serverType === ServerType.SUBSONIC
-                    ) {
-                        try {
-                            const info = await api.controller.getAlbumInfo({
-                                apiClientProps: {
-                                    forceRemoteUrl: true,
-                                    serverId: song._serverId,
-                                },
-                                query: { id: song.albumId },
-                            });
+            // Cover art is static for a given track, so resolve it at most once
+            // per track and reuse the cached key on every later interval/seek/
+            // status tick instead of re-hitting getAlbumInfo / last.fm.
+            const cachedImage = largeImageCacheRef.current;
+            if (cachedImage && cachedImage.id === song._uniqueId) {
+                activity.largeImageKey = cachedImage.key;
+            } else {
+                if (discordSettings.showServerImage && song) {
+                    if (song._uniqueId === currentSong?._uniqueId && imageUrlRef.current) {
+                        if (song._serverType === ServerType.JELLYFIN) {
+                            activity.largeImageKey = imageUrlRef.current;
+                        } else if (
+                            song._serverType === ServerType.NAVIDROME ||
+                            song._serverType === ServerType.SUBSONIC
+                        ) {
+                            try {
+                                const info = await api.controller.getAlbumInfo({
+                                    apiClientProps: {
+                                        forceRemoteUrl: true,
+                                        serverId: song._serverId,
+                                    },
+                                    query: { id: song.albumId },
+                                });
 
-                            if (info.imageUrl) {
-                                activity.largeImageKey = info.imageUrl;
+                                if (info.imageUrl) {
+                                    activity.largeImageKey = info.imageUrl;
+                                }
+                            } catch {
+                                /* empty */
                             }
-                        } catch {
-                            /* empty */
                         }
                     }
                 }
-            }
 
-            if (
-                activity.largeImageKey === undefined &&
-                lastfmApiKey &&
-                song?.album &&
-                song?.albumArtists.length
-            ) {
-                const albumInfo = await fetch(
-                    `https://ws.audioscrobbler.com/2.0/?method=album.getinfo&api_key=${lastfmApiKey}&artist=${encodeURIComponent(song.albumArtists[0].name)}&album=${encodeURIComponent(song.album)}&format=json`,
-                );
+                if (
+                    activity.largeImageKey === undefined &&
+                    lastfmApiKey &&
+                    song?.album &&
+                    song?.albumArtists.length
+                ) {
+                    const albumInfo = await fetch(
+                        `https://ws.audioscrobbler.com/2.0/?method=album.getinfo&api_key=${lastfmApiKey}&artist=${encodeURIComponent(song.albumArtists[0].name)}&album=${encodeURIComponent(song.album)}&format=json`,
+                    );
 
-                const albumInfoJson = await albumInfo.json();
+                    const albumInfoJson = await albumInfo.json();
 
-                if (albumInfoJson.album?.image?.[3]['#text']) {
-                    activity.largeImageKey = albumInfoJson.album.image[3]['#text'];
+                    if (albumInfoJson.album?.image?.[3]['#text']) {
+                        activity.largeImageKey = albumInfoJson.album.image[3]['#text'];
+                    }
                 }
-            }
 
-            // Fall back to default icon if not set
-            if (!activity.largeImageKey) {
-                activity.largeImageKey = 'icon';
+                // Fall back to default icon if not set
+                if (!activity.largeImageKey) {
+                    activity.largeImageKey = 'icon';
+                }
+
+                // Memoize the resolved cover for this track. The Jellyfin branch
+                // depends on imageUrlRef being populated for the *current* song;
+                // only cache once a real key (not the bare 'icon' fallback) is
+                // resolved so a transient miss doesn't pin the placeholder for
+                // the rest of the track.
+                if (activity.largeImageKey && activity.largeImageKey !== 'icon') {
+                    largeImageCacheRef.current = {
+                        id: song._uniqueId,
+                        key: activity.largeImageKey,
+                    };
+                }
             }
 
             // Initialize if needed

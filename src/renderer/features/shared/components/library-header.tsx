@@ -2,7 +2,7 @@ import type { KeyboardEvent } from 'react';
 
 import { closeAllModals, openModal } from '@mantine/modals';
 import clsx from 'clsx';
-import { forwardRef, ReactNode, Ref, useCallback } from 'react';
+import { forwardRef, ReactNode, Ref, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 
@@ -82,11 +82,21 @@ export const LibraryHeader = forwardRef(
         // header backdrop fades from the album's signature hue at the top
         // into the page background below. Falls back to no gradient when
         // the canvas read fails (CORS-tainted image, no album art).
-        const heroSourceUrl =
-            imageUrl ||
-            (item.imageId && item.type
-                ? getItemImageUrl({ id: item.imageId, itemType: item.type as LibraryItem })
-                : null);
+        //
+        // Memoize the source URL: without this the inline expression
+        // produces a new string identity on every parent render, which
+        // re-runs `useDominantColor`'s effect each time (the work itself is
+        // URL-cached, but the effect churn is wasteful). Pin it to the
+        // actual inputs so the dominant-colour extraction runs once per
+        // cover.
+        const heroSourceUrl = useMemo(
+            () =>
+                imageUrl ||
+                (item.imageId && item.type
+                    ? getItemImageUrl({ id: item.imageId, itemType: item.type as LibraryItem })
+                    : null),
+            [imageUrl, item.imageId, item.type],
+        );
         const { color: heroColor } = useDominantColor(heroSourceUrl);
 
         const itemTypeString = (): string => {
@@ -247,9 +257,9 @@ export const LibraryHeader = forwardRef(
                             <Text
                                 className={styles.itemType}
                                 component={Link}
-                                fw={600}
+                                fw={700}
                                 isLink
-                                size="md"
+                                size="sm"
                                 to={item.route}
                                 tt="uppercase"
                             >
@@ -310,45 +320,57 @@ export const calculateWeightedLength = (str: string): number => {
 
 export const calculateTitleSize = (title: string) => {
     const titleLength = calculateWeightedLength(title);
-    // Bumped baseline + ceiling for the Spotify-style hero look. Long
-    // titles still ramp the dvw multiplier down so very long names don't
-    // overflow the header; the floor/ceiling stay synchronised with the
-    // baseline rule in library-header.module.css .title.
-    let baseSize = '4dvw';
+    // Spotify-style hero display title. Short titles get the full 6dvw
+    // baseline so wide desktops read ~86–96px (encore-headline-large);
+    // the 6rem ceiling in the clamp caps ultrawide growth. Longer titles
+    // ramp the dvw multiplier AND the ceiling down together so 60–90
+    // character names still fit the header without overflowing. Keep this
+    // ramp synchronised with the baseline `.title` rule in
+    // library-header.module.css.
+    let baseSize = '6dvw';
+    let ceiling = '6rem';
 
     if (titleLength > 20) {
-        baseSize = '3.4dvw';
+        baseSize = '5dvw';
+        ceiling = '5rem';
     }
 
     if (titleLength > 30) {
-        baseSize = '3dvw';
+        baseSize = '4dvw';
+        ceiling = '4.25rem';
     }
 
     if (titleLength > 40) {
-        baseSize = '2.6dvw';
+        baseSize = '3.2dvw';
+        ceiling = '3.5rem';
     }
 
     if (titleLength > 50) {
-        baseSize = '2.4dvw';
+        baseSize = '2.8dvw';
+        ceiling = '3rem';
     }
 
     if (titleLength > 60) {
-        baseSize = '2.2dvw';
+        baseSize = '2.4dvw';
+        ceiling = '2.75rem';
     }
 
     if (titleLength > 70) {
-        baseSize = '1.9dvw';
+        baseSize = '2dvw';
+        ceiling = '2.5rem';
     }
 
     if (titleLength > 80) {
-        baseSize = '1.7dvw';
+        baseSize = '1.8dvw';
+        ceiling = '2.25rem';
     }
 
     if (titleLength > 90) {
-        baseSize = '1.5dvw';
+        baseSize = '1.6dvw';
+        ceiling = '2rem';
     }
 
-    return `clamp(2rem, ${baseSize}, 3.5rem)`;
+    return `clamp(2rem, ${baseSize}, ${ceiling})`;
 };
 
 interface LibraryHeaderMenuProps {

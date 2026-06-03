@@ -1,4 +1,4 @@
-import { useSuspenseQuery, UseSuspenseQueryResult } from '@tanstack/react-query';
+import { UseSuspenseQueryResult } from '@tanstack/react-query';
 import { forwardRef, Fragment, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router';
@@ -6,7 +6,6 @@ import { useParams } from 'react-router';
 import styles from './album-artist-detail-header.module.css';
 
 import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
-import { artistsQueries } from '/@/renderer/features/artists/api/artists-api';
 import { getArtistAlbumsGrouped } from '/@/renderer/features/artists/hooks/use-artist-albums-grouped';
 import { useDeleteArtistImage } from '/@/renderer/features/artists/mutations/delete-artist-image-mutation';
 import { useUploadArtistImage } from '/@/renderer/features/artists/mutations/upload-artist-image-mutation';
@@ -39,6 +38,7 @@ import { Play } from '/@/shared/types/types';
 
 interface AlbumArtistDetailHeaderProps {
     albumsQuery: UseSuspenseQueryResult<AlbumListResponse, Error>;
+    detailQuery: UseSuspenseQueryResult<AlbumArtistDetailResponse, Error>;
 }
 
 function ArtistImageUploadOverlay({
@@ -112,7 +112,7 @@ function ArtistImageUploadOverlay({
 }
 
 export const AlbumArtistDetailHeader = forwardRef<HTMLDivElement, AlbumArtistDetailHeaderProps>(
-    ({ albumsQuery }, ref) => {
+    ({ albumsQuery, detailQuery }, ref) => {
         const { albumArtistId, artistId } = useParams() as {
             albumArtistId?: string;
             artistId?: string;
@@ -121,12 +121,6 @@ export const AlbumArtistDetailHeader = forwardRef<HTMLDivElement, AlbumArtistDet
         const server = useCurrentServer();
         const showRatings = useShowRatings();
         const { t } = useTranslation();
-        const detailQuery = useSuspenseQuery(
-            artistsQueries.albumArtistDetail({
-                query: { id: routeId },
-                serverId: server?.id,
-            }),
-        );
 
         const albumCount = detailQuery.data?.albumCount;
         const songCount = detailQuery.data?.songCount;

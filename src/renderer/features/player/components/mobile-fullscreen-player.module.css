@@ -924,8 +924,8 @@
 @media (prefers-reduced-motion: reduce) {
     .controls-container button,
     .controls-container button:active {
-        transition: none;
         transform: none;
+        transition: none;
     }
 }
 

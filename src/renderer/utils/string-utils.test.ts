@@ -109,7 +109,7 @@ describe('getHeaderColor', () => {
 
 describe('constrainSidebarWidth', () => {
     it('clamps to the lower bound', () => {
-        expect(constrainSidebarWidth(100)).toBe(260);
+        expect(constrainSidebarWidth(100)).toBe(300);
     });
 
     it('clamps to the upper bound', () => {
@@ -121,7 +121,7 @@ describe('constrainSidebarWidth', () => {
     });
 
     it('keeps the exact bounds', () => {
-        expect(constrainSidebarWidth(260)).toBe(260);
+        expect(constrainSidebarWidth(300)).toBe(300);
         expect(constrainSidebarWidth(400)).toBe(400);
     });
 });

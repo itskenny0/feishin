@@ -35,7 +35,7 @@ import { constrainRightSidebarWidth, constrainSidebarWidth } from '/@/renderer/u
  */
 const TABLET_SHELL_QUERY = '(min-width: 768px) and (max-width: 1199px)';
 
-const MINIMUM_SIDEBAR_WIDTH = 260;
+const MINIMUM_SIDEBAR_WIDTH = 300;
 
 export const MainContent = ({ shell }: { shell?: boolean }) => {
     const {

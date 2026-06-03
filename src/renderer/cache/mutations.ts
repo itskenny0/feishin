@@ -23,6 +23,7 @@ import { useCacheStore } from './store';
 
 import { controller } from '/@/renderer/api/controller';
 import { queryKeys } from '/@/renderer/api/query-keys';
+import { CONNECTIVITY_EVENT } from '/@/renderer/lib/network-status';
 import { queryClient } from '/@/renderer/lib/react-query';
 import { useAuthStore } from '/@/renderer/store';
 import { toast } from '/@/shared/components/toast/toast';
@@ -43,7 +44,35 @@ import {
 // Shared helpers
 // ---------------------------------------------------------------------------
 
-const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+// A backoff sleep that is short-circuited by a reconnect event. Whichever
+// fires first wins; the loser's listener/timer is cleaned up.
+const backoffSleep = (ms: number): Promise<void> => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timed = new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, ms);
+    });
+    if (typeof window === 'undefined') {
+        return timed;
+    }
+    let handler: ((e: Event) => void) | undefined;
+    const reconnected = new Promise<void>((resolve) => {
+        handler = (e: Event) => {
+            const detail = (e as CustomEvent<{ online?: boolean }>).detail;
+            if (detail?.online) {
+                resolve();
+            }
+        };
+        window.addEventListener(CONNECTIVITY_EVENT, handler);
+    });
+    return Promise.race([timed, reconnected]).finally(() => {
+        if (timer) {
+            clearTimeout(timer);
+        }
+        if (handler) {
+            window.removeEventListener(CONNECTIVITY_EVENT, handler);
+        }
+    });
+};
 
 const safeStringify = (value: unknown): string => {
     try {
@@ -1054,7 +1083,8 @@ export const startWorker = async (): Promise<void> => {
                             lastError: String(err),
                             status: 'pending',
                         });
-                        await sleep(jitteredBackoffMs(attempts));
+                        // Wake immediately if connectivity returns mid-backoff.
+                        await backoffSleep(jitteredBackoffMs(attempts));
                     }
                 } else {
                     console.error('[mutations] hard failure — rolling back', {
@@ -1097,6 +1127,19 @@ export const startWorker = async (): Promise<void> => {
     }
     await setPendingCount();
 };
+
+// Drain the queue the moment connectivity returns instead of waiting for the
+// next enqueueMutation or app restart. startWorker's `workerRunning` guard
+// makes concurrent kicks (e.g. flapping wifi) safe no-ops.
+if (typeof window !== 'undefined') {
+    window.addEventListener(CONNECTIVITY_EVENT, (e: Event) => {
+        const detail = (e as CustomEvent<{ online?: boolean }>).detail;
+        if (detail?.online) {
+            console.info('[net] reconnect — kicking mutation worker');
+            void startWorker();
+        }
+    });
+}
 
 // React hook that subscribes the consumer to the live pending count.
 export const useMutationQueueCount = (): number => useCacheStore((s) => s.pendingMutations);

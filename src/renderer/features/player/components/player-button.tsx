@@ -81,13 +81,20 @@ export const MainPlayButton = forwardRef<HTMLButtonElement, PlayButtonProps>(
                 className={clsx(styles.main, playerStateClass)}
                 icon={isPaused ? 'mediaPlay' : 'mediaPause'}
                 iconProps={{
-                    size: 'lg',
+                    size: 16,
                 }}
                 onClick={(e) => {
                     e.stopPropagation();
                     onClick?.(e);
                 }}
                 ref={ref}
+                // Pin the primary transport button to Spotify's 32×32 bar
+                // play button (it uses 48 in the embed/fullscreen). Without
+                // an explicit size the dimensions floated with the
+                // ActionIcon `sm` default + icon `lg`, so it drifted across
+                // themes. The coarse-pointer 44×44 floor in
+                // playerbar.module.css still inflates the hit area on touch.
+                size={32}
                 tooltip={{
                     label: isPaused ? (t('player.play') as string) : (t('player.pause') as string),
                     openDelay: 400,

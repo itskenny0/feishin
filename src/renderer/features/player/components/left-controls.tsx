@@ -347,6 +347,7 @@ const PlayerbarTitle = ({ currentSong, onContextMenu, title }: PlayerbarTitlePro
             onFocus={preloadNowPlaying}
             onMouseEnter={preloadNowPlaying}
             overflow="hidden"
+            size="sm"
             style={{ flex: '1 1 auto', minWidth: 0 }}
             to={AppRoute.NOW_PLAYING}
         >
@@ -410,11 +411,11 @@ const PlayerbarArtistLine = ({
                 artists={artists || []}
                 linkProps={{
                     ...JOINED_ARTISTS_MUTED_PROPS.linkProps,
-                    size: 'md',
+                    size: 'sm',
                 }}
                 rootTextProps={{
                     ...JOINED_ARTISTS_MUTED_PROPS.rootTextProps,
-                    size: 'md',
+                    size: 'sm',
                 }}
             />
         </div>
@@ -457,7 +458,7 @@ const PlayerbarAlbumLine = ({
                 onMouseEnter={preloadAlbumDetail}
                 onPointerDown={albumId ? () => prefetchAlbumDetail(albumId) : undefined}
                 overflow="hidden"
-                size="md"
+                size="sm"
                 to={albumId ? generatePath(AppRoute.LIBRARY_ALBUMS_DETAIL, { albumId }) : ''}
             >
                 <span

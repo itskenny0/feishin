@@ -112,6 +112,10 @@ const GROUPING_TAG = 'grouping';
 const RELEASE_COUNTRY_TAG = 'releasecountry';
 const RELEASE_STATUS_TAG = 'releasestatus';
 
+// Spotify-style detail tracklist density. Scoped to detail routes only —
+// the shared TableItemSize.DEFAULT (64px) drives every other list.
+const DETAIL_TRACKLIST_ROW_HEIGHT = 56;
+
 const AlbumMetadataTags = ({ album }: AlbumMetadataTagsProps) => {
     const { t } = useTranslation();
 
@@ -911,6 +915,11 @@ const AlbumDetailSongsTable = ({ songs }: AlbumDetailSongsTableProps) => {
                 onColumnReordered={handleColumnReordered}
                 onColumnResized={handleColumnResized}
                 overrideControls={overrideControls}
+                // Spotify-style 56px detail tracklist density (scoped to
+                // detail routes; the global TableItemSize.DEFAULT stays
+                // 64px). On mobile ItemTableList forces 64px tap targets
+                // via useMobileTrackRows regardless of this prop.
+                rowHeight={DETAIL_TRACKLIST_ROW_HEIGHT}
                 size={tableConfig.size}
             />
         </Stack>

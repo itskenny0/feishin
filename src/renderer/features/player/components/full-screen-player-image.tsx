@@ -286,12 +286,12 @@ export const FullScreenPlayerImage = () => {
                 </AnimatePresence>
             </div>
             <Stack className={styles.metadataContainer} gap="md" maw="100%">
-                <Text fw={900} lh="1.2" overflow="hidden" size="4xl" w="100%">
+                <Text fw={700} lh="1.2" overflow="hidden" size="4xl" w="100%">
                     {isPlayingRadio
                         ? radioMetadata?.title || stationName || 'Radio'
                         : currentSong?.name}
                 </Text>
-                <Text key="fs-artists" size="xl">
+                <Text key="fs-artists" size="lg">
                     {isPlayingRadio
                         ? radioMetadata?.artist || stationName || 'Radio'
                         : currentSong?.artists?.map((artist, index) => (
@@ -327,7 +327,7 @@ export const FullScreenPlayerImage = () => {
                         component={Link}
                         isLink
                         overflow="hidden"
-                        size="xl"
+                        size="md"
                         to={generatePath(AppRoute.LIBRARY_ALBUMS_DETAIL, {
                             albumId: currentSong?.albumId || '',
                         })}
