@@ -1,8 +1,10 @@
 import isElectron from 'is-electron';
 import { nanoid } from 'nanoid/non-secure';
-import { useState } from 'react';
+import { FocusEvent, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Navigate } from 'react-router';
+
+import styles from './login-route.module.css';
 
 import { api } from '/@/renderer/api';
 import { PageHeader } from '/@/renderer/components/page-header/page-header';
@@ -16,6 +18,7 @@ import SubsonicIcon from '/@/renderer/features/servers/assets/opensubsonic.png';
 import { IgnoreCorsSslSwitches } from '/@/renderer/features/servers/components/ignore-cors-ssl-switches';
 import { AnimatedPage } from '/@/renderer/features/shared/components/animated-page';
 import { PageErrorBoundary } from '/@/renderer/features/shared/components/page-error-boundary';
+import { useIsMobileShell } from '/@/renderer/hooks/use-breakpoint';
 import { AppRoute } from '/@/renderer/router/routes';
 import {
     getServerById,
@@ -59,6 +62,17 @@ const LoginRoute = () => {
     const { addServer, setCurrentServer, updateServer } = useAuthStoreActions();
     const currentServer = useCurrentServer();
     const serverList = useServerList();
+    const isMobileShell = useIsMobileShell();
+
+    // On phones the soft keyboard covers the lower half of the screen, so a
+    // focused field can end up hidden behind it. Centring the field on focus
+    // keeps it in view. Desktop keeps native scroll behaviour.
+    const mobileInputProps = isMobileShell
+        ? {
+              onFocus: (e: FocusEvent<HTMLInputElement>) =>
+                  e.currentTarget.scrollIntoView({ behavior: 'smooth', block: 'center' }),
+          }
+        : {};
 
     // Check if server lock is configured
     const serverLock = isServerLock();
@@ -220,8 +234,8 @@ const LoginRoute = () => {
         <AnimatedPage>
             <PageHeader />
             <Center style={{ height: '100%', padding: '1rem', width: '100vw' }}>
-                <Paper p="lg" style={{ maxWidth: '420px', width: '100%' }}>
-                    <form onSubmit={handleSubmit}>
+                <Paper className={styles.card} p="lg">
+                    <form className={styles.form} onSubmit={handleSubmit}>
                         <Stack gap="xl">
                             <Stack align="center" gap="md">
                                 <img
@@ -242,22 +256,31 @@ const LoginRoute = () => {
 
                             <Stack gap="md">
                                 <TextInput
+                                    autoCapitalize="none"
+                                    autoComplete="username"
+                                    autoCorrect="off"
                                     autoFocus
                                     data-autofocus
+                                    enterKeyHint="next"
                                     label={t('form.addServer.input', {
                                         context: 'username',
                                     })}
                                     required
+                                    spellCheck={false}
                                     variant="filled"
                                     {...form.getInputProps('username')}
+                                    {...mobileInputProps}
                                 />
                                 <PasswordInput
+                                    autoComplete="current-password"
+                                    enterKeyHint="go"
                                     label={t('form.addServer.input', {
                                         context: 'password',
                                     })}
                                     required
                                     variant="filled"
                                     {...form.getInputProps('password')}
+                                    {...mobileInputProps}
                                 />
                                 <IgnoreCorsSslSwitches />
                             </Stack>
@@ -266,6 +289,7 @@ const LoginRoute = () => {
                                 disabled={isSubmitDisabled}
                                 fullWidth
                                 loading={isLoading}
+                                size={isMobileShell ? 'md' : 'sm'}
                                 type="submit"
                                 variant="filled"
                             >

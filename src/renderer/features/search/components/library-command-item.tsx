@@ -1,5 +1,5 @@
 import { openContextModal } from '@mantine/modals';
-import { CSSProperties, useCallback, useState } from 'react';
+import { CSSProperties, memo, useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import styles from './library-command-item.module.css';
@@ -55,7 +55,13 @@ interface LibraryCommandItemProps {
     title?: string;
 }
 
-export const LibraryCommandItem = ({
+// Memoized: this is the heaviest row in the command palette (four
+// usePlayButtonClick hooks, usePlayer, regex highlighting per text). cmdk
+// re-renders its whole item tree on every keystroke / selection change, so
+// without memo every visible row re-runs all of that even when its own data
+// is unchanged. All props are primitives or stable references from the
+// query cache (`song`), so shallow comparison is correct here.
+const LibraryCommandItemComponent = ({
     disabled,
     explicitStatus,
     highlightQuery,
@@ -285,3 +291,6 @@ export const LibraryCommandItem = ({
         </Flex>
     );
 };
+
+export const LibraryCommandItem = memo(LibraryCommandItemComponent);
+LibraryCommandItem.displayName = 'LibraryCommandItem';

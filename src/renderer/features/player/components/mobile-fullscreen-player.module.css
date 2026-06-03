@@ -908,6 +908,28 @@
 }
 
 /*
+ * Tactile press feedback on the secondary transport buttons (prev / next /
+ * shuffle / repeat / skip). A quick transform-only scale-down on tap makes
+ * the row feel responsive without touching layout. The main play button
+ * has its own press animation in player-button.module.css.
+ */
+.controls-container button:active {
+    transform: scale(0.88);
+}
+
+.controls-container button {
+    transition: transform 90ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .controls-container button,
+    .controls-container button:active {
+        transition: none;
+        transform: none;
+    }
+}
+
+/*
  * Spotify-style: the main play button is dramatically bigger than the
  * surrounding transport buttons (~70–80px circle vs ~36px icons). The
  * shared MainPlayButton.module.css renders the .main class as a circle

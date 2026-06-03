@@ -1,0 +1,81 @@
+/* `div.row` (specificity 0,1,1) intentionally outranks the shared
+   `.container` (0,1,0) rules from item-table-list-column.module.css so the
+   single mobile cell lays out as a horizontal row instead of inheriting the
+   column's flex-column / align / padding defaults. */
+div.row {
+    display: flex;
+    flex-direction: row;
+    gap: 0.75rem;
+    align-items: center;
+    width: 100%;
+    min-height: 56px;
+    padding: 0 max(0.5rem, env(safe-area-inset-right)) 0
+        max(0.75rem, env(safe-area-inset-left));
+    overflow: hidden;
+    text-align: left;
+}
+
+div.row > * {
+    align-self: center;
+}
+
+.cover {
+    flex-shrink: 0;
+    width: 44px;
+    height: 44px;
+    overflow: hidden;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.coverImage {
+    width: 44px;
+    height: 44px;
+}
+
+.text {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    justify-content: center;
+    min-width: 0;
+    gap: 0.1rem;
+}
+
+.title {
+    overflow: hidden;
+    font-weight: 500;
+    line-height: 1.3;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.title.active {
+    color: var(--theme-colors-primary);
+}
+
+.artists {
+    display: flex;
+    overflow: hidden;
+    line-height: 1.3;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.artists :global(*) {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.trailing {
+    display: flex;
+    flex-shrink: 0;
+    gap: 0.25rem;
+    align-items: center;
+    height: 100%;
+}
+
+.duration {
+    font-variant-numeric: tabular-nums;
+}

@@ -6,11 +6,14 @@ import { useAlbumListFilters } from '/@/renderer/features/albums/hooks/use-album
 import { useAlbumListCountQuery } from '/@/renderer/features/albums/queries/albums-queries';
 import { EmptyState, EmptyStateProps } from '/@/renderer/features/shared/components/empty-state';
 import { ListFilters, ListFiltersTitle } from '/@/renderer/features/shared/components/list-filters';
+import {
+    ListGridSkeleton,
+    ListTableSkeleton,
+} from '/@/renderer/features/shared/components/list-skeleton';
 import { ListWithSidebarContainer } from '/@/renderer/features/shared/components/list-with-sidebar-container';
 import { SaveAsCollectionButton } from '/@/renderer/features/shared/components/save-as-collection-button';
 import { ItemListSettings, useCurrentServer, useListSettings } from '/@/renderer/store';
 import { ScrollArea } from '/@/shared/components/scroll-area/scroll-area';
-import { Spinner } from '/@/shared/components/spinner/spinner';
 import { Stack } from '/@/shared/components/stack/stack';
 import { AlbumListQuery, LibraryItem } from '/@/shared/types/domain-types';
 import { ItemListKey, ListDisplayType, ListPaginationType } from '/@/shared/types/types';
@@ -83,8 +86,20 @@ const AlbumListSuspenseContainer = () => {
 
     const { customFilters } = useListContext();
 
+    const fallback =
+        display === ListDisplayType.TABLE ? (
+            <ListTableSkeleton enableHeader={table.enableHeader} size={table.size} />
+        ) : (
+            <ListGridSkeleton
+                columns={grid.itemsPerRowEnabled ? grid.itemsPerRow : undefined}
+                gap={grid.itemGap}
+                rows={2}
+                size={grid.size}
+            />
+        );
+
     return (
-        <Suspense fallback={<Spinner container />}>
+        <Suspense fallback={fallback}>
             <AlbumListView
                 detail={detail}
                 display={display}

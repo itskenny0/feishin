@@ -1,4 +1,5 @@
 .container {
+    position: relative;
     width: 100%;
     height: 100%;
     padding: var(--theme-spacing-sm);
@@ -93,4 +94,18 @@
     padding: var(--theme-spacing-sm) var(--theme-spacing-md) var(--theme-spacing-sm) 0;
     font-size: var(--theme-font-size-lg);
     font-weight: 500;
+}
+
+.state-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--theme-spacing-md);
+    color: var(--theme-colors-foreground-muted);
+    font-size: var(--theme-font-size-sm);
+    text-align: center;
+    pointer-events: none;
 }

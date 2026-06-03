@@ -51,9 +51,10 @@ export const GoToAction = ({ items }: GoToActionProps) => {
     );
 
     const hasAlbum = !!albumId;
+    const hasDestination = hasAlbum || artists.length > 0;
 
     return (
-        <ContextMenu.Submenu disabled={items.length !== 1}>
+        <ContextMenu.Submenu disabled={items.length !== 1 || !hasDestination}>
             <ContextMenu.SubmenuTarget>
                 <ContextMenu.Item
                     leftIcon="externalLink"

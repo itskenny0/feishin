@@ -46,3 +46,19 @@
 .container:hover .preset-overlay {
     opacity: 1;
 }
+
+/*
+ * Touch devices have no hover state, so the hover-reveal rules above leave
+ * the settings / fullscreen / preset-cycling controls permanently invisible
+ * (and unreachable) on phones and tablets, and hide the current-preset
+ * label. Keep them visible there.
+ */
+@media (hover: none) {
+    .icon-group > * {
+        opacity: 1;
+    }
+
+    .preset-overlay {
+        opacity: 1;
+    }
+}

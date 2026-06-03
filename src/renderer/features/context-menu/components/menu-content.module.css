@@ -1,0 +1,23 @@
+/*
+ * Transparent wrapper around the menu's items + dividers. `display:
+ * contents` removes this element from the box tree entirely, so the
+ * items and dividers remain effective siblings of the shared
+ * ContextMenu's ScrollArea content — every selector in
+ * context-menu.module.css (.item, .divider, :hover, roving focus, …)
+ * keeps matching exactly as if the wrapper weren't there. We only need
+ * the wrapper so MenuContent has a ref to scan for orphaned dividers
+ * after layout.
+ */
+.group {
+    display: contents;
+}
+
+/*
+ * Orphaned dividers — leading, trailing, or with no rendered item
+ * between them and the previous divider — are collapsed by MenuContent
+ * tagging them with this attribute. Kept out of the box tree so the
+ * surrounding spacing/margins disappear cleanly with no residual gap.
+ */
+.group [data-divider-orphan='true'] {
+    display: none;
+}

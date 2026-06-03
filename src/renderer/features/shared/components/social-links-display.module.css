@@ -1,0 +1,33 @@
+.desktop-container {
+    display: flex;
+    flex-direction: column;
+    gap: var(--theme-spacing-xs);
+}
+
+.mobile-container {
+    display: flex;
+    flex-direction: column;
+    gap: var(--theme-spacing-xs);
+}
+
+/*
+ * Scroll-aware slot. NativeScrollArea sets `data-scrolled="true|false"` on its
+ * scroll container (an ancestor of this slot) once the user scrolls past the
+ * header offset. Show the social links at the top, fade + disable them once
+ * the user scrolls down. Pure CSS — no extra JS, rides the existing
+ * mechanism.
+ */
+.scroll-aware-slot {
+    opacity: 1;
+    max-height: 4rem;
+    overflow: hidden;
+    transition:
+        opacity 150ms ease,
+        max-height 150ms ease;
+}
+
+:global([data-scrolled='true']) .scroll-aware-slot {
+    max-height: 0;
+    opacity: 0;
+    pointer-events: none;
+}

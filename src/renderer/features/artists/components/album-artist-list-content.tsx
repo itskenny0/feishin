@@ -4,8 +4,11 @@ import { useTranslation } from 'react-i18next';
 import { useAlbumArtistListFilters } from '/@/renderer/features/artists/hooks/use-album-artist-list-filters';
 import { useAlbumArtistListQuery } from '/@/renderer/features/artists/queries/artists-queries';
 import { EmptyState, EmptyStateProps } from '/@/renderer/features/shared/components/empty-state';
+import {
+    ListGridSkeleton,
+    ListTableSkeleton,
+} from '/@/renderer/features/shared/components/list-skeleton';
 import { ItemListSettings, useCurrentServer, useListSettings } from '/@/renderer/store';
-import { Spinner } from '/@/shared/components/spinner/spinner';
 import { AlbumArtistListQuery } from '/@/shared/types/domain-types';
 import { ItemListKey, ListDisplayType, ListPaginationType } from '/@/shared/types/types';
 
@@ -46,8 +49,20 @@ export const AlbumArtistListContent = () => {
         ItemListKey.ALBUM_ARTIST,
     );
 
+    const fallback =
+        display === ListDisplayType.TABLE ? (
+            <ListTableSkeleton enableHeader={table.enableHeader} size={table.size} />
+        ) : (
+            <ListGridSkeleton
+                columns={grid.itemsPerRowEnabled ? grid.itemsPerRow : undefined}
+                gap={grid.itemGap}
+                rows={1}
+                size={grid.size}
+            />
+        );
+
     return (
-        <Suspense fallback={<Spinner container />}>
+        <Suspense fallback={fallback}>
             <AlbumArtistListView
                 display={display}
                 grid={grid}

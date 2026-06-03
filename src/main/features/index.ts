@@ -1,5 +1,7 @@
 import './core';
 
+export { loadDeferredCoreFeatures } from './core';
+
 if (process.platform === 'linux') {
     import('./linux');
 } else if (process.platform === 'darwin') {

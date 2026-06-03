@@ -12,13 +12,11 @@ import {
     snapshotSwr,
     toCachedSongRow,
 } from '/@/renderer/cache';
-import {
-    FeatureCardData,
-    SONGS_PER_CARD,
-} from '/@/renderer/features/home/components/feature-card/feature-card-shell';
+import { FeatureCardData } from '/@/renderer/features/home/components/feature-card/feature-card-shell';
 import { usePoolRotation } from '/@/renderer/features/home/components/feature-card/use-pool-rotation';
 import { isCleanGenreName } from '/@/renderer/features/home/utils/genre-filter';
 import { AppRoute } from '/@/renderer/router/routes';
+import { useHomeFeatureCardSongsPerCard } from '/@/renderer/store/settings.store';
 import {
     AlbumArtist,
     AlbumArtistListSort,
@@ -161,7 +159,11 @@ const useArtistCandidates = (serverId: string | undefined) =>
         staleTime: 1000 * 60 * 60,
     });
 
-const useArtistSongs = (artistId: null | string, serverId: string | undefined) =>
+const useArtistSongs = (
+    artistId: null | string,
+    serverId: string | undefined,
+    songsPerCard: number,
+) =>
     useQuery({
         enabled: Boolean(artistId && serverId),
         gcTime: 1000 * 60 * 30,
@@ -170,6 +172,7 @@ const useArtistSongs = (artistId: null | string, serverId: string | undefined) =
                 'feature-card-artist-songs',
                 serverId ?? '',
                 artistId ?? '',
+                songsPerCard,
             ])) as never,
         // Intentionally NO keepPreviousData here. The artist-card auto-skips
         // single-song artists by calling goNext() from a useEffect, which can
@@ -179,7 +182,12 @@ const useArtistSongs = (artistId: null | string, serverId: string | undefined) =
         // reads as 'wrong songs for this artist'. Better to flash a brief
         // skeleton than to display inconsistent state.
         queryFn: (ctx) => {
-            const key = ['feature-card-artist-songs', serverId ?? '', artistId ?? ''] as const;
+            const key = [
+                'feature-card-artist-songs',
+                serverId ?? '',
+                artistId ?? '',
+                songsPerCard,
+            ] as const;
             return cachedSwr<Song[]>({
                 apply: async (_db, fresh) => {
                     await writeSongsToCache(fresh ?? []);
@@ -191,7 +199,7 @@ const useArtistSongs = (artistId: null | string, serverId: string | undefined) =
                     if (rows.length === 0) return undefined;
                     const songs = dedupeSongsByTitle(rows.map((r) => r.Payload)).slice(
                         0,
-                        SONGS_PER_CARD,
+                        songsPerCard,
                     );
                     return songs.length > 0 ? songs : undefined;
                 },
@@ -206,20 +214,22 @@ const useArtistSongs = (artistId: null | string, serverId: string | undefined) =
                         apiClientProps: { serverId, signal },
                         query: {
                             albumArtistIds: [artistId],
-                            limit: SONGS_PER_CARD * 3,
+                            limit: songsPerCard * 3,
                             sortBy: SongListSort.RANDOM,
                             sortOrder: SortOrder.DESC,
                             startIndex: 0,
                         },
                     });
-                    return dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(
-                        0,
-                        SONGS_PER_CARD,
-                    );
+                    return dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(0, songsPerCard);
                 },
             });
         },
-        queryKey: ['feature-card-artist-songs', serverId ?? '', artistId ?? ''] as const,
+        queryKey: [
+            'feature-card-artist-songs',
+            serverId ?? '',
+            artistId ?? '',
+            songsPerCard,
+        ] as const,
         staleTime: 1000 * 60 * 5,
     });
 
@@ -241,11 +251,12 @@ export const useArtistFeatureData = (
     serverId: string | undefined,
     t: TFunction,
 ): FeatureCardData => {
+    const songsPerCard = useHomeFeatureCardSongsPerCard();
     const { data: candidates, isLoading } = useArtistCandidates(serverId);
     const pool = candidates ?? [];
     const { goNext, goPrev, index, reshuffle } = usePoolRotation(pool.length);
     const current = pool[index % Math.max(pool.length, 1)] as ArtistCandidate | undefined;
-    const { data: songs, isFetching } = useArtistSongs(current?.id ?? null, serverId);
+    const { data: songs, isFetching } = useArtistSongs(current?.id ?? null, serverId, songsPerCard);
 
     // Two-tier state: `current` is the candidate being evaluated; `shown` is
     // the artist actually rendered to the user. The display only advances to
@@ -397,6 +408,7 @@ const useGenreSongs = (
     serverType: string | undefined,
     genreName: string,
     serverId: string | undefined,
+    songsPerCard: number,
 ) =>
     useQuery({
         enabled: Boolean(genreId && serverId),
@@ -406,13 +418,19 @@ const useGenreSongs = (
                 'feature-card-genre-songs',
                 serverId ?? '',
                 genreId ?? '',
+                songsPerCard,
             ])) as never,
         // No keepPreviousData: when the user clicks prev/next or the 30s
         // rotation fires, we want the grid to clear immediately so the
         // title and songs are never out of sync. Brief skeleton flash is
         // acceptable; lingering wrong-genre songs under a new title is not.
         queryFn: (ctx) => {
-            const key = ['feature-card-genre-songs', serverId ?? '', genreId ?? ''] as const;
+            const key = [
+                'feature-card-genre-songs',
+                serverId ?? '',
+                genreId ?? '',
+                songsPerCard,
+            ] as const;
             return snapshotSwr<Song[]>({
                 ctx,
                 queryKey: key,
@@ -426,19 +444,21 @@ const useGenreSongs = (
                         apiClientProps: { serverId, signal },
                         query: {
                             genre: genreParam,
-                            limit: SONGS_PER_CARD * 3,
+                            limit: songsPerCard * 3,
                             played: Played.All,
                         },
                     });
                     await writeSongsToCache((res?.items ?? []) as Song[]);
-                    return dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(
-                        0,
-                        SONGS_PER_CARD,
-                    );
+                    return dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(0, songsPerCard);
                 },
             });
         },
-        queryKey: ['feature-card-genre-songs', serverId ?? '', genreId ?? ''] as const,
+        queryKey: [
+            'feature-card-genre-songs',
+            serverId ?? '',
+            genreId ?? '',
+            songsPerCard,
+        ] as const,
         staleTime: 1000 * 60 * 5,
     });
 
@@ -447,6 +467,7 @@ export const useGenreFeatureData = (
     serverType: string | undefined,
     t: TFunction,
 ): FeatureCardData => {
+    const songsPerCard = useHomeFeatureCardSongsPerCard();
     const { data: candidates, isLoading } = useGenreCandidates(serverId);
     const pool = useMemo(
         // Previous filter required albumCount > 0, but Jellyfin's genre
@@ -465,6 +486,7 @@ export const useGenreFeatureData = (
         serverType,
         current?.name ?? '',
         serverId,
+        songsPerCard,
     );
     const empty = !isLoading && pool.length === 0;
 
@@ -493,13 +515,17 @@ export const useGenreFeatureData = (
 // Recently Played
 // ============================================================================
 
-const useRecentlyPlayedSongs = (serverId: string | undefined) =>
+const useRecentlyPlayedSongs = (serverId: string | undefined, songsPerCard: number) =>
     useQuery({
         enabled: Boolean(serverId),
         placeholderData: (() =>
-            readSnapshot<Song[]>(['feature-card-recently-played', serverId ?? ''])) as never,
+            readSnapshot<Song[]>([
+                'feature-card-recently-played',
+                serverId ?? '',
+                songsPerCard,
+            ])) as never,
         queryFn: (ctx) => {
-            const key = ['feature-card-recently-played', serverId ?? ''] as const;
+            const key = ['feature-card-recently-played', serverId ?? '', songsPerCard] as const;
             return snapshotSwr<Song[]>({
                 ctx,
                 queryKey: key,
@@ -508,21 +534,18 @@ const useRecentlyPlayedSongs = (serverId: string | undefined) =>
                     const res = await api.controller.getSongList({
                         apiClientProps: { serverId, signal },
                         query: {
-                            limit: SONGS_PER_CARD * 3,
+                            limit: songsPerCard * 3,
                             sortBy: SongListSort.RECENTLY_PLAYED,
                             sortOrder: SortOrder.DESC,
                             startIndex: 0,
                         },
                     });
                     await writeSongsToCache((res?.items ?? []) as Song[]);
-                    return dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(
-                        0,
-                        SONGS_PER_CARD,
-                    );
+                    return dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(0, songsPerCard);
                 },
             });
         },
-        queryKey: ['feature-card-recently-played', serverId ?? ''] as const,
+        queryKey: ['feature-card-recently-played', serverId ?? '', songsPerCard] as const,
         staleTime: 1000 * 60 * 2,
     });
 
@@ -530,7 +553,8 @@ export const useRecentlyPlayedFeatureData = (
     serverId: string | undefined,
     t: TFunction,
 ): FeatureCardData => {
-    const { data: songs, isLoading, refetch } = useRecentlyPlayedSongs(serverId);
+    const songsPerCard = useHomeFeatureCardSongsPerCard();
+    const { data: songs, isLoading, refetch } = useRecentlyPlayedSongs(serverId, songsPerCard);
     return {
         eyebrow: t('page.home.featureRecentlyPlayed_eyebrow'),
         isLoading,
@@ -545,13 +569,17 @@ export const useRecentlyPlayedFeatureData = (
 // Top Played
 // ============================================================================
 
-const useTopPlayedSongs = (serverId: string | undefined) =>
+const useTopPlayedSongs = (serverId: string | undefined, songsPerCard: number) =>
     useQuery({
         enabled: Boolean(serverId),
         placeholderData: (() =>
-            readSnapshot<Song[]>(['feature-card-top-played', serverId ?? ''])) as never,
+            readSnapshot<Song[]>([
+                'feature-card-top-played',
+                serverId ?? '',
+                songsPerCard,
+            ])) as never,
         queryFn: (ctx) => {
-            const key = ['feature-card-top-played', serverId ?? ''] as const;
+            const key = ['feature-card-top-played', serverId ?? '', songsPerCard] as const;
             return snapshotSwr<Song[]>({
                 ctx,
                 queryKey: key,
@@ -560,21 +588,18 @@ const useTopPlayedSongs = (serverId: string | undefined) =>
                     const res = await api.controller.getSongList({
                         apiClientProps: { serverId, signal },
                         query: {
-                            limit: SONGS_PER_CARD * 3,
+                            limit: songsPerCard * 3,
                             sortBy: SongListSort.PLAY_COUNT,
                             sortOrder: SortOrder.DESC,
                             startIndex: 0,
                         },
                     });
                     await writeSongsToCache((res?.items ?? []) as Song[]);
-                    return dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(
-                        0,
-                        SONGS_PER_CARD,
-                    );
+                    return dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(0, songsPerCard);
                 },
             });
         },
-        queryKey: ['feature-card-top-played', serverId ?? ''] as const,
+        queryKey: ['feature-card-top-played', serverId ?? '', songsPerCard] as const,
         staleTime: 1000 * 60 * 10,
     });
 
@@ -582,7 +607,8 @@ export const useTopPlayedFeatureData = (
     serverId: string | undefined,
     t: TFunction,
 ): FeatureCardData => {
-    const { data: songs, isLoading, refetch } = useTopPlayedSongs(serverId);
+    const songsPerCard = useHomeFeatureCardSongsPerCard();
+    const { data: songs, isLoading, refetch } = useTopPlayedSongs(serverId, songsPerCard);
     return {
         eyebrow: t('page.home.featureTopPlayed_eyebrow'),
         isLoading,
@@ -597,13 +623,17 @@ export const useTopPlayedFeatureData = (
 // Favorites Mix
 // ============================================================================
 
-const useFavoritesSongs = (serverId: string | undefined) =>
+const useFavoritesSongs = (serverId: string | undefined, songsPerCard: number) =>
     useQuery({
         enabled: Boolean(serverId),
         placeholderData: (() =>
-            readSnapshot<Song[]>(['feature-card-favorites', serverId ?? ''])) as never,
+            readSnapshot<Song[]>([
+                'feature-card-favorites',
+                serverId ?? '',
+                songsPerCard,
+            ])) as never,
         queryFn: (ctx) => {
-            const key = ['feature-card-favorites', serverId ?? ''] as const;
+            const key = ['feature-card-favorites', serverId ?? '', songsPerCard] as const;
             return snapshotSwr<Song[]>({
                 ctx,
                 queryKey: key,
@@ -613,22 +643,19 @@ const useFavoritesSongs = (serverId: string | undefined) =>
                         apiClientProps: { serverId, signal },
                         query: {
                             favorite: true,
-                            limit: SONGS_PER_CARD * 3,
+                            limit: songsPerCard * 3,
                             sortBy: SongListSort.RANDOM,
                             sortOrder: SortOrder.DESC,
                             startIndex: 0,
                         },
                     });
                     await writeSongsToCache((res?.items ?? []) as Song[]);
-                    return dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(
-                        0,
-                        SONGS_PER_CARD,
-                    );
+                    return dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(0, songsPerCard);
                 },
             });
         },
         // staleTime 0 so reshuffle truly re-randomises rather than serving cached
-        queryKey: ['feature-card-favorites', serverId ?? ''] as const,
+        queryKey: ['feature-card-favorites', serverId ?? '', songsPerCard] as const,
         staleTime: 0,
     });
 
@@ -636,7 +663,8 @@ export const useFavoritesFeatureData = (
     serverId: string | undefined,
     t: TFunction,
 ): FeatureCardData => {
-    const { data: songs, isLoading, refetch } = useFavoritesSongs(serverId);
+    const songsPerCard = useHomeFeatureCardSongsPerCard();
+    const { data: songs, isLoading, refetch } = useFavoritesSongs(serverId, songsPerCard);
     return {
         eyebrow: t('page.home.featureFavorites_eyebrow'),
         isLoading,
@@ -651,12 +679,21 @@ export const useFavoritesFeatureData = (
 // Unplayed Discoveries
 // ============================================================================
 
-const useUnplayedSongs = (serverId: string | undefined, reseedCounter: number) =>
+const useUnplayedSongs = (
+    serverId: string | undefined,
+    reseedCounter: number,
+    songsPerCard: number,
+) =>
     useQuery({
         enabled: Boolean(serverId),
         placeholderData: keepPreviousData,
         queryFn: (ctx) => {
-            const key = ['feature-card-unplayed', serverId ?? '', reseedCounter] as const;
+            const key = [
+                'feature-card-unplayed',
+                serverId ?? '',
+                reseedCounter,
+                songsPerCard,
+            ] as const;
             return snapshotSwr<Song[]>({
                 ctx,
                 queryKey: key,
@@ -664,18 +701,15 @@ const useUnplayedSongs = (serverId: string | undefined, reseedCounter: number) =
                     if (!serverId) return [] as Song[];
                     const res = await api.controller.getRandomSongList({
                         apiClientProps: { serverId, signal },
-                        query: { limit: SONGS_PER_CARD * 3, played: Played.Never },
+                        query: { limit: songsPerCard * 3, played: Played.Never },
                     });
-                    return dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(
-                        0,
-                        SONGS_PER_CARD,
-                    );
+                    return dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(0, songsPerCard);
                 },
             });
         },
         // The reseed counter is part of the queryKey so reshuffle gets a fresh
         // server-side random sample instead of the cached set.
-        queryKey: ['feature-card-unplayed', serverId ?? '', reseedCounter] as const,
+        queryKey: ['feature-card-unplayed', serverId ?? '', reseedCounter, songsPerCard] as const,
         staleTime: 0,
     });
 
@@ -690,10 +724,15 @@ export const useUnplayedFeatureData = (
     // you've never played" label. Surface an explicit empty state rather
     // than misrepresenting the data.
     const unsupported = serverType !== undefined && serverType !== 'jellyfin';
+    const songsPerCard = useHomeFeatureCardSongsPerCard();
     // Use the rotation index as a reseed nonce; pool size of 100 is arbitrary —
     // we never have 100 different samples but each reshuffle just increments.
     const { index, reshuffle } = usePoolRotation(unsupported ? 0 : 100);
-    const { data: songs, isLoading } = useUnplayedSongs(unsupported ? undefined : serverId, index);
+    const { data: songs, isLoading } = useUnplayedSongs(
+        unsupported ? undefined : serverId,
+        index,
+        songsPerCard,
+    );
     if (unsupported) {
         return {
             eyebrow: t('page.home.featureUnplayed_eyebrow'),
@@ -717,13 +756,17 @@ export const useUnplayedFeatureData = (
 // Forgotten Favorites
 // ============================================================================
 
-const useForgottenFavoritesSongs = (serverId: string | undefined) =>
+const useForgottenFavoritesSongs = (serverId: string | undefined, songsPerCard: number) =>
     useQuery({
         enabled: Boolean(serverId),
         placeholderData: (() =>
-            readSnapshot<Song[]>(['feature-card-forgotten', serverId ?? ''])) as never,
+            readSnapshot<Song[]>([
+                'feature-card-forgotten',
+                serverId ?? '',
+                songsPerCard,
+            ])) as never,
         queryFn: (ctx) => {
-            const key = ['feature-card-forgotten', serverId ?? ''] as const;
+            const key = ['feature-card-forgotten', serverId ?? '', songsPerCard] as const;
             return snapshotSwr<Song[]>({
                 ctx,
                 queryKey: key,
@@ -736,21 +779,18 @@ const useForgottenFavoritesSongs = (serverId: string | undefined) =>
                         apiClientProps: { serverId, signal },
                         query: {
                             favorite: true,
-                            limit: SONGS_PER_CARD * 3,
+                            limit: songsPerCard * 3,
                             sortBy: SongListSort.RECENTLY_PLAYED,
                             sortOrder: SortOrder.ASC,
                             startIndex: 0,
                         },
                     });
                     await writeSongsToCache((res?.items ?? []) as Song[]);
-                    return dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(
-                        0,
-                        SONGS_PER_CARD,
-                    );
+                    return dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(0, songsPerCard);
                 },
             });
         },
-        queryKey: ['feature-card-forgotten', serverId ?? ''] as const,
+        queryKey: ['feature-card-forgotten', serverId ?? '', songsPerCard] as const,
         staleTime: 1000 * 60 * 30,
     });
 
@@ -758,7 +798,8 @@ export const useForgottenFavoritesFeatureData = (
     serverId: string | undefined,
     t: TFunction,
 ): FeatureCardData => {
-    const { data: songs, isLoading, refetch } = useForgottenFavoritesSongs(serverId);
+    const songsPerCard = useHomeFeatureCardSongsPerCard();
+    const { data: songs, isLoading, refetch } = useForgottenFavoritesSongs(serverId, songsPerCard);
     return {
         eyebrow: t('page.home.featureForgotten_eyebrow'),
         isLoading,
@@ -773,7 +814,11 @@ export const useForgottenFavoritesFeatureData = (
 // Time Machine — single year
 // ============================================================================
 
-const useTimeMachineSongs = (year: null | number, serverId: string | undefined) =>
+const useTimeMachineSongs = (
+    year: null | number,
+    serverId: string | undefined,
+    songsPerCard: number,
+) =>
     useQuery({
         enabled: Boolean(year && serverId),
         placeholderData: (() =>
@@ -781,13 +826,19 @@ const useTimeMachineSongs = (year: null | number, serverId: string | undefined) 
                 'feature-card-time-machine',
                 serverId ?? '',
                 year ?? 0,
+                songsPerCard,
             ])) as never,
         // No keepPreviousData: the auto-skip below can churn the year
         // multiple times in succession. The 2-tier `shown` state below
         // hides those transitions from the user; React-Query keeping
         // stale data here would just confuse the dispatch path.
         queryFn: (ctx) => {
-            const key = ['feature-card-time-machine', serverId ?? '', year ?? 0] as const;
+            const key = [
+                'feature-card-time-machine',
+                serverId ?? '',
+                year ?? 0,
+                songsPerCard,
+            ] as const;
             return snapshotSwr<Song[]>({
                 ctx,
                 queryKey: key,
@@ -796,21 +847,18 @@ const useTimeMachineSongs = (year: null | number, serverId: string | undefined) 
                     const res = await api.controller.getRandomSongList({
                         apiClientProps: { serverId, signal },
                         query: {
-                            limit: SONGS_PER_CARD * 3,
+                            limit: songsPerCard * 3,
                             maxYear: year,
                             minYear: year,
                             played: Played.All,
                         },
                     });
                     await writeSongsToCache((res?.items ?? []) as Song[]);
-                    return dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(
-                        0,
-                        SONGS_PER_CARD,
-                    );
+                    return dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(0, songsPerCard);
                 },
             });
         },
-        queryKey: ['feature-card-time-machine', serverId ?? '', year ?? 0] as const,
+        queryKey: ['feature-card-time-machine', serverId ?? '', year ?? 0, songsPerCard] as const,
         staleTime: 1000 * 60 * 5,
     });
 
@@ -837,9 +885,14 @@ export const useTimeMachineFeatureData = (
         return arr;
     }, [minYear, maxYear]);
 
+    const songsPerCard = useHomeFeatureCardSongsPerCard();
     const { goNext, goPrev, index, reshuffle } = usePoolRotation(yearPool.length);
     const year = yearPool[index % yearPool.length];
-    const { data: songs, isFetching, isLoading } = useTimeMachineSongs(year, serverId);
+    const {
+        data: songs,
+        isFetching,
+        isLoading,
+    } = useTimeMachineSongs(year, serverId, songsPerCard);
 
     // Two-tier state: the auto-skip below may try several empty years before
     // landing on one with tracks. Without this, the title would flash
@@ -911,7 +964,11 @@ export const useTimeMachineFeatureData = (
 // Decade Dive
 // ============================================================================
 
-const useDecadeSongs = (decadeStart: null | number, serverId: string | undefined) =>
+const useDecadeSongs = (
+    decadeStart: null | number,
+    serverId: string | undefined,
+    songsPerCard: number,
+) =>
     useQuery({
         enabled: Boolean(decadeStart !== null && serverId),
         placeholderData: (() =>
@@ -919,10 +976,16 @@ const useDecadeSongs = (decadeStart: null | number, serverId: string | undefined
                 'feature-card-decade',
                 serverId ?? '',
                 decadeStart ?? -1,
+                songsPerCard,
             ])) as never,
         // See useTimeMachineSongs — no keepPreviousData here either.
         queryFn: (ctx) => {
-            const key = ['feature-card-decade', serverId ?? '', decadeStart ?? -1] as const;
+            const key = [
+                'feature-card-decade',
+                serverId ?? '',
+                decadeStart ?? -1,
+                songsPerCard,
+            ] as const;
             return snapshotSwr<Song[]>({
                 ctx,
                 queryKey: key,
@@ -931,21 +994,18 @@ const useDecadeSongs = (decadeStart: null | number, serverId: string | undefined
                     const res = await api.controller.getRandomSongList({
                         apiClientProps: { serverId, signal },
                         query: {
-                            limit: SONGS_PER_CARD * 3,
+                            limit: songsPerCard * 3,
                             maxYear: decadeStart + 9,
                             minYear: decadeStart,
                             played: Played.All,
                         },
                     });
                     await writeSongsToCache((res?.items ?? []) as Song[]);
-                    return dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(
-                        0,
-                        SONGS_PER_CARD,
-                    );
+                    return dedupeSongsByTitle((res?.items ?? []) as Song[]).slice(0, songsPerCard);
                 },
             });
         },
-        queryKey: ['feature-card-decade', serverId ?? '', decadeStart ?? -1] as const,
+        queryKey: ['feature-card-decade', serverId ?? '', decadeStart ?? -1, songsPerCard] as const,
         staleTime: 1000 * 60 * 5,
     });
 
@@ -967,9 +1027,10 @@ export const useDecadeDiveFeatureData = (
         return arr;
     }, [minYear, maxYear]);
 
+    const songsPerCard = useHomeFeatureCardSongsPerCard();
     const { goNext, goPrev, index, reshuffle } = usePoolRotation(decades.length);
     const decade = decades[index % decades.length];
-    const { data: songs, isFetching, isLoading } = useDecadeSongs(decade, serverId);
+    const { data: songs, isFetching, isLoading } = useDecadeSongs(decade, serverId, songsPerCard);
 
     // Same 2-tier state machine as time-machine: hide auto-skip transitions
     // from the user. Retry budget = decades.length - 1 so even on a sparse

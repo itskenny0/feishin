@@ -18,6 +18,7 @@ vi.mock('/@/renderer/features/peer-sync/controller/peer-client', () => ({
 import {
     __resetMqttCoalesce,
     peerDispatcher,
+    warmMqttPublish,
 } from '/@/renderer/features/peer-sync/controller/peer-dispatcher';
 import {
     recordPresence,
@@ -31,11 +32,16 @@ const ctx = () => ({
     sessionId: 'sess',
 });
 
-beforeEach(() => {
+beforeEach(async () => {
     published.length = 0;
     resetTransportSelector();
     __resetMqttCoalesce();
     setSyncEnabled(true);
+    // The dispatcher loads `publishCommand` lazily (it carries the mqtt graph,
+    // kept off the entry chunk). Warm it here — resolving against the mocked
+    // peer-client — so the synchronous-publish assertions below hold the same
+    // way the live path does after `use-peer-sync` warms it on client boot.
+    await warmMqttPublish();
     // Fresh MQTT presence so the dispatcher routes via the MQTT lane.
     recordPresence('peer-1', true);
 });

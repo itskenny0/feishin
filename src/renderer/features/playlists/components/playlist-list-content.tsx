@@ -6,9 +6,12 @@ import { openCreatePlaylistModal } from './create-playlist-form';
 import { usePlaylistListFilters } from '/@/renderer/features/playlists/hooks/use-playlist-list-filters';
 import { usePlaylistListQuery } from '/@/renderer/features/playlists/queries/playlists-queries';
 import { EmptyState, EmptyStateProps } from '/@/renderer/features/shared/components/empty-state';
+import {
+    ListGridSkeleton,
+    ListTableSkeleton,
+} from '/@/renderer/features/shared/components/list-skeleton';
 import { ItemListSettings, useCurrentServer, useListSettings } from '/@/renderer/store';
 import { Button } from '/@/shared/components/button/button';
-import { Spinner } from '/@/shared/components/spinner/spinner';
 import { PlaylistListQuery } from '/@/shared/types/domain-types';
 import { ItemListKey, ListDisplayType, ListPaginationType } from '/@/shared/types/types';
 
@@ -49,8 +52,20 @@ export const PlaylistListContent = () => {
         ItemListKey.PLAYLIST,
     );
 
+    const fallback =
+        display === ListDisplayType.TABLE ? (
+            <ListTableSkeleton enableHeader={table.enableHeader} size={table.size} />
+        ) : (
+            <ListGridSkeleton
+                columns={grid.itemsPerRowEnabled ? grid.itemsPerRow : undefined}
+                gap={grid.itemGap}
+                rows={1}
+                size={grid.size}
+            />
+        );
+
     return (
-        <Suspense fallback={<Spinner container />}>
+        <Suspense fallback={fallback}>
             <PlaylistListView
                 display={display}
                 grid={grid}

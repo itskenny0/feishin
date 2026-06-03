@@ -352,6 +352,46 @@ const VisualizerInner = () => {
         }
     }, [motion, options]);
 
+    // Fully suspend AudioMotionAnalyzer's internal rAF loop while the
+    // window/tab is hidden, and honor prefers-reduced-motion. Unlike
+    // butterchurn (which we drive with our own rAF loop), AudioMotionAnalyzer
+    // runs its own loop internally; stop()/start() toggles it. Electron
+    // windows behind another window still get full rAF, so leaning on the
+    // browser's background throttling isn't enough to save GPU/battery.
+    useEffect(() => {
+        if (!motion) return;
+
+        const reducedMotion =
+            typeof window !== 'undefined' &&
+            window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+        const apply = () => {
+            const shouldRun =
+                !reducedMotion && !(typeof document !== 'undefined' && document.hidden);
+            try {
+                if (shouldRun) {
+                    if (!motion.isOn) motion.start();
+                } else if (motion.isOn) {
+                    motion.stop();
+                }
+            } catch {
+                // ignore (e.g. instance destroyed mid-toggle)
+            }
+        };
+
+        apply();
+
+        if (reducedMotion) {
+            // Static under reduced-motion; nothing to listen for.
+            return;
+        }
+
+        document.addEventListener('visibilitychange', apply);
+        return () => {
+            document.removeEventListener('visibilitychange', apply);
+        };
+    }, [motion]);
+
     return <div className={styles.visualizer} ref={canvasRef} style={{ opacity }} />;
 };
 

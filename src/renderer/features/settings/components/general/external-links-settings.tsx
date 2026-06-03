@@ -17,6 +17,46 @@ export const ExternalLinksSettings = memo(() => {
         {
             control: (
                 <Switch
+                    defaultChecked={settings.genresDisplay}
+                    onChange={(e) => {
+                        setSettings({
+                            general: {
+                                ...settings,
+                                genresDisplay: e.currentTarget.checked,
+                            },
+                        });
+                    }}
+                />
+            ),
+            description: t('setting.genresDisplay', {
+                context: 'description',
+                defaultValue: 'Show the genres section on album & artist pages',
+            }),
+            title: t('setting.genresDisplay', { defaultValue: 'Show genres' }),
+        },
+        {
+            control: (
+                <Switch
+                    defaultChecked={settings.socialLinksDisplay}
+                    onChange={(e) => {
+                        setSettings({
+                            general: {
+                                ...settings,
+                                socialLinksDisplay: e.currentTarget.checked,
+                            },
+                        });
+                    }}
+                />
+            ),
+            description: t('setting.socialLinksDisplay', {
+                context: 'description',
+                defaultValue: 'Show the external/social links block on album & artist pages',
+            }),
+            title: t('setting.socialLinksDisplay', { defaultValue: 'Show social links' }),
+        },
+        {
+            control: (
+                <Switch
                     defaultChecked={settings.externalLinks}
                     onChange={(e) => {
                         setSettings({
@@ -31,6 +71,7 @@ export const ExternalLinksSettings = memo(() => {
             description: t('setting.externalLinks', {
                 context: 'description',
             }),
+            isHidden: !settings.socialLinksDisplay,
             title: t('setting.externalLinks'),
         },
         {

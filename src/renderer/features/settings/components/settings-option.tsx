@@ -59,7 +59,7 @@ export const SettingsOptions = memo(
                             {description}
                         </Text>
                     )}
-                    <Group justify="flex-start" w="100%">
+                    <Group className={styles.mobileControl} justify="flex-start" w="100%">
                         {control}
                     </Group>
                 </Stack>

@@ -40,10 +40,39 @@
     background: var(--theme-colors-foreground) !important;
     border-radius: 50%;
 
+    /*
+     * Tactile press feedback for the primary transport button (the most-
+     * tapped control in both the desktop playerbar and the mobile
+     * fullscreen player). A quick scale-down on press + a gentle scale-up
+     * on hover give the button the "live" feel Spotify's play button has.
+     * transform-only so it stays on the compositor — no layout work.
+     */
+    transition: transform 120ms cubic-bezier(0.34, 1.56, 0.64, 1);
+
     svg {
         display: flex;
         color: var(--theme-colors-background);
         fill: var(--theme-colors-background);
+    }
+
+    &:hover {
+        transform: scale(1.06);
+    }
+
+    &:active {
+        transform: scale(0.92);
+        transition-duration: 60ms;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .main {
+        transition: none;
+    }
+
+    .main:hover,
+    .main:active {
+        transform: none;
     }
 }
 

@@ -5,13 +5,16 @@ import { useTranslation } from 'react-i18next';
 import { useListContext } from '/@/renderer/context/list-context';
 import { EmptyState, EmptyStateProps } from '/@/renderer/features/shared/components/empty-state';
 import { ListFilters, ListFiltersTitle } from '/@/renderer/features/shared/components/list-filters';
+import {
+    ListGridSkeleton,
+    ListTableSkeleton,
+} from '/@/renderer/features/shared/components/list-skeleton';
 import { ListWithSidebarContainer } from '/@/renderer/features/shared/components/list-with-sidebar-container';
 import { SaveAsCollectionButton } from '/@/renderer/features/shared/components/save-as-collection-button';
 import { songsQueries } from '/@/renderer/features/songs/api/songs-api';
 import { useSongListFilters } from '/@/renderer/features/songs/hooks/use-song-list-filters';
 import { ItemListSettings, useCurrentServer, useListSettings } from '/@/renderer/store';
 import { ScrollArea } from '/@/shared/components/scroll-area/scroll-area';
-import { Spinner } from '/@/shared/components/spinner/spinner';
 import { Stack } from '/@/shared/components/stack/stack';
 import { LibraryItem, SongListQuery } from '/@/shared/types/domain-types';
 import { ItemListKey, ListDisplayType, ListPaginationType } from '/@/shared/types/types';
@@ -67,8 +70,20 @@ const SongListSuspenseContainer = () => {
 
     const { customFilters } = useListContext();
 
+    const fallback =
+        display === ListDisplayType.GRID ? (
+            <ListGridSkeleton
+                columns={grid.itemsPerRowEnabled ? grid.itemsPerRow : undefined}
+                gap={grid.itemGap}
+                rows={1}
+                size={grid.size}
+            />
+        ) : (
+            <ListTableSkeleton enableHeader={table.enableHeader} size={table.size} />
+        );
+
     return (
-        <Suspense fallback={<Spinner container />}>
+        <Suspense fallback={fallback}>
             <SongListView
                 display={display}
                 grid={grid}

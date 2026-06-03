@@ -2,15 +2,18 @@ import { type UseQueryResult } from '@tanstack/react-query';
 import clsx from 'clsx';
 import { useOverlayScrollbars } from 'overlayscrollbars-react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { List, RowComponentProps } from 'react-window-v2';
 
 import styles from './folder-tree-browser.module.css';
 
 import { ContextMenuController } from '/@/renderer/features/context-menu/context-menu-controller';
 import { useFolderListFilters } from '/@/renderer/features/folders/hooks/use-folder-list-filters';
+import { useIsTouch } from '/@/renderer/hooks/use-breakpoint';
 import { useDragDrop } from '/@/renderer/hooks/use-drag-drop';
 import { useShowFilesystemNameForFolders } from '/@/renderer/store/settings.store';
 import { Icon } from '/@/shared/components/icon/icon';
+import { Spinner } from '/@/shared/components/spinner/spinner';
 import { Tooltip } from '/@/shared/components/tooltip/tooltip';
 import { useMergedRef } from '/@/shared/hooks/use-merged-ref';
 import { Folder, LibraryItem } from '/@/shared/types/domain-types';
@@ -40,6 +43,11 @@ interface TreeNode {
 }
 
 const ITEM_HEIGHT = 32;
+// Touch pointers get a taller row so each folder is a comfortable tap target
+// (the 32px desktop row is fine for a mouse but well under the 44px touch
+// floor). The tree only renders at >= lg, but that band still includes
+// touch laptops and tablets in landscape.
+const TOUCH_ITEM_HEIGHT = 44;
 const INDENT_SIZE = 16;
 
 interface FolderTreeBrowserProps {
@@ -48,7 +56,10 @@ interface FolderTreeBrowserProps {
 }
 
 export const FolderTreeBrowser = ({ fetchFolder, rootFolderQuery }: FolderTreeBrowserProps) => {
+    const { t } = useTranslation();
     const { currentFolderId, folderPath, setFolderPath } = useFolderListFilters();
+    const isTouch = useIsTouch();
+    const itemHeight = isTouch ? TOUCH_ITEM_HEIGHT : ITEM_HEIGHT;
     const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
     const [loadedNodes, setLoadedNodes] = useState<Map<string, Folder[]>>(new Map());
     const containerRef = useRef<HTMLDivElement>(null);
@@ -418,8 +429,8 @@ export const FolderTreeBrowser = ({ fetchFolder, rootFolderQuery }: FolderTreeBr
             const viewport = containerRef.current.firstElementChild as HTMLElement;
             if (viewport) {
                 const viewportHeight = viewport.clientHeight;
-                const scrollOffset = currentIndex * ITEM_HEIGHT;
-                const centeredOffset = scrollOffset - viewportHeight / 2 + ITEM_HEIGHT / 2;
+                const scrollOffset = currentIndex * itemHeight;
+                const centeredOffset = scrollOffset - viewportHeight / 2 + itemHeight / 2;
 
                 viewport.scrollTo({
                     behavior: 'auto',
@@ -429,16 +440,30 @@ export const FolderTreeBrowser = ({ fetchFolder, rootFolderQuery }: FolderTreeBr
                 setShouldScrollToFolder(null);
             }
         }
-    }, [flattenedNodes, shouldScrollToFolder]);
+    }, [flattenedNodes, shouldScrollToFolder, itemHeight]);
+
+    // The OverlayScrollbars init targets containerRef's firstElementChild, so
+    // the <List> must always remain the first child. Loading / empty feedback
+    // is therefore rendered as an overlay sibling rather than replacing it.
+    const isLoading = rootFolderQuery.isLoading;
+    const isEmpty = !isLoading && flattenedNodes.length === 0;
 
     return (
         <div className={styles.container} ref={containerRef}>
             <List
                 rowComponent={RowComponent}
                 rowCount={flattenedNodes.length}
-                rowHeight={ITEM_HEIGHT}
+                rowHeight={itemHeight}
                 rowProps={rowProps}
             />
+            {isLoading ? (
+                <div className={styles.stateOverlay}>
+                    <Spinner />
+                </div>
+            ) : null}
+            {isEmpty ? (
+                <div className={styles.stateOverlay}>{t('page.folderList.emptyTree')}</div>
+            ) : null}
         </div>
     );
 };

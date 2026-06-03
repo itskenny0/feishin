@@ -1,0 +1,14 @@
+/*
+ * Shared input ergonomics for the add/edit-server forms.
+ *
+ * The 16px input font-size at ≤767px is load-bearing: iOS Safari auto-zooms
+ * the viewport whenever a focused <input> has a computed font-size below 16px,
+ * and our default `size="sm"` inputs render at 14px. Inside a modal the zoom
+ * also shifts the whole sheet, so we bump the field font to 16px on phones
+ * only — desktop keeps the denser 14px.
+ */
+@media (max-width: 767px), (orientation: landscape) and (max-height: 480px) {
+    .form input {
+        font-size: 16px;
+    }
+}

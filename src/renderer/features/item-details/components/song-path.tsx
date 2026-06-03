@@ -21,7 +21,7 @@ export const SongPath = ({ path }: SongPathProps) => {
     if (!path) return null;
 
     return (
-        <Group>
+        <Group gap="xs">
             <CopyButton timeout={2000} value={path}>
                 {({ copied, copy }) => (
                     <Tooltip
@@ -53,7 +53,16 @@ export const SongPath = ({ path }: SongPathProps) => {
                     />
                 </Tooltip>
             )}
-            <Text style={{ userSelect: 'all' }}>{path}</Text>
+            <Text
+                style={{
+                    flex: '1 1 12rem',
+                    minWidth: 0,
+                    overflowWrap: 'anywhere',
+                    userSelect: 'all',
+                }}
+            >
+                {path}
+            </Text>
         </Group>
     );
 };

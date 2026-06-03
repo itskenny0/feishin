@@ -25,6 +25,7 @@ import {
     useArtistTopSongsQuery,
 } from '/@/renderer/features/artists/queries/artists-queries';
 import { useIsPlayerFetching, usePlayer } from '/@/renderer/features/player/context/player-context';
+import { GenresDisplay } from '/@/renderer/features/shared/components/genres-display';
 import {
     ListConfigMenu,
     SONG_DISPLAY_TYPES,
@@ -39,6 +40,10 @@ import {
     LONG_PRESS_PLAY_BEHAVIOR,
     PlayTooltip,
 } from '/@/renderer/features/shared/components/play-button-group';
+import {
+    SocialLinkDescriptor,
+    SocialLinksDisplay,
+} from '/@/renderer/features/shared/components/social-links-display';
 import { usePlayButtonClick } from '/@/renderer/features/shared/hooks/use-play-button-click';
 import { searchLibraryItems } from '/@/renderer/features/shared/utils';
 import { songsQueries } from '/@/renderer/features/songs/api/songs-api';
@@ -57,7 +62,9 @@ import {
     useArtistItems,
     useArtistRadioCount,
     useExternalLinks,
+    useGenresDisplay,
     useSettingsStore,
+    useSocialLinksDisplay,
 } from '/@/renderer/store/settings.store';
 import { sanitize } from '/@/renderer/utils/sanitize';
 import { sortAlbumList, sortSongList } from '/@/shared/api/utils';
@@ -158,8 +165,10 @@ interface AlbumArtistMetadataGenresProps {
 
 const AlbumArtistMetadataGenres = ({ genres, order }: AlbumArtistMetadataGenresProps) => {
     const { t } = useTranslation();
+    const genresDisplay = useGenresDisplay();
     const genrePath = useGenreRoute();
 
+    if (!genresDisplay) return null;
     if (!genres || genres.length === 0) return null;
 
     return (
@@ -170,27 +179,20 @@ const AlbumArtistMetadataGenres = ({ genres, order }: AlbumArtistMetadataGenresP
                         count: genres.length,
                     })}
                 </Text>
-                <Group gap="sm">
-                    {genres.map((genre) => (
-                        <Button
-                            component={Link}
-                            key={`genre-${genre.id}`}
-                            radius="md"
-                            size="compact-md"
-                            to={generatePath(genrePath, {
-                                albumArtistId: null,
-                                albumId: null,
-                                artistId: null,
-                                genreId: genre.id,
-                                itemType: null,
-                                playlistId: null,
-                            })}
-                            variant="outline"
-                        >
-                            {genre.name}
-                        </Button>
-                    ))}
-                </Group>
+                <GenresDisplay
+                    genres={genres}
+                    to={(genreId) =>
+                        generatePath(genrePath, {
+                            albumArtistId: null,
+                            albumId: null,
+                            artistId: null,
+                            genreId,
+                            itemType: null,
+                            playlistId: null,
+                        })
+                    }
+                    variant="button"
+                />
             </Stack>
         </Grid.Col>
     );
@@ -905,111 +907,72 @@ const AlbumArtistMetadataExternalLinks = ({
     spotify,
 }: AlbumArtistMetadataExternalLinksProps) => {
     const { t } = useTranslation();
+    const socialLinksDisplay = useSocialLinksDisplay();
+
     const listenBrainzUrl = getListenBrainzUrl(mbzId || null, artistName);
     const qobuzUrl = getQobuzUrl(artistName);
 
-    if (!externalLinks || (!lastFM && !listenBrainz && !musicBrainz && !qobuz && !spotify)) {
+    if (!socialLinksDisplay || !externalLinks) {
+        return null;
+    }
+
+    const links: SocialLinkDescriptor[] = [];
+
+    if (lastFM) {
+        links.push({
+            href: `https://www.last.fm/music/${encodeURIComponent(artistName || '')}`,
+            icon: 'brandLastfm',
+            key: 'lastfm',
+            tooltip: t('action.openIn.lastfm'),
+        });
+    }
+
+    if (mbzId && musicBrainz) {
+        links.push({
+            href: `https://musicbrainz.org/artist/${mbzId}`,
+            icon: 'brandMusicBrainz',
+            key: 'musicbrainz',
+            tooltip: t('action.openIn.musicbrainz'),
+        });
+    }
+
+    if (listenBrainz && listenBrainzUrl) {
+        links.push({
+            href: listenBrainzUrl,
+            icon: 'brandListenBrainz',
+            key: 'listenbrainz',
+            tooltip: t('action.openIn.listenbrainz'),
+        });
+    }
+
+    if (qobuz && qobuzUrl) {
+        links.push({
+            href: qobuzUrl,
+            icon: 'brandQobuz',
+            key: 'qobuz',
+            tooltip: t('action.openIn.qobuz'),
+        });
+    }
+
+    if (spotify) {
+        links.push({
+            href: nativeSpotify
+                ? `spotify:search:${encodeURIComponent(artistName || '')}`
+                : `https://open.spotify.com/search/${encodeURIComponent(artistName || '')}`,
+            icon: 'brandSpotify',
+            key: 'spotify',
+            target: nativeSpotify ? undefined : '_blank',
+            tooltip: t('action.openIn.spotify'),
+        });
+    }
+
+    if (links.length === 0) {
         return null;
     }
 
     return (
         <Grid.Col order={order} span={12}>
-            <Stack gap="xs">
-                <Text fw={600} isNoSelect size="sm" tt="uppercase">
-                    {t('common.externalLinks')}
-                </Text>
-                <Group gap="xs">
-                    {lastFM && (
-                        <ActionIcon
-                            component="a"
-                            href={`https://www.last.fm/music/${encodeURIComponent(artistName || '')}`}
-                            icon="brandLastfm"
-                            iconProps={{
-                                size: '2xl',
-                            }}
-                            rel="noopener noreferrer"
-                            target="_blank"
-                            tooltip={{
-                                label: t('action.openIn.lastfm'),
-                                openDelay: 400,
-                            }}
-                            variant="subtle"
-                        />
-                    )}
-                    {mbzId && musicBrainz ? (
-                        <ActionIcon
-                            component="a"
-                            href={`https://musicbrainz.org/artist/${mbzId}`}
-                            icon="brandMusicBrainz"
-                            iconProps={{
-                                size: '2xl',
-                            }}
-                            rel="noopener noreferrer"
-                            target="_blank"
-                            tooltip={{
-                                label: t('action.openIn.musicbrainz'),
-                                openDelay: 400,
-                            }}
-                            variant="subtle"
-                        />
-                    ) : null}
-                    {listenBrainz && listenBrainzUrl && (
-                        <ActionIcon
-                            component="a"
-                            href={listenBrainzUrl}
-                            icon="brandListenBrainz"
-                            iconProps={{
-                                size: '2xl',
-                            }}
-                            rel="noopener noreferrer"
-                            target="_blank"
-                            tooltip={{
-                                label: t('action.openIn.listenbrainz'),
-                                openDelay: 400,
-                            }}
-                            variant="subtle"
-                        />
-                    )}
-                    {qobuz && qobuzUrl && (
-                        <ActionIcon
-                            component="a"
-                            href={qobuzUrl}
-                            icon="brandQobuz"
-                            iconProps={{
-                                size: '2xl',
-                            }}
-                            rel="noopener noreferrer"
-                            target="_blank"
-                            tooltip={{
-                                label: t('action.openIn.qobuz'),
-                                openDelay: 400,
-                            }}
-                            variant="subtle"
-                        />
-                    )}
-                    {spotify && (
-                        <ActionIcon
-                            component="a"
-                            href={
-                                nativeSpotify
-                                    ? `spotify:search:${encodeURIComponent(artistName || '')}`
-                                    : `https://open.spotify.com/search/${encodeURIComponent(artistName || '')}`
-                            }
-                            icon="brandSpotify"
-                            iconProps={{
-                                size: '2xl',
-                            }}
-                            rel="noopener noreferrer"
-                            target={nativeSpotify ? undefined : '_blank'}
-                            tooltip={{
-                                label: t('action.openIn.spotify'),
-                                openDelay: 400,
-                            }}
-                            variant="subtle"
-                        />
-                    )}
-                </Group>
-            </Stack>
+            <SocialLinksDisplay collapseKey="albumArtist.externalLinks" links={links} />
         </Grid.Col>
     );
 };
@@ -1194,21 +1157,18 @@ export const AlbumArtistDetailContent = ({
                         genres={detailQuery.data?.genres}
                         order={genresOrder}
                     />
-                    {externalLinks &&
-                        (lastFM || listenBrainz || musicBrainz || qobuz || spotify) && (
-                            <AlbumArtistMetadataExternalLinks
-                                artistName={detailQuery.data?.name}
-                                externalLinks={externalLinks}
-                                lastFM={lastFM}
-                                listenBrainz={listenBrainz}
-                                mbzId={mbzId}
-                                musicBrainz={musicBrainz}
-                                nativeSpotify={nativeSpotify}
-                                order={externalLinksOrder}
-                                qobuz={qobuz}
-                                spotify={spotify}
-                            />
-                        )}
+                    <AlbumArtistMetadataExternalLinks
+                        artistName={detailQuery.data?.name}
+                        externalLinks={externalLinks}
+                        lastFM={lastFM}
+                        listenBrainz={listenBrainz}
+                        mbzId={mbzId}
+                        musicBrainz={musicBrainz}
+                        nativeSpotify={nativeSpotify}
+                        order={externalLinksOrder}
+                        qobuz={qobuz}
+                        spotify={spotify}
+                    />
                     {enabledItem.biography && (
                         <AlbumArtistMetadataBiography
                             artistName={detailQuery.data?.name}

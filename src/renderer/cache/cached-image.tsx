@@ -19,7 +19,9 @@ export interface CachedImageProps extends ImgHTMLAttributes<HTMLImageElement> {
 }
 
 export const CachedImage = ({
+    decoding,
     itemId,
+    loading,
     placeholder,
     size,
     src,
@@ -47,5 +49,18 @@ export const CachedImage = ({
         };
     }, [itemId, size, src]);
 
-    return <img {...rest} src={resolved ?? placeholder ?? src} style={style} />;
+    return (
+        <img
+            // Decode off the main thread by default to avoid scroll jank on
+            // large grids; `loading="lazy"` defers off-screen fetches (a
+            // no-op on already-resolved blob: URLs, beneficial on the remote
+            // fallback URL). Both stay overridable by the caller via `rest`-
+            // less explicit props so existing callers keep their behaviour.
+            decoding={decoding ?? 'async'}
+            loading={loading ?? 'lazy'}
+            {...rest}
+            src={resolved ?? placeholder ?? src}
+            style={style}
+        />
+    );
 };

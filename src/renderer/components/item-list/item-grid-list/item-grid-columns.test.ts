@@ -6,20 +6,29 @@
  * fall into the 2-column branch, producing oversized covers on the device
  * class with the most room. Intermediate 3-col (>=540) and 4-col (>=700) steps
  * were added.
+ *
+ * Phone density (S2): phones used to collapse to 1 column below 380 and only
+ * 2 columns up to 540, rendering one viewport-filling cover. Re-tuned so small
+ * phones (<384) show 2 columns and larger phones (384-539) show 3, matching
+ * the density of the Spotify / Apple Music library grids. The >=540
+ * tablet/desktop tiers are unchanged.
  */
 import { describe, expect, it } from 'vitest';
 
 import { getDynamicItemsPerRow } from '/@/renderer/components/item-list/item-grid-list/item-grid-list';
 
 describe('getDynamicItemsPerRow', () => {
-    it('uses a single column on small phones (<380)', () => {
-        expect(getDynamicItemsPerRow(320)).toBe(1);
-        expect(getDynamicItemsPerRow(360)).toBe(1);
+    it('uses 2 columns on small phones (<384)', () => {
+        expect(getDynamicItemsPerRow(320)).toBe(2);
+        expect(getDynamicItemsPerRow(360)).toBe(2);
+        expect(getDynamicItemsPerRow(383)).toBe(2);
     });
 
-    it('uses 2 columns between small-phone and the first tablet step (380-539)', () => {
-        expect(getDynamicItemsPerRow(380)).toBe(2);
-        expect(getDynamicItemsPerRow(539)).toBe(2);
+    it('uses 3 columns on larger phones up to the first tablet step (384-539)', () => {
+        expect(getDynamicItemsPerRow(384)).toBe(3);
+        expect(getDynamicItemsPerRow(390)).toBe(3);
+        expect(getDynamicItemsPerRow(430)).toBe(3);
+        expect(getDynamicItemsPerRow(539)).toBe(3);
     });
 
     it('gives 3 columns at narrow tablet content widths (540-599)', () => {
@@ -53,8 +62,10 @@ describe('getDynamicItemsPerRow', () => {
         expect(getDynamicItemsPerRow(768, 'large')).toBe(3);
         // 540 -> 3 cols, large => round(2.25) = 2.
         expect(getDynamicItemsPerRow(540, 'large')).toBe(2);
-        // 320 -> 1 col, large => round(0.75) = 1 (clamped, never 0).
-        expect(getDynamicItemsPerRow(320, 'large')).toBe(1);
+        // 320 -> 2 cols (small phone), large => round(1.5) = 2.
+        expect(getDynamicItemsPerRow(320, 'large')).toBe(2);
+        // 390 -> 3 cols (larger phone), large => round(2.25) = 2.
+        expect(getDynamicItemsPerRow(390, 'large')).toBe(2);
     });
 
     it('treats "compact" and "default" sizes the same as no size', () => {

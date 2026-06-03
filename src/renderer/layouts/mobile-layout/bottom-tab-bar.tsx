@@ -1,6 +1,6 @@
 import clsx from 'clsx';
-import { motion } from 'motion/react';
-import { ReactNode, useCallback, useState } from 'react';
+import { motion, useReducedMotion } from 'motion/react';
+import { ReactNode, useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
     RiAlbumFill,
@@ -76,6 +76,7 @@ export const BottomTabBar = ({
     const location = useLocation();
     const navigate = useNavigate();
     const haptic = useHaptic();
+    const reduceMotion = useReducedMotion();
 
     // Pre-computed for the active-state check so we don't pay the generatePath
     // cost on every render or for every tab comparison.
@@ -94,66 +95,99 @@ export const BottomTabBar = ({
     }, []);
     const closeLibraryPopover = useCallback(() => setLibraryPopoverOpen(false), []);
 
-    const tabs: Tab[] = [
-        {
-            icon: (active) =>
-                active ? <RiHome6Fill size="1.5rem" /> : <RiHome6Line size="1.5rem" />,
-            isActive: (p) => p === AppRoute.HOME,
-            key: 'home',
-            label: t('page.sidebar.home', { defaultValue: 'Home' }),
-            onClick: () => navigate(AppRoute.HOME),
-        },
-        {
-            icon: (active) =>
-                active ? <RiSearchFill size="1.5rem" /> : <RiSearchLine size="1.5rem" />,
-            // Search tab is "active" while either the search route is
-            // displayed OR the command-palette overlay is showing.
-            isActive: (p) => p.startsWith('/search'),
-            key: 'search',
-            label: t('page.sidebar.search', { defaultValue: 'Search' }),
-            // Per Spotify pattern: tap the Search tab on mobile to bring
-            // up the global command palette (which has search + commands
-            // built in). Falls back to navigating to /search only when
-            // the host didn't wire a palette opener.
-            onClick: () => (onOpenSearch ? onOpenSearch() : navigate(searchPath)),
-        },
-        {
-            icon: (active) =>
-                active ? <RiAlbumFill size="1.5rem" /> : <RiAlbumLine size="1.5rem" />,
-            // Anything under /library OR /playlists is "your library" in
-            // Spotify terms, OR while the library popover itself is open so
-            // the tab stays visually anchored.
-            isActive: (p) =>
-                libraryPopoverOpen || p.startsWith('/library') || p.startsWith('/playlists'),
-            key: 'library',
-            label: t('page.sidebar.myLibrary', { defaultValue: 'Library' }),
-            // Open the entity-type popover instead of navigating.
-            onClick: openLibraryPopover,
-        },
-        {
-            // Settings as a first-class tab. The previous path was More →
-            // sidebar drawer → Settings, which is two taps for a destination
-            // that gets visited often (servers, themes, playback). Sits
-            // immediately left of the More overflow so the visual centre of
-            // gravity stays balanced.
-            icon: (active) =>
-                active ? <RiSettings3Fill size="1.5rem" /> : <RiSettings3Line size="1.5rem" />,
-            isActive: (p) => p.startsWith('/settings'),
-            key: 'settings',
-            label: t('page.sidebar.settings', { defaultValue: 'Settings' }),
-            onClick: () => navigate(AppRoute.SETTINGS),
-        },
-        {
-            // "More" stays active while the drawer is open so the user has a
-            // visual anchor when they're inside it.
-            icon: (active) =>
-                active ? <RiMenuFill size="1.5rem" /> : <RiMenuLine size="1.5rem" />,
-            isActive: () => drawerOpen,
-            key: 'more',
-            label: t('common.menu', { defaultValue: 'More' }),
-            onClick: onMoreTab,
-        },
-    ];
+    const tabs: Tab[] = useMemo(
+        () => [
+            {
+                icon: (active) =>
+                    active ? <RiHome6Fill size="1.5rem" /> : <RiHome6Line size="1.5rem" />,
+                isActive: (p) => p === AppRoute.HOME,
+                key: 'home',
+                label: t('page.sidebar.home', { defaultValue: 'Home' }),
+                onClick: () => navigate(AppRoute.HOME),
+            },
+            {
+                icon: (active) =>
+                    active ? <RiSearchFill size="1.5rem" /> : <RiSearchLine size="1.5rem" />,
+                // Search tab is "active" while either the search route is
+                // displayed OR the command-palette overlay is showing.
+                isActive: (p) => p.startsWith('/search'),
+                key: 'search',
+                label: t('page.sidebar.search', { defaultValue: 'Search' }),
+                // Per Spotify pattern: tap the Search tab on mobile to bring
+                // up the global command palette (which has search + commands
+                // built in). Falls back to navigating to /search only when
+                // the host didn't wire a palette opener.
+                onClick: () => (onOpenSearch ? onOpenSearch() : navigate(searchPath)),
+            },
+            {
+                icon: (active) =>
+                    active ? <RiAlbumFill size="1.5rem" /> : <RiAlbumLine size="1.5rem" />,
+                // Anything under /library OR /playlists is "your library" in
+                // Spotify terms, OR while the library popover itself is open so
+                // the tab stays visually anchored.
+                isActive: (p) =>
+                    libraryPopoverOpen || p.startsWith('/library') || p.startsWith('/playlists'),
+                key: 'library',
+                label: t('page.sidebar.myLibrary', { defaultValue: 'Library' }),
+                // Open the entity-type popover instead of navigating.
+                onClick: openLibraryPopover,
+            },
+            {
+                // Settings as a first-class tab. The previous path was More →
+                // sidebar drawer → Settings, which is two taps for a destination
+                // that gets visited often (servers, themes, playback). Sits
+                // immediately left of the More overflow so the visual centre of
+                // gravity stays balanced.
+                icon: (active) =>
+                    active ? <RiSettings3Fill size="1.5rem" /> : <RiSettings3Line size="1.5rem" />,
+                isActive: (p) => p.startsWith('/settings'),
+                key: 'settings',
+                label: t('page.sidebar.settings', { defaultValue: 'Settings' }),
+                onClick: () => navigate(AppRoute.SETTINGS),
+            },
+            {
+                // "More" stays active while the drawer is open so the user has a
+                // visual anchor when they're inside it.
+                icon: (active) =>
+                    active ? <RiMenuFill size="1.5rem" /> : <RiMenuLine size="1.5rem" />,
+                isActive: () => drawerOpen,
+                key: 'more',
+                label: t('common.menu', { defaultValue: 'More' }),
+                onClick: onMoreTab,
+            },
+        ],
+        [
+            drawerOpen,
+            libraryPopoverOpen,
+            navigate,
+            onMoreTab,
+            onOpenSearch,
+            openLibraryPopover,
+            searchPath,
+            t,
+        ],
+    );
+
+    /*
+     * Compute the single tab that owns the sliding active-dot.
+     *
+     * Several tabs can report `isActive === true` at the same instant — e.g.
+     * the More drawer can be open *over* a /library route (both `more` and
+     * `library` match), or the Library popover can be open while the user is
+     * already on a /library page. The active-dot is a shared-layout element
+     * (one `layoutId`), and motion only permits a SINGLE node per layoutId at
+     * a time: rendering two warns in the console and tears the slide
+     * animation (the dot jumps or disappears). So we pick exactly one owner.
+     *
+     * Priority: a foreground toggle overlay (More drawer / Library popover)
+     * wins, because that's what the user is actively looking at; otherwise
+     * the first route-matched tab in declaration order takes the dot.
+     */
+    const activeDotKey: null | TabKey = useMemo(() => {
+        if (drawerOpen) return 'more';
+        if (libraryPopoverOpen) return 'library';
+        return tabs.find((tab) => tab.isActive(location.pathname))?.key ?? null;
+    }, [drawerOpen, libraryPopoverOpen, location.pathname, tabs]);
 
     return (
         <>
@@ -165,6 +199,10 @@ export const BottomTabBar = ({
             >
                 {tabs.map((tab) => {
                     const active = tab.isActive(location.pathname);
+                    // Only the single elected owner paints the shared-layout
+                    // dot (see activeDotKey) so motion never sees a duplicate
+                    // layoutId.
+                    const showDot = tab.key === activeDotKey;
                     return (
                         <button
                             aria-current={active ? 'page' : undefined}
@@ -200,16 +238,21 @@ export const BottomTabBar = ({
                         >
                             <span className={styles.iconSlot}>
                                 {tab.icon(active)}
-                                {active && (
+                                {showDot && (
                                     <motion.span
                                         className={styles.activeDot}
+                                        data-testid="bottom-tab-active-dot"
                                         layoutId="bottom-tab-bar-active-dot"
-                                        transition={{
-                                            damping: 24,
-                                            mass: 0.6,
-                                            stiffness: 380,
-                                            type: 'spring',
-                                        }}
+                                        transition={
+                                            reduceMotion
+                                                ? { duration: 0 }
+                                                : {
+                                                      damping: 24,
+                                                      mass: 0.6,
+                                                      stiffness: 380,
+                                                      type: 'spring',
+                                                  }
+                                        }
                                     />
                                 )}
                             </span>

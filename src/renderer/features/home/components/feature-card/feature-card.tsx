@@ -14,12 +14,10 @@ import {
     useTopPlayedFeatureData,
     useUnplayedFeatureData,
 } from '/@/renderer/features/home/components/feature-card/data-hooks';
-import {
-    FeatureCardShell,
-    ROTATE_INTERVAL_MS,
-} from '/@/renderer/features/home/components/feature-card/feature-card-shell';
+import { FeatureCardShell } from '/@/renderer/features/home/components/feature-card/feature-card-shell';
 import { isFeatureCardHovered } from '/@/renderer/features/home/components/feature-card/hover-signal';
 import { useCurrentServer } from '/@/renderer/store';
+import { useHomeFeatureCardRotationIntervalSeconds } from '/@/renderer/store/settings.store';
 
 export type FeatureCardVariant =
     | 'album'
@@ -256,6 +254,7 @@ const SURPRISE_BADGE_LABELS: Record<FeatureCardVariant, string> = {
 const SurpriseMeFeatureCard = () => {
     const { t } = useTranslation();
     const serverType = useCurrentServer()?.type;
+    const rotateIntervalMs = useHomeFeatureCardRotationIntervalSeconds() * 1000;
     const pool = useMemo(
         () =>
             SURPRISE_POOL_BASE.filter((v) => {
@@ -278,9 +277,9 @@ const SurpriseMeFeatureCard = () => {
                 if (next === prev) next = (next + 1) % pool.length;
                 return next;
             });
-        }, ROTATE_INTERVAL_MS);
+        }, rotateIntervalMs);
         return () => window.clearInterval(id);
-    }, [pool.length]);
+    }, [pool.length, rotateIntervalMs]);
 
     const subVariant = useMemo(
         () => pool[poolIdx % Math.max(pool.length, 1)] ?? pool[0] ?? 'artist',

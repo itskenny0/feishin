@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
 import { Suspense, useCallback, useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { useItemListColumnReorder } from '/@/renderer/components/item-list/helpers/use-item-list-column-reorder';
 import { useItemListColumnResize } from '/@/renderer/components/item-list/helpers/use-item-list-column-resize';
@@ -12,16 +13,21 @@ import { folderQueries } from '/@/renderer/features/folders/api/folder-api';
 import { FolderTreeBrowser } from '/@/renderer/features/folders/components/folder-tree-browser';
 import { useFolderListFilters } from '/@/renderer/features/folders/hooks/use-folder-list-filters';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
+import { EmptyState } from '/@/renderer/features/shared/components/empty-state';
+import { ListTableSkeleton } from '/@/renderer/features/shared/components/list-skeleton';
 import { ListWithSidebarContainer } from '/@/renderer/features/shared/components/list-with-sidebar-container';
 import { FILTER_KEYS } from '/@/renderer/features/shared/utils';
 import { useCurrentServerId, useListSettings, usePlayerSong } from '/@/renderer/store';
-import { Spinner } from '/@/shared/components/spinner/spinner';
 import { Folder, LibraryItem, Song, SongListSort, SortOrder } from '/@/shared/types/domain-types';
 import { ItemListKey, ListDisplayType, Play } from '/@/shared/types/types';
 
 export const FolderListContent = () => {
+    const { table } = useListSettings(ItemListKey.SONG);
+
     return (
-        <Suspense fallback={<Spinner container />}>
+        <Suspense
+            fallback={<ListTableSkeleton enableHeader={table.enableHeader} size={table.size} />}
+        >
             <FolderListInnerContent />
         </Suspense>
     );
@@ -84,6 +90,7 @@ interface FolderListViewProps {
 }
 
 export const FolderListView = ({ folderQuery }: FolderListViewProps) => {
+    const { t } = useTranslation();
     const { table } = useListSettings(ItemListKey.SONG);
     const display = ListDisplayType.TABLE;
     const { setItemCount } = useListContext();
@@ -152,6 +159,19 @@ export const FolderListView = ({ folderQuery }: FolderListViewProps) => {
     }, [navigateToFolder, player]);
 
     const currentSong = usePlayerSong();
+
+    if (allItems.length === 0) {
+        return (
+            <EmptyState
+                description={t('emptyState.foldersDescription', {
+                    defaultValue:
+                        'There are no subfolders or songs here. Use the breadcrumb above to go back.',
+                })}
+                icon="folder"
+                title={t('emptyState.foldersTitle', { defaultValue: 'This folder is empty' })}
+            />
+        );
+    }
 
     switch (display) {
         // case ListDisplayType.GRID: {

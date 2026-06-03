@@ -1,0 +1,122 @@
+/*
+ * Content-shaped loading skeletons for the library list routes. Dimensions
+ * mirror item-grid-list / item-table-list so content swaps in place with no
+ * layout shift. See list-skeleton.tsx for the rationale.
+ */
+
+/* --- Grid ------------------------------------------------------------- */
+
+/*
+ * Matches `.item-grid-container` in item-grid-list.module.css: same vertical
+ * and right padding so the measured content width — and therefore the column
+ * count from getDynamicItemsPerRow — matches the real grid.
+ */
+.gridRoot {
+    width: 100%;
+    height: 100%;
+    padding-block: var(--theme-spacing-xs);
+    padding-right: var(--theme-spacing-md);
+    overflow: hidden;
+}
+
+.gridList {
+    display: flex;
+    flex-wrap: wrap;
+    width: 100%;
+}
+
+/*
+ * One placeholder cell. `flex` basis mirrors `.item-row` so cells land on the
+ * same column grid; gap classes mirror `.item-row.gap-*` padding so the cell
+ * pitch (and thus cover size) matches the live grid.
+ */
+.cell-gap-xs,
+.cell-gap-sm,
+.cell-gap-md,
+.cell-gap-lg,
+.cell-gap-xl {
+    flex: 1 1 calc(100% / var(--skeleton-columns));
+    max-width: calc(100% / var(--skeleton-columns));
+    overflow: hidden;
+}
+
+.cell-gap-xs {
+    padding: var(--theme-spacing-xs);
+}
+
+.cell-gap-sm {
+    padding: var(--theme-spacing-sm);
+}
+
+.cell-gap-md {
+    padding: var(--theme-spacing-md);
+}
+
+.cell-gap-lg {
+    padding: var(--theme-spacing-lg);
+}
+
+.cell-gap-xl {
+    padding: var(--theme-spacing-xl);
+}
+
+.card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--theme-spacing-xs);
+    width: 100%;
+}
+
+.cover {
+    width: 100%;
+    aspect-ratio: 1;
+}
+
+/* Big-phone tier tightening, mirroring item-grid-list.module.css. */
+@media (361px <= width <= 430px) {
+    .cell-gap-md {
+        padding: var(--theme-spacing-sm);
+    }
+
+    .cell-gap-lg {
+        padding: var(--theme-spacing-md);
+    }
+
+    .cell-gap-xl {
+        padding: var(--theme-spacing-lg);
+    }
+}
+
+/* --- Table ------------------------------------------------------------ */
+
+.tableRoot {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+
+.tableHeader {
+    display: flex;
+    flex-shrink: 0;
+    gap: var(--theme-spacing-lg);
+    align-items: center;
+    padding: 0 var(--theme-spacing-md);
+    border-bottom: 1px solid var(--theme-colors-border);
+}
+
+.tableRow {
+    display: flex;
+    flex-shrink: 0;
+    gap: var(--theme-spacing-md);
+    align-items: center;
+    padding: 0 var(--theme-spacing-md);
+}
+
+.rowThumb {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    border-radius: var(--theme-radius-sm);
+}

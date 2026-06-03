@@ -2,64 +2,42 @@ import { PostProcessorModule } from 'i18next';
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 
-import ar from './locales/ar.json';
-import ca from './locales/ca.json';
-import cs from './locales/cs.json';
-import de from './locales/de.json';
+// Only English ships in the entry chunk. The other ~27 locales (~1.6 MB of
+// JSON) are loaded on demand the first time a user selects them, which keeps
+// them out of the initial-load bundle. English stays statically imported so
+// `i18n.t()` is synchronous and correct on first paint (and as the fallback
+// language). See loadLanguage() below.
 import en from './locales/en.json';
-import es from './locales/es.json';
-import eu from './locales/eu.json';
-import fa from './locales/fa.json';
-import fi from './locales/fi.json';
-import fr from './locales/fr.json';
-import hu from './locales/hu.json';
-import id from './locales/id.json';
-import it from './locales/it.json';
-import ja from './locales/ja.json';
-import ko from './locales/ko.json';
-import nbNO from './locales/nb-NO.json';
-import nl from './locales/nl.json';
-import pl from './locales/pl.json';
-import ptBr from './locales/pt-BR.json';
-import pt from './locales/pt.json';
-import ru from './locales/ru.json';
-import sl from './locales/sl.json';
-import sr from './locales/sr.json';
-import sv from './locales/sv.json';
-import ta from './locales/ta.json';
-import tr from './locales/tr.json';
-import zhHans from './locales/zh-Hans.json';
-import zhHant from './locales/zh-Hant.json';
 
 const resources = {
-    ar: { translation: ar },
-    ca: { translation: ca },
-    cs: { translation: cs },
-    de: { translation: de },
     en: { translation: en },
-    es: { translation: es },
-    eu: { translation: eu },
-    fa: { translation: fa },
-    fi: { translation: fi },
-    fr: { translation: fr },
-    hu: { translation: hu },
-    id: { translation: id },
-    it: { translation: it },
-    ja: { translation: ja },
-    ko: { translation: ko },
-    'nb-NO': { translation: nbNO },
-    nl: { translation: nl },
-    pl: { translation: pl },
-    pt: { translation: pt },
-    'pt-BR': { translation: ptBr },
-    ru: { translation: ru },
-    sl: { translation: sl },
-    sr: { translation: sr },
-    sv: { translation: sv },
-    ta: { translation: ta },
-    tr: { translation: tr },
-    'zh-Hans': { translation: zhHans },
-    'zh-Hant': { translation: zhHant },
+};
+
+// Lazily-importable bundles for every non-English locale. Vite turns each
+// glob entry into its own dynamically-imported chunk, so none of these are
+// pulled into the entry bundle — they are fetched only when requested.
+const localeLoaders = import.meta.glob<{ default: Record<string, unknown> }>('./locales/*.json');
+
+const loadedLanguages = new Set<string>(['en']);
+
+/**
+ * Ensure the resource bundle for `language` is registered with i18next,
+ * dynamically importing its JSON chunk on first use. Resolves immediately
+ * for English / already-loaded languages. Safe to call repeatedly.
+ */
+export const loadLanguage = async (language: string): Promise<void> => {
+    if (!language || loadedLanguages.has(language)) return;
+
+    const loader = localeLoaders[`./locales/${language}.json`];
+    if (!loader) return;
+
+    try {
+        const module = await loader();
+        i18n.addResourceBundle(language, 'translation', module.default, true, true);
+        loadedLanguages.add(language);
+    } catch (error) {
+        console.error(`[i18n] failed to load locale "${language}"`, error);
+    }
 };
 
 export const languages = [

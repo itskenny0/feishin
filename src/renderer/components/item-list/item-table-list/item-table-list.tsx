@@ -31,6 +31,7 @@ import {
 } from '/@/renderer/components/item-list/helpers/item-list-state';
 import { parseTableColumns } from '/@/renderer/components/item-list/helpers/parse-table-columns';
 import { useListHotkeys } from '/@/renderer/components/item-list/helpers/use-list-hotkeys';
+import { MobileTrackRowColumn } from '/@/renderer/components/item-list/item-table-list/columns/mobile-track-row-column';
 import { useContainerWidthTracking } from '/@/renderer/components/item-list/item-table-list/hooks/use-container-width-tracking';
 import { useRowInteractionDelegate } from '/@/renderer/components/item-list/item-table-list/hooks/use-row-interaction-delegate';
 import { useStickyGroupRowPositioning } from '/@/renderer/components/item-list/item-table-list/hooks/use-sticky-group-row-positioning';
@@ -66,6 +67,7 @@ import {
     ItemTableListColumnConfig,
 } from '/@/renderer/components/item-list/types';
 import { PlayerContext, usePlayer } from '/@/renderer/features/player/context/player-context';
+import { useIsMobileShell } from '/@/renderer/hooks/use-breakpoint';
 import { usePlayerStore } from '/@/renderer/store';
 import { animationProps } from '/@/shared/components/animations/animation-props';
 import { useFocusWithin } from '/@/shared/hooks/use-focus-within';
@@ -1235,19 +1237,44 @@ const ItemTableListStickyUI = memo(
 
 ItemTableListStickyUI.displayName = 'ItemTableListStickyUI';
 
+const MobileTrackRowCell = (cellProps: CellComponentProps<TableItemProps>) => {
+    const type = cellProps.columns[cellProps.columnIndex]?.id as TableColumn;
+    return (
+        <MobileTrackRowColumn {...(cellProps as any)} controls={cellProps.controls} type={type} />
+    );
+};
+
+MobileTrackRowCell.displayName = 'MobileTrackRowCell';
+
+const SONG_LIKE_ITEM_TYPES = new Set<LibraryItem>([LibraryItem.PLAYLIST_SONG, LibraryItem.SONG]);
+
+const MOBILE_ROW_COLUMNS: ItemTableListColumnConfig[] = [
+    {
+        align: 'start',
+        autoSize: true,
+        id: TableColumn.TITLE_COMBINED,
+        isEnabled: true,
+        pinned: null,
+        // Non-zero reference width: with autoFitColumns the model treats this
+        // as a proportion and scales it to the full container width. A width of
+        // 0 short-circuits the scaler and leaves a zero-width column.
+        width: 400,
+    },
+];
+
 const BaseItemTableList = ({
     activeRowId,
-    autoFitColumns = false,
-    CellComponent = ItemTableListColumn,
+    autoFitColumns: autoFitColumnsProp = false,
+    CellComponent: CellComponentProp = ItemTableListColumn,
     cellPadding = 'sm',
-    columns,
+    columns: columnsProp,
     data,
     enableAlternateRowColors = false,
     enableDrag = true,
     enableDragScroll = true,
     enableEntranceAnimation = true,
     enableExpansion = true,
-    enableHeader = true,
+    enableHeader: enableHeaderProp = true,
     enableHorizontalBorders = false,
     enableRowHoverHighlight = true,
     enableScrollShadow = true,
@@ -1258,7 +1285,7 @@ const BaseItemTableList = ({
     getItem,
     getItemIndex,
     getRowId,
-    groups,
+    groups: groupsProp,
     headerHeight = 40,
     initialTop,
     itemCount,
@@ -1269,10 +1296,31 @@ const BaseItemTableList = ({
     onScrollEnd,
     overrideControls,
     ref,
-    rowHeight,
-    size = 'default',
+    rowHeight: rowHeightProp,
+    size: sizeProp = 'default',
     startRowIndex,
 }: ItemTableListProps) => {
+    // On phone viewports, song-like lists drop the wide multi-column table in
+    // favour of a single full-width "mobile track row" (cover + title/artist +
+    // duration + overflow menu). The desktop/tablet path is byte-identical —
+    // the branch is only taken when both conditions hold. Virtualization,
+    // selection, context menus, drag wiring and the play handlers are all
+    // reused untouched; only the column model + cell renderer change.
+    const isMobileShell = useIsMobileShell();
+    const useMobileTrackRows = isMobileShell && SONG_LIKE_ITEM_TYPES.has(itemType);
+
+    const columns = useMobileTrackRows ? MOBILE_ROW_COLUMNS : columnsProp;
+    const autoFitColumns = useMobileTrackRows ? true : autoFitColumnsProp;
+    const enableHeader = useMobileTrackRows ? false : enableHeaderProp;
+    const CellComponent = useMobileTrackRows ? MobileTrackRowCell : CellComponentProp;
+    // Album grouping is rendered by the desktop column router, which the mobile
+    // single-column cell bypasses; suppress groups so we don't emit blank rows.
+    const groups = useMobileTrackRows ? undefined : groupsProp;
+    // Force a comfortable >=44px tap target regardless of the saved table
+    // density, and a stable default row size for the mobile cell.
+    const rowHeight = useMobileTrackRows ? 64 : rowHeightProp;
+    const size = useMobileTrackRows ? 'default' : sizeProp;
+
     const { playlistId: routePlaylistId } = useParams() as { playlistId?: string };
     const tableId = useId();
     const baseItemCount = itemCount ?? data.length;

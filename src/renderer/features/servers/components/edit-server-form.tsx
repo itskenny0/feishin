@@ -1,10 +1,13 @@
 import { closeAllModals } from '@mantine/modals';
 import isElectron from 'is-electron';
-import { useState } from 'react';
+import { FocusEvent, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+
+import styles from './server-form.module.css';
 
 import i18n from '/@/i18n/i18n';
 import { api } from '/@/renderer/api';
+import { useIsMobileShell } from '/@/renderer/hooks/use-breakpoint';
 import { queryClient } from '/@/renderer/lib/react-query';
 import { getServerById, useAuthStoreActions } from '/@/renderer/store';
 import { Checkbox } from '/@/shared/components/checkbox/checkbox';
@@ -47,6 +50,15 @@ export const EditServerForm = ({ isUpdate, onCancel, password, server }: EditSer
     const { updateServer } = useAuthStoreActions();
     const focusTrapRef = useFocusTrap();
     const [isLoading, setIsLoading] = useState(false);
+    const isMobileShell = useIsMobileShell();
+
+    // Centre the focused field above the soft keyboard on phones.
+    const mobileInputProps = isMobileShell
+        ? {
+              onFocus: (e: FocusEvent<HTMLInputElement>) =>
+                  e.currentTarget.scrollIntoView({ behavior: 'smooth', block: 'center' }),
+          }
+        : {};
 
     const form = useForm({
         initialValues: {
@@ -202,25 +214,39 @@ export const EditServerForm = ({ isUpdate, onCancel, password, server }: EditSer
     });
 
     return (
-        <form onSubmit={handleSubmit}>
+        <form className={styles.form} onSubmit={handleSubmit}>
             <Stack ref={focusTrapRef}>
                 <TextInput
+                    enterKeyHint="next"
                     label={t('form.addServer.input', {
                         context: 'name',
                     })}
                     required
                     rightSection={form.isDirty('name') && <ModifiedFieldIndicator />}
                     {...form.getInputProps('name')}
+                    {...mobileInputProps}
                 />
                 <TextInput
+                    autoCapitalize="none"
+                    autoComplete="url"
+                    autoCorrect="off"
+                    enterKeyHint="next"
+                    inputMode="url"
                     label={t('form.addServer.input', {
                         context: 'url',
                     })}
                     required
                     rightSection={form.isDirty('url') && <ModifiedFieldIndicator />}
+                    spellCheck={false}
                     {...form.getInputProps('url')}
+                    {...mobileInputProps}
                 />
                 <TextInput
+                    autoCapitalize="none"
+                    autoComplete="url"
+                    autoCorrect="off"
+                    enterKeyHint="next"
+                    inputMode="url"
                     label={t('form.addServer.input', {
                         context: 'remoteUrl',
                     })}
@@ -228,7 +254,9 @@ export const EditServerForm = ({ isUpdate, onCancel, password, server }: EditSer
                         context: 'remoteUrlPlaceholder',
                     })}
                     rightSection={form.isDirty('remoteUrl') && <ModifiedFieldIndicator />}
+                    spellCheck={false}
                     {...form.getInputProps('remoteUrl')}
+                    {...mobileInputProps}
                 />
                 {form.values.remoteUrl && (
                     <Group gap="xs">
@@ -244,19 +272,28 @@ export const EditServerForm = ({ isUpdate, onCancel, password, server }: EditSer
                     </Group>
                 )}
                 <TextInput
+                    autoCapitalize="none"
+                    autoComplete="username"
+                    autoCorrect="off"
+                    enterKeyHint="next"
                     label={t('form.addServer.input', {
                         context: 'username',
                     })}
                     required
                     rightSection={form.isDirty('username') && <ModifiedFieldIndicator />}
+                    spellCheck={false}
                     {...form.getInputProps('username')}
+                    {...mobileInputProps}
                 />
                 <PasswordInput
+                    autoComplete="current-password"
                     data-autofocus
+                    enterKeyHint="go"
                     label={t('form.addServer.input', {
                         context: 'password',
                     })}
                     {...form.getInputProps('password')}
+                    {...mobileInputProps}
                 />
                 {localSettings && isNavidrome && (
                     <Checkbox
@@ -291,7 +328,7 @@ export const EditServerForm = ({ isUpdate, onCancel, password, server }: EditSer
                         })}
                     />
                 )}
-                <Group justify="flex-end">
+                <Group grow={isMobileShell} justify="flex-end">
                     <ModalButton onClick={onCancel}>{t('common.cancel')}</ModalButton>
                     <ModalButton loading={isLoading} type="submit" variant="filled">
                         {t('common.save')}

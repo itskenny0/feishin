@@ -147,23 +147,32 @@ export const MobileLayout = ({ shell }: MobileLayoutProps) => {
                     onOpenSearch={openCommandPalette}
                     onScrollToTop={() => {
                         // Soft-scroll the main content + any inner
-                        // scrollable nearest to the top so re-tapping
-                        // the active tab snaps back to the start of
-                        // the page (Spotify pattern). Best-effort —
-                        // routes that own their own scroll containers
-                        // get the outer scroll reset for free anyway
-                        // because main-content also scrolls.
+                        // scrollables back to the top so re-tapping the
+                        // active tab snaps back to the start of the page
+                        // (Spotify pattern). Best-effort.
                         const main = mainContentRef.current;
-                        if (main) {
-                            main.scrollTo({ behavior: 'smooth', top: 0 });
-                            // Also walk to the first inner scrollable
-                            // child and reset it — routes that render
-                            // a NativeScrollArea or OverlayScrollbars
-                            // inside main-content need this to actually
-                            // snap to top.
-                            const inner = main.querySelector<HTMLElement>('[data-scrollable]');
-                            inner?.scrollTo({ behavior: 'smooth', top: 0 });
-                        }
+                        if (!main) return;
+                        const reduceMotion = window.matchMedia?.(
+                            '(prefers-reduced-motion: reduce)',
+                        ).matches;
+                        const behavior: ScrollBehavior = reduceMotion ? 'auto' : 'smooth';
+                        main.scrollTo({ behavior, top: 0 });
+                        /*
+                         * Most routes own their own scroll container — a
+                         * NativeScrollArea (OverlayScrollbars, whose real
+                         * scroller carries [data-overlayscrollbars-viewport])
+                         * or a virtualized grid/table viewport. The outer
+                         * main-content scroll above does nothing for those,
+                         * so reset every scroller we can find. (The previous
+                         * `[data-scrollable]` selector matched nothing in the
+                         * tree and silently no-opped.)
+                         */
+                        const scrollers = main.querySelectorAll<HTMLElement>(
+                            '[data-overlayscrollbars-viewport]',
+                        );
+                        scrollers.forEach((el) => {
+                            if (el.scrollTop > 0) el.scrollTo({ behavior, top: 0 });
+                        });
                     }}
                 />
             </div>

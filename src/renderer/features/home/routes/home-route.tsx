@@ -12,6 +12,11 @@ import { FeatureCard } from '/@/renderer/features/home/components/feature-card/f
 import { FeatureCardPicker } from '/@/renderer/features/home/components/feature-card/feature-card-picker';
 import { FeaturedGenres } from '/@/renderer/features/home/components/featured-genres';
 import { FeelingLuckyButton } from '/@/renderer/features/home/components/feeling-lucky-button';
+import {
+    FeatureCardSkeleton,
+    GenreGridSkeleton,
+    HomeSkeleton,
+} from '/@/renderer/features/home/components/home-skeleton';
 import { LibraryStats } from '/@/renderer/features/home/components/library-stats';
 import { NewSinceLastVisit } from '/@/renderer/features/home/components/new-since-last-visit';
 import { QuickFilterChips } from '/@/renderer/features/home/components/quick-filter-chips';
@@ -31,10 +36,10 @@ import {
     useHomeFeatureContent,
     useHomeFeatureStyle,
     useHomeFeelingLucky,
+    useHomeGreetingVisible,
     useHomeItems,
     useWindowSettings,
 } from '/@/renderer/store';
-import { Spinner } from '/@/shared/components/spinner/spinner';
 import { Stack } from '/@/shared/components/stack/stack';
 import { Text } from '/@/shared/components/text/text';
 import {
@@ -57,6 +62,7 @@ const HomeRoute = () => {
     const homeFeatureStyle = useHomeFeatureStyle();
     const homeFeelingLucky = useHomeFeelingLucky();
     const homeItems = useHomeItems();
+    const homeGreetingVisible = useHomeGreetingVisible();
     const containerQuery = useGridCarouselContainerQuery();
 
     const isJellyfin = server?.type === ServerType.JELLYFIN;
@@ -128,7 +134,13 @@ const HomeRoute = () => {
         rows.push(
             <ComponentErrorBoundary key="feature-single">
                 <FeatureCardPicker />
-                <FeatureCard variant={homeFeatureContent} />
+                {/* `FeatureCard` can render a suspending carousel (the `album`
+                    variant) or the feature shell. Give it its own boundary
+                    with a banner-shaped skeleton so it fills in independently
+                    instead of bubbling to the route fallback. */}
+                <Suspense fallback={<FeatureCardSkeleton />}>
+                    <FeatureCard variant={homeFeatureContent} />
+                </Suspense>
             </ComponentErrorBoundary>,
         );
     }
@@ -136,7 +148,11 @@ const HomeRoute = () => {
     if (homeFeature && homeFeatureStyle === HomeFeatureStyle.MULTIPLE) {
         rows.push(
             <ComponentErrorBoundary key="feature-multiple">
-                <AlbumInfiniteFeatureCarousel />
+                {/* Suspending feature carousel — own boundary + banner-shaped
+                    skeleton so the rest of the page paints immediately. */}
+                <Suspense fallback={<FeatureCardSkeleton />}>
+                    <AlbumInfiniteFeatureCarousel />
+                </Suspense>
             </ComponentErrorBoundary>,
         );
     }
@@ -155,7 +171,11 @@ const HomeRoute = () => {
         if (item.id === HomeItem.GENRES) {
             rows.push(
                 <ComponentErrorBoundary key="featured-genres">
-                    <FeaturedGenres />
+                    {/* Suspending genre query — own boundary + genre-grid
+                        skeleton so it fills in independently. */}
+                    <Suspense fallback={<GenreGridSkeleton />}>
+                        <FeaturedGenres />
+                    </Suspense>
                 </ComponentErrorBoundary>,
             );
             continue;
@@ -224,11 +244,14 @@ const HomeRoute = () => {
     }
 
     // Slot the greeting at the very top so it leads the staggered fade-in.
-    rows.unshift(
-        <div className={styles.greeting} key="greeting">
-            <Text className={styles.greetingText}>{greeting}</Text>
-        </div>,
-    );
+    // Hidden entirely when the user disables it (default: visible).
+    if (homeGreetingVisible) {
+        rows.unshift(
+            <div className={styles.greeting} key="greeting">
+                <Text className={styles.greetingText}>{greeting}</Text>
+            </div>,
+        );
+    }
 
     return (
         <AnimatedPage>
@@ -319,7 +342,10 @@ const HomeRow = ({ children, index }: { children: ReactNode; index: number }) =>
 const HomeRouteWithBoundary = () => {
     return (
         <PageErrorBoundary>
-            <Suspense fallback={<Spinner container />}>
+            {/* Shaped full-layout skeleton instead of a centered spinner so
+                the lazy route-chunk load (and any top-level suspend) paints a
+                layout-shaped placeholder with no jarring shift. */}
+            <Suspense fallback={<HomeSkeleton />}>
                 <HomeRoute />
             </Suspense>
         </PageErrorBoundary>

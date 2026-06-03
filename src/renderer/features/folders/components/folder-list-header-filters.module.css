@@ -1,0 +1,52 @@
+/*
+ * Folder breadcrumb row. On desktop this is a normal inline breadcrumb that
+ * wraps to the container width (collapsing middle segments into the "…"
+ * dropdown via the maxItems logic in the component).
+ *
+ * On touch / phone viewports the breadcrumb is the PRIMARY navigation surface
+ * for the folders view — the tree-browser sidebar is hidden below the `lg`
+ * breakpoint (see list-with-sidebar-container.module.css), so the only way
+ * back up the hierarchy on a phone is tapping a breadcrumb segment. Two
+ * problems to solve there:
+ *
+ *   1. The segment buttons are `compact-sm` (~24px tall) which is well below
+ *      the 44px touch-target floor.
+ *   2. Even after collapsing, the row can still run wider than a narrow phone
+ *      (long folder names, deep paths), so it needs to pan-x rather than clip.
+ */
+.breadcrumb-container {
+    width: 100%;
+    min-width: 0;
+}
+
+@media (pointer: coarse) {
+    .breadcrumb-container {
+        overflow-x: auto;
+        overflow-y: hidden;
+        scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .breadcrumb-container::-webkit-scrollbar {
+        display: none;
+    }
+
+    /* Keep the breadcrumb on a single finger-scrollable line. */
+    .breadcrumb-container > * {
+        flex-wrap: nowrap;
+        width: max-content;
+    }
+
+    /*
+     * Bump the segment buttons to a comfortable touch target. The buttons are
+     * rendered as `compact-sm`; on touch we widen the hit area without
+     * blowing up the visual density (the breadcrumb still reads as a strip,
+     * not a row of chunky pills).
+     */
+    .breadcrumb-container button {
+        min-height: 36px;
+        padding-right: var(--theme-spacing-sm);
+        padding-left: var(--theme-spacing-sm);
+        font-size: var(--theme-font-size-md);
+    }
+}

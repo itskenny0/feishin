@@ -1,0 +1,120 @@
+/*
+ * Layout-shaped skeletons for the home page. These mirror the real
+ * components' dimensions so the slots are reserved before data resolves —
+ * content swaps in place with no layout shift, and the user never sees a
+ * centered full-page spinner.
+ */
+
+.skeletonStack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--theme-spacing-2xl);
+    width: 100%;
+    padding-right: 1rem;
+    padding-left: 1rem;
+}
+
+@media (width >= 600px) {
+    .skeletonStack {
+        padding-right: 1.5rem;
+        padding-left: 1.5rem;
+    }
+}
+
+@media (width >= 835px) {
+    .skeletonStack {
+        padding-right: 2rem;
+        padding-left: 2rem;
+    }
+}
+
+/* Greeting placeholder — matches the 2.25–2.75rem display heading height. */
+.greeting {
+    margin-bottom: var(--theme-spacing-md);
+}
+
+/*
+ * Feature banner placeholder. Locks the same 280–300px height the real
+ * feature card / feature carousel occupy so swapping in real content does
+ * not shift everything below it.
+ */
+.featureCard {
+    width: 100%;
+    height: 300px;
+    min-height: 300px;
+    border-radius: var(--theme-radius-md);
+}
+
+@media (width <= 720px) {
+    .featureCard {
+        height: 280px;
+        min-height: 280px;
+    }
+}
+
+/* Carousel row placeholder: title strip + a single row of poster cards. */
+.carouselRow {
+    display: flex;
+    flex-direction: column;
+    gap: var(--theme-spacing-md);
+    width: 100%;
+}
+
+.carouselCards {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--theme-spacing-md);
+    width: 100%;
+}
+
+@media (width >= 520px) {
+    .carouselCards {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+@media (width >= 720px) {
+    .carouselCards {
+        grid-template-columns: repeat(4, 1fr);
+    }
+}
+
+@media (width >= 960px) {
+    .carouselCards {
+        grid-template-columns: repeat(5, 1fr);
+    }
+}
+
+@media (width >= 1152px) {
+    .carouselCards {
+        grid-template-columns: repeat(6, 1fr);
+    }
+}
+
+.posterCard {
+    display: flex;
+    flex-direction: column;
+    gap: var(--theme-spacing-xs);
+    width: 100%;
+}
+
+.posterImage {
+    width: 100%;
+    aspect-ratio: 1;
+    border-radius: var(--theme-radius-sm);
+}
+
+/* Genre grid placeholder: title strip + tile grid matching featured-genres. */
+.genreSection {
+    display: flex;
+    flex-direction: column;
+    gap: var(--theme-spacing-md);
+    width: 100%;
+}
+
+.genreGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: var(--theme-spacing-md);
+    padding: var(--theme-spacing-xs) 0;
+}

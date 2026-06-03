@@ -3,6 +3,7 @@ import { MouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useCreateRadioStation } from '/@/renderer/features/radio/mutations/create-radio-station-mutation';
+import { MOBILE_SHELL_QUERY, useIsMobileShell } from '/@/renderer/hooks/use-breakpoint';
 import { useCurrentServer } from '/@/renderer/store';
 import { Group } from '/@/shared/components/group/group';
 import { closeAllModals, openModal } from '/@/shared/components/modal/modal';
@@ -21,6 +22,7 @@ export const CreateRadioStationForm = ({ onCancel }: CreateRadioStationFormProps
     const { t } = useTranslation();
     const mutation = useCreateRadioStation({});
     const server = useCurrentServer();
+    const isMobile = useIsMobileShell();
 
     const form = useForm<CreateInternetRadioStationBody>({
         initialValues: {
@@ -75,7 +77,7 @@ export const CreateRadioStationForm = ({ onCancel }: CreateRadioStationFormProps
                     })}
                     {...form.getInputProps('homepageUrl')}
                 />
-                <Group justify="flex-end">
+                <Group grow={isMobile} justify={isMobile ? 'stretch' : 'flex-end'} wrap="nowrap">
                     <ModalButton onClick={onCancel} variant="subtle">
                         {t('common.cancel')}
                     </ModalButton>
@@ -101,8 +103,11 @@ export const openCreateRadioStationModal = (
         return;
     }
 
+    const isMobile = typeof window !== 'undefined' && window.matchMedia(MOBILE_SHELL_QUERY).matches;
+
     openModal({
         children: <CreateRadioStationForm onCancel={closeAllModals} />,
+        fullScreen: isMobile,
         title: t('action.createRadioStation') as string,
     });
 };

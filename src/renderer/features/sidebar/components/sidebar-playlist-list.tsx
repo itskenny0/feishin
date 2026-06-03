@@ -25,6 +25,7 @@ import {
 } from '/@/renderer/features/sidebar/components/playlist-folder-tree';
 import { useDragDrop } from '/@/renderer/hooks/use-drag-drop';
 import { useDragMonitor } from '/@/renderer/hooks/use-drag-monitor';
+import { preloadRoute } from '/@/renderer/router/route-preloaders';
 import { AppRoute } from '/@/renderer/router/routes';
 import {
     useCurrentServer,
@@ -258,6 +259,14 @@ export const PlaylistRowButton = memo(
 
         const permissions = usePermissions();
 
+        // Warm the playlist-detail route chunk while the pointer is on the row
+        // so the click navigates without a Suspense flash. Idempotent per
+        // session (preloadRoute guards against repeat fetches).
+        const handleHoverPreload = useCallback(() => {
+            setIsHovered(true);
+            preloadRoute(url.pathname);
+        }, [url.pathname]);
+
         const handlePlay = useCallback(
             (id: string, type: Play) => {
                 player.addToQueueByFetch(serverId, [id], LibraryItem.PLAYLIST, type);
@@ -287,7 +296,8 @@ export const PlaylistRowButton = memo(
                     e.preventDefault();
                     onContextMenu(e, item);
                 }}
-                onMouseEnter={() => setIsHovered(true)}
+                onFocus={handleHoverPreload}
+                onMouseEnter={handleHoverPreload}
                 onMouseLeave={() => setIsHovered(false)}
                 ref={ref}
                 to={url}

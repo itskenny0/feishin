@@ -5,6 +5,7 @@ import { DownloadAction } from '/@/renderer/features/context-menu/actions/downlo
 import { PlayAction } from '/@/renderer/features/context-menu/actions/play-action';
 import { ShareAction } from '/@/renderer/features/context-menu/actions/share-action';
 import { ContextMenuPreview } from '/@/renderer/features/context-menu/components/context-menu-preview';
+import { MenuContent } from '/@/renderer/features/context-menu/components/menu-content';
 import { ContextMenu } from '/@/shared/components/context-menu/context-menu';
 import { Folder, LibraryItem } from '/@/shared/types/domain-types';
 
@@ -20,15 +21,13 @@ export const FolderContextMenu = ({ items, type }: FolderContextMenuProps) => {
     }, [items]);
 
     return (
-        <ContextMenu.Content
-            bottomStickyContent={<ContextMenuPreview items={items} itemType={type} />}
-        >
+        <MenuContent bottomStickyContent={<ContextMenuPreview items={items} itemType={type} />}>
             <PlayAction ids={ids} itemType={LibraryItem.FOLDER} />
             <ContextMenu.Divider />
             <AddToPlaylistAction items={ids} itemType={LibraryItem.FOLDER} />
             <ContextMenu.Divider />
             <DownloadAction ids={ids} />
             <ShareAction ids={ids} itemType={LibraryItem.FOLDER} />
-        </ContextMenu.Content>
+        </MenuContent>
     );
 };

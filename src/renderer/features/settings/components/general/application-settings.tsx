@@ -26,6 +26,7 @@ import {
 } from '/@/renderer/store/settings.store';
 import { type Font, FONT_OPTIONS } from '/@/renderer/types/fonts';
 import { FileInput } from '/@/shared/components/file-input/file-input';
+import { MultiSelect } from '/@/shared/components/multi-select/multi-select';
 import { NumberInput } from '/@/shared/components/number-input/number-input';
 import { SegmentedControl } from '/@/shared/components/segmented-control/segmented-control';
 import { Select } from '/@/shared/components/select/select';
@@ -82,6 +83,88 @@ const SIDE_QUEUE_LAYOUT_OPTIONS = [
         }),
         value: 'vertical',
     },
+];
+
+const GRID_GAP_OPTIONS = [
+    { label: 'XS', value: 'xs' },
+    { label: 'SM', value: 'sm' },
+    { label: 'MD', value: 'md' },
+    { label: 'LG', value: 'lg' },
+    { label: 'XL', value: 'xl' },
+];
+
+const GRID_CARD_SIZE_OPTIONS = [
+    {
+        label: t('setting.gridCardSize', { context: 'optionCompact', defaultValue: 'Compact' }),
+        value: 'compact',
+    },
+    {
+        label: t('setting.gridCardSize', { context: 'optionDefault', defaultValue: 'Default' }),
+        value: 'default',
+    },
+    {
+        label: t('setting.gridCardSize', { context: 'optionLarge', defaultValue: 'Large' }),
+        value: 'large',
+    },
+];
+
+const GRID_CORNER_RADIUS_OPTIONS = [
+    {
+        label: t('setting.gridCardCornerRadius', {
+            context: 'optionSquare',
+            defaultValue: 'Square',
+        }),
+        value: 'square',
+    },
+    {
+        label: t('setting.gridCardCornerRadius', {
+            context: 'optionRoundedSm',
+            defaultValue: 'Rounded (small)',
+        }),
+        value: 'rounded-sm',
+    },
+    {
+        label: t('setting.gridCardCornerRadius', {
+            context: 'optionRoundedMd',
+            defaultValue: 'Rounded (medium)',
+        }),
+        value: 'rounded-md',
+    },
+    {
+        label: t('setting.gridCardCornerRadius', {
+            context: 'optionRoundedLg',
+            defaultValue: 'Rounded (large)',
+        }),
+        value: 'rounded-lg',
+    },
+    {
+        label: t('setting.gridCardCornerRadius', { context: 'optionPill', defaultValue: 'Pill' }),
+        value: 'pill',
+    },
+];
+
+const GRID_METADATA_ROW_OPTIONS = [
+    { label: t('table.column.title', { defaultValue: 'Title' }), value: 'name' },
+    {
+        label: t('table.column.albumArtist', { defaultValue: 'Album artist' }),
+        value: 'albumArtists',
+    },
+    { label: t('table.column.artist', { defaultValue: 'Artist' }), value: 'artists' },
+    { label: t('table.column.duration', { defaultValue: 'Duration' }), value: 'duration' },
+    { label: t('table.column.releaseYear', { defaultValue: 'Year' }), value: 'releaseYear' },
+    {
+        label: t('table.column.releaseDate', { defaultValue: 'Release date' }),
+        value: 'releaseDate',
+    },
+    { label: t('table.column.dateAdded', { defaultValue: 'Date added' }), value: 'createdAt' },
+    { label: t('table.column.lastPlayed', { defaultValue: 'Last played' }), value: 'lastPlayedAt' },
+    { label: t('table.column.playCount', { defaultValue: 'Play count' }), value: 'playCount' },
+    { label: t('table.column.genre', { defaultValue: 'Genres' }), value: 'genres' },
+    { label: t('table.column.album', { defaultValue: 'Album' }), value: 'album' },
+    { label: t('table.column.songCount', { defaultValue: 'Song count' }), value: 'songCount' },
+    { label: t('table.column.albumCount', { defaultValue: 'Album count' }), value: 'albumCount' },
+    { label: t('table.column.rating', { defaultValue: 'Rating' }), value: 'rating' },
+    { label: t('table.column.favorite', { defaultValue: 'Favorite' }), value: 'userFavorite' },
 ];
 
 const FONT_TYPES: Font[] = [
@@ -463,6 +546,116 @@ export const ApplicationSettings = memo(() => {
         {
             control: (
                 <Switch
+                    aria-label={t('setting.homeGreetingVisible', {
+                        defaultValue: 'Show greeting',
+                    })}
+                    defaultChecked={settings.homeGreetingVisible}
+                    onChange={(e) =>
+                        setSettings({
+                            general: {
+                                ...settings,
+                                homeGreetingVisible: e.currentTarget.checked,
+                            },
+                        })
+                    }
+                />
+            ),
+            description: t('setting.homeGreetingVisible', {
+                context: 'description',
+                defaultValue: 'Show the time-aware greeting at the top of the home page',
+            }),
+            isHidden: false,
+            title: t('setting.homeGreetingVisible', { defaultValue: 'Show greeting' }),
+        },
+        {
+            control: (
+                <NumberInput
+                    max={50}
+                    min={5}
+                    onBlur={(e) => {
+                        if (!e) return;
+                        const newVal = e.currentTarget.value
+                            ? Math.min(Math.max(Number(e.currentTarget.value), 5), 50)
+                            : settings.homeCarouselItemsPerPage;
+                        setSettings({
+                            general: {
+                                ...settings,
+                                homeCarouselItemsPerPage: newVal,
+                            },
+                        });
+                    }}
+                    value={settings.homeCarouselItemsPerPage}
+                />
+            ),
+            description: t('setting.homeCarouselItemsPerPage', {
+                context: 'description',
+                defaultValue: 'Number of items loaded per page in home carousels',
+            }),
+            isHidden: false,
+            title: t('setting.homeCarouselItemsPerPage', {
+                defaultValue: 'Home carousel items per page',
+            }),
+        },
+        {
+            control: (
+                <NumberInput
+                    max={20}
+                    min={5}
+                    onBlur={(e) => {
+                        if (!e) return;
+                        const newVal = e.currentTarget.value
+                            ? Math.min(Math.max(Number(e.currentTarget.value), 5), 20)
+                            : settings.homeFeatureCardSongsPerCard;
+                        setSettings({
+                            general: {
+                                ...settings,
+                                homeFeatureCardSongsPerCard: newVal,
+                            },
+                        });
+                    }}
+                    value={settings.homeFeatureCardSongsPerCard}
+                />
+            ),
+            description: t('setting.homeFeatureCardSongsPerCard', {
+                context: 'description',
+                defaultValue: 'Number of songs shown in each home feature card',
+            }),
+            isHidden: false,
+            title: t('setting.homeFeatureCardSongsPerCard', {
+                defaultValue: 'Feature card songs per card',
+            }),
+        },
+        {
+            control: (
+                <Slider
+                    defaultValue={settings.homeFeatureCardRotationIntervalSeconds}
+                    label={(e) => `${e}s`}
+                    max={120}
+                    min={5}
+                    onChangeEnd={(e) => {
+                        setSettings({
+                            general: {
+                                ...settings,
+                                homeFeatureCardRotationIntervalSeconds: e,
+                            },
+                        });
+                    }}
+                    step={5}
+                    w={140}
+                />
+            ),
+            description: t('setting.homeFeatureCardRotationInterval', {
+                context: 'description',
+                defaultValue: 'Seconds before home feature cards auto-rotate',
+            }),
+            isHidden: false,
+            title: t('setting.homeFeatureCardRotationInterval', {
+                defaultValue: 'Feature card rotation interval',
+            }),
+        },
+        {
+            control: (
+                <Switch
                     aria-label={t('setting.albumBackground')}
                     defaultChecked={settings.albumBackground}
                     onChange={(e) =>
@@ -635,6 +828,131 @@ export const ApplicationSettings = memo(() => {
             }),
             isHidden: false,
             title: t('setting.showRatings'),
+        },
+        {
+            control: (
+                <Switch
+                    aria-label={t('setting.showRatingBadge', { defaultValue: 'Show rating badge' })}
+                    defaultChecked={settings.showRatingBadge}
+                    onChange={(e) =>
+                        setSettings({
+                            general: {
+                                ...settings,
+                                showRatingBadge: e.currentTarget.checked,
+                            },
+                        })
+                    }
+                />
+            ),
+            description: t('setting.showRatingBadge', {
+                context: 'description',
+                defaultValue: 'Show the star rating badge in the corner of grid card images',
+            }),
+            isHidden: false,
+            title: t('setting.showRatingBadge', { defaultValue: 'Show rating badge' }),
+        },
+        {
+            control: (
+                <Select
+                    aria-label={t('setting.gridCardSize', { defaultValue: 'Grid card size' })}
+                    data={GRID_CARD_SIZE_OPTIONS}
+                    onChange={(e) => {
+                        if (!e) return;
+                        setSettings({
+                            general: {
+                                ...settings,
+                                gridCardSize: e as (typeof settings)['gridCardSize'],
+                            },
+                        });
+                    }}
+                    value={settings.gridCardSize}
+                />
+            ),
+            description: t('setting.gridCardSize', {
+                context: 'description',
+                defaultValue: 'Default density for library grid cards',
+            }),
+            isHidden: false,
+            title: t('setting.gridCardSize', { defaultValue: 'Grid card size' }),
+        },
+        {
+            control: (
+                <Select
+                    aria-label={t('setting.gridGap', { defaultValue: 'Grid gap' })}
+                    data={GRID_GAP_OPTIONS}
+                    onChange={(e) => {
+                        if (!e) return;
+                        setSettings({
+                            general: {
+                                ...settings,
+                                gridGap: e as (typeof settings)['gridGap'],
+                            },
+                        });
+                    }}
+                    value={settings.gridGap}
+                />
+            ),
+            description: t('setting.gridGap', {
+                context: 'description',
+                defaultValue: 'Default spacing between cards in library grids',
+            }),
+            isHidden: false,
+            title: t('setting.gridGap', { defaultValue: 'Grid gap' }),
+        },
+        {
+            control: (
+                <Select
+                    aria-label={t('setting.gridCardCornerRadius', {
+                        defaultValue: 'Grid card corner radius',
+                    })}
+                    data={GRID_CORNER_RADIUS_OPTIONS}
+                    onChange={(e) => {
+                        if (!e) return;
+                        setSettings({
+                            general: {
+                                ...settings,
+                                gridCardCornerRadius:
+                                    e as (typeof settings)['gridCardCornerRadius'],
+                            },
+                        });
+                    }}
+                    value={settings.gridCardCornerRadius}
+                />
+            ),
+            description: t('setting.gridCardCornerRadius', {
+                context: 'description',
+                defaultValue: 'Corner-radius style for library grid cards',
+            }),
+            isHidden: false,
+            title: t('setting.gridCardCornerRadius', { defaultValue: 'Grid card corner radius' }),
+        },
+        {
+            control: (
+                <MultiSelect
+                    aria-label={t('setting.gridMetadataRows', {
+                        defaultValue: 'Grid card metadata rows',
+                    })}
+                    clearable
+                    data={GRID_METADATA_ROW_OPTIONS}
+                    onChange={(values) => {
+                        setSettings({
+                            general: {
+                                ...settings,
+                                gridMetadataRows: values as (typeof settings)['gridMetadataRows'],
+                            },
+                        });
+                    }}
+                    value={settings.gridMetadataRows}
+                    width={300}
+                />
+            ),
+            description: t('setting.gridMetadataRows', {
+                context: 'description',
+                defaultValue:
+                    'Fields shown beneath grid card images. Leave empty to use the per-item-type defaults',
+            }),
+            isHidden: false,
+            title: t('setting.gridMetadataRows', { defaultValue: 'Grid card metadata rows' }),
         },
         {
             control: (

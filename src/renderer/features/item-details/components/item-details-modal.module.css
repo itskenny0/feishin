@@ -1,0 +1,52 @@
+.table {
+    width: 100%;
+    table-layout: fixed;
+}
+
+.table th {
+    width: 38%;
+    padding: var(--theme-spacing-sm);
+    vertical-align: top;
+    overflow-wrap: anywhere;
+}
+
+.table td {
+    /* Long unbreakable values (paths, IDs, MBIDs, URLs) must wrap rather
+       than blow out the modal width. */
+    padding: var(--theme-spacing-sm);
+    overflow-wrap: anywhere;
+}
+
+.empty {
+    padding: var(--theme-spacing-xl) var(--theme-spacing-md);
+    text-align: center;
+}
+
+/* On phone-shaped viewports the two-column label/value table is too
+   cramped — the label column squeezes values into a sliver. Stack the
+   label above its value so each gets the full modal width. */
+@media (width <= 600px) {
+    .table,
+    .table tbody,
+    .table tr {
+        display: block;
+        width: 100%;
+    }
+
+    .table th,
+    .table td {
+        display: block;
+        width: 100%;
+        padding-right: 0;
+        padding-left: 0;
+    }
+
+    .table th {
+        padding-bottom: 0;
+    }
+
+    .table tr {
+        padding-top: var(--theme-spacing-sm);
+        padding-bottom: var(--theme-spacing-sm);
+    }
+}

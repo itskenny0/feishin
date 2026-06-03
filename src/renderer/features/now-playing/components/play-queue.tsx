@@ -13,7 +13,7 @@ import {
 import { ItemTableListColumn } from '/@/renderer/components/item-list/item-table-list/item-table-list-column';
 import { ItemListHandle } from '/@/renderer/components/item-list/types';
 import { eventEmitter } from '/@/renderer/events/event-emitter';
-import { useActivePlayerSource } from '/@/renderer/features/jellyfin-remote-target/hooks/use-active-player-source';
+import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
 import { useIsPlayerFetching, usePlayer } from '/@/renderer/features/player/context/player-context';
 import { EmptyState } from '/@/renderer/features/shared/components/empty-state';
 import { searchLibraryItems } from '/@/renderer/features/shared/utils';
@@ -57,8 +57,21 @@ export const PlayQueue = forwardRef<ItemListHandle, QueueProps>(
         const { getVisibleQueue } = usePlayerActions();
         const followCurrentSong = useFollowCurrentSong();
         const queueInPlaybackOrder = useQueueInPlaybackOrder();
-        const source = useActivePlayerSource();
-        const isRemote = source.mode === 'remote';
+
+        // Subscribe ONLY to the remote leaves the queue list actually renders
+        // (isRemote / queue / queueIndex) rather than the broad
+        // useActivePlayerSource(), whose memoized object identity changes on
+        // every position tick (it mirrors playState.positionMs/volume). Using
+        // the wide hook here would re-run this whole component — and break the
+        // remoteData / filteredData memos' guards — on every ~50ms-3s remote
+        // poll. These three leaves only change on an actual queue/track move.
+        const isRemote = useRemoteTargetStore((s) => s.targetDeviceId !== null);
+        const remoteQueue = useRemoteTargetStore((s) =>
+            s.targetDeviceId === null ? null : s.mirrored.queue,
+        );
+        const remoteQueueIndex = useRemoteTargetStore((s) =>
+            s.targetDeviceId === null ? -1 : s.mirrored.queueIndex,
+        );
 
         const [debouncedSearchTerm] = useDebouncedValue(searchTerm, 200);
 
@@ -70,12 +83,12 @@ export const PlayQueue = forwardRef<ItemListHandle, QueueProps>(
         // so we synthesize a stable id-based key. Position suffix disambiguates
         // duplicate tracks within the remote queue.
         const remoteData: QueueSong[] = useMemo(() => {
-            if (!isRemote || !source.queue) return [];
-            return source.queue.map((song, idx) => ({
+            if (!isRemote || !remoteQueue) return [];
+            return remoteQueue.map((song, idx) => ({
                 ...(song as Song),
                 _uniqueId: `remote:${song.id}:${idx}`,
             })) as QueueSong[];
-        }, [isRemote, source.queue]);
+        }, [isRemote, remoteQueue]);
 
         useEffect(() => {
             // In remote mode the queue comes from the mirror (see remoteData below);
@@ -184,6 +197,10 @@ export const PlayQueue = forwardRef<ItemListHandle, QueueProps>(
         }, [visibleData, debouncedSearchTerm]);
 
         const isEmpty = filteredData.length === 0;
+        // Distinguish "the queue itself is empty" from "the current search
+        // filtered everything out" — the two warrant different copy, and the
+        // drop-zone affordance only makes sense for a genuinely empty queue.
+        const isSearchNoResults = isEmpty && Boolean(debouncedSearchTerm) && visibleData.length > 0;
 
         const { handleColumnReordered } = useItemListColumnReorder({
             itemListKey: listKey,
@@ -197,9 +214,7 @@ export const PlayQueue = forwardRef<ItemListHandle, QueueProps>(
 
         const localCurrentSongUniqueId = currentSong?._uniqueId;
         const remoteCurrentSongUniqueId =
-            isRemote && source.queueIndex >= 0
-                ? remoteData[source.queueIndex]?._uniqueId
-                : undefined;
+            isRemote && remoteQueueIndex >= 0 ? remoteData[remoteQueueIndex]?._uniqueId : undefined;
         const currentSongUniqueId = isRemote ? remoteCurrentSongUniqueId : localCurrentSongUniqueId;
 
         const { focused, ref: containerFocusRef } = useFocusWithin();
@@ -254,14 +269,37 @@ export const PlayQueue = forwardRef<ItemListHandle, QueueProps>(
                     ref={mergedRef}
                     size={table.size}
                 />
-                {isEmpty && <EmptyQueueDropZone />}
+                {isEmpty &&
+                    !isFetching &&
+                    (isSearchNoResults ? (
+                        <SearchNoResults searchTerm={debouncedSearchTerm} />
+                    ) : isRemote ? (
+                        // Remote queues can't be drag-populated (drag is
+                        // disabled in remote mode), so show the message without
+                        // the local drop affordance.
+                        <Flex
+                            align="center"
+                            className={styles.dropZone}
+                            direction="column"
+                            gap="md"
+                            justify="center"
+                            w="100%"
+                        >
+                            <EmptyQueueMessage />
+                        </Flex>
+                    ) : (
+                        // Suppress the "your queue is empty" affordance while a
+                        // queue fetch (e.g. restore-from-server) is in flight —
+                        // the LoadingOverlay covers that window, and showing the
+                        // empty state underneath reads as a flash of wrong copy.
+                        <EmptyQueueDropZone />
+                    ))}
             </div>
         );
     },
 );
 
 const EmptyQueueDropZone = () => {
-    const { t } = useTranslation();
     const playerContext = usePlayer();
 
     const { isDraggedOver, ref } = useDragDrop<HTMLDivElement>({
@@ -424,13 +462,44 @@ const EmptyQueueDropZone = () => {
             ref={ref}
             w="100%"
         >
+            <EmptyQueueMessage />
+        </Flex>
+    );
+};
+
+const EmptyQueueMessage = () => {
+    const { t } = useTranslation();
+
+    return (
+        <EmptyState
+            description={t('emptyState.queueDescription', {
+                defaultValue: 'Pick a song from the library and the queue will pick up from there.',
+            })}
+            icon="playlistAdd"
+            title={t('emptyState.queueTitle', { defaultValue: 'Your queue is empty' })}
+        />
+    );
+};
+
+const SearchNoResults = ({ searchTerm }: { searchTerm: string | undefined }) => {
+    const { t } = useTranslation();
+
+    return (
+        <Flex
+            align="center"
+            className={styles.dropZone}
+            direction="column"
+            gap="md"
+            justify="center"
+            w="100%"
+        >
             <EmptyState
-                description={t('emptyState.queueDescription', {
-                    defaultValue:
-                        'Pick a song from the library and the queue will pick up from there.',
+                description={t('emptyState.queueSearchNoResultsDescription', {
+                    defaultValue: 'No queued tracks match "{{searchTerm}}".',
+                    searchTerm,
                 })}
-                icon="playlistAdd"
-                title={t('emptyState.queueTitle', { defaultValue: 'Your queue is empty' })}
+                icon="search"
+                title={t('emptyState.queueSearchNoResultsTitle', { defaultValue: 'No results' })}
             />
         </Flex>
     );

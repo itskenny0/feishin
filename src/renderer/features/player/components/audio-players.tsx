@@ -1,5 +1,5 @@
 import isElectron from 'is-electron';
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 
 import { eventEmitter } from '/@/renderer/events/event-emitter';
 import { UserFavoriteEventPayload, UserRatingEventPayload } from '/@/renderer/events/events';
@@ -7,7 +7,6 @@ import { DiscordRpcHook } from '/@/renderer/features/discord-rpc/use-discord-rpc
 import { JellyfinRemoteControlHook } from '/@/renderer/features/jellyfin-remote-control';
 import { SessionsPollerHook } from '/@/renderer/features/jellyfin-remote-target/hooks/use-sessions-poller';
 import { UpcomingLyricsPrefetch } from '/@/renderer/features/lyrics/hooks/use-prefetch-upcoming-lyrics';
-import { PeerSyncHook } from '/@/renderer/features/peer-sync';
 import { CapacitorMediaSessionHook } from '/@/renderer/features/player/audio-player/hooks/use-capacitor-media-session';
 import { MainPlayerListenerHook } from '/@/renderer/features/player/audio-player/hooks/use-main-player-listener';
 import { PauseOnDeviceDisconnectHook } from '/@/renderer/features/player/audio-player/hooks/use-pause-on-device-disconnect';
@@ -41,12 +40,49 @@ import {
     useCurrentServerId,
     usePlaybackSettings,
     usePlaybackType,
+    useSettingsStore,
     useSettingsStoreActions,
 } from '/@/renderer/store';
 import { logFn } from '/@/renderer/utils/logger';
 import { toast } from '/@/shared/components/toast/toast';
 import { LibraryItem } from '/@/shared/types/domain-types';
 import { PlayerType, WebAudio } from '/@/shared/types/types';
+
+// The peer-sync subsystem statically pulls in the MQTT client (`mqtt` + its
+// `mqtt-packet`/`number-allocator` deps, ~360 KB of parsed JS). Loading it
+// lazily keeps that graph out of the renderer ENTRY chunk. We go one step
+// further than a bare React.lazy: the chunk is only fetched once the user has
+// actually completed the Connect wizard (peerSync.enabled + jellyfinRemoteEnabled
+// + onboarded). For the common case — a user who never touches Connect — the
+// MQTT chunk is NEVER downloaded, so it stops counting toward startup JS.
+//
+// `usePeerSync`'s effects all no-op when those preconditions are false, so
+// nothing meaningful is lost by withholding the mount; flipping any of them
+// true mounts the hook and wires the subsystem, and flipping one false unmounts
+// it (running its `stopPeerClient` teardown). `null` fallback — the hook renders
+// nothing, so there is no UI to flash.
+const LazyPeerSyncHook = lazy(() =>
+    import('/@/renderer/features/peer-sync').then((module) => ({
+        default: module.PeerSyncHook,
+    })),
+);
+
+const PeerSyncMount = () => {
+    const peerSyncActive = useSettingsStore(
+        (state) =>
+            state.peerSync.enabled &&
+            state.peerSync.jellyfinRemoteEnabled &&
+            state.peerSync.onboarded,
+    );
+
+    if (!peerSyncActive) return null;
+
+    return (
+        <Suspense fallback={null}>
+            <LazyPeerSyncHook />
+        </Suspense>
+    );
+};
 
 const CODEC_PROBES = [
     { codec: 'mp3', container: 'mp3', mime: 'audio/mpeg' },
@@ -145,7 +181,7 @@ export const AudioPlayers = () => {
             <RemoteHook />
             <JellyfinRemoteControlHook />
             <SessionsPollerHook />
-            <PeerSyncHook />
+            <PeerSyncMount />
             <AutoDJHook />
             <UpcomingLyricsPrefetch />
             <QueueRestoreTimestampHook />

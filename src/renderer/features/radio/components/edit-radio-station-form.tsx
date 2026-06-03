@@ -6,6 +6,7 @@ import { ItemImage } from '/@/renderer/components/item-image/item-image';
 import { useDeleteInternetRadioStationImage } from '/@/renderer/features/radio/mutations/delete-internet-radio-station-image-mutation';
 import { useUpdateRadioStation } from '/@/renderer/features/radio/mutations/update-radio-station-mutation';
 import { useUploadInternetRadioStationImage } from '/@/renderer/features/radio/mutations/upload-internet-radio-station-image-mutation';
+import { MOBILE_SHELL_QUERY, useIsMobileShell } from '/@/renderer/hooks/use-breakpoint';
 import { useCurrentServer } from '/@/renderer/store';
 import { logFn } from '/@/renderer/utils/logger';
 import { logMsg } from '/@/renderer/utils/logger-message';
@@ -47,6 +48,7 @@ export const EditRadioStationForm = ({ onCancel, station }: EditRadioStationForm
     const uploadImageMutation = useUploadInternetRadioStationImage({});
     const deleteImageMutation = useDeleteInternetRadioStationImage({});
     const server = useCurrentServer();
+    const isMobile = useIsMobileShell();
     const isCoverImageDisplayed = hasFeature(server, ServerFeature.INTERNET_RADIO_IMAGE_UPLOAD);
 
     const stationImage: RadioStationImageProps = {
@@ -149,7 +151,12 @@ export const EditRadioStationForm = ({ onCancel, station }: EditRadioStationForm
             })}
             {...form.getInputProps('homepageUrl')}
         />,
-        <Group justify="flex-end" key="actions">
+        <Group
+            grow={isMobile}
+            justify={isMobile ? 'stretch' : 'flex-end'}
+            key="actions"
+            wrap="nowrap"
+        >
             <ModalButton disabled={isSaving} onClick={onCancel}>
                 {t('common.cancel')}
             </ModalButton>
@@ -342,9 +349,11 @@ export const openEditRadioStationModal = (
     }
 
     const hasImageUpload = hasFeature(server, ServerFeature.INTERNET_RADIO_IMAGE_UPLOAD);
+    const isMobile = typeof window !== 'undefined' && window.matchMedia(MOBILE_SHELL_QUERY).matches;
 
     openModal({
         children: <EditRadioStationForm onCancel={closeAllModals} station={station} />,
+        fullScreen: isMobile,
         size: hasImageUpload ? 'lg' : 'md',
         title: t('common.edit') as string,
     });

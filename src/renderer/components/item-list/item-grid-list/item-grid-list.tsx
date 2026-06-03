@@ -27,6 +27,7 @@ import {
 import styles from './item-grid-list.module.css';
 
 import {
+    getDataRows,
     getDataRowsCount,
     ItemCard,
     ItemCardProps,
@@ -40,14 +41,38 @@ import {
 } from '/@/renderer/components/item-list/helpers/item-list-state';
 import { useListHotkeys } from '/@/renderer/components/item-list/helpers/use-list-hotkeys';
 import { ItemControls, ItemListHandle } from '/@/renderer/components/item-list/types';
+import {
+    useGridCardCornerRadius,
+    useGridCardSize,
+    useGridGap,
+    useGridMetadataRows,
+    useShowRatingBadge,
+} from '/@/renderer/store';
 import { animationProps } from '/@/shared/components/animations/animation-props';
 import { useElementSize } from '/@/shared/hooks/use-element-size';
 import { useFocusWithin } from '/@/shared/hooks/use-focus-within';
 import { useMergedRef } from '/@/shared/hooks/use-merged-ref';
 import { LibraryItem } from '/@/shared/types/domain-types';
 
+export type GridCardCornerRadius = 'pill' | 'rounded-lg' | 'rounded-md' | 'rounded-sm' | 'square';
+
+/**
+ * Maps the user-facing grid-card corner-radius setting onto a CSS length the
+ * cards consume via the `--card-corner-radius` custom property. 'rounded-md'
+ * resolves to `--theme-radius-md`, reproducing the hardcoded look the cards
+ * shipped with, so the default is a no-op.
+ */
+export const GRID_CARD_CORNER_RADIUS_VALUE: Record<GridCardCornerRadius, string> = {
+    pill: 'var(--theme-radius-pill)',
+    'rounded-lg': 'var(--theme-radius-lg)',
+    'rounded-md': 'var(--theme-radius-md)',
+    'rounded-sm': 'var(--theme-radius-sm)',
+    square: '0px',
+};
+
 interface VirtualizedGridListProps {
     _tableMetaVersion: number; // Used to trigger rerenders via React.memo comparison
+    cardCornerRadius: GridCardCornerRadius;
     controls: ItemControls;
     currentPage?: number;
     dataVersion?: number;
@@ -68,6 +93,7 @@ interface VirtualizedGridListProps {
     outerRef: RefObject<any>;
     ref: RefObject<FixedSizeList<GridItemProps> | null>;
     rows?: ItemCardProps['rows'];
+    showRatingBadge: boolean;
     size?: 'compact' | 'default' | 'large';
     tableMetaRef: RefObject<null | {
         columnCount: number;
@@ -79,6 +105,7 @@ interface VirtualizedGridListProps {
 
 const VirtualizedGridList = React.memo(
     ({
+        cardCornerRadius,
         controls,
         currentPage,
         dataVersion,
@@ -99,6 +126,7 @@ const VirtualizedGridList = React.memo(
         outerRef,
         ref,
         rows,
+        showRatingBadge,
         size,
         tableMetaRef,
         width,
@@ -110,6 +138,7 @@ const VirtualizedGridList = React.memo(
 
         const itemData: GridItemProps = useMemo(() => {
             return {
+                cardCornerRadius,
                 columns: tableMeta?.columnCount || 0,
                 controls,
                 dataVersion,
@@ -123,11 +152,13 @@ const VirtualizedGridList = React.memo(
                 itemCount,
                 itemType,
                 rows,
+                showRatingBadge,
                 size,
                 tableMeta,
             };
         }, [
             tableMeta,
+            cardCornerRadius,
             controls,
             rows,
             getItem,
@@ -140,6 +171,7 @@ const VirtualizedGridList = React.memo(
             gap,
             internalState,
             itemType,
+            showRatingBadge,
             size,
         ]);
 
@@ -258,11 +290,23 @@ VirtualizedGridList.displayName = 'VirtualizedGridList';
  * widths a sensible 3-4 columns.
  */
 export function getDynamicItemsPerRow(width: number, size?: 'compact' | 'default' | 'large') {
-    // Small-phone tier: below 380 (covers 320 iPhone SE through 360 Pixel 4a
-    // plus padding), drop to a single column. Two square covers at 360 minus
-    // padding leaves ~150px each, which is smaller than the text rows beneath
-    // them and looks cramped on Spotify-tier devices.
-    const isSmallPhone = width < 380;
+    // Phone tiers (content width < 540 — below the lowest tablet tier).
+    //
+    // The old tuning collapsed phones to 1 column below 380 and only reached
+    // 2 columns up to 540, so a 360-430px phone rendered 1-2 oversized covers
+    // and almost nothing fit above the fold. Phones want DENSITY, like the
+    // Spotify / Apple Music library grids.
+    //
+    //   - Small phones (< 384: 320 iPhone SE … 360 Pixel/Android) -> 2 cols.
+    //     Two square covers at 360 minus padding leaves ~165px each — a clean,
+    //     readable thumbnail rather than one viewport-filling cover.
+    //   - Larger phones (384-539: 390 iPhone, 412-430 Pro Max / Android-XL)
+    //     -> 3 cols (~120-133px covers), matching the streaming-app density
+    //     users expect on a comfortable portrait phone.
+    //
+    // The >=540 tablet/desktop content-width tiers below are UNCHANGED.
+    const isSmallPhone = width < 384;
+    const isLargePhone = width < 540;
     const is3col = width >= 540;
     const is4col = width >= 700;
     const isSm = width >= 600;
@@ -294,7 +338,9 @@ export function getDynamicItemsPerRow(width: number, size?: 'compact' | 'default
     } else if (is3col) {
         dynamicItemsPerRow = 3;
     } else if (isSmallPhone) {
-        dynamicItemsPerRow = 1;
+        dynamicItemsPerRow = 2;
+    } else if (isLargePhone) {
+        dynamicItemsPerRow = 3;
     } else {
         dynamicItemsPerRow = 2;
     }
@@ -340,6 +386,7 @@ const createThrottledSetTableMeta = (
 };
 
 export interface GridItemProps {
+    cardCornerRadius: GridCardCornerRadius;
     columns: number;
     controls: ItemCardProps['controls'];
     dataVersion?: number;
@@ -353,6 +400,7 @@ export interface GridItemProps {
     itemCount: number;
     itemType: LibraryItem;
     rows?: ItemCardProps['rows'];
+    showRatingBadge: boolean;
     size?: 'compact' | 'default' | 'large';
     tableMeta: null | {
         columnCount: number;
@@ -400,7 +448,7 @@ const BaseItemGridList = ({
     enableExpansion = false,
     enableMultiSelect = false,
     enableSelection = true,
-    gap = 'sm',
+    gap,
     getItem,
     getItemIndex,
     getRowId,
@@ -414,8 +462,41 @@ const BaseItemGridList = ({
     overrideControls,
     ref,
     rows,
-    size = 'default',
+    size,
 }: ItemGridListProps) => {
+    // Global grid-display settings. Each defaults to the value that reproduces
+    // the card's previously-hardcoded look, so an untouched install renders
+    // identically. A per-list override (an explicitly-passed `gap`/`size`/`rows`
+    // prop) still wins when present — list consumers pass their configured
+    // values, so those remain authoritative; consumers that omit a prop (e.g.
+    // home carousels) inherit the global default instead.
+    const globalGap = useGridGap();
+    const globalSize = useGridCardSize();
+    const globalMetadataRows = useGridMetadataRows();
+    const globalCornerRadius = useGridCardCornerRadius();
+    const globalShowRatingBadge = useShowRatingBadge();
+
+    const resolvedGap = gap ?? globalGap;
+    const resolvedSize = size ?? globalSize;
+    const cardCornerRadius = globalCornerRadius as GridCardCornerRadius;
+    const showRatingBadge = globalShowRatingBadge;
+
+    // When the global metadata-row setting is non-empty it overrides the
+    // per-item-type defaults supplied via the `rows` prop. Empty (the default)
+    // keeps whatever the caller passed (i.e. getDefaultRowsForItemType).
+    const resolvedRows = useMemo<ItemCardProps['rows']>(() => {
+        if (!globalMetadataRows || globalMetadataRows.length === 0) {
+            return rows;
+        }
+        const type: 'compact' | 'poster' = resolvedSize === 'compact' ? 'compact' : 'poster';
+        const allRows = getDataRows(type);
+        const rowMap = new Map(allRows.map((row) => [row.id, row]));
+        const picked = globalMetadataRows
+            .map((id) => rowMap.get(id))
+            .filter((row): row is NonNullable<typeof row> => row !== undefined);
+        return picked.length > 0 ? picked : rows;
+    }, [globalMetadataRows, resolvedSize, rows]);
+
     const rootRef = useRef<HTMLDivElement | null>(null);
     const outerRef = useRef<HTMLDivElement | null>(null);
     const listRef = useRef<FixedSizeList<GridItemProps>>(null);
@@ -513,8 +594,8 @@ const BaseItemGridList = ({
     }, [osInstance]);
 
     const throttledSetTableMeta = useMemo(() => {
-        return createThrottledSetTableMeta(itemsPerRow, rows?.length, size);
-    }, [itemsPerRow, rows?.length, size]);
+        return createThrottledSetTableMeta(itemsPerRow, resolvedRows?.length, resolvedSize);
+    }, [itemsPerRow, resolvedRows?.length, resolvedSize]);
 
     useLayoutEffect(() => {
         const container = rootRef.current;
@@ -833,6 +914,7 @@ const BaseItemGridList = ({
                 {({ height, width }) => (
                     <VirtualizedGridList
                         _tableMetaVersion={tableMetaVersion}
+                        cardCornerRadius={cardCornerRadius}
                         controls={controls}
                         currentPage={currentPage}
                         dataVersion={dataVersion}
@@ -840,7 +922,7 @@ const BaseItemGridList = ({
                         enableExpansion={enableExpansion}
                         enableMultiSelect={enableMultiSelect}
                         enableSelection={enableSelection}
-                        gap={gap}
+                        gap={resolvedGap}
                         getItem={resolvedGetItem}
                         height={height}
                         initialTop={initialTop}
@@ -852,8 +934,9 @@ const BaseItemGridList = ({
                         onScrollEnd={onScrollEnd ?? (() => {})}
                         outerRef={outerRef}
                         ref={listRef}
-                        rows={rows}
-                        size={size}
+                        rows={resolvedRows}
+                        showRatingBadge={showRatingBadge}
+                        size={resolvedSize}
                         tableMetaRef={tableMetaRef}
                         width={width}
                     />
@@ -866,6 +949,7 @@ const BaseItemGridList = ({
 const ListComponent = memo((props: ListChildComponentProps<GridItemProps>) => {
     const { index, style } = props;
     const {
+        cardCornerRadius,
         columns,
         controls,
         enableDrag,
@@ -875,8 +959,11 @@ const ListComponent = memo((props: ListChildComponentProps<GridItemProps>) => {
         itemCount,
         itemType,
         rows,
+        showRatingBadge,
         size,
     } = props.data;
+
+    const cornerRadiusValue = GRID_CARD_CORNER_RADIUS_VALUE[cardCornerRadius];
 
     const items: ReactNode[] = [];
     const startIndex = index * columns;
@@ -897,7 +984,12 @@ const ListComponent = memo((props: ListChildComponentProps<GridItemProps>) => {
                 <div
                     className={clsx(styles.itemRow, styles[`gap-${gap}`])}
                     key={`card-${i}-${index}`}
-                    style={{ '--columns': columns } as CSSProperties}
+                    style={
+                        {
+                            '--card-corner-radius': cornerRadiusValue,
+                            '--columns': columns,
+                        } as CSSProperties
+                    }
                 >
                     <ItemCard
                         controls={controls}
@@ -909,6 +1001,7 @@ const ListComponent = memo((props: ListChildComponentProps<GridItemProps>) => {
                         internalState={props.data.internalState}
                         itemType={itemType}
                         rows={rows}
+                        showRatingBadge={showRatingBadge}
                         type={size === 'compact' ? 'compact' : 'poster'}
                         withControls
                     />

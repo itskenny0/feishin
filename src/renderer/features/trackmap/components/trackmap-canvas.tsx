@@ -273,6 +273,32 @@ export const TrackmapCanvas = () => {
         let rafId: null | number = null;
         let unsub: (() => void) | null = null;
 
+        // Per-frame caches. The energy gradient is a 256-stop horizontal
+        // gradient whose stops depend ONLY on bins / canvas width / the two
+        // anchor colors / the audio-to-canvas ratio — none of which change
+        // between animation frames during playback (breath only scales the
+        // vertical envelope, not the gradient). Rebuilding it every frame
+        // costs a CanvasGradient allocation + 256 addColorStop calls on a
+        // loop that runs at frame rate across up to three live canvases
+        // (desktop playerbar + mobile playerbar + mobile fullscreen). Cache
+        // it and rebuild only when one of its real inputs changes.
+        let cachedEnergyGrad: CanvasGradient | null = null;
+        let cachedGradKey = '';
+        // readAccentColor() calls getComputedStyle(document.documentElement),
+        // which forces a style recalc — too expensive to do every frame.
+        // Cache it and refresh at most a few times per second; the theme
+        // accent effectively never changes mid-playback.
+        let cachedAccent = '';
+        let cachedAccentAtMs = 0;
+        const ACCENT_TTL_MS = 250;
+        const getAccent = (nowMs: number): string => {
+            if (!cachedAccent || nowMs - cachedAccentAtMs > ACCENT_TTL_MS) {
+                cachedAccent = readAccentColor();
+                cachedAccentAtMs = nowMs;
+            }
+            return cachedAccent;
+        };
+
         const draw = () => {
             rafId = null;
             const w = canvas.width;
@@ -291,7 +317,7 @@ export const TrackmapCanvas = () => {
             }
 
             const adv = advancedRef.current;
-            const accent = readAccentColor();
+            const accent = getAccent(performance.now());
             // Warm anchor — user override has priority; empty string falls
             // back to the resolved theme accent. Same value drives the
             // playhead glow strip so the two read as one visual.
@@ -410,14 +436,25 @@ export const TrackmapCanvas = () => {
             // === Pass 2: envelope fill + outline ============================
             {
                 const stepEnv = Math.max(1, Math.floor(dpr));
-                const energyGrad = buildEnergyGradient(
-                    ctx2d,
-                    w,
-                    bins,
-                    coolColor,
-                    warmColor,
-                    audioToCanvasRatio,
-                );
+                // Rebuild the energy gradient only when one of its inputs
+                // actually changes — see the cache declarations above the
+                // draw loop. The key folds every parameter buildEnergyGradient
+                // reads (bins length stands in for bins identity, which is
+                // stable per analysis result; a new song re-runs the effect
+                // and resets the cache).
+                const gradKey = `${w}|${binCount}|${rgbStr(coolColor)}|${rgbStr(warmColor)}|${audioToCanvasRatio.toFixed(4)}`;
+                if (!cachedEnergyGrad || gradKey !== cachedGradKey) {
+                    cachedEnergyGrad = buildEnergyGradient(
+                        ctx2d,
+                        w,
+                        bins,
+                        coolColor,
+                        warmColor,
+                        audioToCanvasRatio,
+                    );
+                    cachedGradKey = gradKey;
+                }
+                const energyGrad = cachedEnergyGrad;
                 ctx2d.beginPath();
                 for (let px = 0; px <= w; px += stepEnv) {
                     const xFrac = px / w;

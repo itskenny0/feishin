@@ -24,12 +24,12 @@ import { autoUpdater } from 'electron-updater';
 import { access, constants } from 'fs';
 import path, { join } from 'path';
 
+import { loadDeferredCoreFeatures } from './features';
 import { disableMediaKeys, enableMediaKeys } from './features/core/player/media-keys';
 import { shutdownServer } from './features/core/remote';
 import { store } from './features/core/settings';
 import { canHandleVisualizerDisplayMedia } from './features/core/visualizer';
 import MenuBuilder, { MenuPlaybackState } from './menu';
-import './features';
 import { autoUpdaterLogInterface, createLog, hotkeyToElectronAccelerator } from './utils';
 
 import { disableAutoUpdates, isLinux, isMacOS, isWindows } from '/@/main/env';
@@ -114,6 +114,10 @@ let currentSidebarCollapsed = false;
 let currentShuffleEnabled = false;
 let playbackMenuAccelerators: MenuPlaybackState['accelerators'] = {};
 let inputFocused = false;
+// The auto-update network check is deferred to `ready-to-show` (off the
+// cold-start critical path). This guards against firing it more than once
+// for the primary window.
+let appUpdaterStarted = false;
 
 ipcMain.on('input-focus-state', (_event, focused: boolean) => {
     const next = !!focused;
@@ -528,6 +532,29 @@ async function createWindow(first = true): Promise<void> {
             mainWindow.show();
             createWinThumbarButtons();
         }
+
+        // Window is on screen; pull the non-critical IPC feature handlers
+        // (Discord RPC, autodiscover, peer-broker, native TCP socket) in now
+        // that they are off the boot critical path. Their handlers are still
+        // registered long before any renderer IPC can reach them.
+        loadDeferredCoreFeatures();
+
+        // Kick off the auto-update check only after the window is painted.
+        // `new AppUpdater()` issues network requests (checkForUpdates /
+        // checkForUpdatesAndNotify) that have nothing to do with first paint,
+        // so running them here keeps the cold-start critical path free of an
+        // outbound HTTP round-trip. Guarded so it fires at most once per
+        // window and respects the same disable flags as before.
+        if (
+            first &&
+            !appUpdaterStarted &&
+            !disableAutoUpdates() &&
+            store.get('disable_auto_updates') !== true
+        ) {
+            appUpdaterStarted = true;
+            console.info('[startup] ready-to-show: starting AppUpdater check');
+            new AppUpdater();
+        }
     });
 
     mainWindow.on('closed', () => {
@@ -611,10 +638,6 @@ async function createWindow(first = true): Promise<void> {
                 callback({});
             });
     });
-
-    if (!disableAutoUpdates() && store.get('disable_auto_updates') !== true) {
-        new AppUpdater();
-    }
 
     const theme = store.get('theme') as TitleTheme | undefined;
     nativeTheme.themeSource = theme || 'dark';

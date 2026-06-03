@@ -14,6 +14,7 @@ import { SetRatingAction } from '/@/renderer/features/context-menu/actions/set-r
 import { ShareAction } from '/@/renderer/features/context-menu/actions/share-action';
 import { ShowInFileExplorerAction } from '/@/renderer/features/context-menu/actions/show-in-file-explorer-action';
 import { ContextMenuPreview } from '/@/renderer/features/context-menu/components/context-menu-preview';
+import { MenuContent } from '/@/renderer/features/context-menu/components/menu-content';
 import { ContextMenu } from '/@/shared/components/context-menu/context-menu';
 import { LibraryItem, Song } from '/@/shared/types/domain-types';
 
@@ -29,9 +30,7 @@ export const SongContextMenu = ({ items, type }: SongContextMenuProps) => {
     }, [items]);
 
     return (
-        <ContextMenu.Content
-            bottomStickyContent={<ContextMenuPreview items={items} itemType={type} />}
-        >
+        <MenuContent bottomStickyContent={<ContextMenuPreview items={items} itemType={type} />}>
             <PlayAction ids={ids} itemType={LibraryItem.SONG} songs={items} />
             <PlayTrackRadioAction disabled={items.length > 1} song={items[0]} />
             <ContextMenu.Divider />
@@ -50,6 +49,6 @@ export const SongContextMenu = ({ items, type }: SongContextMenuProps) => {
             <ContextMenu.Divider />
             <RefreshMetadataAction disabled={items.length === 0} ids={ids} />
             <GetInfoAction disabled={items.length === 0} items={items} />
-        </ContextMenu.Content>
+        </MenuContent>
     );
 };

@@ -266,6 +266,8 @@
         "searchDescription": "We couldn't find anything matching that search.",
         "queueTitle": "Your queue is empty",
         "queueDescription": "Pick a song from the library and the queue will pick up from there.",
+        "queueSearchNoResultsTitle": "No results",
+        "queueSearchNoResultsDescription": "No queued tracks match \"{{searchTerm}}\".",
         "artistsTitle": "No artists yet",
         "artistsDescription": "Artists will appear here once your library is scanned.",
         "albumArtistsTitle": "No album artists yet",
@@ -280,7 +282,16 @@
         "favoriteSongsDescription": "Songs you favorite will appear here.",
         "favoriteAlbumArtistsTitle": "No favorite album artists yet",
         "favoriteAlbumArtistsDescription": "Album artists you favorite will appear here.",
-        "createPlaylist": "Create playlist"
+        "createPlaylist": "Create playlist",
+        "radioTitle": "No radio stations yet",
+        "radioDescription": "Add an internet radio station to start listening.",
+        "radioSearchDescription": "We couldn't find any radio stations matching that search.",
+        "createRadioStation": "Add radio station",
+        "radioErrorTitle": "Couldn't load radio stations",
+        "radioErrorDescription": "Something went wrong while loading your radio stations.",
+        "foldersTitle": "This folder is empty",
+        "foldersDescription": "There are no subfolders or songs here. Use the breadcrumb above to go back.",
+        "retry": "Try again"
     },
     "error": {
         "apiRouteError": "Unable to route request",
@@ -541,9 +552,13 @@
         },
         "shareItem": {
             "allowDownloading": "Allow downloading",
+            "allowDownloadingDescription": "Let people download the original files, not just stream them.",
             "copyToClipboard": "Copy to clipboard: Ctrl+C, enter",
             "description": "Description",
+            "descriptionPlaceholder": "Optional note shown on the share page",
+            "intro": "Create a public link that anyone can open, even without an account.",
             "setExpiration": "Set expiration",
+            "setExpirationDescription": "Leave empty for a link that never expires.",
             "success": "Share link copied to clipboard (or click here to open)",
             "successMustClick": "Share created successfully. Click here to open",
             "expireInvalid": "Expiration must be in the future",
@@ -751,6 +766,7 @@
             "title": "$t(entity.genre, {\"count\": 2})"
         },
         "folderList": {
+            "emptyTree": "No folders found",
             "title": "$t(entity.folder, {\"count\": 2})"
         },
         "globalSearch": {
@@ -868,7 +884,8 @@
         "itemDetail": {
             "copyPath": "Copy path to clipboard",
             "copiedPath": "Path copied successfully",
-            "openFile": "Show track in file manager"
+            "openFile": "Show track in file manager",
+            "noDetails": "No details available for this item"
         },
         "playlist": {
             "reorder": "Reordering only enabled when sorting by ID"
@@ -1346,6 +1363,32 @@
         "fontType_optionSystem": "System font",
         "fontType": "Font type",
         "gaplessAudio_description": "Sets the gapless audio setting for mpv",
+        "genresDisplay_description": "Show the genres section on album & artist pages",
+        "genresDisplay": "Show genres",
+        "gridCardCornerRadius_description": "Corner-radius style for library grid cards",
+        "gridCardCornerRadius_optionPill": "Pill",
+        "gridCardCornerRadius_optionRoundedLg": "Rounded (large)",
+        "gridCardCornerRadius_optionRoundedMd": "Rounded (medium)",
+        "gridCardCornerRadius_optionRoundedSm": "Rounded (small)",
+        "gridCardCornerRadius_optionSquare": "Square",
+        "gridCardCornerRadius": "Grid card corner radius",
+        "gridCardSize_description": "Default density for library grid cards",
+        "gridCardSize_optionCompact": "Compact",
+        "gridCardSize_optionDefault": "Default",
+        "gridCardSize_optionLarge": "Large",
+        "gridCardSize": "Grid card size",
+        "gridGap_description": "Default spacing between cards in library grids",
+        "gridGap": "Grid gap",
+        "gridMetadataRows_description": "Fields shown beneath grid card images. Leave empty to use the per-item-type defaults",
+        "gridMetadataRows": "Grid card metadata rows",
+        "homeCarouselItemsPerPage_description": "Number of items loaded per page in home carousels",
+        "homeCarouselItemsPerPage": "Home carousel items per page",
+        "homeFeatureCardRotationInterval_description": "Seconds before home feature cards auto-rotate",
+        "homeFeatureCardRotationInterval": "Feature card rotation interval",
+        "homeFeatureCardSongsPerCard_description": "Number of songs shown in each home feature card",
+        "homeFeatureCardSongsPerCard": "Feature card songs per card",
+        "homeGreetingVisible_description": "Show the time-aware greeting at the top of the home page",
+        "homeGreetingVisible": "Show greeting",
         "gaplessAudio_optionWeak": "Weak (recommended)",
         "gaplessAudio": "Gapless audio",
         "globalMediaHotkeys_description": "Enable or disable the usage of your system media hotkeys to control playback",
@@ -1505,8 +1548,12 @@
         "showLyricsInSidebar": "Show lyrics in player sidebar",
         "showPlaybarYearChip_description": "Display the song's release year as a small chip next to the title in the playbar",
         "showPlaybarYearChip": "Show release year next to playbar title",
+        "showRatingBadge_description": "Show the star rating badge in the corner of grid card images",
+        "showRatingBadge": "Show rating badge",
         "showRatings_description": "Controls if the star ratings feature shows up in the interface",
         "showRatings": "Show star ratings",
+        "socialLinksDisplay_description": "Show the external/social links block on album & artist pages",
+        "socialLinksDisplay": "Show social links",
         "blurExplicitImages": "Blur explicit images",
         "blurExplicitImages_description": "Album and song artwork tagged as explicit will be blurred",
         "enableGridMultiSelect": "Enable grid multi-select",
@@ -1859,7 +1906,17 @@
     },
     "shortcuts": {
         "title": "Keyboard shortcuts",
-        "noneBound": "No keyboard shortcuts are currently bound. Configure them in Settings."
+        "noneBound": "No keyboard shortcuts are currently bound. Configure them in Settings.",
+        "searchPlaceholder": "Search shortcuts",
+        "noResults": "No shortcuts match \"{{query}}\".",
+        "touchNote": "These shortcuts apply to a connected physical keyboard.",
+        "categoryPlayback": "Playback",
+        "categoryNavigation": "Navigation",
+        "categoryLists": "Lists",
+        "categoryFavorites": "Favorites",
+        "categoryRating": "Rating",
+        "categoryView": "View",
+        "categoryOther": "Other"
     },
     "visualizer": {
         "systemAudioConsentAllow": "Allow",

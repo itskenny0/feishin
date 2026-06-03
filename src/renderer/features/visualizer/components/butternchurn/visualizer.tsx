@@ -442,15 +442,7 @@ const VisualizerInner = () => {
 
         let lastFrameTime = 0;
         const userMaxFPS = butterchurnSettings.maxFPS;
-
-        const computeMinFrameInterval = (): number => {
-            // Drop to ~30fps when the window is hidden — the browser already
-            // throttles rAF in background tabs, but Electron windows that are
-            // merely behind another window still get full rAF; capping here
-            // keeps GPU + battery use down when the user can't see anything.
-            if (typeof document !== 'undefined' && document.hidden) return 1000 / 30;
-            return userMaxFPS > 0 ? 1000 / userMaxFPS : 0;
-        };
+        const minFrameInterval = userMaxFPS > 0 ? 1000 / userMaxFPS : 0;
 
         const render = (currentTime: number) => {
             const currentVisualizer = visualizerRef.current;
@@ -462,7 +454,6 @@ const VisualizerInner = () => {
                 return;
             }
 
-            const minFrameInterval = computeMinFrameInterval();
             if (minFrameInterval === 0 || currentTime - lastFrameTime >= minFrameInterval) {
                 currentVisualizer.render();
                 lastFrameTime = currentTime;
@@ -470,13 +461,42 @@ const VisualizerInner = () => {
             animationFrameRef.current = requestAnimationFrame(render);
         };
 
-        animationFrameRef.current = requestAnimationFrame(render);
+        const startLoop = () => {
+            if (animationFrameRef.current === undefined) {
+                animationFrameRef.current = requestAnimationFrame(render);
+            }
+        };
 
-        return () => {
-            if (animationFrameRef.current) {
+        const stopLoop = () => {
+            if (animationFrameRef.current !== undefined) {
                 cancelAnimationFrame(animationFrameRef.current);
                 animationFrameRef.current = undefined;
             }
+        };
+
+        // Fully suspend the render loop while the window/tab is hidden — a
+        // GPU-heavy WebGL preset should cost nothing when the user can't see
+        // it. Electron windows merely behind another window still receive
+        // full rAF, so the browser's own background throttling isn't enough.
+        const handleVisibilityChange = () => {
+            if (typeof document !== 'undefined' && document.hidden) {
+                stopLoop();
+            } else {
+                startLoop();
+            }
+        };
+
+        if (typeof document !== 'undefined' && document.hidden) {
+            // Mounted while hidden — wait for the window to become visible.
+        } else {
+            startLoop();
+        }
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            stopLoop();
         };
     }, [isVisualizerReady, butterchurnSettings.maxFPS]);
 

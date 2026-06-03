@@ -23,6 +23,7 @@ import {
     startPeerClient,
     stopPeerClient,
 } from '/@/renderer/features/peer-sync/controller/peer-client';
+import { warmMqttPublish } from '/@/renderer/features/peer-sync/controller/peer-dispatcher';
 import { applyPeerCommand } from '/@/renderer/features/peer-sync/controller/peer-receiver';
 import { applyPeerStateToStore } from '/@/renderer/features/peer-sync/controller/peer-state-mirror';
 import {
@@ -102,6 +103,10 @@ export const usePeerSync = () => {
             return;
         }
         if (!currentServer.userId || !currentServer.username) return;
+        // Warm the lazily-loaded MQTT publish seam so peerDispatcher's
+        // command path is synchronous by the time a peer is live. Cheap: it
+        // shares the vendor-mqtt chunk this hook already pulled in.
+        void warmMqttPublish().catch(() => {});
         const tls = peerSync.brokerUrl.startsWith('wss://');
         log('booting client', {
             brokerUrl: peerSync.brokerUrl,

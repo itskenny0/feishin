@@ -6,6 +6,7 @@ import { Link, useLocation } from 'react-router';
 import styles from './sidebar-collection-list.module.css';
 
 import { SidebarIcon } from '/@/renderer/features/sidebar/components/sidebar-icon';
+import { preloadRoute } from '/@/renderer/router/route-preloaders';
 import { AppRoute } from '/@/renderer/router/routes';
 import { useCollections, useSettingsStoreActions } from '/@/renderer/store';
 import { getFilterQueryStringFromSearchParams } from '/@/renderer/utils/query-params';
@@ -83,6 +84,12 @@ const CollectionRow = ({
         [collection.id, removeCollection],
     );
 
+    // Warm the target library-list chunk on hover so the collection opens
+    // without a Suspense flash. Idempotent per session.
+    const handleHoverPreload = useCallback(() => {
+        preloadRoute(to.pathname);
+    }, [to.pathname]);
+
     return (
         <Popover
             onClose={renameHandlers.close}
@@ -92,7 +99,12 @@ const CollectionRow = ({
         >
             <Popover.Target>
                 <div className={clsx(styles.row, { [styles.rowActive]: isActive })}>
-                    <Link className={styles.rowLink} to={to}>
+                    <Link
+                        className={styles.rowLink}
+                        onFocus={handleHoverPreload}
+                        onMouseEnter={handleHoverPreload}
+                        to={to}
+                    >
                         <Group className={styles.rowContent} wrap="nowrap">
                             <SidebarIcon
                                 active={isActive}

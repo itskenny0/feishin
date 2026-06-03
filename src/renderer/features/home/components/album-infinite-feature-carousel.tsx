@@ -15,6 +15,7 @@ import {
 } from '/@/renderer/cache';
 import { FeatureCarousel } from '/@/renderer/components/feature-carousel/feature-carousel';
 import { useCurrentServerId } from '/@/renderer/store';
+import { useHomeCarouselItemsPerPage } from '/@/renderer/store/settings.store';
 import { Album, AlbumListResponse, AlbumListSort, SortOrder } from '/@/shared/types/domain-types';
 
 interface InfiniteAlbumFeatureCarouselProps {
@@ -23,9 +24,12 @@ interface InfiniteAlbumFeatureCarouselProps {
 }
 
 export const AlbumInfiniteFeatureCarousel = ({
-    itemLimit = 20,
+    itemLimit: itemLimitProp,
     queryKey,
 }: InfiniteAlbumFeatureCarouselProps) => {
+    const carouselItemsPerPage = useHomeCarouselItemsPerPage();
+    // Explicit prop wins; otherwise fall back to the user setting (default 20).
+    const itemLimit = itemLimitProp ?? carouselItemsPerPage;
     const serverId = useCurrentServerId();
     const loadMoreTriggeredRef = useRef(false);
 

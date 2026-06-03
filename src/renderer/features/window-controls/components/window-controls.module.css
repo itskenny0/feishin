@@ -1,32 +1,45 @@
 .windows-button-group {
     display: flex;
-    width: 130px;
+    align-items: stretch;
+    align-self: stretch;
+    width: 138px;
     height: 100%;
     -webkit-app-region: no-drag;
-    background-color: var(--theme-colors-background);
 }
 
 .windows-button {
     display: flex;
-    flex: 1;
+    flex: 1 1 0;
     align-items: center;
+    align-self: stretch;
     justify-content: center;
+    min-width: 46px;
+    padding: 0;
+    color: inherit;
+    cursor: default;
+    outline: none;
+    background: transparent;
+    border: none;
+    transition: background-color 0.1s ease;
     -webkit-app-region: no-drag;
-    width: 50px;
-    height: 65px;
-
-    img {
-        width: 35%;
-        height: 50%;
-    }
 
     &:hover {
         background: rgb(125 125 125 / 30%);
+    }
+
+    &:active {
+        background: rgb(125 125 125 / 45%);
     }
 }
 
 .windows-button.exit-button {
     &:hover {
+        color: #fff;
         background: var(--theme-colors-state-error);
+    }
+
+    &:active {
+        color: #fff;
+        background: color-mix(in srgb, var(--theme-colors-state-error) 80%, black);
     }
 }

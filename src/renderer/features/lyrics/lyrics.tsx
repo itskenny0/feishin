@@ -34,8 +34,9 @@ import { useLyricsSettings } from '/@/renderer/store';
 import { useCurrentServerWithCredential } from '/@/renderer/store/auth.store';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Center } from '/@/shared/components/center/center';
-import { Group } from '/@/shared/components/group/group';
+import { Icon } from '/@/shared/components/icon/icon';
 import { Spinner } from '/@/shared/components/spinner/spinner';
+import { Stack } from '/@/shared/components/stack/stack';
 import { Text } from '/@/shared/components/text/text';
 import { toast } from '/@/shared/components/toast/toast';
 import { LyricsOverride, QueueSong, ServerType } from '/@/shared/types/domain-types';
@@ -417,11 +418,12 @@ export const Lyrics = ({ fadeOutNoLyricsMessage = true, settingsKey = 'default' 
                                     initial={{ opacity: 1 }}
                                     transition={{ duration: 0.5 }}
                                 >
-                                    <Group>
+                                    <Stack align="center" gap="sm">
+                                        <Icon icon="microphone" size="2xl" />
                                         <Text fw={500} isMuted isNoSelect>
                                             {t('page.fullscreenPlayer.noLyrics')}
                                         </Text>
-                                    </Group>
+                                    </Stack>
                                 </motion.div>
                             </Center>
                         ) : (

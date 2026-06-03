@@ -11,6 +11,7 @@ import {
     useRadioPlayer,
 } from '/@/renderer/features/radio/hooks/use-radio-player';
 import { useDeleteRadioStation } from '/@/renderer/features/radio/mutations/delete-radio-station-mutation';
+import { useIsMobileShell } from '/@/renderer/hooks/use-breakpoint';
 import { useCurrentServer, usePermissions } from '/@/renderer/store';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Box } from '/@/shared/components/box/box';
@@ -37,6 +38,7 @@ const RadioListItem = ({ station }: RadioListItemProps) => {
     const { play, stop } = useRadioControls();
     const server = useCurrentServer();
     const permissions = usePermissions();
+    const isMobile = useIsMobileShell();
     const deleteRadioStationMutation = useDeleteRadioStation({});
 
     const isCurrentStation = currentStreamUrl === station.streamUrl;
@@ -127,18 +129,29 @@ const RadioListItem = ({ station }: RadioListItemProps) => {
                                 type="table"
                             />
                         </Box>
-                        <Stack className={styles.meta} gap={4}>
+                        <Stack className={styles.meta} gap={isMobile ? 2 : 4}>
                             <Text fw={500} size="md">
                                 {station.name}
                             </Text>
-                            <Text className={styles['meta-line']} isMuted size="sm">
-                                {station.streamUrl}
-                            </Text>
-                            {station.homepageUrl ? (
+                            {isMobile ? (
+                                // Phones: a single secondary line keeps rows
+                                // compact. Prefer the friendlier homepage URL,
+                                // fall back to the raw stream URL.
                                 <Text className={styles['meta-line']} isMuted size="sm">
-                                    {station.homepageUrl}
+                                    {station.homepageUrl || station.streamUrl}
                                 </Text>
-                            ) : null}
+                            ) : (
+                                <>
+                                    <Text className={styles['meta-line']} isMuted size="sm">
+                                        {station.streamUrl}
+                                    </Text>
+                                    {station.homepageUrl ? (
+                                        <Text className={styles['meta-line']} isMuted size="sm">
+                                            {station.homepageUrl}
+                                        </Text>
+                                    ) : null}
+                                </>
+                            )}
                         </Stack>
                     </Group>
                 </button>

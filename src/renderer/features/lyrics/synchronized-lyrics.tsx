@@ -128,33 +128,17 @@ export const SynchronizedLyrics = ({
     const programmaticScrollRef = useRef(false);
     const programmaticScrollTimeoutRef = useRef<null | ReturnType<typeof setTimeout>>(null);
 
-    const setActiveIndex = useCallback((nextIndex: number) => {
-        if (nextIndex === activeIndexRef.current) {
-            return;
-        }
-        activeIndexRef.current = nextIndex;
+    // The scroll container is stable across a song, but resolving it walks the
+    // ancestor chain calling getComputedStyle (a forced style/layout flush).
+    // Cache the resolved element so we pay that cost once, not on every tick.
+    const scrollContainerRef = useRef<HTMLElement | null>(null);
+    // Pending rAF handle for the geometry read + scroll, so we never compute
+    // layout synchronously inside the advance timer callback.
+    const scrollRafRef = useRef<null | number>(null);
 
-        // Swap the active class on a single tracked element instead of
-        // touching every active node in the document.
-        if (activeElementRef.current) {
-            activeElementRef.current.classList.remove('active');
-            activeElementRef.current = null;
-        }
-
-        if (nextIndex < 0) {
-            return;
-        }
-
-        const nextActive = document.getElementById(`lyric-${nextIndex}`);
-        if (!nextActive) {
-            return;
-        }
-
-        nextActive.classList.add('active');
-        activeElementRef.current = nextActive;
-
-        if (!followRef.current || userScrollingRef.current) {
-            return;
+    const resolveScrollContainer = useCallback((fromNode: HTMLElement): HTMLElement | null => {
+        if (scrollContainerRef.current && scrollContainerRef.current.isConnected) {
+            return scrollContainerRef.current;
         }
 
         /*
@@ -167,10 +151,9 @@ export const SynchronizedLyrics = ({
          * actually clipping the lyric list. Fall back to the named
          * container id for the desktop tab.
          */
-        let container: HTMLElement | null = nextActive.parentElement;
+        let container: HTMLElement | null = fromNode.parentElement;
         while (container) {
-            const style = window.getComputedStyle(container);
-            const overflowY = style.overflowY;
+            const overflowY = window.getComputedStyle(container).overflowY;
             const canScroll =
                 (overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay') &&
                 container.scrollHeight > container.clientHeight;
@@ -180,29 +163,83 @@ export const SynchronizedLyrics = ({
         if (!container) {
             container = document.getElementById(SCROLL_CONTAINER_ID);
         }
-        if (!container) {
-            return;
-        }
-
-        const targetTop =
-            nextActive.offsetTop -
-            container.offsetTop -
-            container.clientHeight / 2 +
-            nextActive.clientHeight / 2;
-
-        // Mark the upcoming scroll event chain as programmatic so the user
-        // scroll handler doesn't mistake them for human input.
-        programmaticScrollRef.current = true;
-        if (programmaticScrollTimeoutRef.current) {
-            clearTimeout(programmaticScrollTimeoutRef.current);
-        }
-        programmaticScrollTimeoutRef.current = setTimeout(() => {
-            programmaticScrollRef.current = false;
-            programmaticScrollTimeoutRef.current = null;
-        }, PROGRAMMATIC_SCROLL_GUARD_MS);
-
-        container.scroll({ behavior: 'smooth', top: targetTop });
+        scrollContainerRef.current = container;
+        return container;
     }, []);
+
+    const setActiveIndex = useCallback(
+        (nextIndex: number) => {
+            if (nextIndex === activeIndexRef.current) {
+                return;
+            }
+            activeIndexRef.current = nextIndex;
+
+            // Swap the active class on a single tracked element instead of
+            // touching every active node in the document.
+            if (activeElementRef.current) {
+                activeElementRef.current.classList.remove('active');
+                activeElementRef.current = null;
+            }
+
+            if (nextIndex < 0) {
+                return;
+            }
+
+            // Scope the lookup to our container rather than a document-wide
+            // getElementById, which collides with the mobile preview card that
+            // mounts a second synced-lyrics list sharing the `lyric-N` ids.
+            const root = containerRef.current ?? document;
+            const nextActive = root.querySelector<HTMLElement>(`#lyric-${nextIndex}`);
+            if (!nextActive) {
+                return;
+            }
+
+            nextActive.classList.add('active');
+            activeElementRef.current = nextActive;
+
+            if (!followRef.current || userScrollingRef.current) {
+                return;
+            }
+
+            // Defer the geometry read + scroll to the next frame so the advance
+            // timer never triggers a synchronous layout. Coalesce rapid
+            // advances (duplicate timecodes, seeks) into a single scroll.
+            if (scrollRafRef.current != null) {
+                cancelAnimationFrame(scrollRafRef.current);
+            }
+            scrollRafRef.current = requestAnimationFrame(() => {
+                scrollRafRef.current = null;
+                const target = activeElementRef.current;
+                if (!target || !followRef.current || userScrollingRef.current) {
+                    return;
+                }
+                const container = resolveScrollContainer(target);
+                if (!container) {
+                    return;
+                }
+
+                const targetTop =
+                    target.offsetTop -
+                    container.offsetTop -
+                    container.clientHeight / 2 +
+                    target.clientHeight / 2;
+
+                // Mark the upcoming scroll event chain as programmatic so the
+                // user scroll handler doesn't mistake them for human input.
+                programmaticScrollRef.current = true;
+                if (programmaticScrollTimeoutRef.current) {
+                    clearTimeout(programmaticScrollTimeoutRef.current);
+                }
+                programmaticScrollTimeoutRef.current = setTimeout(() => {
+                    programmaticScrollRef.current = false;
+                    programmaticScrollTimeoutRef.current = null;
+                }, PROGRAMMATIC_SCROLL_GUARD_MS);
+
+                container.scroll({ behavior: 'smooth', top: targetTop });
+            });
+        },
+        [resolveScrollContainer],
+    );
 
     // Reset state when the lyric set changes so we don't carry an active index
     // that points into the old array. Crucially, scrub the .active class off
@@ -217,6 +254,9 @@ export const SynchronizedLyrics = ({
             activeElementRef.current.classList.remove('active');
             activeElementRef.current = null;
         }
+        // Drop the cached scroll container; the list re-rendered and our cached
+        // node may be detached (e.g. tab unmounted/remounted between songs).
+        scrollContainerRef.current = null;
         // Belt-and-suspenders: clear any stray .active inside the container in
         // case the tracked ref got out of sync (e.g. the lyrics view unmounted
         // and remounted while the ref was still pointing at a detached node).
@@ -332,6 +372,9 @@ export const SynchronizedLyrics = ({
             }
             if (programmaticScrollTimeoutRef.current) {
                 clearTimeout(programmaticScrollTimeoutRef.current);
+            }
+            if (scrollRafRef.current != null) {
+                cancelAnimationFrame(scrollRafRef.current);
             }
         };
     }, []);

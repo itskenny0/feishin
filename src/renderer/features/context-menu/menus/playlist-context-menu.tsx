@@ -7,6 +7,7 @@ import { GetInfoAction } from '/@/renderer/features/context-menu/actions/get-inf
 import { OfflineDownloadAction } from '/@/renderer/features/context-menu/actions/offline-download-action';
 import { PlayAction } from '/@/renderer/features/context-menu/actions/play-action';
 import { ContextMenuPreview } from '/@/renderer/features/context-menu/components/context-menu-preview';
+import { MenuContent } from '/@/renderer/features/context-menu/components/menu-content';
 import { usePermissions } from '/@/renderer/store';
 import { ContextMenu } from '/@/shared/components/context-menu/context-menu';
 import { LibraryItem, Playlist } from '/@/shared/types/domain-types';
@@ -32,9 +33,7 @@ export const PlaylistContextMenu = ({ items, type }: PlaylistContextMenuProps) =
     const canDeletePlaylist = canEditPublic || !includesNonOwnedPublic;
 
     return (
-        <ContextMenu.Content
-            bottomStickyContent={<ContextMenuPreview items={items} itemType={type} />}
-        >
+        <MenuContent bottomStickyContent={<ContextMenuPreview items={items} itemType={type} />}>
             <PlayAction ids={ids} itemType={LibraryItem.PLAYLIST} />
             <ContextMenu.Divider />
             <AddToPlaylistAction items={ids} itemType={LibraryItem.PLAYLIST} />
@@ -45,6 +44,6 @@ export const PlaylistContextMenu = ({ items, type }: PlaylistContextMenuProps) =
             <DeletePlaylistAction disabled={!canDeletePlaylist} items={items} />
             <ContextMenu.Divider />
             <GetInfoAction disabled={items.length === 0} items={items} />
-        </ContextMenu.Content>
+        </MenuContent>
     );
 };

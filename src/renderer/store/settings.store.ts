@@ -488,8 +488,73 @@ export const GeneralSettingsSchema = z.object({
     externalLinks: z.boolean(),
     followCurrentSong: z.boolean(),
     followSystemTheme: z.boolean(),
+    // .default(true) so settings files from before these fields existed
+    // safeParse cleanly (mirrors mobileShellForce). Defaults reproduce the
+    // current hardcoded behavior — the feature components that consume these
+    // ship in a later batch, so adding the fields changes nothing until a
+    // user opts in.
+    /** Show the genres section on album/artist detail pages. */
+    genresDisplay: z.boolean().default(true),
     genreTarget: GenreTargetSchema,
+    /**
+     * Card corner-radius style for library grid cards. 'rounded-md' matches
+     * the current hardcoded `--theme-radius-md` look.
+     */
+    gridCardCornerRadius: z
+        .enum(['square', 'rounded-sm', 'rounded-md', 'rounded-lg', 'pill'])
+        .default('rounded-md'),
+    /**
+     * Default card density for library grid cards. 'default' matches today's
+     * standard sizing; per-list overrides still win when set.
+     */
+    gridCardSize: z.enum(['compact', 'default', 'large']).default('default'),
+    /**
+     * Default gap between library grid cards. 'sm' matches the current
+     * per-list default; per-list overrides still win when set.
+     */
+    gridGap: z.enum(['lg', 'md', 'sm', 'xl', 'xs']).default('sm'),
+    /**
+     * Default metadata rows shown beneath grid cards. Empty array = keep the
+     * existing per-item-type defaults (name + albumArtists for albums, etc.),
+     * so the out-of-box behavior is unchanged.
+     */
+    gridMetadataRows: z
+        .array(
+            z.enum([
+                'name',
+                'albumArtists',
+                'artists',
+                'duration',
+                'releaseYear',
+                'releaseDate',
+                'createdAt',
+                'lastPlayedAt',
+                'playCount',
+                'genres',
+                'album',
+                'songCount',
+                'albumCount',
+                'rating',
+                'userFavorite',
+            ]),
+        )
+        .default([]),
+    /**
+     * Number of album/song items requested per page in regular home
+     * carousels. 20 matches the current hardcoded itemLimit.
+     */
+    homeCarouselItemsPerPage: z.number().int().min(5).max(50).default(20),
     homeFeature: z.boolean(),
+    /**
+     * Auto-rotation interval (seconds) for home feature cards. 30 matches the
+     * current hardcoded ROTATE_INTERVAL_MS (30_000 ms).
+     */
+    homeFeatureCardRotationIntervalSeconds: z.number().int().min(5).max(120).default(30),
+    /**
+     * Number of songs displayed in each home feature card. 10 matches the
+     * current hardcoded SONGS_PER_CARD.
+     */
+    homeFeatureCardSongsPerCard: z.number().int().min(5).max(20).default(10),
     homeFeatureContent: z.enum([
         'album',
         'albumOfTheDay',
@@ -506,6 +571,8 @@ export const GeneralSettingsSchema = z.object({
     ]),
     homeFeatureStyle: z.nativeEnum(HomeFeatureStyle),
     homeFeelingLucky: z.boolean(),
+    /** Show the time-aware greeting at the top of the home page. */
+    homeGreetingVisible: z.boolean().default(true),
     homeItems: z.array(SortableItemSchema(HomeItemSchema)),
     imageRes: z.object({
         fullScreenPlayer: z.number(),
@@ -572,6 +639,11 @@ export const GeneralSettingsSchema = z.object({
     // added (or any future version-bump-less addition) doesn't fail
     // ValidationSettingsStateSchema.safeParse with a missing-key error.
     showPlaybarYearChip: z.boolean().default(true),
+    /**
+     * Show the user-rating star badge in the corner of grid-card images.
+     * .default(true) reproduces the current always-on behavior.
+     */
+    showRatingBadge: z.boolean().default(true),
     showRatings: z.boolean(),
     showVisualizerInSidebar: z.boolean(),
     sidebarBottomSection: z.enum(['playlists', 'favoriteAlbums', 'none']),
@@ -591,6 +663,8 @@ export const GeneralSettingsSchema = z.object({
     sideQueueLayout: SideQueueLayoutSchema,
     sideQueueType: SideQueueTypeSchema,
     skipButtons: SkipButtonsSchema,
+    /** Show the external/social-links block on album/artist detail pages. */
+    socialLinksDisplay: z.boolean().default(true),
     spotify: z.boolean(),
     theme: z.nativeEnum(AppTheme),
     themeDark: z.nativeEnum(AppTheme),
@@ -1470,11 +1544,20 @@ const initialState: SettingsState = {
         externalLinks: true,
         followCurrentSong: true,
         followSystemTheme: false,
+        genresDisplay: true,
         genreTarget: GenreTarget.TRACK,
+        gridCardCornerRadius: 'rounded-md',
+        gridCardSize: 'default',
+        gridGap: 'sm',
+        gridMetadataRows: [],
+        homeCarouselItemsPerPage: 20,
         homeFeature: true,
+        homeFeatureCardRotationIntervalSeconds: 30,
+        homeFeatureCardSongsPerCard: 10,
         homeFeatureContent: 'artist',
         homeFeatureStyle: HomeFeatureStyle.SINGLE,
         homeFeelingLucky: true,
+        homeGreetingVisible: true,
         homeItems,
         imageRes: {
             fullScreenPlayer: 0,
@@ -1520,6 +1603,7 @@ const initialState: SettingsState = {
         showFilesystemNameForFolders: true,
         showLyricsInSidebar: true,
         showPlaybarYearChip: true,
+        showRatingBadge: true,
         showRatings: true,
         showVisualizerInSidebar: true,
         sidebarBottomSection: 'playlists',
@@ -1543,6 +1627,7 @@ const initialState: SettingsState = {
             skipBackwardSeconds: 5,
             skipForwardSeconds: 10,
         },
+        socialLinksDisplay: true,
         spotify: true,
         theme: AppTheme.SPOTIFY,
         themeDark: AppTheme.SPOTIFY,
@@ -3551,6 +3636,38 @@ export const useExternalLinks = () =>
         }),
         shallow,
     );
+
+export const useGenresDisplay = () =>
+    useSettingsStore((state) => state.general.genresDisplay, shallow);
+
+export const useSocialLinksDisplay = () =>
+    useSettingsStore((state) => state.general.socialLinksDisplay, shallow);
+
+export const useGridCardCornerRadius = () =>
+    useSettingsStore((state) => state.general.gridCardCornerRadius, shallow);
+
+export const useGridCardSize = () =>
+    useSettingsStore((state) => state.general.gridCardSize, shallow);
+
+export const useGridGap = () => useSettingsStore((state) => state.general.gridGap, shallow);
+
+export const useGridMetadataRows = () =>
+    useSettingsStore((state) => state.general.gridMetadataRows, shallow);
+
+export const useShowRatingBadge = () =>
+    useSettingsStore((state) => state.general.showRatingBadge, shallow);
+
+export const useHomeGreetingVisible = () =>
+    useSettingsStore((state) => state.general.homeGreetingVisible, shallow);
+
+export const useHomeCarouselItemsPerPage = () =>
+    useSettingsStore((state) => state.general.homeCarouselItemsPerPage, shallow);
+
+export const useHomeFeatureCardSongsPerCard = () =>
+    useSettingsStore((state) => state.general.homeFeatureCardSongsPerCard, shallow);
+
+export const useHomeFeatureCardRotationIntervalSeconds = () =>
+    useSettingsStore((state) => state.general.homeFeatureCardRotationIntervalSeconds, shallow);
 
 export const useHomeFeature = () => useSettingsStore((state) => state.general.homeFeature, shallow);
 

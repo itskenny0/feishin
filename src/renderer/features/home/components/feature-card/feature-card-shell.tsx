@@ -12,14 +12,12 @@ import { ContextMenuController } from '/@/renderer/features/context-menu/context
 import { setFeatureCardHovered } from '/@/renderer/features/home/components/feature-card/hover-signal';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
 import { triggerHaptic } from '/@/renderer/hooks/use-haptic';
+import { useHomeFeatureCardSongsPerCard } from '/@/renderer/store/settings.store';
 import { Button } from '/@/shared/components/button/button';
 import { Icon } from '/@/shared/components/icon/icon';
 import { Skeleton } from '/@/shared/components/skeleton/skeleton';
 import { LibraryItem, Song } from '/@/shared/types/domain-types';
 import { Play } from '/@/shared/types/types';
-
-export const SONGS_PER_CARD = 10;
-export const ROTATE_INTERVAL_MS = 30_000;
 
 /**
  * Generic data shape every feature-card variant must provide. The shell only
@@ -116,6 +114,7 @@ export const FeatureCardShell = ({
 }: FeatureCardShellProps) => {
     const { t } = useTranslation();
     const { addToQueueByData } = usePlayer();
+    const songsPerCard = useHomeFeatureCardSongsPerCard();
 
     const backgroundSong = data.backgroundSong ?? data.songs[0] ?? null;
     const backgroundImageUrl = useItemImageUrl({
@@ -246,14 +245,14 @@ export const FeatureCardShell = ({
             <div className={styles.content}>
                 <div className={styles.songGrid}>
                     {showSkeleton ? (
-                        Array.from({ length: SONGS_PER_CARD }).map((_, idx) => (
+                        Array.from({ length: songsPerCard }).map((_, idx) => (
                             <SongTileSkeleton key={idx} />
                         ))
                     ) : showNoSongsMessage ? (
                         <div className={styles.noSongs}>{t('page.home.featureCard_emptyGrid')}</div>
                     ) : (
                         data.songs
-                            .slice(0, SONGS_PER_CARD)
+                            .slice(0, songsPerCard)
                             .map((song) => (
                                 <SongTile
                                     key={song.id}

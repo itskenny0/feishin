@@ -11,10 +11,13 @@
  * with a spy so the dispatcher's MQTT lane is observable. The transport
  * selector is driven explicitly with `recordPresence` to flip the lane.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
-import { peerDispatcher } from '/@/renderer/features/peer-sync/controller/peer-dispatcher';
+import {
+    peerDispatcher,
+    warmMqttPublish,
+} from '/@/renderer/features/peer-sync/controller/peer-dispatcher';
 import { applyPeerStateToStore } from '/@/renderer/features/peer-sync/controller/peer-state-mirror';
 import {
     __resetForTests,
@@ -85,6 +88,14 @@ const fakeCtx = {
     server: { id: 's' } as never,
     sessionId: 'sess-1',
 };
+
+// The dispatcher loads `publishCommand` lazily (it carries the mqtt graph,
+// kept off the entry chunk). Warm it once against the mocked peer-client so the
+// MQTT-lane publish assertions observe a synchronous publish — matching the
+// live path, which `use-peer-sync` warms on client boot.
+beforeAll(async () => {
+    await warmMqttPublish();
+});
 
 beforeEach(() => {
     published.length = 0;

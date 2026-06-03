@@ -29,6 +29,17 @@
     opacity: 1;
 }
 
+/*
+ * Touch devices have no hover state, so the hover-reveal above leaves the
+ * settings / fullscreen controls permanently invisible (and the buttons
+ * unreachable) on phones and tablets. Keep them visible there.
+ */
+@media (hover: none) {
+    .icon-group > * {
+        opacity: 1;
+    }
+}
+
 .visualizer {
     width: 100%;
     max-width: 100%;

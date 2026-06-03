@@ -170,8 +170,11 @@ vi.mock('/@/shared/components/action-icon/action-icon', () => ({
 vi.mock('/@/shared/components/center/center', () => ({
     Center: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
 }));
-vi.mock('/@/shared/components/group/group', () => ({
-    Group: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+vi.mock('/@/shared/components/stack/stack', () => ({
+    Stack: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+}));
+vi.mock('/@/shared/components/icon/icon', () => ({
+    Icon: () => <span data-testid="icon" />,
 }));
 vi.mock('/@/shared/components/spinner/spinner', () => ({
     Spinner: () => <div data-testid="spinner" />,

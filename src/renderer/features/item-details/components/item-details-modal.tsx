@@ -3,9 +3,10 @@ import { ReactNode, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { generatePath, Link } from 'react-router';
 
+import styles from '/@/renderer/features/item-details/components/item-details-modal.module.css';
 import { SongPath } from '/@/renderer/features/item-details/components/song-path';
 import { AppRoute } from '/@/renderer/router/routes';
-import { useShowFilesystemNameForAlbums } from '/@/renderer/store/settings.store';
+import { useGenresDisplay, useShowFilesystemNameForAlbums } from '/@/renderer/store/settings.store';
 import { formatDurationString, formatSizeString } from '/@/renderer/utils';
 import { formatDateRelative, formatRating } from '/@/renderer/utils/format';
 import { replaceURLWithHTMLLinks } from '/@/renderer/utils/linkify';
@@ -431,6 +432,7 @@ const handleParticipants = (item: Album | Song, t: TFunction) => {
 
 export const ItemDetailsModal = ({ item, items }: ItemDetailsModalProps) => {
     const { t } = useTranslation();
+    const genresDisplay = useGenresDisplay();
     const allItems = useMemo(() => items || (item ? [item] : []), [item, items]);
     const [selectedIndex, setSelectedIndex] = useState(0);
 
@@ -445,32 +447,51 @@ export const ItemDetailsModal = ({ item, items }: ItemDetailsModalProps) => {
         }));
     }, [allItems, t]);
 
+    const body = useMemo<ReactNode[]>(() => {
+        if (!selectedItem) return [];
+
+        const keepRule = (rule: { label: string }) =>
+            genresDisplay || rule.label !== 'entity.genre';
+
+        let rows: ReactNode[] = [];
+
+        switch (selectedItem._itemType) {
+            case LibraryItem.ALBUM:
+                rows = AlbumPropertyMapping.filter(keepRule).map((rule) =>
+                    handleRow(t, selectedItem, rule),
+                );
+                rows.push(...handleParticipants(selectedItem, t));
+                rows.push(...handleTags(selectedItem, t));
+                break;
+            case LibraryItem.ALBUM_ARTIST:
+                rows = AlbumArtistPropertyMapping.filter(keepRule).map((rule) =>
+                    handleRow(t, selectedItem, rule),
+                );
+                break;
+            case LibraryItem.PLAYLIST:
+                rows = PlaylistPropertyMapping.filter(keepRule).map((rule) =>
+                    handleRow(t, selectedItem, rule),
+                );
+                break;
+            case LibraryItem.SONG:
+                rows = SongPropertyMapping.filter(keepRule).map((rule) =>
+                    handleRow(t, selectedItem, rule),
+                );
+                rows.push(...handleParticipants(selectedItem, t));
+                rows.push(...handleTags(selectedItem, t));
+                break;
+            default:
+                rows = [];
+        }
+
+        return rows;
+    }, [genresDisplay, selectedItem, t]);
+
     if (!selectedItem) {
         return null;
     }
 
-    let body: ReactNode[] = [];
-
-    switch (selectedItem._itemType) {
-        case LibraryItem.ALBUM:
-            body = AlbumPropertyMapping.map((rule) => handleRow(t, selectedItem, rule));
-            body.push(...handleParticipants(selectedItem, t));
-            body.push(...handleTags(selectedItem, t));
-            break;
-        case LibraryItem.ALBUM_ARTIST:
-            body = AlbumArtistPropertyMapping.map((rule) => handleRow(t, selectedItem, rule));
-            break;
-        case LibraryItem.PLAYLIST:
-            body = PlaylistPropertyMapping.map((rule) => handleRow(t, selectedItem, rule));
-            break;
-        case LibraryItem.SONG:
-            body = SongPropertyMapping.map((rule) => handleRow(t, selectedItem, rule));
-            body.push(...handleParticipants(selectedItem, t));
-            body.push(...handleTags(selectedItem, t));
-            break;
-        default:
-            body = [];
-    }
+    const hasRows = body.some(Boolean);
 
     return (
         <Stack gap="md">
@@ -485,23 +506,28 @@ export const ItemDetailsModal = ({ item, items }: ItemDetailsModalProps) => {
                     value={String(selectedIndex)}
                 />
             )}
-            <Table
-                highlightOnHover={false}
-                styles={{
-                    th: {
-                        color: 'var(--theme-colors-foreground-muted)',
-                        fontWeight: 500,
-                        padding: 'var(--theme-spacing-sm)',
-                    },
-                    tr: {
-                        color: 'var(--theme-colors-foreground-muted)',
-                        padding: 'var(--theme-spacing-xl)',
-                    },
-                }}
-                withRowBorders={true}
-            >
-                <Table.Tbody>{body}</Table.Tbody>
-            </Table>
+            {hasRows ? (
+                <Table
+                    className={styles.table}
+                    highlightOnHover={false}
+                    styles={{
+                        th: {
+                            color: 'var(--theme-colors-foreground-muted)',
+                            fontWeight: 500,
+                        },
+                        tr: {
+                            color: 'var(--theme-colors-foreground-muted)',
+                        },
+                    }}
+                    withRowBorders={true}
+                >
+                    <Table.Tbody>{body}</Table.Tbody>
+                </Table>
+            ) : (
+                <Text className={styles.empty} isMuted>
+                    {t('page.itemDetail.noDetails', { postProcess: 'sentenceCase' })}
+                </Text>
+            )}
         </Stack>
     );
 };

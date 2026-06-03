@@ -5,6 +5,8 @@ import { nanoid } from 'nanoid/non-secure';
 import { FocusEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import styles from './server-form.module.css';
+
 import { api } from '/@/renderer/api';
 import {
     isLegacyAuth,
@@ -473,7 +475,7 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
     });
 
     return (
-        <form onSubmit={handleSubmit}>
+        <form className={styles.form} onSubmit={handleSubmit}>
             <Stack gap="md" ref={setStackRef}>
                 {isWizard ? (
                     <>
@@ -549,6 +551,7 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
                                     autoCorrect="off"
                                     data-autofocus
                                     disabled={serverLock}
+                                    enterKeyHint="next"
                                     error={
                                         form.values.url.length > 'http://'.length && !urlHasHostname
                                             ? t('form.addServer.urlInvalid')
@@ -565,6 +568,7 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
                                 />
                                 <TextInput
                                     disabled={serverLock}
+                                    enterKeyHint="next"
                                     label={t('form.addServer.input', { context: 'name' })}
                                     required
                                     {...form.getInputProps('name')}
@@ -608,13 +612,16 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
                                     autoComplete="username"
                                     autoCorrect="off"
                                     data-autofocus
+                                    enterKeyHint="next"
                                     label={t('form.addServer.input', { context: 'username' })}
                                     required
+                                    spellCheck={false}
                                     {...form.getInputProps('username')}
                                     {...mobileInputProps}
                                 />
                                 <PasswordInput
                                     autoComplete="current-password"
+                                    enterKeyHint="go"
                                     label={t('form.addServer.input', { context: 'password' })}
                                     {...form.getInputProps('password')}
                                     {...mobileInputProps}
@@ -701,15 +708,18 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
                                 <TextInput
                                     data-autofocus
                                     disabled={serverLock}
+                                    enterKeyHint="next"
                                     label={t('form.addServer.input', { context: 'name' })}
                                     required
                                     {...form.getInputProps('name')}
+                                    {...mobileInputProps}
                                 />
                                 <TextInput
                                     autoCapitalize="none"
                                     autoComplete="url"
                                     autoCorrect="off"
                                     disabled={serverLock}
+                                    enterKeyHint="next"
                                     inputMode="url"
                                     label={t('form.addServer.input', { context: 'url' })}
                                     placeholder={URL_PLACEHOLDERS[form.values.type as ServerType]}
@@ -796,13 +806,16 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
                             autoCapitalize="none"
                             autoComplete="username"
                             autoCorrect="off"
+                            enterKeyHint="next"
                             label={t('form.addServer.input', { context: 'username' })}
                             required
+                            spellCheck={false}
                             {...form.getInputProps('username')}
                             {...mobileInputProps}
                         />
                         <PasswordInput
                             autoComplete="current-password"
+                            enterKeyHint="go"
                             label={t('form.addServer.input', { context: 'password' })}
                             {...form.getInputProps('password')}
                             {...mobileInputProps}

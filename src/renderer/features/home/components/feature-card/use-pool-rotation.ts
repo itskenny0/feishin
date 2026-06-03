@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
-import { ROTATE_INTERVAL_MS } from '/@/renderer/features/home/components/feature-card/feature-card-shell';
 import { isFeatureCardHovered } from '/@/renderer/features/home/components/feature-card/hover-signal';
+import { useHomeFeatureCardRotationIntervalSeconds } from '/@/renderer/store/settings.store';
 
 const pickRandomIndex = (length: number, exclude: null | number = null): number => {
     if (length <= 1) return 0;
@@ -14,12 +14,14 @@ const pickRandomIndex = (length: number, exclude: null | number = null): number 
 
 /**
  * Auto-rotation through a pool of candidates. Picks a random index initially,
- * advances every {@link ROTATE_INTERVAL_MS} ms, and reshuffles on demand.
- * Rotation pauses while a feature card is hovered (`hover-signal.ts`).
+ * advances every `homeFeatureCardRotationIntervalSeconds` (default 30s), and
+ * reshuffles on demand. Rotation pauses while a feature card is hovered
+ * (`hover-signal.ts`).
  *
  * Returns {index, goPrev, goNext, reshuffle}.
  */
 export const usePoolRotation = (poolSize: number) => {
+    const rotateIntervalMs = useHomeFeatureCardRotationIntervalSeconds() * 1000;
     // We track both the index AND the pool size it was picked against so we
     // can detect when the pool first transitions from 0 → N and synchronously
     // re-pick during the same render. Without this, the first render with a
@@ -64,12 +66,12 @@ export const usePoolRotation = (poolSize: number) => {
                 sizeAtPick: poolSize,
             }));
         };
-        timer = setTimeout(tick, ROTATE_INTERVAL_MS);
+        timer = setTimeout(tick, rotateIntervalMs);
         return () => {
             cancelled = true;
             clearTimeout(timer);
         };
-    }, [poolSize, index]);
+    }, [poolSize, index, rotateIntervalMs]);
 
     const reshuffle = useCallback(() => {
         if (poolSize === 0) return;

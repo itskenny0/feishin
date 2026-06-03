@@ -15,10 +15,10 @@ const seedSidebarItems = () => {
     });
 };
 
-const renderBar = (props: Partial<Parameters<typeof BottomTabBar>[0]> = {}) =>
+const renderBar = (props: Partial<Parameters<typeof BottomTabBar>[0]> = {}, route = '/') =>
     render(
         <MantineProvider>
-            <MemoryRouter initialEntries={['/']}>
+            <MemoryRouter initialEntries={[route]}>
                 <BottomTabBar drawerOpen={false} onMoreTab={() => undefined} {...props} />
             </MemoryRouter>
         </MantineProvider>,
@@ -90,5 +90,37 @@ describe('BottomTabBar — My Library tab', () => {
         fireEvent.click(tab(/library/i) as HTMLElement);
         await waitFor(() => expect(document.querySelector('[role="dialog"]')).not.toBeNull());
         expect(onScrollToTop).not.toHaveBeenCalled();
+    });
+});
+
+describe('BottomTabBar — active indicator', () => {
+    const dots = () => screen.queryAllByTestId('bottom-tab-active-dot');
+
+    it('renders exactly one active dot for a plain route', () => {
+        renderBar({}, '/');
+        expect(dots()).toHaveLength(1);
+    });
+
+    it('renders exactly one active dot when the More drawer is open over a /library route', () => {
+        // Both the Library tab (route match) and the More tab (drawerOpen)
+        // report active here. The shared-layout dot uses a single layoutId,
+        // so only ONE element may carry it — the elected owner. Two dots
+        // would tear motion's slide animation and warn in the console.
+        renderBar({ drawerOpen: true }, '/library/albums');
+        expect(dots()).toHaveLength(1);
+    });
+
+    it('gives the dot to the More tab when the drawer is open (foreground overlay wins)', () => {
+        renderBar({ drawerOpen: true }, '/library/albums');
+        const moreTab = tab(/more|menu/i);
+        expect(moreTab?.contains(dots()[0])).toBe(true);
+    });
+
+    it('moves the dot to the Library tab when its popover is open over the Home route', async () => {
+        renderBar({}, '/');
+        fireEvent.click(tab(/library/i) as HTMLElement);
+        await waitFor(() => expect(document.querySelector('[role="dialog"]')).not.toBeNull());
+        expect(dots()).toHaveLength(1);
+        expect(tab(/library/i)?.contains(dots()[0])).toBe(true);
     });
 });

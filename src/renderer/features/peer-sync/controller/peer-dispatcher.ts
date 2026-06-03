@@ -17,11 +17,7 @@
 import type { ServerListItemWithCredential } from '/@/shared/types/domain-types';
 
 import { commandDispatcher } from '/@/renderer/features/jellyfin-remote-target/controller/command-dispatcher';
-import { publishCommand } from '/@/renderer/features/peer-sync/controller/peer-client';
 import { pickTransport } from '/@/renderer/features/peer-sync/controller/transport-selector';
-// `publishCommand` stays imported because `fireMqtt` below uses it; the
-// callers above were inlined to a `route(... fireMqtt(...) ...)` pattern so
-// outbound diagnostics always record.
 import { recordOutboundCommand } from '/@/renderer/features/peer-sync/diagnostics/diagnostics-store';
 import {
     buildCommand,
@@ -51,11 +47,70 @@ const jfNoop = (verb: string): (() => void) => {
     };
 };
 
+// `publishCommand` lives in peer-client.ts, which statically pulls in the
+// ~360 KB `mqtt` graph. We import it lazily so the dispatcher — reachable from
+// the renderer ENTRY via player-context — does NOT drag mqtt into the entry
+// chunk. `fireMqtt` only ever runs when `route()` selects the MQTT lane, which
+// only happens when a peer is live; by then `use-peer-sync` has already mounted
+// and loaded peer-client, so this dynamic import resolves from the warm
+// `vendor-mqtt` chunk near-instantly.
+type PublishCommandFn =
+    (typeof import('/@/renderer/features/peer-sync/controller/peer-client'))['publishCommand'];
+
+let publishCommandFn: null | PublishCommandFn = null;
+let publishCommandLoading: null | Promise<PublishCommandFn> = null;
+
+const loadPublishCommand = (): Promise<PublishCommandFn> => {
+    if (publishCommandFn) return Promise.resolve(publishCommandFn);
+    if (publishCommandLoading) return publishCommandLoading;
+    publishCommandLoading = import('/@/renderer/features/peer-sync/controller/peer-client')
+        .then((mod) => {
+            publishCommandFn = mod.publishCommand;
+            return publishCommandFn;
+        })
+        .catch((err) => {
+            // A failed chunk fetch (offline, cache eviction mid-session) must
+            // not strand the dispatcher in a rejected-promise state — reset so
+            // a later command retries the load. The command that triggered this
+            // load is dropped; MQTT publishes are QoS-0 fire-and-forget and the
+            // next state echo is the source of truth, so a dropped frame is
+            // self-healing.
+            warn('failed to load mqtt publish seam', { err: (err as Error).message });
+            publishCommandLoading = null;
+            throw err;
+        });
+    return publishCommandLoading;
+};
+
+/**
+ * Eagerly resolve the lazily-loaded `publishCommand` so the MQTT-lane publish
+ * path runs synchronously. Called when the peer-sync subsystem boots (see
+ * `use-peer-sync.tsx`) so a live peer's commands never hit the cold-start
+ * microtask. Returns the resolved fn so tests can await it before asserting on
+ * synchronous publishes.
+ */
+export const warmMqttPublish = (): Promise<PublishCommandFn> => loadPublishCommand();
+
 /** Publish + record. Single seam so every MQTT outbound goes through one
- *  helper, which the diagnostics store taps for the recent-commands list. */
+ *  helper, which the diagnostics store taps for the recent-commands list.
+ *
+ *  Diagnostics are recorded synchronously (the recent-commands list reflects
+ *  intent regardless of wire timing). The publish itself goes out as soon as
+ *  the lazily-loaded `publishCommand` resolves — synchronously when it is
+ *  already cached (the normal live-peer case), or on the next microtask during
+ *  the rare cold-start window. `publishCommand` is QoS-0 fire-and-forget, so a
+ *  microtask of slack never changes observable behaviour. */
 const fireMqtt = (peer: PeerAddress, cmd: PeerCommand): void => {
-    publishCommand(peer, cmd);
     recordOutboundCommand(peer.peerId, cmd);
+    if (publishCommandFn) {
+        publishCommandFn(peer, cmd);
+        return;
+    }
+    // Swallow load failures here — loadPublishCommand already logs + resets so
+    // a later command retries. Dropping this QoS-0 frame is self-healing.
+    void loadPublishCommand()
+        .then((publish) => publish(peer, cmd))
+        .catch(() => {});
 };
 
 /**

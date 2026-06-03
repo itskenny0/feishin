@@ -13,6 +13,7 @@ import { ShareAction } from '/@/renderer/features/context-menu/actions/share-act
 import { ShowInFileExplorerAction } from '/@/renderer/features/context-menu/actions/show-in-file-explorer-action';
 import { ShuffleItemsAction } from '/@/renderer/features/context-menu/actions/shuffle-items-action';
 import { ContextMenuPreview } from '/@/renderer/features/context-menu/components/context-menu-preview';
+import { MenuContent } from '/@/renderer/features/context-menu/components/menu-content';
 import { ContextMenu } from '/@/shared/components/context-menu/context-menu';
 import { LibraryItem, QueueSong } from '/@/shared/types/domain-types';
 
@@ -27,7 +28,7 @@ export const QueueContextMenu = ({ items }: QueueContextMenuProps) => {
     }, [items]);
 
     return (
-        <ContextMenu.Content
+        <MenuContent
             bottomStickyContent={<ContextMenuPreview items={items} itemType={LibraryItem.SONG} />}
         >
             <RemoveFromQueueAction items={items} />
@@ -49,6 +50,6 @@ export const QueueContextMenu = ({ items }: QueueContextMenuProps) => {
             <ShowInFileExplorerAction items={items} />
             <ContextMenu.Divider />
             <GetInfoAction disabled={items.length === 0} items={items} />
-        </ContextMenu.Content>
+        </MenuContent>
     );
 };

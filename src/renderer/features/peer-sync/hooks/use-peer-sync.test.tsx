@@ -19,6 +19,10 @@ const stopPeerClient = vi.fn();
 const publishPresenceHeartbeat = vi.fn();
 vi.mock('/@/renderer/features/peer-sync/controller/peer-client', () => ({
     isPeerClientConnected: () => false,
+    // The hook warms the lazy MQTT publish seam on boot
+    // (peer-dispatcher.warmMqttPublish → dynamic import of this module), so the
+    // mock must expose publishCommand or the warm rejects.
+    publishCommand: () => {},
     publishPing: () => null,
     publishPresenceHeartbeat: () => publishPresenceHeartbeat(),
     startPeerClient: (...args: unknown[]) => startPeerClient(...args),

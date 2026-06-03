@@ -4,8 +4,11 @@ import { useTranslation } from 'react-i18next';
 import { useGenreListFilters } from '/@/renderer/features/genres/hooks/use-genre-list-filters';
 import { useGenreListQuery } from '/@/renderer/features/genres/queries/genres-queries';
 import { EmptyState, EmptyStateProps } from '/@/renderer/features/shared/components/empty-state';
+import {
+    ListGridSkeleton,
+    ListTableSkeleton,
+} from '/@/renderer/features/shared/components/list-skeleton';
 import { ItemListSettings, useCurrentServer, useListSettings } from '/@/renderer/store';
-import { Spinner } from '/@/shared/components/spinner/spinner';
 import { GenreListQuery } from '/@/shared/types/domain-types';
 import { ItemListKey, ListDisplayType, ListPaginationType } from '/@/shared/types/types';
 
@@ -36,8 +39,20 @@ const GenreListPaginatedTable = lazy(() =>
 export const GenreListContent = () => {
     const { display, grid, itemsPerPage, pagination, table } = useListSettings(ItemListKey.GENRE);
 
+    const fallback =
+        display === ListDisplayType.TABLE ? (
+            <ListTableSkeleton enableHeader={table.enableHeader} size={table.size} />
+        ) : (
+            <ListGridSkeleton
+                columns={grid.itemsPerRowEnabled ? grid.itemsPerRow : undefined}
+                gap={grid.itemGap}
+                rows={1}
+                size={grid.size}
+            />
+        );
+
     return (
-        <Suspense fallback={<Spinner container />}>
+        <Suspense fallback={fallback}>
             <GenreListView
                 display={display}
                 grid={grid}

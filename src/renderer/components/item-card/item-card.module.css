@@ -8,7 +8,13 @@
     overflow: hidden;
     user-select: none;
     background-color: var(--theme-colors-surface);
-    border-radius: var(--theme-radius-md);
+
+    /*
+     * --card-corner-radius is set per grid row from the gridCardCornerRadius
+     * setting; absent (non-grid contexts) it falls back to the historical
+     * --theme-radius-md so nothing changes.
+     */
+    border-radius: var(--card-corner-radius, var(--theme-radius-md));
 }
 
 .container.selected {
@@ -28,7 +34,7 @@
     overflow: hidden;
     color: inherit;
     text-decoration: none;
-    border-radius: var(--theme-radius-md);
+    border-radius: var(--card-corner-radius, var(--theme-radius-md));
 
     &::before {
         position: absolute;

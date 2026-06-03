@@ -4,11 +4,21 @@
     width: 100%;
     height: 100%;
     padding: 10vh 0 50vh;
-    overflow: scroll;
-    word-break: break-all;
+    overflow-x: hidden;
+    overflow-y: scroll;
+
+    /* Break on word boundaries (with a hyphenation fallback for very long
+       tokens) instead of mid-character: far more readable than break-all. */
+    overflow-wrap: break-word;
+    word-break: normal;
+    overscroll-behavior: contain;
     transform: translateY(-2rem);
 
+    /* Promote to its own layer so the smooth auto-scroll is GPU-composited and
+       doesn't repaint sibling chrome on every frame. */
+    will-change: scroll-position;
+
     @media screen and (orientation: portrait) {
-        padding: 5vh 0;
+        padding: 8vh 0 40vh;
     }
 }

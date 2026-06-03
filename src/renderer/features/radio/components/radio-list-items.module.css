@@ -81,3 +81,30 @@
         opacity: 1;
     }
 }
+
+/* Phones: tighter rows, smaller thumbnail, fewer gaps. The full stream URL
+   is noise on a narrow screen, so it gets hidden (see radio-list-items.tsx)
+   and we lean on name + homepage for the secondary line. */
+@media (max-width: 767px) {
+    .radio-item {
+        padding: var(--mantine-spacing-sm) !important;
+    }
+
+    .thumbnail,
+    .image-container {
+        width: 2.5rem;
+        height: 2.5rem;
+    }
+}
+
+@media (max-width: 360px) {
+    .radio-item {
+        padding: var(--mantine-spacing-xs) var(--mantine-spacing-sm) !important;
+    }
+
+    .thumbnail,
+    .image-container {
+        width: 2.25rem;
+        height: 2.25rem;
+    }
+}

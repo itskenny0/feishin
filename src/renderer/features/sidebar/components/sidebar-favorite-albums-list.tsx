@@ -15,6 +15,7 @@ import {
     PlayTooltip,
 } from '/@/renderer/features/shared/components/play-button-group';
 import { usePlayButtonClick } from '/@/renderer/features/shared/hooks/use-play-button-click';
+import { prefetchAlbumDetail, preloadRoute } from '/@/renderer/router/route-preloaders';
 import { AppRoute } from '/@/renderer/router/routes';
 import { useCurrentServer } from '/@/renderer/store';
 import {
@@ -65,6 +66,16 @@ const AlbumRowButton = memo(({ item, name, onContextMenu }: AlbumRowButtonProps)
         type: 'table',
     });
 
+    // On hover, warm the album-detail route chunk and prefetch the detail
+    // query so the click resolves from cache without a loading flash. Both
+    // calls dedupe internally (preloadRoute once per session, prefetchQuery
+    // by queryKey), so repeated hovers are cheap.
+    const handleHoverPreload = useCallback(() => {
+        setIsHovered(true);
+        preloadRoute(url.pathname);
+        prefetchAlbumDetail(item.id);
+    }, [url.pathname, item.id]);
+
     return (
         <Link
             className={clsx(styles.row, {
@@ -74,7 +85,8 @@ const AlbumRowButton = memo(({ item, name, onContextMenu }: AlbumRowButtonProps)
                 e.preventDefault();
                 onContextMenu(e, item);
             }}
-            onMouseEnter={() => setIsHovered(true)}
+            onFocus={handleHoverPreload}
+            onMouseEnter={handleHoverPreload}
             onMouseLeave={() => setIsHovered(false)}
             to={url}
         >

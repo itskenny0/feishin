@@ -15,6 +15,47 @@ const readableStreamDir = path.dirname(
     createRequire(require.resolve('mqtt/package.json')).resolve('readable-stream/package.json'),
 );
 
+// Split stable, heavy vendor libraries into their own long-lived chunks so
+// they stay byte-stable across releases (warm-start cache hits) and download
+// in parallel with the app chunk instead of collapsing into one giant entry
+// bundle. Mirrors electron.vite.config.ts. Returning undefined keeps Vite's
+// default chunking (incl. the React.lazy route splits) for everything else.
+const manualChunks = (id: string): string | undefined => {
+    if (!id.includes('node_modules')) return undefined;
+
+    if (id.includes('/react-dom/') || id.includes('/scheduler/')) return 'vendor-react-dom';
+    if (
+        /\/node_modules\/(react|react-router|react-router-dom|react-is)\//.test(id) ||
+        id.includes('/use-sync-external-store/')
+    ) {
+        return 'vendor-react';
+    }
+    if (id.includes('/@mantine/')) return 'vendor-mantine';
+    if (id.includes('/@tanstack/')) return 'vendor-tanstack';
+    if (id.includes('/i18next') || id.includes('/react-i18next/')) return 'vendor-i18n';
+    if (id.includes('/react-icons/')) return 'vendor-icons';
+    if (id.includes('/lodash')) return 'vendor-lodash';
+    if (id.includes('/@atlaskit/')) return 'vendor-dnd';
+    if (id.includes('/zod/')) return 'vendor-zod';
+    // MQTT peer-sync transport. Only reachable through async boundaries (the
+    // lazy PeerSyncHook, the lazy peer-dispatcher facade, the lazy Settings
+    // route), so isolating it keeps the ~360 KB mqtt graph out of the entry
+    // chunk and in a single warm-cacheable async chunk instead of being
+    // duplicated/inlined into whichever lazy chunk first touches it.
+    if (
+        id.includes('/mqtt/') ||
+        id.includes('/mqtt-packet/') ||
+        id.includes('/number-allocator/') ||
+        id.includes('/reinterval/') ||
+        id.includes('/mqtt-pattern/') ||
+        id.includes('/help-me/')
+    ) {
+        return 'vendor-mqtt';
+    }
+
+    return undefined;
+};
+
 export default defineConfig({
     base: './',
     build: {
@@ -53,6 +94,7 @@ export default defineConfig({
 
                     return 'assets/[name]-[hash][extname]';
                 },
+                manualChunks,
                 sourcemapExcludeSources: false,
             },
         },

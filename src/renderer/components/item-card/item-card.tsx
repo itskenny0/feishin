@@ -70,6 +70,12 @@ export interface ItemCardProps {
     isRound?: boolean;
     itemType: LibraryItem;
     rows?: DataRow[];
+    /**
+     * Whether the user-rating star badge may render in the image corner.
+     * Defaults to true, reproducing the always-on behavior; the library grid
+     * threads the `showRatingBadge` setting through here.
+     */
+    showRatingBadge?: boolean;
     type?: 'compact' | 'default' | 'poster';
     withControls?: boolean;
 }
@@ -87,6 +93,7 @@ export const ItemCard = ({
     isRound,
     itemType,
     rows: providedRows,
+    showRatingBadge = true,
     type = 'poster',
     withControls,
 }: ItemCardProps) => {
@@ -112,6 +119,7 @@ export const ItemCard = ({
                     itemType={itemType}
                     rows={rows}
                     showRating={showRatings}
+                    showRatingBadge={showRatingBadge}
                     withControls={withControls}
                 />
             );
@@ -132,6 +140,7 @@ export const ItemCard = ({
                     itemType={itemType}
                     rows={rows}
                     showRating={showRatings}
+                    showRatingBadge={showRatingBadge}
                     withControls={withControls}
                 />
             );
@@ -152,6 +161,7 @@ export const ItemCard = ({
                     itemType={itemType}
                     rows={rows}
                     showRating={showRatings}
+                    showRatingBadge={showRatingBadge}
                     withControls={withControls}
                 />
             );
@@ -168,6 +178,7 @@ export interface ItemCardDerivativeProps extends Omit<ItemCardProps, 'type'> {
     internalState?: ItemListStateActions;
     rows: DataRow[];
     showRating: boolean;
+    showRatingBadge: boolean;
 }
 
 type ItemCardData = NonNullable<ItemCardProps['data']>;
@@ -188,6 +199,7 @@ const ItemCardStandardImageArea = memo(function ItemCardStandardImageArea({
     itemType,
     navigationPath,
     showRating,
+    showRatingBadge = true,
     variant,
     withControls,
 }: {
@@ -206,6 +218,7 @@ const ItemCardStandardImageArea = memo(function ItemCardStandardImageArea({
     itemType: LibraryItem;
     navigationPath: null | string;
     showRating: boolean;
+    showRatingBadge?: boolean;
     variant: 'default' | 'poster';
     withControls?: boolean;
 }) {
@@ -233,7 +246,7 @@ const ItemCardStandardImageArea = memo(function ItemCardStandardImageArea({
         typeof (data as { userRating: null | number }).userRating === 'number'
             ? (data as { userRating: null | number }).userRating
             : null;
-    const hasRating = showRating && userRating !== null && userRating > 0;
+    const hasRating = showRatingBadge && showRating && userRating !== null && userRating > 0;
 
     const imageContainerContent = (
         <>
@@ -323,6 +336,7 @@ const CompactItemCardImageArea = memo(function CompactItemCardImageArea({
     navigationPath,
     rows,
     showRating,
+    showRatingBadge = true,
     withControls,
 }: {
     controls?: ItemControls;
@@ -340,6 +354,7 @@ const CompactItemCardImageArea = memo(function CompactItemCardImageArea({
     navigationPath: null | string;
     rows: DataRow[];
     showRating: boolean;
+    showRatingBadge?: boolean;
     withControls?: boolean;
 }) {
     const [showControls, setShowControls] = useState(false);
@@ -366,7 +381,7 @@ const CompactItemCardImageArea = memo(function CompactItemCardImageArea({
         typeof (data as { userRating: null | number }).userRating === 'number'
             ? (data as { userRating: null | number }).userRating
             : null;
-    const hasRating = showRating && userRating !== null && userRating > 0;
+    const hasRating = showRatingBadge && showRating && userRating !== null && userRating > 0;
 
     const imageContainerContent = (
         <>
@@ -470,6 +485,7 @@ const CompactItemCard = ({
     itemType,
     rows,
     showRating,
+    showRatingBadge,
     withControls,
 }: ItemCardDerivativeProps) => {
     const itemRowId =
@@ -636,6 +652,7 @@ const CompactItemCard = ({
                     navigationPath={navigationPath}
                     rows={rows}
                     showRating={showRating}
+                    showRatingBadge={showRatingBadge}
                     withControls={withControls}
                 />
             </div>
@@ -681,6 +698,7 @@ const DefaultItemCard = ({
     itemType,
     rows,
     showRating,
+    showRatingBadge,
     withControls,
 }: ItemCardDerivativeProps) => {
     const itemRowId =
@@ -779,6 +797,7 @@ const DefaultItemCard = ({
                     itemType={itemType}
                     navigationPath={navigationPath}
                     showRating={showRating}
+                    showRatingBadge={showRatingBadge}
                     variant="default"
                     withControls={withControls}
                 />
@@ -842,6 +861,7 @@ const PosterItemCard = ({
     itemType,
     rows,
     showRating,
+    showRatingBadge,
     withControls,
 }: ItemCardDerivativeProps) => {
     const itemRowId =
@@ -1007,6 +1027,7 @@ const PosterItemCard = ({
                     itemType={itemType}
                     navigationPath={navigationPath}
                     showRating={showRating}
+                    showRatingBadge={showRatingBadge}
                     variant="poster"
                     withControls={withControls}
                 />

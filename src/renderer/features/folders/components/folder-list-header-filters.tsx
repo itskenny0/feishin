@@ -1,6 +1,8 @@
 import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import styles from './folder-list-header-filters.module.css';
+
 import { SONG_TABLE_COLUMNS } from '/@/renderer/components/item-list/item-table-list/default-columns';
 import { useFolderListFilters } from '/@/renderer/features/folders/hooks/use-folder-list-filters';
 import {
@@ -273,7 +275,7 @@ export const FolderListHeaderFilters = () => {
                     />
                 </Group>
             </Flex>
-            <div ref={breadcrumbContainerRef}>
+            <div className={styles.breadcrumbContainer} ref={breadcrumbContainerRef}>
                 <Breadcrumb separator={<Icon icon="arrowRight" />}>{breadcrumbItems}</Breadcrumb>
             </div>
         </Stack>

@@ -40,6 +40,36 @@
 }
 
 /*
+ * Mobile control wrapper. The stacked phone layout puts the control on its
+ * own full-width row, but most controls carry a fixed pixel width from the
+ * settings definitions (e.g. `width={300}` on theme/lyric Selects, `w={120}`
+ * on sliders). At 320–360px content widths a 300px Select overflows the
+ * pane horizontally; narrower controls just float in a sea of dead space and
+ * are needlessly fiddly to tap.
+ *
+ * Cap every direct child to the row width so nothing overflows, then let the
+ * input-bearing controls (Mantine wires its inline `width`/`w` onto the
+ * component *root*, so we override with `!important`) grow to fill the row —
+ * Android-Settings style full-bleed dropdowns/sliders with comfortable touch
+ * targets. Switches, color swatches, button groups and small number steppers
+ * keep their intrinsic size (they read wrong stretched edge-to-edge).
+ */
+.mobile-control > * {
+    max-width: 100%;
+}
+
+.mobile-control > [class*='mantine-Select-root'],
+.mobile-control > [class*='mantine-MultiSelect-root'],
+.mobile-control > [class*='mantine-Slider-root'],
+.mobile-control > [class*='mantine-SegmentedControl-root'],
+.mobile-control > [class*='mantine-Autocomplete-root'],
+.mobile-control > [class*='mantine-TextInput-root'],
+.mobile-control > [class*='mantine-Textarea-root'] {
+    width: 100% !important;
+    max-width: 100%;
+}
+
+/*
  * Sub-section headers within a settings list — used by trackmap's
  * advanced panel to chunk ~15 sliders into "Colors", "Envelope", etc.
  * The 1px hairline under the label visually separates each group from

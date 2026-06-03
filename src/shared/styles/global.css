@@ -318,6 +318,10 @@ button {
     --theme-radius-md: var(--mantine-radius-md);
     --theme-radius-lg: var(--mantine-radius-lg);
     --theme-radius-xl: var(--mantine-radius-xl);
+    --theme-radius-card: 6px; /* artwork / cards (Spotify 6px) */
+    --theme-radius-panel: 8px; /* sidebar, main view, section cards (Spotify 8px) */
+    --theme-radius-pill: 9999px; /* play / follow / nav pills */
+    --theme-hover-overlay: rgb(255 255 255 / 6%); /* one-step bg lift on rows/cards, no shadow */
     --theme-line-height-xs: var(--mantine-line-height-xs);
     --theme-line-height-sm: var(--mantine-line-height-sm);
     --theme-line-height-md: var(--mantine-line-height-md);

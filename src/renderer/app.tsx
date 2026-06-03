@@ -10,7 +10,7 @@ import '@mantine/notifications/styles.css';
 import isElectron from 'is-electron';
 import { lazy, memo, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 
-import i18n from '/@/i18n/i18n';
+import i18n, { loadLanguage } from '/@/i18n/i18n';
 import { EnableCacheModal, useCacheLifecycle } from '/@/renderer/cache';
 import { WebAudioContext } from '/@/renderer/features/player/context/webaudio-context';
 import { useDocumentTitle } from '/@/renderer/features/shared/hooks/use-document-title';
@@ -120,22 +120,61 @@ const AppShell = memo(function AppShell() {
     );
 });
 
+// Effects split into two tiers. The critical tier mounts synchronously on
+// first paint because it affects first-paint correctness: language (avoids a
+// flash of the wrong locale), document title, input-focus tracking, and the
+// cache lifecycle. Everything else is deferred until after the browser has
+// painted the first frame, since none of it influences what the user sees on
+// the initial render and several of these effects do synchronous DOM work
+// (custom CSS injection), IPC chatter (global shortcuts, native menu sync,
+// settings sync), or network polling (update checks) that we'd rather not
+// run while React is still flushing the first commit.
 const AppEffects = () => (
     <>
-        <SyncSettingsEffect />
-        <UpdateCheckEffect />
-        <CustomCssFileEffect />
-        <CssSettingsEffect />
-        <GlobalShortcutsEffect />
         <LanguageEffect />
-        <NativeMenuSyncEffect />
         <DocumentTitleEffect />
-        <AndroidNativeEffect />
-        <IosNativeEffect />
         <CacheLifecycleEffect />
         <InputFocusEffect />
+        <DeferredAppEffects />
     </>
 );
+
+// Mounts its children only after the first paint has flushed (double-rAF:
+// the first rAF fires before paint, the second after). Until then it renders
+// nothing, keeping the deferred effects off the cold-start critical path.
+const DeferredAppEffects = () => {
+    const [ready, setReady] = useState(false);
+
+    useEffect(() => {
+        let raf2 = 0;
+        const raf1 = requestAnimationFrame(() => {
+            raf2 = requestAnimationFrame(() => {
+                console.info('[startup] first paint flushed: mounting deferred app effects');
+                setReady(true);
+            });
+        });
+
+        return () => {
+            cancelAnimationFrame(raf1);
+            if (raf2) cancelAnimationFrame(raf2);
+        };
+    }, []);
+
+    if (!ready) return null;
+
+    return (
+        <>
+            <SyncSettingsEffect />
+            <UpdateCheckEffect />
+            <CustomCssFileEffect />
+            <CssSettingsEffect />
+            <GlobalShortcutsEffect />
+            <NativeMenuSyncEffect />
+            <AndroidNativeEffect />
+            <IosNativeEffect />
+        </>
+    );
+};
 
 const CacheLifecycleEffect = () => {
     useCacheLifecycle();
@@ -296,7 +335,11 @@ const LanguageEffect = () => {
 
     useEffect(() => {
         if (language) {
-            i18n.changeLanguage(language);
+            // Lazily fetch the locale chunk (no-op for English / already
+            // loaded) before switching so the bundle is registered first.
+            loadLanguage(language).then(() => {
+                i18n.changeLanguage(language);
+            });
         }
     }, [language]);
 
