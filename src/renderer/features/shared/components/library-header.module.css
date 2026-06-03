@@ -106,23 +106,24 @@
     }
 
     /*
-     * Small-phone tier (≤360): a 250px cover with 2rem vertical padding
-     * leaves less than half a 568px screen for the metadata + tracklist.
-     * Drop the cover to 220px so the title, artist link, and the first
-     * three tracks are visible above the fold on iPhone SE and Pixel 4a.
+     * Small-phone tier (≤360): inherits the side-by-side portrait layout
+     * above (grid-template-columns: 120px minmax(0, 1fr)). The cover must
+     * therefore fit the narrow image column — drop it to 100px. The old
+     * 220px value here predated the side-by-side redesign and, left in a
+     * 120px column, overflowed the cell and overlapped the action buttons.
      */
     @media (width <= 360px) {
         gap: var(--theme-spacing-sm);
         padding: 1.25rem 0.75rem;
 
         .image {
-            width: 220px !important;
-            height: 220px;
+            width: 100px !important;
+            height: 100px;
         }
 
         :global(.item-image-placeholder) {
-            width: 175px !important;
-            height: 175px;
+            width: 100px !important;
+            height: 100px;
         }
     }
 
