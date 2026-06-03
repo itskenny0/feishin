@@ -111,12 +111,8 @@ export function computeSelectedFromResult(
         };
     }
 
-    const hasLocalLocal =
-        (Array.isArray(local) && local.length > 0) ||
-        (local != null && !Array.isArray(local) && 'lyrics' in local && Boolean(local.lyrics));
-
     // If setting is set to prefer local lyrics, return the local lyrics if available
-    if (preferLocalLyrics && hasLocalLocal) {
+    if (preferLocalLyrics && hasLocalLyrics(local)) {
         if (Array.isArray(local) && local.length > 0) {
             const item = local[Math.min(selectedStructuredIndex, local.length - 1)];
             return { selected: item, selectedSynced: item.synced };
@@ -245,6 +241,13 @@ export function getDisplayOffset(
     return storedOffsetMs;
 }
 
+export function hasLocalLyrics(local: FullLyricsMetadata | null | StructuredLyric[]): boolean {
+    return (
+        (Array.isArray(local) && local.length > 0) ||
+        (local != null && !Array.isArray(local) && 'lyrics' in local && Boolean(local.lyrics))
+    );
+}
+
 const emptyResult = (): LyricsQueryResult => ({
     local: null,
     overrideData: null,
@@ -315,11 +318,42 @@ export const lyricsQueries = {
                   })
                 : null;
 
-            const [local, remoteAuto, overrideData] = await Promise.all([
-                localPromise,
-                remoteAutoPromise,
-                overrideDataPromise,
-            ]);
+            let local: FullLyricsMetadata | null | StructuredLyric[];
+            let remoteAuto: FullLyricsMetadata | null;
+            let overrideData: LyricsResponse | null;
+
+            // When the user prefers local lyrics, await local first and skip
+            // blocking on the remote-auto fetch if local lyrics exist — the
+            // remote result is fetched in the background and patched in when
+            // it resolves (#2100). Otherwise fetch all flavours in parallel.
+            if (preferLocalLyrics) {
+                local = await localPromise;
+
+                if (hasLocalLyrics(local)) {
+                    overrideData = overrideDataPromise ? await overrideDataPromise : null;
+                    remoteAuto = null;
+
+                    if (remoteAutoPromise) {
+                        void remoteAutoPromise.then((fetchedRemoteAuto) => {
+                            if (signal?.aborted || !fetchedRemoteAuto) return;
+                            queryClient.setQueryData<LyricsQueryResult>(lyricsKey, (prev) =>
+                                prev ? { ...prev, remoteAuto: fetchedRemoteAuto } : prev,
+                            );
+                        });
+                    }
+                } else {
+                    [remoteAuto, overrideData] = await Promise.all([
+                        remoteAutoPromise,
+                        overrideDataPromise,
+                    ]);
+                }
+            } else {
+                [local, remoteAuto, overrideData] = await Promise.all([
+                    localPromise,
+                    remoteAutoPromise,
+                    overrideDataPromise,
+                ]);
+            }
 
             const partial: Pick<
                 LyricsQueryResult,

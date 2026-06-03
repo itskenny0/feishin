@@ -1,6 +1,6 @@
 import { useIsFetching } from '@tanstack/react-query';
 import { t } from 'i18next';
-import { RefObject } from 'react';
+import { RefObject, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import styles from './play-queue-list-controls.module.css';
@@ -155,7 +155,14 @@ const QueueRestoreActions = () => {
 
     const isFetching = useIsFetching({ queryKey: queryKeys.player.fetch({ type: 'queue' }) });
 
-    const { isPending: isSavingQueue, mutate: handleSaveQueue } = useSaveQueue();
+    const { isPending: isSavingQueue, mutate: saveQueue } = useSaveQueue();
+
+    const handleSaveQueue = useCallback(() => {
+        // The success toast is emitted by the save mutation itself (suppressed
+        // for silent autosaves); an explicit save passes no `silent` flag, so
+        // it surfaces exactly once. Toasting here too would double it.
+        saveQueue(undefined);
+    }, [saveQueue]);
 
     const handleRestoreQueue = useRestoreQueue();
 
@@ -170,7 +177,7 @@ const QueueRestoreActions = () => {
                 icon="upload"
                 iconProps={{ size: 'lg' }}
                 loading={isSavingQueue}
-                onClick={() => handleSaveQueue(undefined)}
+                onClick={() => handleSaveQueue()}
                 tooltip={{
                     label: t('player.saveQueueToServer'),
                     openDelay: 400,

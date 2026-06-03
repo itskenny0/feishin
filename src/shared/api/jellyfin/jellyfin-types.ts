@@ -721,6 +721,14 @@ const removeFromPlaylistParameters = z.object({
 
 const deletePlaylist = z.null();
 
+const deletePlaylistImage = z.null();
+
+const deleteArtistImage = deletePlaylistImage;
+
+const uploadPlaylistImage = z.null();
+
+const uploadArtistImage = uploadPlaylistImage;
+
 const deletePlaylistParameters = z.object({
     Id: z.string(),
 });
@@ -940,7 +948,9 @@ export const jfType = {
         authenticate,
         capabilitiesFull: capabilitiesFullResponse,
         createPlaylist,
+        deleteArtistImage,
         deletePlaylist,
+        deletePlaylistImage,
         error,
         favorite,
         filters,
@@ -967,6 +977,8 @@ export const jfType = {
         studioList,
         topSongsList,
         updatePlaylist,
+        uploadArtistImage,
+        uploadPlaylistImage,
         user,
     },
 };

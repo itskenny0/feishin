@@ -32,6 +32,7 @@ export const useSyncSettingsToMain = () => {
             const settingsFromStore = useSettingsStore.getState();
 
             const settings = {
+                font: settingsFromStore.font,
                 general: settingsFromStore.general,
                 hotkeys: settingsFromStore.hotkeys,
                 lyrics: settingsFromStore.lyrics,
@@ -104,6 +105,10 @@ export const useSyncSettingsToMain = () => {
                 {
                     mainStoreKey: 'skipNeteasePlaceholders',
                     rendererValue: settings.lyrics.skipNeteasePlaceholders,
+                },
+                {
+                    mainStoreKey: 'local_font_path',
+                    rendererValue: settings.font.custom ?? undefined,
                 },
             ];
 

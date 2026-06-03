@@ -399,6 +399,7 @@ const normalizeAlbumArtist = (
         playCount: item.UserData?.PlayCount || 0,
         similarArtists,
         songCount: item.SongCount ?? null,
+        uploadedImage: item.ImageTags?.Primary ?? undefined,
         userFavorite: item.UserData?.IsFavorite || false,
         userRating: null,
     };
@@ -436,6 +437,7 @@ const normalizePlaylist = (
         size: null,
         songCount: item?.ChildCount || null,
         sync: null,
+        uploadedImage: item.ImageTags?.Primary ?? undefined,
     };
 };
 

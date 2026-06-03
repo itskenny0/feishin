@@ -141,6 +141,7 @@ export const utils = {
     rendererToggleSidebar,
     rendererUpdateAvailable,
     saveCustomCss,
+    separator: isWindows() ? '\\' : '/',
     setInputFocused,
     startPowerSaveBlocker,
     stopPowerSaveBlocker,
