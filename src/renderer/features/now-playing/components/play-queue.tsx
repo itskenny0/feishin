@@ -1,16 +1,16 @@
+// `TableGroupHeader` is a type-only import, so it does NOT pull the heavy
+// item-table-list engine back into the entry chunk (verified by tsc emitting no
+// runtime reference). The engine itself is code-split behind PlayQueueTable.
+import type { TableGroupHeader } from '/@/renderer/components/item-list/item-table-list/item-table-list';
+
 import clsx from 'clsx';
-import { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
+import { forwardRef, lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import styles from './play-queue.module.css';
 
 import { useItemListColumnReorder } from '/@/renderer/components/item-list/helpers/use-item-list-column-reorder';
 import { useItemListColumnResize } from '/@/renderer/components/item-list/helpers/use-item-list-column-resize';
-import {
-    ItemTableList,
-    TableGroupHeader,
-} from '/@/renderer/components/item-list/item-table-list/item-table-list';
-import { ItemTableListColumn } from '/@/renderer/components/item-list/item-table-list/item-table-list-column';
 import { ItemListHandle } from '/@/renderer/components/item-list/types';
 import { eventEmitter } from '/@/renderer/events/event-emitter';
 import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
@@ -34,12 +34,18 @@ import {
 } from '/@/renderer/store';
 import { Flex } from '/@/shared/components/flex/flex';
 import { LoadingOverlay } from '/@/shared/components/loading-overlay/loading-overlay';
+import { Skeleton } from '/@/shared/components/skeleton/skeleton';
 import { useDebouncedValue } from '/@/shared/hooks/use-debounced-value';
 import { useFocusWithin } from '/@/shared/hooks/use-focus-within';
 import { useMergedRef } from '/@/shared/hooks/use-merged-ref';
 import { Folder, LibraryItem, QueueSong, Song } from '/@/shared/types/domain-types';
 import { DragTarget } from '/@/shared/types/drag-and-drop';
 import { ItemListKey, Play } from '/@/shared/types/types';
+
+// Lazy seam: the heavy item-table-list engine (~186KB) is loaded on demand so
+// the always-mounted queue (sidebar/popover/playerbar) does not force it into
+// the renderer entry chunk.
+const PlayQueueTable = lazy(() => import('./play-queue-table'));
 
 type QueueProps = {
     enableScrollShadow?: boolean;
@@ -53,7 +59,17 @@ export const PlayQueue = forwardRef<ItemListHandle, QueueProps>(
 
         const isFetching = useIsPlayerFetching();
         const tableRef = useRef<ItemListHandle>(null);
-        const mergedRef = useMergedRef(ref, tableRef);
+        // One-shot flag flipped true once the lazy table chunk has mounted and
+        // populated tableRef. The first scroll-to-current can fire while the
+        // chunk is still loading (ref.current === null); this lets the effect
+        // below re-apply it after mount so "follow current song" works on first
+        // open after app boot.
+        const [tableReady, setTableReady] = useState(false);
+        const handleTableRef = (instance: ItemListHandle | null) => {
+            tableRef.current = instance;
+            setTableReady(instance !== null);
+        };
+        const mergedRef = useMergedRef(ref, handleTableRef);
         const { getVisibleQueue } = usePlayerActions();
         const followCurrentSong = useFollowCurrentSong();
         const queueInPlaybackOrder = useQueueInPlaybackOrder();
@@ -181,6 +197,33 @@ export const PlayQueue = forwardRef<ItemListHandle, QueueProps>(
             };
         }, [getVisibleQueue, tableRef, followCurrentSong, queueInPlaybackOrder, isRemote]);
 
+        // Re-apply scroll-to-current once the lazy table chunk has mounted.
+        // On first open after app boot the table ref is null while the chunk
+        // loads, so the initial scroll in the subscription effect is a no-op;
+        // this effect fires when tableReady flips true and self-heals it.
+        useEffect(() => {
+            if (!tableReady || !followCurrentSong || isRemote) {
+                return;
+            }
+            const state = usePlayerStore.getState();
+            const visible = state.getVisibleQueue();
+            let index = state.player.index;
+            if (queueInPlaybackOrder && isShuffleEnabled(state)) {
+                index = state.player.index;
+            } else if (isShuffleEnabled(state)) {
+                index = mapShuffledToQueueIndex(index, state.queue.shuffled);
+            }
+            if (index < 0 || index >= visible.items.length) {
+                return;
+            }
+            setTimeout(() => {
+                tableRef.current?.scrollToIndex(index, {
+                    align: 'center',
+                    behavior: 'auto',
+                });
+            }, 0);
+        }, [tableReady, followCurrentSong, isRemote, queueInPlaybackOrder]);
+
         const visibleData = isRemote ? remoteData : data;
 
         const filteredData: QueueSong[] = useMemo(() => {
@@ -241,34 +284,35 @@ export const PlayQueue = forwardRef<ItemListHandle, QueueProps>(
         return (
             <div className={styles.container} ref={containerFocusRef}>
                 <LoadingOverlay pos="absolute" visible={isFetching} />
-                <ItemTableList
-                    activeRowId={currentSongUniqueId}
-                    autoFitColumns={table.autoFitColumns}
-                    CellComponent={ItemTableListColumn}
-                    columns={table.columns}
-                    data={filteredData}
-                    enableAlternateRowColors={table.enableAlternateRowColors}
-                    enableDrag={!isRemote}
-                    enableExpansion={false}
-                    enableHeader={table.enableHeader}
-                    enableHorizontalBorders={table.enableHorizontalBorders}
-                    enableRowHoverHighlight={table.enableRowHoverHighlight}
-                    enableScrollShadow={enableScrollShadow}
-                    enableSelection
-                    enableSelectionDialog={false}
-                    enableVerticalBorders={table.enableVerticalBorders}
-                    getRowId="_uniqueId"
-                    groups={groups.length > 0 ? groups : undefined}
-                    initialTop={{
-                        to: 0,
-                        type: 'offset',
-                    }}
-                    itemType={LibraryItem.QUEUE_SONG}
-                    onColumnReordered={handleColumnReordered}
-                    onColumnResized={handleColumnResized}
-                    ref={mergedRef}
-                    size={table.size}
-                />
+                <Suspense fallback={<QueueTableSkeleton />}>
+                    <PlayQueueTable
+                        activeRowId={currentSongUniqueId}
+                        autoFitColumns={table.autoFitColumns}
+                        columns={table.columns}
+                        data={filteredData}
+                        enableAlternateRowColors={table.enableAlternateRowColors}
+                        enableDrag={!isRemote}
+                        enableExpansion={false}
+                        enableHeader={table.enableHeader}
+                        enableHorizontalBorders={table.enableHorizontalBorders}
+                        enableRowHoverHighlight={table.enableRowHoverHighlight}
+                        enableScrollShadow={enableScrollShadow}
+                        enableSelection
+                        enableSelectionDialog={false}
+                        enableVerticalBorders={table.enableVerticalBorders}
+                        getRowId="_uniqueId"
+                        groups={groups.length > 0 ? groups : undefined}
+                        initialTop={{
+                            to: 0,
+                            type: 'offset',
+                        }}
+                        itemType={LibraryItem.QUEUE_SONG}
+                        onColumnReordered={handleColumnReordered}
+                        onColumnResized={handleColumnResized}
+                        ref={mergedRef}
+                        size={table.size}
+                    />
+                </Suspense>
                 {isEmpty &&
                     !isFetching &&
                     (isSearchNoResults ? (
@@ -298,6 +342,19 @@ export const PlayQueue = forwardRef<ItemListHandle, QueueProps>(
         );
     },
 );
+
+// Dependency-light fallback while the lazy table chunk loads. Deliberately uses
+// plain Skeleton rows rather than ListTableSkeleton, which would re-pull
+// item-grid-list/motion back into the entry chunk and defeat the split.
+const QueueTableSkeleton = () => {
+    return (
+        <div className={styles.skeleton}>
+            {Array.from({ length: 12 }, (_, i) => (
+                <Skeleton borderRadius="var(--theme-radius-sm)" height={36} key={i} width="100%" />
+            ))}
+        </div>
+    );
+};
 
 const EmptyQueueDropZone = () => {
     const playerContext = usePlayer();
