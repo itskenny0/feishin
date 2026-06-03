@@ -667,13 +667,7 @@ export const Visualizer = () => {
 
     return (
         <div className={styles.container}>
-            <Group
-                className={styles.iconGroup}
-                gap="xs"
-                pos="absolute"
-                right="var(--theme-spacing-sm)"
-                top="var(--theme-spacing-sm)"
-            >
+            <Group className={`${styles.iconGroup} ${styles.iconGroupTop}`} gap="xs">
                 <ActionIcon
                     aria-label={t('player.toggleFullscreenPlayer')}
                     icon="expand"
@@ -691,13 +685,7 @@ export const Visualizer = () => {
                     variant="subtle"
                 />
             </Group>
-            <Group
-                className={styles.iconGroup}
-                gap="xs"
-                pos="absolute"
-                right="var(--theme-spacing-sm)"
-                style={{ bottom: 'var(--theme-spacing-sm)' }}
-            >
+            <Group className={`${styles.iconGroup} ${styles.iconGroupBottom}`} gap="xs">
                 <ActionIcon
                     aria-label={t('common.previous', { defaultValue: 'Previous' })}
                     icon="arrowLeftS"

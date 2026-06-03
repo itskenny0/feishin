@@ -9,7 +9,28 @@
 }
 
 .icon-group {
+    position: absolute;
     z-index: 100;
+}
+
+/*
+ * Top control cluster (fullscreen toggle + settings). Sits in the top-right
+ * but offset left of the fullscreen-visualizer overlay's close button
+ * (size lg = 3.125rem at right:1rem) so the two never overlap, and pushed
+ * below the device status-bar via the safe-area inset.
+ */
+.icon-group-top {
+    top: calc(
+        var(--theme-spacing-sm) + max(env(safe-area-inset-top, 0px), var(--android-safe-top, 0px))
+    );
+    right: calc(1rem + 3.125rem + var(--theme-spacing-sm));
+}
+
+.icon-group-bottom {
+    right: var(--theme-spacing-sm);
+    bottom: calc(
+        var(--theme-spacing-sm) + env(safe-area-inset-bottom, 0px)
+    );
 }
 
 .icon-group > * {

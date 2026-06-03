@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router';
 
-import { useAppTracker } from '/@/renderer/features/analytics/hooks/use-app-tracker';
 import { CommandPalette } from '/@/renderer/features/search/components/command-palette';
 import { useGarbageCollection } from '/@/renderer/hooks/use-garbage-collection';
 import { HotkeyItem, useHotkeys } from '/@/renderer/hooks/use-hotkeys';
@@ -34,8 +33,6 @@ const ResponsiveLayoutBase = ({ shell }: ResponsiveLayoutProps) => {
 };
 
 export const ResponsiveLayout = ({ shell }: ResponsiveLayoutProps) => {
-    useAppTracker();
-
     return (
         <>
             <ResponsiveLayoutBase shell={shell} />

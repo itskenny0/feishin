@@ -1,6 +1,16 @@
 import { t } from 'i18next';
 import { motion, Variants } from 'motion/react';
-import { lazy, memo, ReactNode, Suspense, useLayoutEffect, useRef } from 'react';
+import {
+    lazy,
+    memo,
+    ReactNode,
+    Suspense,
+    useCallback,
+    useEffect,
+    useLayoutEffect,
+    useRef,
+    useState,
+} from 'react';
 import { useLocation } from 'react-router';
 
 import styles from './full-screen-visualizer.module.css';
@@ -113,11 +123,12 @@ const containerVariants: Variants = {
 interface VisualizerContainerProps {
     children: ReactNode;
     isMobile?: boolean;
+    onActivity: () => void;
     windowBarStyle: Platform;
 }
 
 const VisualizerContainer = memo(
-    ({ children, isMobile, windowBarStyle }: VisualizerContainerProps) => {
+    ({ children, isMobile, onActivity, windowBarStyle }: VisualizerContainerProps) => {
         return (
             <motion.div
                 animate="open"
@@ -125,6 +136,9 @@ const VisualizerContainer = memo(
                 custom={{ isMobile, windowBarStyle }}
                 exit="closed"
                 initial="closed"
+                onMouseMove={onActivity}
+                onPointerDown={onActivity}
+                onTouchStart={onActivity}
                 transition={{ duration: 2 }}
                 variants={containerVariants}
             >
@@ -149,6 +163,34 @@ export const FullScreenVisualizer = () => {
     const location = useLocation();
     const isOpenedRef = useRef<boolean | null>(null);
 
+    // Idle auto-hide for the top controls (close + lyrics toggle). The
+    // visualizer is a lean-back, full-bleed view; persistent buttons clutter
+    // it. Fade them out after a few idle seconds and reveal on any pointer /
+    // touch / key activity. The timer is cleared on unmount so it can't fire
+    // against a torn-down component.
+    const [controlsVisible, setControlsVisible] = useState(true);
+    const idleTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+    const revealControls = useCallback(() => {
+        setControlsVisible(true);
+        if (idleTimerRef.current) {
+            clearTimeout(idleTimerRef.current);
+        }
+        idleTimerRef.current = setTimeout(() => {
+            setControlsVisible(false);
+        }, 3500);
+    }, []);
+
+    useEffect(() => {
+        // Kick off the initial idle countdown on mount.
+        revealControls();
+        return () => {
+            if (idleTimerRef.current) {
+                clearTimeout(idleTimerRef.current);
+            }
+        };
+    }, [revealControls]);
+
     const handleCloseVisualizer = () => {
         setStore({ visualizerExpanded: false });
     };
@@ -164,17 +206,24 @@ export const FullScreenVisualizer = () => {
     }, [location, setStore]);
 
     return (
-        <VisualizerContainer isMobile={isMobile} windowBarStyle={windowBarStyle}>
+        <VisualizerContainer
+            isMobile={isMobile}
+            onActivity={revealControls}
+            windowBarStyle={windowBarStyle}
+        >
             {/*
              * Floating close button. Without this the visualizer overlay
              * had no visible dismiss affordance on mobile (only Escape
              * worked, which requires a keyboard). Positioned via CSS in
              * the top-right with safe-area-top respected so it doesn't
-             * sit under the Android status-bar clock.
+             * sit under the Android status-bar clock. Auto-hides with the
+             * other top controls when idle.
              */}
             <ActionIcon
                 aria-label={t('common.close', { defaultValue: 'Close' })}
-                className={styles.closeButton}
+                className={`${styles.closeButton} ${styles.topControl} ${
+                    controlsVisible ? '' : styles.topControlHidden
+                }`}
                 icon="x"
                 iconProps={{ size: 'xl' }}
                 onClick={handleCloseVisualizer}
@@ -193,7 +242,9 @@ export const FullScreenVisualizer = () => {
                     defaultValue: 'Show lyrics over visualizer',
                 })}
                 aria-pressed={visualizerLyricsOverlay !== false}
-                className={styles.lyricsToggleButton}
+                className={`${styles.lyricsToggleButton} ${styles.topControl} ${
+                    controlsVisible ? '' : styles.topControlHidden
+                }`}
                 icon="microphone"
                 iconProps={{
                     fill: visualizerLyricsOverlay !== false ? 'primary' : undefined,

@@ -54,6 +54,26 @@
     backdrop-filter: blur(8px);
 }
 
+/*
+ * Idle auto-hide for the top controls. They fade out after a few seconds of
+ * no interaction and reveal on any pointer / touch / key activity (handled in
+ * the component). While hidden they drop pointer-events so a tap lands on the
+ * container's reveal handler rather than (e.g.) accidentally closing the
+ * visualizer — the first tap brings the controls back, the second acts on
+ * them.
+ */
+.top-control {
+    transition:
+        opacity 0.3s ease-in-out,
+        visibility 0.3s ease-in-out;
+}
+
+.top-control-hidden {
+    visibility: hidden;
+    pointer-events: none;
+    opacity: 0;
+}
+
 .visualizer-container {
     position: relative;
     flex: 1;
@@ -135,9 +155,20 @@
     color: #fff;
 }
 
+/*
+ * The active line previously used --theme-colors-primary (a blue), which
+ * sat poorly against the multi-hued visualizer canvas and was hard to read.
+ * Use solid white for maximum legibility over any visualizer colour, and a
+ * heavy multi-layer shadow (dark halo + soft glow) so the line stays crisp
+ * whether the canvas behind it is light or dark.
+ */
 .lyrics-overlay :global(.active) {
-    color: var(--theme-colors-primary);
-    text-shadow: 0 2px 12px rgb(0 0 0 / 60%);
+    color: #fff;
+    text-shadow:
+        0 0 1px rgb(0 0 0 / 90%),
+        0 2px 10px rgb(0 0 0 / 80%),
+        0 0 22px rgb(0 0 0 / 60%);
+    opacity: 1;
 }
 
 /*
@@ -147,7 +178,10 @@
  * visualizer's motion. Active line keeps full opacity via .active.
  */
 .lyrics-overlay :global([id^='lyric-']) {
-    text-shadow: 0 1px 6px rgb(0 0 0 / 70%);
+    color: #fff;
+    text-shadow:
+        0 0 1px rgb(0 0 0 / 80%),
+        0 1px 6px rgb(0 0 0 / 75%);
 
-    --lyric-opacity: 0.7;
+    --lyric-opacity: 0.75;
 }

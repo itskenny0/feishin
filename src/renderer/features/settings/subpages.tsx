@@ -35,7 +35,6 @@ import {
     RiRemoteControlLine,
     RiServerLine,
     RiSettings4Line,
-    RiShareForwardLine,
     RiSlideshowLine,
     RiTerminalBoxLine,
     RiThumbUpLine,
@@ -222,10 +221,6 @@ const JellyfinServerActionsSubpage = lazyDefault(
     () => import('/@/renderer/features/settings/components/advanced/jellyfin-server-actions'),
     'JellyfinServerActions',
 );
-const AnalyticsSubpage = lazyDefault(
-    () => import('/@/renderer/features/settings/components/advanced/analytics-settings'),
-    'AnalyticsSettings',
-);
 const MobileOverridesSubpage = lazyDefault(
     () => import('/@/renderer/features/settings/components/advanced/mobile-overrides-settings'),
     'MobileOverridesSettings',
@@ -292,16 +287,6 @@ export const SETTINGS_SUBPAGES: Record<string, SubpageDef[]> = {
             Icon: RiPaletteLine,
             id: 'custom-css',
             label: (t) => t('page.setting.customCss', { defaultValue: 'Custom CSS' }),
-        },
-        {
-            Component: AnalyticsSubpage,
-            description: (t) =>
-                t('page.setting.analyticsDescription', {
-                    defaultValue: 'Opt-in anonymous usage telemetry.',
-                }),
-            Icon: RiShareForwardLine,
-            id: 'analytics',
-            label: (t) => t('page.setting.analytics', { defaultValue: 'Analytics' }),
         },
         {
             Component: MobileOverridesSubpage,

@@ -9,7 +9,7 @@ import type {
 import { onlineManager, QueryCache, QueryClient } from '@tanstack/react-query';
 import i18n from 'i18next';
 
-import { CONNECTIVITY_EVENT, getIsOnline } from '/@/renderer/lib/network-status';
+import { getNavigatorOnline } from '/@/renderer/lib/network-status';
 import { toast } from '/@/shared/components/toast/toast';
 
 type ErrorCategory = 'auth' | 'network' | 'server' | 'unknown';
@@ -152,24 +152,38 @@ const queryConfig: DefaultOptions = {
     },
 };
 
-// Drive TanStack's pause/resume from our combined connectivity signal
-// (navigator.onLine AND server-reachability) rather than navigator.onLine
-// alone, which lies on Electron/WebView when the server is unreachable. When
-// this flips back to online, queries with refetchOnReconnect auto-refetch and
-// paused mutations resume.
+// Drive TanStack's pause/resume from the OS link (`navigator.onLine`) ALONE —
+// NOT from our combined `getIsOnline()` (which also factors in
+// `serverReachable`).
+//
+// `serverReachable` flips false on a single transport error (a 30s timeout or
+// ERR_NETWORK) and can only flip back true from a *successful response*. If it
+// gated `onlineManager`, that one blip would pause every query — and a paused
+// query never issues a request, so no response can ever arrive to clear the
+// flag. The result is a permanent deadlock: search and all other queries stop
+// firing requests after a single network hiccup and never self-recover (the
+// reported "it doesn't even appear to be searching"). The OS `online` event
+// wouldn't rescue it either, since the OS link never actually dropped.
+//
+// `navigator.onLine` + the window `online`/`offline` events are self-recovering
+// (the browser fires `online` when the link returns), so pausing on them is
+// safe. Transient server-unreachability is still surfaced to the UX layer via
+// the combined `useIsOnline()` signal (NO_NETWORK route, offline indicators)
+// and is handled by per-request retries with backoff — those retries succeed
+// once the server is back and call `markServerReachable()`, which auto-recovers
+// the UX. The durable mutation worker has its own reconnect short-circuit
+// (see `cache/mutations.ts`).
 onlineManager.setEventListener((setOnline) => {
-    const handler = () => setOnline(getIsOnline());
+    const handler = () => setOnline(getNavigatorOnline());
     if (typeof window === 'undefined') {
         setOnline(true);
         return () => {};
     }
-    window.addEventListener(CONNECTIVITY_EVENT, handler);
     window.addEventListener('online', handler);
     window.addEventListener('offline', handler);
     // Seed the manager with the current snapshot.
-    setOnline(getIsOnline());
+    setOnline(getNavigatorOnline());
     return () => {
-        window.removeEventListener(CONNECTIVITY_EVENT, handler);
         window.removeEventListener('online', handler);
         window.removeEventListener('offline', handler);
     };

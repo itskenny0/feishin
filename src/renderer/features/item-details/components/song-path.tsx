@@ -4,10 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { CopyButton } from '/@/shared/components/copy-button/copy-button';
 import { Group } from '/@/shared/components/group/group';
-import { Icon } from '/@/shared/components/icon/icon';
 import { Text } from '/@/shared/components/text/text';
 import { toast } from '/@/shared/components/toast/toast';
-import { Tooltip } from '/@/shared/components/tooltip/tooltip';
 
 const util = isElectron() ? window.api.utils : null;
 
@@ -24,34 +22,33 @@ export const SongPath = ({ path }: SongPathProps) => {
         <Group gap="xs">
             <CopyButton timeout={2000} value={path}>
                 {({ copied, copy }) => (
-                    <Tooltip
-                        label={t(
-                            copied ? 'page.itemDetail.copiedPath' : 'page.itemDetail.copyPath',
-                            {},
-                        )}
-                        withinPortal
-                    >
-                        <ActionIcon onClick={copy} variant="transparent">
-                            {copied ? <Icon icon="check" /> : <Icon icon="clipboardCopy" />}
-                        </ActionIcon>
-                    </Tooltip>
-                )}
-            </CopyButton>
-            {util && (
-                <Tooltip label={t('page.itemDetail.openFile')} withinPortal>
                     <ActionIcon
-                        icon="externalLink"
-                        onClick={() => {
-                            util.openItem(path).catch((error) => {
-                                toast.error({
-                                    message: (error as Error).message,
-                                    title: t('error.openError'),
-                                });
-                            });
+                        icon={copied ? 'check' : 'clipboardCopy'}
+                        onClick={copy}
+                        tooltip={{
+                            label: t(
+                                copied ? 'page.itemDetail.copiedPath' : 'page.itemDetail.copyPath',
+                                {},
+                            ),
                         }}
                         variant="transparent"
                     />
-                </Tooltip>
+                )}
+            </CopyButton>
+            {util && (
+                <ActionIcon
+                    icon="externalLink"
+                    onClick={() => {
+                        util.openItem(path).catch((error) => {
+                            toast.error({
+                                message: (error as Error).message,
+                                title: t('error.openError'),
+                            });
+                        });
+                    }}
+                    tooltip={{ label: t('page.itemDetail.openFile') }}
+                    variant="transparent"
+                />
             )}
             <Text
                 style={{

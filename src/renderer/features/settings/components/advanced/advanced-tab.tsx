@@ -1,7 +1,6 @@
 import { memo } from 'react';
 import { Fragment } from 'react/jsx-runtime';
 
-import { AnalyticsSettings } from '/@/renderer/features/settings/components/advanced/analytics-settings';
 import { ExportImportSettings } from '/@/renderer/features/settings/components/advanced/export-import-settings';
 import { JellyfinServerActions } from '/@/renderer/features/settings/components/advanced/jellyfin-server-actions';
 import { LoggerSettings } from '/@/renderer/features/settings/components/advanced/logger-settings';
@@ -16,7 +15,6 @@ const sections = [
     { component: UpdateSettings, key: 'update' },
     { component: ServerInfoWidget, key: 'server-info' },
     { component: JellyfinServerActions, key: 'jellyfin-server-actions' },
-    { component: AnalyticsSettings, key: 'analytics' },
     { component: MobileOverridesSettings, key: 'mobile-overrides' },
     { component: ExportImportSettings, key: 'export-import' },
     { component: LoggerSettings, key: 'logger' },

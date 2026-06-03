@@ -6,6 +6,12 @@
     letter-spacing: -0.01em;
     word-break: normal;
     overflow-wrap: break-word;
+
+    /* Legibility halo so lyrics stay readable over busy backgrounds
+       (e.g. the visualizer canvas), independent of the theme's text color. */
+    text-shadow:
+        0 1px 4px rgb(0 0 0 / 55%),
+        0 0 2px rgb(0 0 0 / 45%);
     opacity: var(--lyric-opacity);
     transform: scale(var(--lyric-scale));
     transform-origin: var(--lyric-scale-origin) center;

@@ -20,13 +20,21 @@ const CONNECTIVITY_EVENT = 'feishin:connectivity-change';
 
 const hasWindow = typeof window !== 'undefined';
 
-const navigatorOnline = (): boolean => {
+/**
+ * OS-level link status from `navigator.onLine`. This is the ONLY input that
+ * drives TanStack's `onlineManager` (query pause/resume) — see the rationale on
+ * `getIsOnline` below. Assumes online when the platform doesn't expose the flag
+ * (SSR/tests).
+ */
+export const getNavigatorOnline = (): boolean => {
     if (typeof navigator === 'undefined' || typeof navigator.onLine !== 'boolean') {
-        // Assume online when the platform doesn't expose the flag (SSR/tests).
         return true;
     }
     return navigator.onLine;
 };
+
+// Internal alias kept so the rest of this module reads naturally.
+const navigatorOnline = getNavigatorOnline;
 
 // Tracks the server-reachability override. Starts optimistic — we only learn a
 // server is unreachable once a real request fails, and we don't want to gate
@@ -64,8 +72,19 @@ if (hasWindow) {
 }
 
 /**
- * Current combined connectivity snapshot. Cheap; safe to call frequently
- * (used by `useSyncExternalStore` and by `onlineManager`).
+ * Current combined connectivity snapshot (`navigator.onLine` AND
+ * `serverReachable`). Cheap; safe to call frequently.
+ *
+ * IMPORTANT: this combined signal drives UX only (the NO_NETWORK route, the
+ * `useIsOnline` hook, offline indicators) — it must NOT drive TanStack's
+ * `onlineManager`. `serverReachable` flips false on a single transport error
+ * (timeout / ERR_NETWORK) and can only recover via a *successful response*. If
+ * the combined signal paused queries, that pause would itself prevent any
+ * request from ever succeeding, so `serverReachable` could never flip back —
+ * a permanent deadlock where "search (and everything) stops firing requests"
+ * after one network blip. `onlineManager` is therefore wired to
+ * `getNavigatorOnline()` (the self-recovering OS link) instead; see
+ * `lib/react-query.ts`.
  */
 export const getIsOnline = (): boolean => computeOnline();
 
