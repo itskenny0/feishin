@@ -170,7 +170,7 @@ const DummyAlbumDetailRoute = () => {
                                     WebkitLineClamp: 2,
                                 }}
                             >
-                                {detailQuery?.data?.albumArtists.map((artist) => (
+                                {detailQuery?.data?.albumArtists?.map((artist) => (
                                     <Text
                                         component={Link}
                                         fw={600}

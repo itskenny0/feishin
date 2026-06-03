@@ -2691,8 +2691,8 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     state.lists[LibraryItem.PLAYLIST_SONG]?.table.columns.push(...columns);
                     state.lists[LibraryItem.QUEUE_SONG]?.table.columns.push(...columns);
                     state.lists['albumDetail']?.table.columns.push(...columns);
-                    state.lists['fullscreen']?.table.columns.push(...columns);
-                    state.lists['sidequeue']?.table.columns.push(...columns);
+                    state.lists['fullScreen']?.table.columns.push(...columns);
+                    state.lists['sideQueue']?.table.columns.push(...columns);
                 }
 
                 if (version <= 15) {
@@ -2870,7 +2870,7 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                         (item) => item.id === ArtistItem.FAVORITE_SONGS,
                     );
 
-                    if (!hasFavoriteSongs) {
+                    if (!hasFavoriteSongs && state.general.artistItems) {
                         state.general.artistItems.push({
                             disabled: false,
                             id: ArtistItem.FAVORITE_SONGS,

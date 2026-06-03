@@ -65,11 +65,17 @@ export const useCacheLifecycle = (): void => {
         }
         let cancelled = false;
         console.info('[cache] lifecycle: probing IndexedDB');
-        isCacheAvailable().then((available) => {
-            if (cancelled) return;
-            console.info('[cache] lifecycle: capability', { available });
-            actions.setCacheAvailable(available);
-        });
+        isCacheAvailable()
+            .then((available) => {
+                if (cancelled) return;
+                console.info('[cache] lifecycle: capability', { available });
+                actions.setCacheAvailable(available);
+            })
+            .catch((err) => {
+                if (cancelled) return;
+                console.warn('[cache] lifecycle: capability probe failed', err);
+                actions.setCacheAvailable(false);
+            });
         return () => {
             cancelled = true;
         };
@@ -160,7 +166,9 @@ export const useCacheLifecycle = (): void => {
                 // cold start.
                 void startWorker();
                 // Seed the dashboard's bytes-used readout once on activation.
-                void estimateBytes().then((n) => actions.setBytesUsed(n));
+                void estimateBytes()
+                    .then((n) => actions.setBytesUsed(n))
+                    .catch((err) => console.warn('[cache] estimateBytes failed', err));
                 // Run an eviction pass on activation in case quotas changed
                 // between sessions (best-effort, no-op when under cap).
                 void evict();

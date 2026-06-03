@@ -89,7 +89,7 @@ const BaseAlbumInfiniteCarousel = (props: AlbumCarouselProps & { rows: DataRow[]
     }, [refetch]);
 
     const firstPageItems = excludeIds
-        ? albums?.pages[0]?.items.filter((album) => !excludeIds.includes(album.id)) || []
+        ? albums?.pages[0]?.items?.filter((album) => !excludeIds.includes(album.id)) || []
         : albums?.pages[0]?.items || [];
 
     if (firstPageItems.length === 0) {

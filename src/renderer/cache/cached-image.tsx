@@ -34,14 +34,20 @@ export const CachedImage = ({
         let cancelled = false;
         let createdBlobUrl: string | undefined;
 
-        resolveThumbnail(itemId, size, src).then((url) => {
-            if (cancelled) {
-                if (url.startsWith('blob:')) URL.revokeObjectURL(url);
-                return;
-            }
-            if (url.startsWith('blob:')) createdBlobUrl = url;
-            setResolved(url);
-        });
+        resolveThumbnail(itemId, size, src)
+            .then((url) => {
+                if (cancelled) {
+                    if (url.startsWith('blob:')) URL.revokeObjectURL(url);
+                    return;
+                }
+                if (url.startsWith('blob:')) createdBlobUrl = url;
+                setResolved(url);
+            })
+            .catch((err) => {
+                if (cancelled) return;
+                console.warn('[cache] thumbnail resolve failed', err);
+                setResolved(src);
+            });
 
         return () => {
             cancelled = true;

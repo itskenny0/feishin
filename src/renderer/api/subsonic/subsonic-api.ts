@@ -436,7 +436,15 @@ const parsePath = (fullPath: string) => {
 };
 
 const silentlyTransformResponse = (data: any) => {
-    const jsonBody = JSON.parse(data);
+    let jsonBody;
+    try {
+        jsonBody = JSON.parse(data);
+    } catch {
+        // Malformed/non-JSON body (e.g. an HTML error page from a proxy).
+        // The whole point of the silent path is to swallow failures for a
+        // fallback, so return the raw payload instead of throwing.
+        return data;
+    }
     const status = jsonBody ? jsonBody['subsonic-response']?.status : undefined;
 
     if (status && status !== 'ok') {

@@ -365,15 +365,15 @@ export const getSongById = async (args: {
 const getSongFieldValue = (song: Song, field: string): boolean | null | number | string => {
     switch (field) {
         case 'albumArtist':
-            return song.albumArtists[0]?.name || '';
+            return song.albumArtists?.[0]?.name || '';
         case 'artist':
-            return song.artistName || song.artists[0]?.name || '';
+            return song.artistName || song.artists?.[0]?.name || '';
         case 'duration':
             return song.duration;
         case 'favorite':
             return song.userFavorite;
         case 'genre':
-            return song.genres[0]?.name || '';
+            return song.genres?.[0]?.name || '';
         case 'name':
             return song.name;
         case 'note':

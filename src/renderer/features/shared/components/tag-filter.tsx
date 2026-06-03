@@ -90,9 +90,9 @@ export const TagFilters = ({ query, setCustom, type }: TagFiltersProps) => {
             [];
 
         const excluded =
-            type === LibraryItem.ALBUM
-                ? tagsQuery.data?.excluded.album
-                : tagsQuery.data?.excluded.song;
+            (type === LibraryItem.ALBUM
+                ? tagsQuery.data?.excluded?.album
+                : tagsQuery.data?.excluded?.song) ?? [];
 
         for (const tag of tagsQuery.data?.tags || []) {
             if (!excluded.includes(tag.name)) {
@@ -105,7 +105,12 @@ export const TagFilters = ({ query, setCustom, type }: TagFiltersProps) => {
         }
 
         return results;
-    }, [tagsQuery.data?.tags, tagsQuery.data?.excluded.album, tagsQuery.data?.excluded.song, type]);
+    }, [
+        tagsQuery.data?.tags,
+        tagsQuery.data?.excluded?.album,
+        tagsQuery.data?.excluded?.song,
+        type,
+    ]);
 
     return (
         <>

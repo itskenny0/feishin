@@ -236,20 +236,26 @@ export const useDiscordRpc = () => {
                     discordSettings.linkType == DiscordLinkType.MBZ_LAST_FM) &&
                 song?.artistName
             ) {
-                activity.stateUrl =
-                    'https://www.last.fm/music/' + encodeURIComponent(song.artists[0].name);
+                const stateArtistName = song.artists?.[0]?.name;
+                if (stateArtistName) {
+                    activity.stateUrl =
+                        'https://www.last.fm/music/' + encodeURIComponent(stateArtistName);
+                }
 
-                const detailsUrl =
-                    'https://www.last.fm/music/' +
-                    encodeURIComponent(song.albumArtists[0].name) +
-                    '/' +
-                    encodeURIComponent(song.album || '_') +
-                    '/' +
-                    encodeURIComponent(song.name);
+                const detailsArtistName = song.albumArtists?.[0]?.name;
+                if (detailsArtistName) {
+                    const detailsUrl =
+                        'https://www.last.fm/music/' +
+                        encodeURIComponent(detailsArtistName) +
+                        '/' +
+                        encodeURIComponent(song.album || '_') +
+                        '/' +
+                        encodeURIComponent(song.name);
 
-                // The details URL has a max length, only set it if it doesn't exceed it
-                if (detailsUrl.length <= MAX_URL_LENGTH) {
-                    activity.detailsUrl = detailsUrl;
+                    // The details URL has a max length, only set it if it doesn't exceed it
+                    if (detailsUrl.length <= MAX_URL_LENGTH) {
+                        activity.detailsUrl = detailsUrl;
+                    }
                 }
             }
 

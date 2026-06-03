@@ -154,6 +154,34 @@ describe('filterSongsByPlayerFilters', () => {
         ).toEqual(songs);
     });
 
+    it('does not throw when albumArtists / artists / genres arrays are undefined', () => {
+        // Malformed cache/API payloads can omit these arrays entirely even
+        // though the Song type declares them as arrays. getSongFieldValue must
+        // tolerate undefined and resolve to '' rather than crashing on [0].
+        const malformed = song({
+            albumArtists: undefined as unknown as Song['albumArtists'],
+            artistName: undefined as unknown as Song['artistName'],
+            artists: undefined as unknown as Song['artists'],
+            genres: undefined as unknown as Song['genres'],
+            name: 'Keep',
+        });
+        for (const field of ['albumArtist', 'artist', 'genre'] as const) {
+            expect(() =>
+                filterSongsByPlayerFilters(
+                    [malformed],
+                    [filter({ field, operator: 'contains', value: 'x' })],
+                ),
+            ).not.toThrow();
+        }
+        // With empty resolved values nothing matches 'x', so the song is kept.
+        expect(
+            filterSongsByPlayerFilters(
+                [malformed],
+                [filter({ field: 'albumArtist', operator: 'contains', value: 'x' })],
+            ).map((s) => s.name),
+        ).toEqual(['Keep']);
+    });
+
     it('excludes a song that matches ANY of several filters', () => {
         const songs = [song({ name: 'A' }), song({ name: 'B' }), song({ name: 'C' })];
         const result = filterSongsByPlayerFilters(songs, [

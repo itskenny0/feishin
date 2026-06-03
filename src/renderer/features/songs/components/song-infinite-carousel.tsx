@@ -116,7 +116,7 @@ const BaseSongInfiniteCarousel = (props: SongCarouselProps & { rows: DataRow[] }
     }, [refetch]);
 
     const firstPageItems = excludeIds
-        ? songs?.pages[0]?.items.filter((song) => !excludeIds.includes(song.id)) || []
+        ? songs?.pages[0]?.items?.filter((song) => !excludeIds.includes(song.id)) || []
         : songs?.pages[0]?.items || [];
 
     if (firstPageItems.length === 0) {

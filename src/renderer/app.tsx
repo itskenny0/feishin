@@ -337,9 +337,11 @@ const LanguageEffect = () => {
         if (language) {
             // Lazily fetch the locale chunk (no-op for English / already
             // loaded) before switching so the bundle is registered first.
-            loadLanguage(language).then(() => {
-                i18n.changeLanguage(language);
-            });
+            loadLanguage(language)
+                .then(() => {
+                    i18n.changeLanguage(language);
+                })
+                .catch((err) => console.error('[i18n] failed to switch language', err));
         }
     }, [language]);
 

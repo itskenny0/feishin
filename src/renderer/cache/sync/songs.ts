@@ -33,7 +33,7 @@ const fetchSongsPage =
         const now = Date.now();
         const items: CachedSong[] = (result?.items ?? []).map((song) => ({
             __cachedAt: now,
-            AlbumArtistId: song.albumArtists[0]?.id,
+            AlbumArtistId: song.albumArtists?.[0]?.id,
             AlbumId: song.albumId,
             DateLastSaved: song.updatedAt,
             Id: song.id,
