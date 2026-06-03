@@ -17,6 +17,7 @@ import styles from './full-screen-visualizer.module.css';
 
 import { Lyrics } from '/@/renderer/features/lyrics/lyrics';
 import { FullScreenVisualizerSongInfo } from '/@/renderer/features/player/components/full-screen-visualizer-song-info';
+import { openVisualizerSettingsModal } from '/@/renderer/features/player/utils/open-visualizer-settings-modal';
 import { useHotkeys } from '/@/renderer/hooks/use-hotkeys';
 import { useIsMobile } from '/@/renderer/hooks/use-is-mobile';
 import {
@@ -231,6 +232,25 @@ export const FullScreenVisualizer = () => {
                 variant="default"
             />
             {/*
+             * Configure-visualizer button. The visualizer components' own
+             * built-in settings/expand cluster is suppressed in this overlay
+             * (hideTopControls) because it sat behind / collided with the
+             * close button. Surface a single settings affordance here in the
+             * overlay's own control layer, slotted immediately left of the
+             * close button so the two never overlap.
+             */}
+            <ActionIcon
+                aria-label={t('common.settings')}
+                className={`${styles.configButton} ${styles.topControl} ${
+                    controlsVisible ? '' : styles.topControlHidden
+                }`}
+                icon="settings2"
+                iconProps={{ size: 'xl' }}
+                onClick={openVisualizerSettingsModal}
+                size="lg"
+                variant="default"
+            />
+            {/*
              * In-line lyrics toggle. The "show lyrics over visualizer"
              * setting was previously buried in the fullscreen-player
              * config popover; surfacing it inside the visualizer itself
@@ -260,9 +280,9 @@ export const FullScreenVisualizer = () => {
                 {webAudio ? (
                     <Suspense fallback={<></>}>
                         {visualizerType === 'butterchurn' ? (
-                            <ButterchurnVisualizer />
+                            <ButterchurnVisualizer hideTopControls />
                         ) : (
-                            <AudioMotionAnalyzerVisualizer />
+                            <AudioMotionAnalyzerVisualizer hideTopControls />
                         )}
                     </Suspense>
                 ) : null}

@@ -40,6 +40,21 @@
 }
 
 /*
+ * Configure-visualizer button. Slotted immediately to the left of the
+ * close button (close is size lg = 3.125rem wide at right:1rem) with a
+ * 0.5rem gap, so the two never overlap. Same safe-area top inset and
+ * frosted backing as the close button.
+ */
+.config-button {
+    position: absolute;
+    top: calc(1rem + max(env(safe-area-inset-top, 0px), var(--android-safe-top, 0px)));
+    right: calc(1rem + 3.125rem + 0.5rem);
+    z-index: 220;
+    background: rgb(0 0 0 / 50%);
+    backdrop-filter: blur(8px);
+}
+
+/*
  * Lyrics-overlay toggle, mirrors the close-button positioning but on
  * the left so the two affordances bookend the top of the visualizer.
  * `aria-pressed` styling lives in :global(.is-pressed) elsewhere — the
@@ -183,5 +198,12 @@
         0 0 1px rgb(0 0 0 / 80%),
         0 1px 6px rgb(0 0 0 / 75%);
 
-    --lyric-opacity: 0.75;
+    /*
+     * Dim the inactive lines well below the active line (which is full
+     * opacity via .active) so the current line clearly stands out. The
+     * heavy text-shadow keeps them legible over the visualizer even at
+     * this lower opacity. (Was 0.75, which sat too close to the active
+     * line and made the two hard to tell apart.)
+     */
+    --lyric-opacity: 0.55;
 }

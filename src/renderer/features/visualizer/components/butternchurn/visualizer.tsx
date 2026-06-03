@@ -562,7 +562,16 @@ const CurrentPresetDisplay = () => {
     );
 };
 
-export const Visualizer = () => {
+export interface VisualizerProps {
+    // When rendered inside the dedicated full-screen visualizer overlay, the
+    // overlay supplies its own close / configure controls. Hiding this
+    // component's built-in top icon-group avoids a second, redundant control
+    // cluster colliding with the overlay's close button. The bottom group
+    // (preset cycling) stays — it never overlaps the overlay controls.
+    hideTopControls?: boolean;
+}
+
+export const Visualizer = ({ hideTopControls }: VisualizerProps = {}) => {
     const { t } = useTranslation();
     const { visualizerExpanded } = useFullScreenPlayerStore();
     const { setStore } = useFullScreenPlayerStoreActions();
@@ -667,24 +676,26 @@ export const Visualizer = () => {
 
     return (
         <div className={styles.container}>
-            <Group className={`${styles.iconGroup} ${styles.iconGroupTop}`} gap="xs">
-                <ActionIcon
-                    aria-label={t('player.toggleFullscreenPlayer')}
-                    icon="expand"
-                    iconProps={{ size: 'lg' }}
-                    onClick={handleToggleFullscreen}
-                    tooltip={{ label: t('player.toggleFullscreenPlayer'), openDelay: 400 }}
-                    variant="subtle"
-                />
-                <ActionIcon
-                    aria-label={t('common.settings')}
-                    icon="settings2"
-                    iconProps={{ size: 'lg' }}
-                    onClick={openVisualizerSettingsModal}
-                    tooltip={{ label: t('common.settings'), openDelay: 400 }}
-                    variant="subtle"
-                />
-            </Group>
+            {!hideTopControls && (
+                <Group className={`${styles.iconGroup} ${styles.iconGroupTop}`} gap="xs">
+                    <ActionIcon
+                        aria-label={t('player.toggleFullscreenPlayer')}
+                        icon="expand"
+                        iconProps={{ size: 'lg' }}
+                        onClick={handleToggleFullscreen}
+                        tooltip={{ label: t('player.toggleFullscreenPlayer'), openDelay: 400 }}
+                        variant="subtle"
+                    />
+                    <ActionIcon
+                        aria-label={t('common.settings')}
+                        icon="settings2"
+                        iconProps={{ size: 'lg' }}
+                        onClick={openVisualizerSettingsModal}
+                        tooltip={{ label: t('common.settings'), openDelay: 400 }}
+                        variant="subtle"
+                    />
+                </Group>
+            )}
             <Group className={`${styles.iconGroup} ${styles.iconGroupBottom}`} gap="xs">
                 <ActionIcon
                     aria-label={t('common.previous', { defaultValue: 'Previous' })}

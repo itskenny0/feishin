@@ -42,6 +42,15 @@ const USER_SCROLL_COOLDOWN_MS = 3000;
 // the first line, or before any lyric data has been loaded).
 const NO_ACTIVE_INDEX = -1;
 
+// When a fresh player timestamp re-anchors the active line *backward* by this
+// little (in lyric-ms), treat it as clock jitter rather than a seek. The
+// advance timer moves the highlight forward exactly at a line boundary; the
+// next player tick can report a time a few hundred ms behind that boundary
+// (coarse progress granularity / report lag) and would otherwise snap the
+// highlight back one line, making it flicker back and forth. A backward move
+// larger than this is honored as a genuine seek.
+const SEEK_BACK_TOLERANCE_MS = 1500;
+
 export const SynchronizedLyrics = ({
     artist,
     lyrics,
@@ -348,8 +357,20 @@ export const SynchronizedLyrics = ({
                 armNext(0);
             }
         } else {
-            setActiveIndex(initialIndex);
-            armNext(initialIndex);
+            // Guard against timestamp jitter snapping the highlight backward by
+            // a line right after the advance timer moved it forward. Only honor
+            // a backward re-anchor when it's far enough behind to be a real
+            // seek; otherwise keep the forward position and re-arm from there.
+            const current = activeIndexRef.current;
+            let effectiveIndex = initialIndex;
+            if (current !== NO_ACTIVE_INDEX && initialIndex < current) {
+                const currentLineStart = sortedLyrics[current]?.[0] ?? 0;
+                if (currentLineStart - lyricStart <= SEEK_BACK_TOLERANCE_MS) {
+                    effectiveIndex = current;
+                }
+            }
+            setActiveIndex(effectiveIndex);
+            armNext(effectiveIndex);
         }
 
         return () => {
