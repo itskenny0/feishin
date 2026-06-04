@@ -27,6 +27,7 @@ import { ListSortOrderToggleButton } from '/@/renderer/features/shared/component
 import { MoreButton } from '/@/renderer/features/shared/components/more-button';
 import { FILTER_KEYS } from '/@/renderer/features/shared/utils';
 import { useContainerQuery } from '/@/renderer/hooks';
+import { useIsMobileShell } from '/@/renderer/hooks/use-breakpoint';
 import {
     PlaylistTarget,
     useCurrentServerId,
@@ -55,6 +56,12 @@ const PlaylistSongListFiltersModal = () => {
     const { isSidebarOpen, setIsSidebarOpen } = useListContext();
     const { clear, query } = usePlaylistSongListFilters();
     const [isOpen, handlers] = useDisclosure(false);
+    // On the mobile shell the filter modal goes full-screen so its content
+    // (dense rows of selects / sliders / year pickers) is bounded by the
+    // viewport instead of the desktop `--theme-content-max-width`, which on
+    // a phone overflowed past the screen edges and sat under the status
+    // bar / gesture nav. Mirrors list-filters.tsx.
+    const isMobileShell = useIsMobileShell();
 
     const hasActiveFilters = useMemo(() => {
         return Boolean(
@@ -78,16 +85,37 @@ const PlaylistSongListFiltersModal = () => {
         <>
             <FilterButton isActive={hasActiveFilters} onClick={handlers.toggle} />
             <Modal
+                fullScreen={isMobileShell}
                 handlers={handlers}
                 opened={isOpen}
                 size="lg"
                 styles={{
-                    content: {
-                        height: '100%',
-                        maxHeight: '640px',
-                        maxWidth: 'var(--theme-content-max-width)',
-                        width: '100%',
-                    },
+                    body: isMobileShell
+                        ? {
+                              overflowY: 'auto',
+                              paddingBottom:
+                                  'calc(var(--theme-spacing-md) + max(env(safe-area-inset-bottom, 0px), var(--android-safe-bottom, 0px)))',
+                          }
+                        : undefined,
+                    content: isMobileShell
+                        ? {
+                              height: '100dvh',
+                              maxHeight: '100dvh',
+                              maxWidth: '100vw',
+                              width: '100vw',
+                          }
+                        : {
+                              height: '100%',
+                              maxHeight: '640px',
+                              maxWidth: 'var(--theme-content-max-width)',
+                              width: '100%',
+                          },
+                    header: isMobileShell
+                        ? {
+                              paddingTop:
+                                  'calc(var(--theme-spacing-md) + max(env(safe-area-inset-top, 0px), var(--android-safe-top, 0px)))',
+                          }
+                        : undefined,
                 }}
                 title={
                     <Group justify="space-between" style={{ paddingRight: '3rem', width: '100%' }}>

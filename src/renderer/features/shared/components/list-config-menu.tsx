@@ -5,6 +5,7 @@ import i18n from '/@/i18n/i18n';
 import { GridConfig } from '/@/renderer/features/shared/components/grid-config';
 import { SettingsButton } from '/@/renderer/features/shared/components/settings-button';
 import { TableConfig } from '/@/renderer/features/shared/components/table-config';
+import { useIsMobileShell } from '/@/renderer/hooks/use-breakpoint';
 import { useSettingsStore, useSettingsStoreActions } from '/@/renderer/store';
 import { ActionIconProps } from '/@/shared/components/action-icon/action-icon';
 import { Divider } from '/@/shared/components/divider/divider';
@@ -121,6 +122,12 @@ export const ListConfigMenu = (props: ListConfigMenuProps) => {
     ) as ListDisplayType;
     const { setList } = useSettingsStoreActions();
     const [isOpen, handlers] = useDisclosure(false);
+    // On the mobile shell the config modal goes full-screen so the
+    // SegmentedControl (Table / Grid / Detail) and the dense column-toggle
+    // table are bounded by the viewport instead of the desktop `xl`
+    // (820px) width, which on a phone overflowed past the screen edges and
+    // sat under the status bar / gesture nav.
+    const isMobileShell = useIsMobileShell();
 
     // Filter display types based on config
     const availableDisplayTypes = useMemo(() => {
@@ -148,7 +155,34 @@ export const ListConfigMenu = (props: ListConfigMenuProps) => {
     return (
         <>
             <SettingsButton {...props.buttonProps} onClick={handlers.toggle} />
-            <Modal handlers={handlers} opened={isOpen} size="xl" title={t('common.configure')}>
+            <Modal
+                fullScreen={isMobileShell}
+                handlers={handlers}
+                opened={isOpen}
+                size="xl"
+                styles={
+                    isMobileShell
+                        ? {
+                              body: {
+                                  overflowY: 'auto',
+                                  paddingBottom:
+                                      'calc(var(--theme-spacing-md) + max(env(safe-area-inset-bottom, 0px), var(--android-safe-bottom, 0px)))',
+                              },
+                              content: {
+                                  height: '100dvh',
+                                  maxHeight: '100dvh',
+                                  maxWidth: '100vw',
+                                  width: '100vw',
+                              },
+                              header: {
+                                  paddingTop:
+                                      'calc(var(--theme-spacing-md) + max(env(safe-area-inset-top, 0px), var(--android-safe-top, 0px)))',
+                              },
+                          }
+                        : undefined
+                }
+                title={t('common.configure')}
+            >
                 <Stack gap="xs">
                     {availableDisplayTypes.length > 1 && (
                         <ListConfigTable
