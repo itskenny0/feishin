@@ -226,6 +226,16 @@ export const AddToPlaylistContextModal = ({
                 }
             }
 
+            // Guard against a submit with no target playlists (e.g. Enter key
+            // in the playlist table calls requestSubmit() which bypasses the
+            // disabled submit button). Without this the success-message math
+            // below divides by playlistIds.length === 0 and renders a "NaN
+            // tracks added to 0 playlists" toast.
+            if (playlistIds.length === 0) {
+                setIsLoading(false);
+                return;
+            }
+
             for (const playlistId of playlistIds) {
                 const uniqueSongIds: string[] = [];
 
