@@ -87,7 +87,7 @@ const ActionRequiredRoute = () => {
                         <Stack mt="2rem">
                             {canReturnHome && <Navigate to={AppRoute.HOME} />}
                             {/* This should be displayed if a credential is required */}
-                            {isCredentialRequired && !isServerLock && (
+                            {isCredentialRequired && !isServerLock() && (
                                 <Group justify="center" wrap="nowrap">
                                     <Button
                                         fullWidth

@@ -1,7 +1,7 @@
 import type { FallbackProps } from 'react-error-boundary';
 
 import { useTranslation } from 'react-i18next';
-import { useNavigate, useRouteError } from 'react-router';
+import { useNavigate } from 'react-router';
 
 import styles from './error-fallback.module.css';
 
@@ -14,8 +14,14 @@ import { Icon } from '/@/shared/components/icon/icon';
 import { Stack } from '/@/shared/components/stack/stack';
 import { Text } from '/@/shared/components/text/text';
 
-export const ErrorFallback = ({ resetErrorBoundary }: FallbackProps) => {
-    const error = useRouteError() as any;
+// This is a react-error-boundary `FallbackComponent`, so the caught error
+// arrives via the `error` prop (`FallbackProps`). It must NOT call
+// `useRouteError()` — that hook is only valid inside a react-router *data
+// router* error element, and this app uses a non-data `HashRouter`. There,
+// `useRouteError()` hits an `invariant` and THROWS during the fallback render,
+// which escapes this boundary and crashes the parent boundary instead of
+// containing the original error.
+export const ErrorFallback = ({ error, resetErrorBoundary }: FallbackProps) => {
     const { t } = useTranslation();
     const isMobileShell = useIsMobileShell();
     const navigate = useNavigate();
