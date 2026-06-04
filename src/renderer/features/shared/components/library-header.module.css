@@ -64,13 +64,29 @@
     height: auto;
     padding: 2rem 1rem;
 
+    /*
+     * Hard cap the cover to its grid cell at EVERY breakpoint. The per-tier
+     * rules below set an explicit pixel width that is meant to match the
+     * `image` grid column, but if the two ever disagree (a tier mismatch, an
+     * orientation/container-query edge) the fixed-width cover overflows its
+     * cell and spills across the metadata column, overlapping the action
+     * buttons — the bug users hit on the artist/playlist headers. `max-width`
+     * is a no-op when the cover already fits, and clamps it to the column
+     * when it doesn't, so it can never break the layout regardless of width.
+     * (The underlying <img> keeps aspect-ratio 1/1 + object-fit from the
+     * shared image styles, so a clamp crops rather than distorts.)
+     */
     :global(.item-image-placeholder) {
         width: 175px !important;
+        min-width: 0;
+        max-width: 100%;
         height: 175px;
     }
 
     .image {
         width: 250px !important;
+        min-width: 0;
+        max-width: 100%;
         height: 250px;
     }
 
