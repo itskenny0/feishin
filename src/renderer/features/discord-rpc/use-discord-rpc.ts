@@ -326,14 +326,23 @@ export const useDiscordRpc = () => {
                     song?.album &&
                     song?.albumArtists.length
                 ) {
-                    const albumInfo = await fetch(
-                        `https://ws.audioscrobbler.com/2.0/?method=album.getinfo&api_key=${lastfmApiKey}&artist=${encodeURIComponent(song.albumArtists[0].name)}&album=${encodeURIComponent(song.album)}&format=json`,
-                    );
+                    try {
+                        const albumInfo = await fetch(
+                            `https://ws.audioscrobbler.com/2.0/?method=album.getinfo&api_key=${lastfmApiKey}&artist=${encodeURIComponent(song.albumArtists[0].name)}&album=${encodeURIComponent(song.album)}&format=json`,
+                        );
 
-                    const albumInfoJson = await albumInfo.json();
+                        const albumInfoJson = await albumInfo.json();
 
-                    if (albumInfoJson.album?.image?.[3]['#text']) {
-                        activity.largeImageKey = albumInfoJson.album.image[3]['#text'];
+                        // last.fm normally returns four image sizes, but a
+                        // partial/malformed response may return fewer (or none).
+                        // Guard every hop so a missing index doesn't throw and
+                        // abort the whole activity update.
+                        const lastfmImage = albumInfoJson?.album?.image?.[3]?.['#text'];
+                        if (lastfmImage) {
+                            activity.largeImageKey = lastfmImage;
+                        }
+                    } catch {
+                        /* network/parse failure — fall through to the icon */
                     }
                 }
 
