@@ -1,0 +1,74 @@
+/*
+ * Hero zone for the redesigned (Spotify-flavoured) home page.
+ *
+ * The hero is a positioned container so the colour wash (`.glow`) can be
+ * painted behind the greeting and bleed slightly past the content padding
+ * for an immersive top-of-page feel. The greeting itself reuses the same
+ * fw=800 / tight-tracking display treatment the library header uses, so it
+ * reads as an editorial title rather than chrome.
+ */
+.hero {
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+    min-height: 7rem;
+    padding-top: 0.5rem;
+}
+
+/*
+ * Accent-derived atmosphere. A radial glow in the track's dominant colour
+ * fades into transparency so it layers over the page background rather than
+ * replacing it. Kept low-opacity and offset to the upper-left so it feels
+ * like ambient light, not a coloured card. `will-change` is deliberately
+ * omitted — this never animates, so promoting it would just waste a layer.
+ */
+.glow {
+    position: absolute;
+    inset: -2rem -3rem auto;
+    height: 16rem;
+    pointer-events: none;
+    background:
+        radial-gradient(
+            120% 100% at 0% 0%,
+            color-mix(in srgb, var(--home-hero-accent) 32%, transparent) 0%,
+            color-mix(in srgb, var(--home-hero-accent) 10%, transparent) 38%,
+            transparent 72%
+        );
+    opacity: 0.9;
+    transition: background 600ms ease-out;
+}
+
+.greeting {
+    position: relative;
+    z-index: 1;
+    font-size: 2rem;
+    font-weight: 800;
+    line-height: 1.1;
+    letter-spacing: -0.025em;
+}
+
+@media (600px <= width <= 834px) {
+    .greeting {
+        font-size: 2.375rem;
+    }
+}
+
+@media (width >= 835px) {
+    .hero {
+        min-height: 8rem;
+    }
+
+    .greeting {
+        font-size: 2.75rem;
+    }
+}
+
+/*
+ * Respect reduced-motion: the colour wash should never crossfade for users
+ * who've asked the OS to minimise motion.
+ */
+@media (prefers-reduced-motion: reduce) {
+    .glow {
+        transition: none;
+    }
+}

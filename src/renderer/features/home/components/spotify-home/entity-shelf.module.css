@@ -1,0 +1,78 @@
+/*
+ * Horizontal-scroll shelf for artists / playlists. The scroller is a flex
+ * row that overflows horizontally; each card is a fixed width so the row
+ * reads as a Spotify shelf. Negative inline margins + matching padding let
+ * the first/last card sit flush with the page edge while keeping a scroll
+ * gutter, so the shelf "bleeds" to the screen edge like Spotify's do.
+ */
+.shelf {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.header {
+    display: flex;
+    align-items: center;
+}
+
+.scroller {
+    display: flex;
+    gap: 1rem;
+    padding-right: 1rem;
+    padding-bottom: 0.25rem;
+    padding-left: 1rem;
+    margin-right: -1rem;
+    margin-left: -1rem;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+
+    /* Momentum scroll on iOS without a visible scrollbar elsewhere. */
+    -webkit-overflow-scrolling: touch;
+}
+
+.scroller::-webkit-scrollbar {
+    display: none;
+}
+
+@media (width >= 600px) {
+    .scroller {
+        padding-right: 1.5rem;
+        padding-left: 1.5rem;
+        margin-right: -1.5rem;
+        margin-left: -1.5rem;
+    }
+}
+
+@media (width >= 835px) {
+    .scroller {
+        padding-right: 2rem;
+        padding-left: 2rem;
+        margin-right: -2rem;
+        margin-left: -2rem;
+    }
+}
+
+/*
+ * Card width tracks the breakpoints loosely: a touch wider on desktop so the
+ * cover art has presence, narrower on phones so ~2.5 cards peek (signalling
+ * scrollability). flex-shrink:0 keeps them from collapsing in the flex row.
+ */
+.card {
+    flex: 0 0 auto;
+    width: 9rem;
+    scroll-snap-align: start;
+}
+
+@media (width >= 835px) {
+    .card {
+        width: 10.5rem;
+    }
+}
+
+.card-skeleton {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+}

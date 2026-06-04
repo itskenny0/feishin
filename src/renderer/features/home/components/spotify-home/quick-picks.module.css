@@ -1,0 +1,149 @@
+/*
+ * Spotify-style "quick picks" grid — short, wide tiles for the most-recent
+ * albums. One column on the narrowest phones, two on phones/portrait, three
+ * on tablets, and four on desktop so the zone stays dense (matching the
+ * app's dense feel) without the tiles getting cramped.
+ */
+.grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+}
+
+@media (width >= 480px) {
+    .grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.5rem 0.75rem;
+    }
+}
+
+@media (width >= 835px) {
+    .grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+@media (width >= 1280px) {
+    .grid {
+        grid-template-columns: repeat(4, 1fr);
+    }
+}
+
+/*
+ * The tile is a horizontal card: a rounded cover thumbnail flush-left, the
+ * album title filling the remaining width, and a play button that slides in
+ * on hover (pointer devices) or is always tappable on touch. The tile uses a
+ * translucent surface that brightens on hover — Spotify's exact quick-tile
+ * affordance — built from theme tokens so it tracks the active theme.
+ */
+.tile {
+    position: relative;
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    height: 3.5rem;
+    padding-right: 0.5rem;
+    overflow: hidden;
+    color: var(--theme-colors-foreground);
+    text-decoration: none;
+    background: color-mix(in srgb, var(--theme-colors-foreground) 7%, transparent);
+    border-radius: var(--theme-radius-sm);
+    transition:
+        background-color 150ms ease,
+        transform 150ms ease;
+}
+
+.tile-image {
+    position: relative;
+    flex-shrink: 0;
+    width: 3.5rem;
+    height: 3.5rem;
+    overflow: hidden;
+}
+
+/*
+ * `ItemImage` renders a container div wrapping an <img> (or a loader/unloader
+ * placeholder div) — stretch whichever child lands here to fill the square so
+ * the cover, the loading skeleton, and the empty-art fallback all sit flush.
+ */
+.tile-image > * {
+    width: 100%;
+    height: 100%;
+}
+
+.tile-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.tile-title {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.875rem;
+    font-weight: 600;
+    line-height: 1.25;
+    white-space: nowrap;
+}
+
+/*
+ * Play button. Hidden-but-present by default (opacity 0, translated down)
+ * and revealed on hover only where hover is a real input. On touch it's
+ * always visible so the affordance isn't hover-trapped.
+ */
+.play-button {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    color: var(--theme-colors-background);
+    cursor: pointer;
+    background: var(--theme-colors-primary);
+    border: none;
+    border-radius: 50%;
+    box-shadow: 0 4px 12px rgb(0 0 0 / 35%);
+    transition:
+        opacity 150ms ease,
+        transform 150ms ease;
+}
+
+@media (hover: hover) {
+    .tile:hover {
+        background: color-mix(in srgb, var(--theme-colors-foreground) 14%, transparent);
+    }
+
+    .play-button {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+
+    .tile:hover .play-button,
+    .tile:focus-within .play-button {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.play-button:active {
+    transform: scale(0.92);
+}
+
+.tile:active {
+    transform: scale(0.99);
+}
+
+.tile-skeleton {
+    width: 100%;
+    height: 3.5rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .tile,
+    .play-button {
+        transition: none;
+    }
+}

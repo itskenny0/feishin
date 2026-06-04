@@ -869,6 +869,11 @@
             "newlyAdded": "Newly added releases",
             "recentlyPlayed": "Recently played",
             "recentlyReleased": "Recently released",
+            "showAll": "Show all",
+            "shelfArtists": "Your favourite artists",
+            "shelfPlaylists": "Your playlists",
+            "empty_title": "Your library is ready",
+            "empty_subtitle": "Start exploring — what you play and add will show up here as a personalised home.",
             "title": "$t(common.home)",
             "syncChip": {
                 "albums": "Syncing albums",

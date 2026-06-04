@@ -1,0 +1,62 @@
+/*
+ * Shelf heading: bold title flush-left, "Show all" pill flush-right. Sits
+ * inside the carousel's custom-title slot (the nav arrows render to the
+ * right of this whole block) and inside the home-grown artist/playlist
+ * shelves. min-width:0 on the heading lets it ellipsis-truncate instead of
+ * pushing the "Show all" link off the row.
+ */
+.shelf-title {
+    display: flex;
+    flex: 1;
+    gap: 0.75rem;
+    align-items: baseline;
+    min-width: 0;
+}
+
+.heading {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 1.25rem;
+    white-space: nowrap;
+}
+
+@media (width >= 835px) {
+    .heading {
+        font-size: 1.5rem;
+    }
+}
+
+/*
+ * "Show all" — muted by default, brightens on hover. Uppercase + letter
+ * spacing reads as a secondary action, not a competing headline.
+ */
+.show-all {
+    display: inline-flex;
+    flex-shrink: 0;
+    gap: 0.125rem;
+    align-items: center;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    color: var(--theme-colors-foreground-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    text-decoration: none;
+    transition: color 150ms ease;
+}
+
+@media (hover: hover) {
+    .show-all:hover {
+        color: var(--theme-colors-foreground);
+    }
+}
+
+.show-all:active {
+    color: var(--theme-colors-foreground);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .show-all {
+        transition: none;
+    }
+}

@@ -7,19 +7,17 @@ import { HydrationBanner, SyncChip } from '/@/renderer/cache';
 import { useGridCarouselContainerQuery } from '/@/renderer/components/grid-carousel/grid-carousel-v2';
 import { NativeScrollArea } from '/@/renderer/components/native-scroll-area/native-scroll-area';
 import { AlbumInfiniteCarousel } from '/@/renderer/features/albums/components/album-infinite-carousel';
-import { AlbumInfiniteFeatureCarousel } from '/@/renderer/features/home/components/album-infinite-feature-carousel';
-import { FeatureCard } from '/@/renderer/features/home/components/feature-card/feature-card';
-import { FeatureCardPicker } from '/@/renderer/features/home/components/feature-card/feature-card-picker';
 import { FeaturedGenres } from '/@/renderer/features/home/components/featured-genres';
-import { FeelingLuckyButton } from '/@/renderer/features/home/components/feeling-lucky-button';
 import {
-    FeatureCardSkeleton,
     GenreGridSkeleton,
     HomeSkeleton,
 } from '/@/renderer/features/home/components/home-skeleton';
-import { LibraryStats } from '/@/renderer/features/home/components/library-stats';
-import { NewSinceLastVisit } from '/@/renderer/features/home/components/new-since-last-visit';
-import { QuickFilterChips } from '/@/renderer/features/home/components/quick-filter-chips';
+import { ArtistShelf } from '/@/renderer/features/home/components/spotify-home/artist-shelf';
+import { HomeEmpty } from '/@/renderer/features/home/components/spotify-home/home-empty';
+import { HomeHero } from '/@/renderer/features/home/components/spotify-home/home-hero';
+import { PlaylistShelf } from '/@/renderer/features/home/components/spotify-home/playlist-shelf';
+import { QuickPicks } from '/@/renderer/features/home/components/spotify-home/quick-picks';
+import { ShelfTitle } from '/@/renderer/features/home/components/spotify-home/shelf-title';
 import { MobileDevicePickerButton } from '/@/renderer/features/jellyfin-remote-target';
 import { AnimatedPage } from '/@/renderer/features/shared/components/animated-page';
 import { ComponentErrorBoundary } from '/@/renderer/features/shared/components/component-error-boundary';
@@ -28,230 +26,192 @@ import { LibraryHeaderBar } from '/@/renderer/features/shared/components/library
 import { PageErrorBoundary } from '/@/renderer/features/shared/components/page-error-boundary';
 import { SongInfiniteCarousel } from '/@/renderer/features/songs/components/song-infinite-carousel';
 import { useIsMobileShell } from '/@/renderer/hooks/use-breakpoint';
-import {
-    HomeFeatureStyle,
-    HomeItem,
-    useCurrentServer,
-    useHomeFeature,
-    useHomeFeatureContent,
-    useHomeFeatureStyle,
-    useHomeFeelingLucky,
-    useHomeGreetingVisible,
-    useHomeItems,
-    useWindowSettings,
-} from '/@/renderer/store';
+import { AppRoute } from '/@/renderer/router/routes';
+import { useCurrentServer, useWindowSettings } from '/@/renderer/store';
 import { Stack } from '/@/shared/components/stack/stack';
-import { Text } from '/@/shared/components/text/text';
-import {
-    AlbumListSort,
-    LibraryItem,
-    ServerType,
-    SongListSort,
-    SortOrder,
-} from '/@/shared/types/domain-types';
+import { AlbumListSort, ServerType, SongListSort, SortOrder } from '/@/shared/types/domain-types';
 import { Platform } from '/@/shared/types/types';
 
+/**
+ * Redesigned, Spotify-flavoured home page.
+ *
+ * Structure (top → bottom):
+ *   1. Hero — time-of-day greeting on a now-playing-derived colour wash.
+ *   2. Quick picks — a responsive grid of short wide tiles for the most
+ *      recently-played albums (Spotify's Home top zone).
+ *   3. A rhythm of horizontal-scroll shelves: Recently played, On repeat
+ *      (most played), Recently added, Jump back in (random/discover),
+ *      Recently released, Your favourite artists (circular), Your playlists,
+ *      and Featured genres.
+ *
+ * All data is sourced from the app's existing query hooks (album/song infinite
+ * carousels, album-artist/playlist list queries) so the page is real, cached,
+ * and offline-aware — no bespoke API surface. Each section renders in its own
+ * error boundary and Suspense fallback so one slow/failing shelf can't blank
+ * the page, and every section self-collapses when it has no data, with a
+ * single friendly empty state when nothing is available at all.
+ */
 const HomeRoute = () => {
     const { t } = useTranslation();
     const scrollAreaRef = useRef<HTMLDivElement>(null);
     const server = useCurrentServer();
     const { windowBarStyle } = useWindowSettings();
     const isMobileShell = useIsMobileShell();
-    const homeFeature = useHomeFeature();
-    const homeFeatureContent = useHomeFeatureContent();
-    const homeFeatureStyle = useHomeFeatureStyle();
-    const homeFeelingLucky = useHomeFeelingLucky();
-    const homeItems = useHomeItems();
-    const homeGreetingVisible = useHomeGreetingVisible();
     const containerQuery = useGridCarouselContainerQuery();
 
     const isJellyfin = server?.type === ServerType.JELLYFIN;
 
-    const carousels = {
-        [HomeItem.MOST_PLAYED]: {
-            enableRefresh: true,
-            itemType: isJellyfin ? LibraryItem.SONG : LibraryItem.ALBUM,
-            sortBy: isJellyfin ? SongListSort.PLAY_COUNT : AlbumListSort.PLAY_COUNT,
-            sortOrder: SortOrder.DESC,
-            title: t('page.home.mostPlayed'),
-        },
-        [HomeItem.RANDOM]: {
-            enableRefresh: true,
-            itemType: LibraryItem.ALBUM,
-            sortBy: AlbumListSort.RANDOM,
-            sortOrder: SortOrder.ASC,
-            title: t('page.home.explore'),
-        },
-        [HomeItem.RECENTLY_ADDED]: {
-            enableRefresh: true,
-            itemType: LibraryItem.ALBUM,
-            sortBy: AlbumListSort.RECENTLY_ADDED,
-            sortOrder: SortOrder.DESC,
-            title: t('page.home.newlyAdded'),
-        },
-        [HomeItem.RECENTLY_PLAYED]: {
-            enableRefresh: true,
-            itemType: isJellyfin ? LibraryItem.SONG : LibraryItem.ALBUM,
-            sortBy: isJellyfin ? SongListSort.RECENTLY_PLAYED : AlbumListSort.RECENTLY_PLAYED,
-            sortOrder: SortOrder.DESC,
-            title: t('page.home.recentlyPlayed'),
-        },
-        [HomeItem.RECENTLY_RELEASED]: {
-            enableRefresh: true,
-            itemType: LibraryItem.ALBUM,
-            sortBy: AlbumListSort.RELEASE_DATE,
-            sortOrder: SortOrder.DESC,
-            title: t('page.home.recentlyReleased'),
-        },
-    };
-
-    const sortedItems = homeItems.filter((item) => !item.disabled);
-
-    const sortedCarousel = sortedItems
-        .filter((item) => item.id !== HomeItem.GENRES)
-        .map((item) => ({
-            ...carousels[item.id],
-            uniqueId: item.id,
-        }));
-
-    // Time-aware greeting at the top of the home page. Computed once per
-    // render — the hour boundaries are coarse enough that "afternoon"
-    // shifting to "evening" mid-session is fine without a timer.
-    const hour = new Date().getHours();
-    let greetingKey: 'afternoon' | 'evening' | 'morning' | 'night';
-    if (hour < 5) greetingKey = 'night';
-    else if (hour < 12) greetingKey = 'morning';
-    else if (hour < 18) greetingKey = 'afternoon';
-    else greetingKey = 'evening';
-    const greeting = t(`page.home.greeting.${greetingKey}`);
-
-    // Each rendered row knows its slot index so the CSS stagger lines up
-    // with painted order, not the source order of the `if` branches above.
-    // We compute the rows up-front, then `.map` them with a running index.
+    // Each row knows its slot index so the CSS stagger lines up with painted
+    // order. We collect rows up-front, then `.map` them with a running index.
     const rows: ReactNode[] = [];
 
-    if (homeFeature && homeFeatureStyle === HomeFeatureStyle.SINGLE) {
-        rows.push(
-            <ComponentErrorBoundary key="feature-single">
-                <FeatureCardPicker />
-                {/* `FeatureCard` can render a suspending carousel (the `album`
-                    variant) or the feature shell. Give it its own boundary
-                    with a banner-shaped skeleton so it fills in independently
-                    instead of bubbling to the route fallback. */}
-                <Suspense fallback={<FeatureCardSkeleton />}>
-                    <FeatureCard variant={homeFeatureContent} />
-                </Suspense>
-            </ComponentErrorBoundary>,
-        );
-    }
+    // 1. Hero greeting + atmosphere.
+    rows.push(
+        <ComponentErrorBoundary key="hero">
+            <HomeHero />
+        </ComponentErrorBoundary>,
+    );
 
-    if (homeFeature && homeFeatureStyle === HomeFeatureStyle.MULTIPLE) {
-        rows.push(
-            <ComponentErrorBoundary key="feature-multiple">
-                {/* Suspending feature carousel — own boundary + banner-shaped
-                    skeleton so the rest of the page paints immediately. */}
-                <Suspense fallback={<FeatureCardSkeleton />}>
-                    <AlbumInfiniteFeatureCarousel />
-                </Suspense>
-            </ComponentErrorBoundary>,
-        );
-    }
+    // 2. Quick picks (recently-played albums as wide tiles).
+    rows.push(
+        <ComponentErrorBoundary key="quick-picks">
+            <QuickPicks />
+        </ComponentErrorBoundary>,
+    );
 
-    if (homeFeelingLucky) {
-        rows.push(
-            <ComponentErrorBoundary key="feeling-lucky">
-                <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
-                    <FeelingLuckyButton />
-                </div>
-            </ComponentErrorBoundary>,
-        );
-    }
+    // 3a. Recently played. Jellyfin tracks play recency on songs, not albums,
+    // so use the song carousel there (mirrors the previous home behaviour);
+    // everything else uses albums.
+    rows.push(
+        <ComponentErrorBoundary key="recently-played">
+            {isJellyfin ? (
+                <SongInfiniteCarousel
+                    containerQuery={containerQuery}
+                    enableRefresh
+                    queryKey={['home', 'song', 'recentlyPlayed'] as const}
+                    rowCount={1}
+                    sortBy={SongListSort.RECENTLY_PLAYED}
+                    sortOrder={SortOrder.DESC}
+                    title={<ShelfTitle title={t('page.home.recentlyPlayed')} />}
+                />
+            ) : (
+                <AlbumInfiniteCarousel
+                    containerQuery={containerQuery}
+                    enableRefresh
+                    queryKey={['home', 'album', 'recentlyPlayed'] as const}
+                    rowCount={1}
+                    sortBy={AlbumListSort.RECENTLY_PLAYED}
+                    sortOrder={SortOrder.DESC}
+                    title={<ShelfTitle title={t('page.home.recentlyPlayed')} />}
+                />
+            )}
+        </ComponentErrorBoundary>,
+    );
 
-    for (const item of sortedItems) {
-        if (item.id === HomeItem.GENRES) {
-            rows.push(
-                <ComponentErrorBoundary key="featured-genres">
-                    {/* Suspending genre query — own boundary + genre-grid
-                        skeleton so it fills in independently. */}
-                    <Suspense fallback={<GenreGridSkeleton />}>
-                        <FeaturedGenres />
-                    </Suspense>
-                </ComponentErrorBoundary>,
-            );
-            continue;
-        }
+    // 3b. On repeat (most played).
+    rows.push(
+        <ComponentErrorBoundary key="most-played">
+            {isJellyfin ? (
+                <SongInfiniteCarousel
+                    containerQuery={containerQuery}
+                    enableRefresh
+                    queryKey={['home', 'song', 'mostPlayed'] as const}
+                    rowCount={1}
+                    sortBy={SongListSort.PLAY_COUNT}
+                    sortOrder={SortOrder.DESC}
+                    title={<ShelfTitle title={t('page.home.mostPlayed')} />}
+                />
+            ) : (
+                <AlbumInfiniteCarousel
+                    containerQuery={containerQuery}
+                    enableRefresh
+                    queryKey={['home', 'album', 'mostPlayed'] as const}
+                    rowCount={1}
+                    sortBy={AlbumListSort.PLAY_COUNT}
+                    sortOrder={SortOrder.DESC}
+                    title={<ShelfTitle title={t('page.home.mostPlayed')} />}
+                />
+            )}
+        </ComponentErrorBoundary>,
+    );
 
-        if (item.id === HomeItem.LIBRARY_STATS) {
-            rows.push(
-                <ComponentErrorBoundary key="library-stats">
-                    <LibraryStats />
-                </ComponentErrorBoundary>,
-            );
-            continue;
-        }
-
-        if (item.id === HomeItem.QUICK_FILTERS) {
-            rows.push(
-                <ComponentErrorBoundary key="quick-filters">
-                    <QuickFilterChips />
-                </ComponentErrorBoundary>,
-            );
-            continue;
-        }
-
-        if (item.id === HomeItem.NEW_SINCE_LAST_VISIT) {
-            rows.push(
-                <ComponentErrorBoundary key="new-since-last-visit">
-                    <NewSinceLastVisit />
-                </ComponentErrorBoundary>,
-            );
-            continue;
-        }
-
-        const carousel = sortedCarousel.find((c) => c.uniqueId === item.id);
-        if (!carousel) continue;
-
-        const carouselKey = `carousel-${carousel.uniqueId}`;
-        if (carousel.itemType === LibraryItem.ALBUM) {
-            rows.push(
-                <ComponentErrorBoundary key={carouselKey}>
-                    <AlbumInfiniteCarousel
-                        containerQuery={containerQuery}
-                        enableRefresh={carousel.enableRefresh}
-                        queryKey={['home', 'album', carousel.uniqueId] as const}
-                        rowCount={1}
-                        sortBy={carousel.sortBy as AlbumListSort}
-                        sortOrder={carousel.sortOrder}
-                        title={carousel.title}
+    // 3c. Recently added.
+    rows.push(
+        <ComponentErrorBoundary key="recently-added">
+            <AlbumInfiniteCarousel
+                containerQuery={containerQuery}
+                enableRefresh
+                queryKey={['home', 'album', 'recentlyAdded'] as const}
+                rowCount={1}
+                sortBy={AlbumListSort.RECENTLY_ADDED}
+                sortOrder={SortOrder.DESC}
+                title={
+                    <ShelfTitle
+                        showAllRoute={AppRoute.LIBRARY_ALBUMS}
+                        title={t('page.home.newlyAdded')}
                     />
-                </ComponentErrorBoundary>,
-            );
-        } else if (carousel.itemType === LibraryItem.SONG) {
-            rows.push(
-                <ComponentErrorBoundary key={carouselKey}>
-                    <SongInfiniteCarousel
-                        containerQuery={containerQuery}
-                        enableRefresh={carousel.enableRefresh}
-                        queryKey={['home', 'song', carousel.uniqueId] as const}
-                        rowCount={1}
-                        sortBy={carousel.sortBy as SongListSort}
-                        sortOrder={carousel.sortOrder}
-                        title={carousel.title}
-                    />
-                </ComponentErrorBoundary>,
-            );
-        }
-    }
+                }
+            />
+        </ComponentErrorBoundary>,
+    );
 
-    // Slot the greeting at the very top so it leads the staggered fade-in.
-    // Hidden entirely when the user disables it (default: visible).
-    if (homeGreetingVisible) {
-        rows.unshift(
-            <div className={styles.greeting} key="greeting">
-                <Text className={styles.greetingText}>{greeting}</Text>
-            </div>,
-        );
-    }
+    // 3d. Your favourite artists (circular shelf).
+    rows.push(
+        <ComponentErrorBoundary key="artists">
+            <ArtistShelf />
+        </ComponentErrorBoundary>,
+    );
+
+    // 3e. Jump back in / discover (random albums).
+    rows.push(
+        <ComponentErrorBoundary key="random">
+            <AlbumInfiniteCarousel
+                containerQuery={containerQuery}
+                enableRefresh
+                queryKey={['home', 'album', 'random'] as const}
+                rowCount={1}
+                sortBy={AlbumListSort.RANDOM}
+                sortOrder={SortOrder.ASC}
+                title={
+                    <ShelfTitle
+                        showAllRoute={AppRoute.LIBRARY_ALBUMS}
+                        title={t('page.home.explore')}
+                    />
+                }
+            />
+        </ComponentErrorBoundary>,
+    );
+
+    // 3f. Your playlists (rounded-square shelf).
+    rows.push(
+        <ComponentErrorBoundary key="playlists">
+            <PlaylistShelf />
+        </ComponentErrorBoundary>,
+    );
+
+    // 3g. Recently released.
+    rows.push(
+        <ComponentErrorBoundary key="recently-released">
+            <AlbumInfiniteCarousel
+                containerQuery={containerQuery}
+                enableRefresh
+                queryKey={['home', 'album', 'recentlyReleased'] as const}
+                rowCount={1}
+                sortBy={AlbumListSort.RELEASE_DATE}
+                sortOrder={SortOrder.DESC}
+                title={<ShelfTitle title={t('page.home.recentlyReleased')} />}
+            />
+        </ComponentErrorBoundary>,
+    );
+
+    // 3h. Featured genres grid.
+    rows.push(
+        <ComponentErrorBoundary key="featured-genres">
+            <Suspense fallback={<GenreGridSkeleton />}>
+                <FeaturedGenres />
+            </Suspense>
+        </ComponentErrorBoundary>,
+    );
 
     return (
         <AnimatedPage>
@@ -262,10 +222,8 @@ const HomeRoute = () => {
                         <LibraryHeaderBar>
                             <LibraryHeaderBar.Title>{t('page.home.title')}</LibraryHeaderBar.Title>
                             <SyncChip />
-                            {/* Cold-start Jellyfin Connect entry: on mobile the
-                                device picker otherwise only lives in the player
-                                bar, which isn't shown until something plays.
-                                Self-gates to Jellyfin servers. */}
+                            {/* Cold-start Jellyfin Connect entry; self-gates to
+                                Jellyfin servers. */}
                             {isMobileShell && <MobileDevicePickerButton iconSize="lg" />}
                         </LibraryHeaderBar>
                     ),
@@ -282,42 +240,32 @@ const HomeRoute = () => {
                         pt={windowBarStyle === Platform.WEB ? '5rem' : '3rem'}
                         ref={containerQuery.ref}
                     >
-                        {/* Cold-start Jellyfin Connect entry. The page-header
-                            copy (above) only fades in on scroll, so — like the
-                            SyncChip — mount a visible one at the top of the
-                            content too. Self-gates to Jellyfin servers. */}
+                        {/* Cold-start Jellyfin Connect entry mirrored in the
+                            content since the page-header copy only fades in on
+                            scroll. Self-gates to Jellyfin servers. */}
                         {isMobileShell && (
                             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                                 <MobileDevicePickerButton iconSize="lg" variant="default" />
                             </div>
                         )}
                         <HydrationBanner />
-                        {/* SyncChip is also mounted in the page-header chrome
-                            above, but that chrome only fades in after the user
-                            scrolls past the 200px offset. While sitting at the
-                            top of home during the initial hydration the user
-                            wouldn't see it; render a second copy here so the
-                            sync progress is glanceable from the entry point.
-                            The chip self-gates on enabled + active sweep so
-                            both mounts are no-ops outside that window. */}
+                        {/* Second SyncChip mount — the header chip only appears
+                            after scrolling past the 200px offset, so surface
+                            one at the entry point during hydration. Both
+                            self-gate so they're no-ops outside an active sweep. */}
                         <SyncChip />
-                        {/* Per-widget error boundaries so a thrown error in one
-                            widget (e.g. a transient malformed-response from a
-                            specific carousel) doesn't black-hole the entire
-                            home page via PageErrorBoundary below. Each widget
-                            gets its own boundary; the rest keep rendering. */}
-                        {rows.map((row, index) => (
-                            <HomeRow
-                                index={index}
-                                // The row already carries a stable React key
-                                // because each ComponentErrorBoundary above is
-                                // keyed; reuse it on the wrapper so the
-                                // animation also keys consistently.
-                                key={(row as { key?: string }).key ?? `home-row-${index}`}
-                            >
-                                {row}
-                            </HomeRow>
-                        ))}
+                        {!server ? (
+                            <HomeEmpty />
+                        ) : (
+                            rows.map((row, index) => (
+                                <HomeRow
+                                    index={index}
+                                    key={(row as { key?: string }).key ?? `home-row-${index}`}
+                                >
+                                    {row}
+                                </HomeRow>
+                            ))
+                        )}
                     </Stack>
                 </LibraryContainer>
             </NativeScrollArea>
@@ -331,7 +279,7 @@ const HomeRoute = () => {
  * computed here so we don't need a CSS variable round-trip.
  */
 const HomeRow = ({ children, index }: { children: ReactNode; index: number }) => {
-    const style: CSSProperties = { animationDelay: `${index * 80}ms` };
+    const style: CSSProperties = { animationDelay: `${index * 70}ms` };
     return (
         <div className={styles.row} style={style}>
             {children}
@@ -342,9 +290,9 @@ const HomeRow = ({ children, index }: { children: ReactNode; index: number }) =>
 const HomeRouteWithBoundary = () => {
     return (
         <PageErrorBoundary>
-            {/* Shaped full-layout skeleton instead of a centered spinner so
-                the lazy route-chunk load (and any top-level suspend) paints a
-                layout-shaped placeholder with no jarring shift. */}
+            {/* Shaped full-layout skeleton instead of a centered spinner so the
+                lazy route-chunk load paints a layout-shaped placeholder with no
+                jarring shift. */}
             <Suspense fallback={<HomeSkeleton />}>
                 <HomeRoute />
             </Suspense>
