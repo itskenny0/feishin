@@ -3,6 +3,7 @@ import { CSSProperties, lazy, MouseEvent, Suspense, useMemo } from 'react';
 
 import styles from './playerbar.module.css';
 
+import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
 import { CenterControls } from '/@/renderer/features/player/components/center-controls';
 import { LeftControls } from '/@/renderer/features/player/components/left-controls';
 import { RightControls } from '/@/renderer/features/player/components/right-controls';
@@ -29,6 +30,13 @@ export const Playerbar = () => {
     const setFullScreenPlayerStore = useSetFullScreenPlayerStore();
     const isMobile = useIsMobile();
     const currentSong = usePlayerSong();
+    // When a Jellyfin Connect target is active the mini-player mirrors the
+    // remote's now-playing item (via useActiveNowPlayingItem inside
+    // MobilePlayerbar) even though no local song is loaded. The mobile shell
+    // already reserves the player row in that case, so we must keep the bar
+    // mounted — otherwise the reserved 90px row renders as an empty gap above
+    // the tab bar while controlling a remote.
+    const remoteTargetActive = useRemoteTargetStore((s) => s.targetDeviceId !== null);
     const { color } = useDominantColor(currentSong?.imageUrl);
 
     // Two related CSS variables for descendants. `--playerbar-art-tint` is
@@ -59,7 +67,7 @@ export const Playerbar = () => {
          * library screens. The bottom-tab-bar fills in nicely without
          * the gap above.
          */
-        if (!currentSong?.id) {
+        if (!currentSong?.id && !remoteTargetActive) {
             return null;
         }
         return (
