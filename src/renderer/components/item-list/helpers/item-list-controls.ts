@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router';
 
 import { getTitlePath } from '/@/renderer/components/item-list/helpers/get-title-path';
+import { isRangeSelectableItem } from '/@/renderer/components/item-list/helpers/is-range-selectable-item';
 import { ItemListStateItemWithRequiredProperties } from '/@/renderer/components/item-list/helpers/item-list-state';
 import { DefaultItemControlProps, ItemControls } from '/@/renderer/components/item-list/types';
 import { ContextMenuController } from '/@/renderer/features/context-menu/context-menu-controller';
@@ -127,17 +128,10 @@ export const useDefaultItemListControls = (args?: UseDefaultItemListControlsArgs
                             const rangeItems: ItemListStateItemWithRequiredProperties[] = [];
                             for (let i = startIndex; i <= stopIndex; i++) {
                                 const rangeItem = validData[i];
-                                if (
-                                    rangeItem &&
-                                    typeof rangeItem === 'object' &&
-                                    '_serverId' in rangeItem &&
-                                    '_itemType' in rangeItem
-                                ) {
+                                if (isRangeSelectableItem(rangeItem)) {
                                     const rangeRowId = internalState.extractRowId(rangeItem);
                                     if (rangeRowId) {
-                                        rangeItems.push(
-                                            rangeItem as ItemListStateItemWithRequiredProperties,
-                                        );
+                                        rangeItems.push(rangeItem);
                                     }
                                 }
                             }

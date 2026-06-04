@@ -33,6 +33,7 @@ import {
     ItemCardProps,
 } from '/@/renderer/components/item-card/item-card';
 import { createExtractRowId } from '/@/renderer/components/item-list/helpers/extract-row-id';
+import { isRangeSelectableItem } from '/@/renderer/components/item-list/helpers/is-range-selectable-item';
 import { useDefaultItemListControls } from '/@/renderer/components/item-list/helpers/item-list-controls';
 import {
     ItemListStateActions,
@@ -800,15 +801,10 @@ const BaseItemGridList = ({
                         for (let i = startIndex; i <= stopIndex; i++) {
                             const rangeItem = resolvedGetItem(i);
                             if (
-                                rangeItem &&
-                                typeof rangeItem === 'object' &&
-                                '_serverId' in rangeItem &&
-                                'itemType' in rangeItem &&
+                                isRangeSelectableItem(rangeItem) &&
                                 internalState.extractRowId(rangeItem)
                             ) {
-                                rangeItems.push(
-                                    rangeItem as unknown as ItemListStateItemWithRequiredProperties,
-                                );
+                                rangeItems.push(rangeItem);
                             }
                         }
 
