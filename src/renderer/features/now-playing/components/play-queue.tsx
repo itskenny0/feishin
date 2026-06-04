@@ -20,8 +20,7 @@ import { searchLibraryItems } from '/@/renderer/features/shared/utils';
 import { useDragDrop } from '/@/renderer/hooks/use-drag-drop';
 import { useHotkeys } from '/@/renderer/hooks/use-hotkeys';
 import {
-    isShuffleEnabled,
-    mapShuffledToQueueIndex,
+    getVisibleCurrentIndex,
     subscribeCurrentTrack,
     subscribePlayerQueue,
     subscribePlayerShuffle,
@@ -123,21 +122,9 @@ export const PlayQueue = forwardRef<ItemListHandle, QueueProps>(
 
             // Resolves the index of the currently-playing song within the visible
             // queue. Works regardless of whether the visible queue is in default
-            // or shuffled order.
-            const getVisibleCurrentIndex = (): number => {
-                const state = usePlayerStore.getState();
-                const visible = state.getVisibleQueue();
-                if (queueInPlaybackOrder && isShuffleEnabled(state)) {
-                    // In shuffled view, player.index is already the shuffled position.
-                    return state.player.index;
-                }
-                let index = state.player.index;
-                if (isShuffleEnabled(state)) {
-                    index = mapShuffledToQueueIndex(index, state.queue.shuffled);
-                }
-                if (index < 0 || index >= visible.items.length) return -1;
-                return index;
-            };
+            // or shuffled order (see store helper).
+            const resolveVisibleCurrentIndex = (): number =>
+                getVisibleCurrentIndex(usePlayerStore.getState(), queueInPlaybackOrder);
 
             const unsub = subscribePlayerQueue(() => {
                 setQueue();
@@ -149,7 +136,7 @@ export const PlayQueue = forwardRef<ItemListHandle, QueueProps>(
 
             const unsubCurrentTrack = subscribeCurrentTrack(() => {
                 if (!followCurrentSong) return;
-                const index = getVisibleCurrentIndex();
+                const index = resolveVisibleCurrentIndex();
                 if (index !== -1) {
                     tableRef.current?.scrollToIndex(index, {
                         align: 'center',
@@ -160,7 +147,7 @@ export const PlayQueue = forwardRef<ItemListHandle, QueueProps>(
 
             const handleAutoDJQueueAdded = () => {
                 if (followCurrentSong) {
-                    const index = getVisibleCurrentIndex();
+                    const index = resolveVisibleCurrentIndex();
                     if (index !== -1) {
                         // Use setTimeout to ensure the DOM has updated with the new queue items
                         setTimeout(() => {
@@ -178,7 +165,7 @@ export const PlayQueue = forwardRef<ItemListHandle, QueueProps>(
             setQueue();
 
             if (followCurrentSong) {
-                const index = getVisibleCurrentIndex();
+                const index = resolveVisibleCurrentIndex();
                 if (index !== -1) {
                     setTimeout(() => {
                         tableRef.current?.scrollToIndex(index, {
@@ -205,15 +192,8 @@ export const PlayQueue = forwardRef<ItemListHandle, QueueProps>(
             if (!tableReady || !followCurrentSong || isRemote) {
                 return;
             }
-            const state = usePlayerStore.getState();
-            const visible = state.getVisibleQueue();
-            let index = state.player.index;
-            if (queueInPlaybackOrder && isShuffleEnabled(state)) {
-                index = state.player.index;
-            } else if (isShuffleEnabled(state)) {
-                index = mapShuffledToQueueIndex(index, state.queue.shuffled);
-            }
-            if (index < 0 || index >= visible.items.length) {
+            const index = getVisibleCurrentIndex(usePlayerStore.getState(), queueInPlaybackOrder);
+            if (index === -1) {
                 return;
             }
             setTimeout(() => {

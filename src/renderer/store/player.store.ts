@@ -159,6 +159,46 @@ export function getDualPlayerSongs(
     };
 }
 
+/**
+ * Resolves the row index of the currently-playing song WITHIN THE VISIBLE QUEUE
+ * (the order the table actually renders). Use this — not the raw
+ * `player.index` — for any scroll-to-current / jump-to-current affordance.
+ *
+ * `player.index` is the PLAYBACK position. When shuffle is on it indexes into
+ * `queue.shuffled`, not into the default display order. The visible queue is:
+ *   - shuffled order  when `queueInPlaybackOrder` && shuffle on  → row = player.index
+ *   - default order   otherwise                                  → row = mapShuffledToQueueIndex(player.index)
+ *
+ * Returns -1 when the index falls outside the visible queue (e.g. empty queue).
+ */
+export function getVisibleCurrentIndex(
+    state: {
+        getVisibleQueue: () => GroupedQueue;
+        player: { index: number; shuffle: PlayerShuffle };
+        queue: { shuffled: number[] };
+    },
+    queueInPlaybackOrder: boolean,
+): number {
+    const visibleLength = state.getVisibleQueue().items.length;
+    const shuffleOn = isShuffleEnabled(state);
+
+    let index: number;
+    if (queueInPlaybackOrder && shuffleOn) {
+        // Visible queue is already in shuffled (playback) order, so the
+        // playback position is the visible row directly.
+        index = state.player.index;
+    } else if (shuffleOn) {
+        // Visible queue is in default order; translate the shuffled playback
+        // position back to its default-order row.
+        index = mapShuffledToQueueIndex(state.player.index, state.queue.shuffled);
+    } else {
+        index = state.player.index;
+    }
+
+    if (index < 0 || index >= visibleLength) return -1;
+    return index;
+}
+
 // Helper function to check if shuffle is enabled
 export function isShuffleEnabled(state: {
     player: { shuffle: PlayerShuffle };

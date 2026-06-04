@@ -15,7 +15,12 @@ import {
     SONG_DISPLAY_TYPES,
 } from '/@/renderer/features/shared/components/list-config-menu';
 import { SearchInput } from '/@/renderer/features/shared/components/search-input';
-import { useCurrentServer, usePlayerStoreBase } from '/@/renderer/store';
+import {
+    getVisibleCurrentIndex,
+    useCurrentServer,
+    usePlayerStoreBase,
+    useQueueInPlaybackOrder,
+} from '/@/renderer/store';
 import { hasFeature } from '/@/shared/api/utils';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Box } from '/@/shared/components/box/box';
@@ -88,6 +93,7 @@ export const PlayQueueListControls = ({
 const QueuePlaybackIcons = ({ tableRef }: { tableRef: RefObject<ItemListHandle | null> }) => {
     const { t } = useTranslation();
     const player = usePlayer();
+    const queueInPlaybackOrder = useQueueInPlaybackOrder();
 
     const handleClearQueue = () => {
         // Wrap in a confirm modal — one accidental click on this 16px icon
@@ -112,7 +118,12 @@ const QueuePlaybackIcons = ({ tableRef }: { tableRef: RefObject<ItemListHandle |
     };
 
     const handleJumpToCurrent = () => {
-        const index = usePlayerStoreBase.getState().player.index;
+        // Use the VISIBLE row index, not the raw playback index. With shuffle on
+        // and the queue displayed in default order, player.index is a shuffled
+        // position and would scroll to the wrong row. getVisibleCurrentIndex
+        // maps it to the row the table actually renders (and returns -1 when out
+        // of range, e.g. empty queue).
+        const index = getVisibleCurrentIndex(usePlayerStoreBase.getState(), queueInPlaybackOrder);
         if (index !== -1) {
             tableRef.current?.scrollToIndex(index);
         }
