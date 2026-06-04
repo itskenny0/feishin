@@ -74,11 +74,16 @@ import {
 
 // --- in-memory table shim (same shape as media-store.test.ts) ---------
 
+// `*`-prefixed (multiEntry) indexes per the v9 mediaBlobs schema in db.ts.
+const MEDIA_BLOBS_MULTI_ENTRY = new Set(['EntityKeys']);
+
 class TableShim<T extends Record<string, any>> {
     readonly rows = new Map<unknown, T>();
+    private readonly multiEntry: Set<string>;
     private readonly pk: string;
-    constructor(pk: string) {
+    constructor(pk: string, multiEntry: Set<string> = new Set()) {
         this.pk = pk;
+        this.multiEntry = multiEntry;
     }
     async clear() {
         this.rows.clear();
@@ -94,6 +99,26 @@ class TableShim<T extends Record<string, any>> {
     }
     async get(key: unknown) {
         return this.rows.get(key);
+    }
+    // See media-store.test.ts: `.keys()` returns INDEX keys only (no row, no
+    // Blob); multiEntry indexes expand array fields per element.
+    orderBy(field: string) {
+        return {
+            keys: async (): Promise<Array<number | string>> => {
+                const out: Array<number | string> = [];
+                for (const row of this.rows.values()) {
+                    const v = (row as any)[field];
+                    if (this.multiEntry.has(field)) {
+                        if (Array.isArray(v)) {
+                            for (const el of v) out.push(el);
+                        }
+                    } else if (v !== undefined) {
+                        out.push(v);
+                    }
+                }
+                return out;
+            },
+        };
     }
     async put(row: T) {
         this.rows.set(row[this.pk], row);
@@ -116,7 +141,7 @@ class TableShim<T extends Record<string, any>> {
 
 const makeStore = () => {
     const db = {
-        mediaBlobs: new TableShim<CachedMediaBlob>('Key'),
+        mediaBlobs: new TableShim<CachedMediaBlob>('Key', MEDIA_BLOBS_MULTI_ENTRY),
         offlineTargets: new TableShim<OfflineTargetRow>('Key'),
     } as unknown as LibraryCacheDb;
     return new LocalMediaStore(() => db);

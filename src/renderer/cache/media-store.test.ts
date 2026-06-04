@@ -11,7 +11,7 @@
 import type { LibraryCacheDb } from '/@/renderer/cache/db';
 import type { CachedMediaBlob, OfflineTargetRow } from '/@/renderer/cache/types';
 
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
     blobKey,
@@ -22,12 +22,23 @@ import {
 
 // --- in-memory Dexie table shim ---------------------------------------
 
+// Multi-entry (`*`-prefixed) indexes per the v9 mediaBlobs schema in db.ts.
+// A multiEntry index expands an array-valued field into one index entry per
+// element; a plain index yields one entry per row. `orderBy(index).keys()`
+// must reproduce that so the Blob-free read paths in LocalMediaStore behave
+// exactly as real Dexie would.
+const MULTI_ENTRY: Record<string, Set<string>> = {
+    mediaBlobs: new Set(['EntityKeys']),
+};
+
 class TableShim<T extends Record<string, any>> {
     readonly rows = new Map<unknown, T>();
+    private readonly multiEntry: Set<string>;
     private readonly pk: string;
 
-    constructor(pk: string) {
+    constructor(pk: string, multiEntry: Set<string> = new Set()) {
         this.pk = pk;
+        this.multiEntry = multiEntry;
     }
 
     async clear(): Promise<void> {
@@ -42,12 +53,37 @@ class TableShim<T extends Record<string, any>> {
         this.rows.delete(key);
     }
 
+    // Faithful to Dexie: `.each()` deserialises the WHOLE row (Blob included).
+    // The Blob-free read paths must NOT route through here — tests spy on this
+    // to prove the audio bytes are never materialised on those paths.
     async each(fn: (row: T) => void): Promise<void> {
         for (const row of this.rows.values()) fn(row);
     }
 
     async get(key: unknown): Promise<T | undefined> {
         return this.rows.get(key);
+    }
+
+    // Mirror Dexie's `Collection`: `.keys()` returns the INDEX keys (scalars),
+    // never the rows — so no Blob is ever cloned. multiEntry indexes expand
+    // array fields per element; scalar indexes emit one key per row.
+    orderBy(field: string) {
+        return {
+            keys: async (): Promise<Array<number | string>> => {
+                const out: Array<number | string> = [];
+                for (const row of this.rows.values()) {
+                    const v = row[field];
+                    if (this.multiEntry.has(field)) {
+                        if (Array.isArray(v)) {
+                            for (const el of v) out.push(el);
+                        }
+                    } else if (v !== undefined) {
+                        out.push(v);
+                    }
+                }
+                return out;
+            },
+        };
     }
 
     async put(row: T): Promise<void> {
@@ -72,7 +108,7 @@ class TableShim<T extends Record<string, any>> {
 }
 
 const makeDb = () => {
-    const mediaBlobs = new TableShim<CachedMediaBlob>('Key');
+    const mediaBlobs = new TableShim<CachedMediaBlob>('Key', MULTI_ENTRY.mediaBlobs);
     const offlineTargets = new TableShim<OfflineTargetRow>('Key');
     return { mediaBlobs, offlineTargets } as unknown as LibraryCacheDb;
 };
@@ -344,6 +380,60 @@ describe('LocalMediaStore targets', () => {
         });
         const keys = await store.listSongKeys();
         expect(keys.sort()).toEqual(['srv:s1', 'srv:s2']);
+    });
+
+    it('totalBytes / listSongKeys / listAvailableEntityKeys never materialise blob rows', async () => {
+        // The OOM fix: these three indicator-refresh paths run on every
+        // availability/stats refresh (offline add/remove, each sync finish,
+        // cold start). They MUST read index keys only — routing through
+        // `.each()` (or any row read) structured-clones each row's audio Blob
+        // into the heap, which on a multi-GB library is a real iOS OOM. We spy
+        // on the shim's `.each()` to prove no row deserialisation occurs and on
+        // `.orderBy().keys()` to prove the Blob-free index cursor IS used.
+        // s1 belongs to two entities (dedup coverage); s2 is a distinct blob
+        // so the byte sum and song-key set are non-trivial.
+        await store.save({
+            blob: blob(10),
+            container: 'mp3',
+            entityKey: 'srv:album:al1',
+            serverId: 'srv',
+            songId: 's1',
+        });
+        await store.save({
+            blob: blob(20),
+            container: 'mp3',
+            entityKey: 'srv:playlist:pl1',
+            serverId: 'srv',
+            songId: 's1',
+        });
+        await store.save({
+            blob: blob(30),
+            container: 'mp3',
+            entityKey: 'srv:album:al1',
+            serverId: 'srv',
+            songId: 's2',
+        });
+
+        const table = (db as any).mediaBlobs;
+        const eachSpy = vi.spyOn(table, 'each');
+        const orderBySpy = vi.spyOn(table, 'orderBy');
+
+        const total = await store.totalBytes();
+        const songKeys = await store.listSongKeys();
+        const entityKeys = await store.listAvailableEntityKeys();
+
+        // Correct results preserved (s1=10 + s2=30; s1's second save is
+        // membership-only and adds no bytes).
+        expect(total).toBe(40);
+        expect(songKeys.sort()).toEqual(['srv:s1', 'srv:s2']);
+        expect(entityKeys.sort()).toEqual(['srv:album:al1', 'srv:playlist:pl1']);
+
+        // No row (and therefore no Blob) was ever read.
+        expect(eachSpy).not.toHaveBeenCalled();
+        // Each method drove a Blob-free index cursor.
+        expect(orderBySpy).toHaveBeenCalledWith('ByteSize');
+        expect(orderBySpy).toHaveBeenCalledWith('Key');
+        expect(orderBySpy).toHaveBeenCalledWith('EntityKeys');
     });
 
     it('listAvailableEntityKeys returns each owning target once (deduped)', async () => {

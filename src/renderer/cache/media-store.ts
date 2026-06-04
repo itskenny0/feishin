@@ -192,10 +192,22 @@ export class LocalMediaStore {
         const db = this.dbOrUndefined();
         if (!db) return [];
         try {
+            // Read the multi-entry `*EntityKeys` index keys directly instead of
+            // iterating full rows. `.each()` structured-clones every row —
+            // INCLUDING its audio `Blob` — just to read the scalar membership
+            // array; on a multi-GB offline library that transiently
+            // materialises the entire corpus into the JS heap (a real iOS OOM,
+            // and this path runs on every availability refresh). The
+            // `*EntityKeys` multiEntry index (see db.ts v9 schema) lets
+            // IndexedDB hand back ONE key per array element across all rows
+            // without touching the row store. Mirrors `sumThumbnailBytes` in
+            // eviction.ts. We dedup into a Set exactly as before — multiEntry
+            // keys repeat when the same entity key tags several blobs.
+            const indexKeys = await db.mediaBlobs.orderBy('EntityKeys').keys();
             const keys = new Set<string>();
-            await db.mediaBlobs.each((row) => {
-                for (const k of row.EntityKeys ?? []) keys.add(k);
-            });
+            for (const k of indexKeys) {
+                if (typeof k === 'string') keys.add(k);
+            }
             return [...keys];
         } catch (err) {
             console.warn(`${TAG} listAvailableEntityKeys() failed`, err);
@@ -223,10 +235,16 @@ export class LocalMediaStore {
         const db = this.dbOrUndefined();
         if (!db) return [];
         try {
+            // `Key` is the primary key (`${serverId}:${songId}`), so reading
+            // the primary-key cursor returns exactly what `.each()` pushed from
+            // `row.Key` — but without structured-cloning each row's audio Blob
+            // into the heap. See `listAvailableEntityKeys` for why the row-walk
+            // is an OOM hazard on a large offline library.
+            const indexKeys = await db.mediaBlobs.orderBy('Key').keys();
             const out: string[] = [];
-            await db.mediaBlobs.each((row) => {
-                out.push(row.Key);
-            });
+            for (const k of indexKeys) {
+                if (typeof k === 'string') out.push(k);
+            }
             return out;
         } catch (err) {
             console.warn(`${TAG} listSongKeys() failed`, err);
@@ -316,10 +334,20 @@ export class LocalMediaStore {
         const db = this.dbOrUndefined();
         if (!db) return 0;
         try {
+            // Sum the `ByteSize` index keys — IndexedDB returns one integer per
+            // row from the index without deserialising the row store (and so
+            // without pulling the audio Blob into memory). Identical sum to the
+            // old `.each((row) => total += row.ByteSize)` walk, but O(1) heap
+            // instead of O(corpus bytes). Mirrors `sumThumbnailBytes` in
+            // eviction.ts. (Rows persisted with a missing/undefined ByteSize
+            // produced an index entry of `undefined`, which the old code
+            // coalesced to 0; the cursor simply skips non-numeric keys, giving
+            // the same total.)
+            const indexKeys = await db.mediaBlobs.orderBy('ByteSize').keys();
             let total = 0;
-            await db.mediaBlobs.each((row) => {
-                total += row.ByteSize ?? 0;
-            });
+            for (const k of indexKeys) {
+                if (typeof k === 'number') total += k;
+            }
             return total;
         } catch (err) {
             console.warn(`${TAG} totalBytes() failed`, err);
