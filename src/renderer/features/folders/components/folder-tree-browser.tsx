@@ -449,7 +449,12 @@ export const FolderTreeBrowser = ({ fetchFolder, rootFolderQuery }: FolderTreeBr
     const isEmpty = !isLoading && flattenedNodes.length === 0;
 
     return (
-        <div className={styles.container} ref={containerRef}>
+        <div
+            aria-label={t('page.folderList.treeLabel', { defaultValue: 'Folder tree' })}
+            className={styles.container}
+            ref={containerRef}
+            role="tree"
+        >
             <List
                 rowComponent={RowComponent}
                 rowCount={flattenedNodes.length}
@@ -565,6 +570,47 @@ const RowComponent = ({
         handleNodeClick(item.folder, item.path, item.isExpanded, isActive);
     };
 
+    // Keyboard support for the tree (WAI-ARIA treeitem semantics): Enter/Space
+    // activates the row, Right/Left expand/collapse the node, and Up/Down move
+    // focus to the adjacent rendered treeitem. Combined with the roving
+    // tabIndex below (only the active row — or the first row when none is
+    // active — is a Tab stop) this makes the folder tree fully keyboard
+    // operable without turning every virtualized row into its own tab stop.
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+        switch (e.key) {
+            case ' ':
+            case 'Enter':
+                e.preventDefault();
+                handleRowClick();
+                break;
+            case 'ArrowDown':
+            case 'ArrowUp': {
+                const row = rowRef.current;
+                const tree = row?.closest('[role="tree"]');
+                if (!row || !tree) break;
+                const items = Array.from(tree.querySelectorAll<HTMLElement>('[role="treeitem"]'));
+                const next = items[items.indexOf(row) + (e.key === 'ArrowDown' ? 1 : -1)];
+                if (next) {
+                    e.preventDefault();
+                    next.focus();
+                }
+                break;
+            }
+            case 'ArrowLeft':
+                if (item.hasChildren && item.isExpanded) {
+                    e.preventDefault();
+                    toggleNode(item.folder.id, item.hasChildren, item.folder);
+                }
+                break;
+            case 'ArrowRight':
+                if (item.hasChildren && !item.isExpanded) {
+                    e.preventDefault();
+                    toggleNode(item.folder.id, item.hasChildren, item.folder);
+                }
+                break;
+        }
+    };
+
     const handleContextMenu = (e: React.MouseEvent<HTMLDivElement>) => {
         e.preventDefault();
         e.stopPropagation();
@@ -593,17 +639,23 @@ const RowComponent = ({
             withArrow={false}
         >
             <div
+                aria-expanded={item.hasChildren ? item.isExpanded : undefined}
+                aria-level={item.depth + 1}
+                aria-selected={isActive}
                 className={clsx(styles.row, {
                     [styles.active]: isActive,
                     [styles.dragging]: isDragging,
                 })}
                 onClick={handleRowClick}
                 onContextMenu={handleContextMenu}
+                onKeyDown={handleKeyDown}
                 ref={mergedRef}
+                role="treeitem"
                 style={{
                     ...style,
                     paddingLeft: `${paddingLeft}px`,
                 }}
+                tabIndex={isActive || (currentFolderId === null && index === 0) ? 0 : -1}
             >
                 <div className={styles.rowContent}>
                     {item.hasChildren ? (
