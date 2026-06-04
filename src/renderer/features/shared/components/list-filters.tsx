@@ -13,6 +13,7 @@ import { JellyfinSongFilters } from '/@/renderer/features/songs/components/jelly
 import { NavidromeSongFilters } from '/@/renderer/features/songs/components/navidrome-song-filters';
 import { SubsonicSongFilters } from '/@/renderer/features/songs/components/subsonic-song-filters';
 import { useSongListFilters } from '/@/renderer/features/songs/hooks/use-song-list-filters';
+import { useIsMobileShell } from '/@/renderer/hooks/use-breakpoint';
 import { useCurrentServer } from '/@/renderer/store';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Button } from '/@/shared/components/button/button';
@@ -48,6 +49,11 @@ export const ListFiltersModal = ({ isActive, itemType }: ListFiltersProps) => {
     const FilterComponent = FILTERS[serverType][itemType];
 
     const [isOpen, handlers] = useDisclosure(false);
+    // On the mobile shell the filter modal goes full-screen so its content
+    // (dense rows of selects / sliders / date pickers) is bounded by the
+    // viewport instead of the desktop `--theme-content-max-width`, which on a
+    // phone overflowed past the screen edges.
+    const isMobileShell = useIsMobileShell();
 
     const albumListFilters = useAlbumListFilters(pageKey as ItemListKey);
     const songListFilters = useSongListFilters(pageKey as ItemListKey);
@@ -71,16 +77,37 @@ export const ListFiltersModal = ({ isActive, itemType }: ListFiltersProps) => {
         <>
             <FilterButton isActive={isActive} onClick={handlers.toggle} />
             <Modal
+                fullScreen={isMobileShell}
                 handlers={handlers}
                 opened={isOpen}
                 size="lg"
                 styles={{
-                    content: {
-                        height: '100%',
-                        maxHeight: '640px',
-                        maxWidth: 'var(--theme-content-max-width)',
-                        width: '100%',
-                    },
+                    body: isMobileShell
+                        ? {
+                              overflowY: 'auto',
+                              paddingBottom:
+                                  'calc(var(--theme-spacing-md) + max(env(safe-area-inset-bottom, 0px), var(--android-safe-bottom, 0px)))',
+                          }
+                        : undefined,
+                    content: isMobileShell
+                        ? {
+                              height: '100dvh',
+                              maxHeight: '100dvh',
+                              maxWidth: '100vw',
+                              width: '100vw',
+                          }
+                        : {
+                              height: '100%',
+                              maxHeight: '640px',
+                              maxWidth: 'var(--theme-content-max-width)',
+                              width: '100%',
+                          },
+                    header: isMobileShell
+                        ? {
+                              paddingTop:
+                                  'calc(var(--theme-spacing-md) + max(env(safe-area-inset-top, 0px), var(--android-safe-top, 0px)))',
+                          }
+                        : undefined,
                 }}
                 title={
                     <Group justify="space-between" style={{ paddingRight: '3rem', width: '100%' }}>
