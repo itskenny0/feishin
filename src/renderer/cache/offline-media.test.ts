@@ -66,6 +66,7 @@ import {
     addOfflineTarget,
     cancelOfflineSync,
     enumerateTargetSongs,
+    isSyncing,
     refreshOfflineAvailability,
     removeOfflineTarget,
     syncTarget,
@@ -413,5 +414,150 @@ describe('byte-cap reservation accounting', () => {
         // s1's blob is now shared by both the playlist and the album target.
         const s1 = await store.get('srv', 's1');
         expect(s1?.EntityKeys.sort()).toEqual(['srv:album:e1', 'srv:playlist:pl1']);
+    });
+
+    it('releases the FULL reconciled reservation when a store write throws after fetch', async () => {
+        // Regression: the error path released a flat `projected` reservation,
+        // but if the write threw AFTER the reservation was reconciled up to the
+        // real (larger) blob size, the difference leaked into reservedBytes and
+        // permanently ate cap headroom — starving a later song in the same
+        // sync. Here s1's reported size is small (projected 500) but its real
+        // blob is large (2000) and its store.save() throws. With a correct
+        // FULL release there is still room for the remaining small song; with
+        // the buggy `projected`-only release the leaked 1500 trips the cap.
+        //
+        // Cap = 2750. Real sizes: s1=2000 (fails to save), then s2,s3,s4=500.
+        // Committed bytes if everything that *can* download does: s2+s3+s4 =
+        // 1500 — well under 2750. With the fix, s1's catch releases the full
+        // reconciled 2000, so when worker A loops to s4 the live reservation is
+        // 1500 (s2+s3 in flight) and s4's pre-check 1500+500=2000 < 2750 → ok.
+        // With the bug, s1's catch releases only `projected` (500), leaving a
+        // 1500 leak; s4's pre-check sees 2500+500=3000 > 2750 → capHit → s4 is
+        // skipped and the target is wrongly marked partial.
+        mocks.settingsState.localCache.offlineMedia.maxBytes = 2750;
+        controller.getAlbumDetail.mockResolvedValue({
+            songs: [song('s1', 500), song('s2', 500), song('s3', 500), song('s4', 500)],
+        });
+
+        // Real blob sizes per song id.
+        const realSize: Record<string, number> = { s1: 2000, s2: 500, s3: 500, s4: 500 };
+        // s1 resolves immediately; the others gate on `release` so worker A
+        // finishes s1 (fails) and loops to pick s4 with s1's reservation state
+        // already settled.
+        let release = (): void => {};
+        const gate = new Promise<void>((r) => {
+            release = r;
+        });
+        global.fetch = vi.fn(async (url: any) => {
+            const id = String(url).split('/').pop() as string;
+            if (id !== 's1') await gate;
+            return {
+                blob: async () => new Blob([new Uint8Array(realSize[id])]),
+                ok: true,
+            } as any;
+        }) as any;
+
+        const store = makeStore();
+        // Make ONLY s1's save throw, after its (large) blob has been fetched.
+        const realSave = store.save.bind(store);
+        store.save = (async (a: any) => {
+            if (a.songId === 's1') throw new Error('disk write failed');
+            return realSave(a);
+        }) as any;
+        await store.putTarget(target());
+
+        const p = syncTarget({ store, target: target() });
+        // Let s1 fail and worker A advance before unblocking the rest.
+        await new Promise((r) => setTimeout(r, 0));
+        release();
+        const result = await p;
+
+        // s1 failed; s2,s3,s4 must ALL have downloaded — the failed s1's
+        // reservation was fully released so it never blocked the remaining
+        // songs against the 3000 cap.
+        expect(await store.has('srv', 's1')).toBe(false);
+        expect(await store.has('srv', 's2')).toBe(true);
+        expect(await store.has('srv', 's3')).toBe(true);
+        expect(await store.has('srv', 's4')).toBe(true);
+        expect(await store.count()).toBe(3);
+        // One genuine failure → status is 'error', not 'partial' (cap).
+        expect(result.Status).toBe('error');
+    });
+});
+
+describe('same-key re-sync race', () => {
+    it('a superseding same-key sync stays cancellable; the stale one cannot clobber it', async () => {
+        // Regression: starting a second sync for the SAME key used to NOT
+        // cancel the first (the guard was `activeKey !== key`), so two worker
+        // pools ran against one target and the first pool's finish() — keyed
+        // only by `key` — wiped the second pool's abort controller, leaving the
+        // live sync un-cancellable (isSyncing() === false). The fix always
+        // cancels the in-flight sync and gates finish() on controller identity.
+        controller.getAlbumDetail.mockResolvedValue({ songs: [song('s1'), song('s2')] });
+
+        // Hang every fetch until released so both syncs stay in-flight, but
+        // honour the abort signal so an aborted (superseded) sync's workers
+        // unwind instead of hanging on the gate forever.
+        let release = (): void => {};
+        const gate = new Promise<void>((r) => {
+            release = r;
+        });
+        global.fetch = vi.fn(
+            (_url: any, opts: any) =>
+                new Promise((resolve, reject) => {
+                    const signal: AbortSignal | undefined = opts?.signal;
+                    if (signal?.aborted) {
+                        reject(new DOMException('Aborted', 'AbortError'));
+                        return;
+                    }
+                    signal?.addEventListener('abort', () =>
+                        reject(new DOMException('Aborted', 'AbortError')),
+                    );
+                    void gate.then(() =>
+                        resolve({
+                            blob: async () => new Blob([new Uint8Array(1000)]),
+                            ok: true,
+                        } as any),
+                    );
+                }),
+        ) as any;
+
+        const store = makeStore();
+        await store.putTarget(target());
+
+        // Sync A (will be superseded). Don't await — it hangs on the gate.
+        let aSettled = false;
+        const a = syncTarget({ store, target: target() }).finally(() => {
+            aSettled = true;
+        });
+        await new Promise((r) => setTimeout(r, 0));
+        // Sync B for the SAME key. Must cancel A first.
+        const b = syncTarget({ store, target: target() });
+        await new Promise((r) => setTimeout(r, 0));
+
+        // B is the live sync we expect to be running and cancellable.
+        expect(isSyncing()).toBe(true);
+
+        // A must settle PROMPTLY without the gate ever being released — the
+        // ONLY way that happens is if B cancelled A on start (its fetches
+        // reject on abort). With the buggy `activeKey !== key` guard A is never
+        // cancelled and stays hung on the gate, so it never settles. Bound the
+        // wait so the buggy behaviour fails by assertion, not by suite timeout.
+        for (let i = 0; i < 20 && !aSettled; i += 1) {
+            await new Promise((r) => setTimeout(r, 0));
+        }
+        expect(aSettled).toBe(true);
+
+        // After the STALE sync (A) finished, B must STILL be the cancellable
+        // live sync — A's finish must not have wiped B's controller.
+        expect(isSyncing()).toBe(true);
+
+        // And cancel must actually stop B (its hung fetches reject on abort).
+        cancelOfflineSync();
+        expect(isSyncing()).toBe(false);
+        // Unblock so any straggler fetch promises settle, then drain.
+        release();
+        await a;
+        await Promise.race([b, new Promise((r) => setTimeout(r, 500))]);
     });
 });

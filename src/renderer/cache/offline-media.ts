@@ -282,8 +282,14 @@ export const syncTarget = async (args: SyncTargetArgs): Promise<OfflineTargetRow
     const { target } = args;
     const { Key: key, Name: name, ServerId: serverId } = target;
 
-    // Only one sync at a time; cancel any in-flight one for a different target.
-    if (activeAbort && activeKey !== key) cancelOfflineSync();
+    // Only one sync at a time. Cancel ANY in-flight sync before starting a new
+    // one — including one for the SAME key (e.g. a double-clicked "sync" or a
+    // re-sync that overlaps `syncAllTargets`). The previous `activeKey !== key`
+    // guard let a same-key re-sync spawn a second worker pool against the same
+    // target, and the old pool's `finish()` (keyed only by `key`) would then
+    // clobber the new pool's abort controller, leaving the live sync
+    // un-cancellable.
+    if (activeAbort) cancelOfflineSync();
     const abort = new AbortController();
     activeAbort = abort;
     activeKey = key;
@@ -295,11 +301,18 @@ export const syncTarget = async (args: SyncTargetArgs): Promise<OfflineTargetRow
         status: OfflineTargetStatus,
         lastError?: string,
     ): Promise<OfflineTargetRow> => {
-        if (activeKey === key) {
+        // Clear the active-sync handle only if THIS invocation still owns it.
+        // Compare controller identity (not `key`): a superseding same-key sync
+        // installs a fresh controller under the same key, and matching by key
+        // would let this (now-stale) finish wipe the live sync's controller.
+        if (activeAbort === abort) {
             activeAbort = undefined;
             activeKey = undefined;
+            // Only clear the live progress banner when WE owned the active
+            // sync. A stale finish that's been superseded must not wipe the
+            // progress of the sync that replaced it.
+            setSync(undefined);
         }
-        setSync(undefined);
         await store.patchTarget(key, { LastError: lastError, Status: status });
         await refreshOfflineStats(store);
         const updated = (await store.getTarget(key)) ?? target;
@@ -382,19 +395,28 @@ export const syncTarget = async (args: SyncTargetArgs): Promise<OfflineTargetRow
                 });
                 return;
             }
-            // Reserve synchronously before yielding to the fetch.
+            // Reserve synchronously before yielding to the fetch. Track THIS
+            // song's live reservation locally so the error path releases the
+            // exact amount currently held — `projected` before the fetch, the
+            // real `blob.size` after reconciliation. Releasing a flat
+            // `projected` in the catch would under-release (and permanently
+            // leak cap headroom) if `store.save`/`patchTarget` throws AFTER the
+            // reservation was reconciled up to the real size.
             reservedBytes += projected;
+            let songReserved = projected;
 
             try {
                 const url = await resolveDownloadUrl(song, serverId);
                 const blob = await fetchSongBlob(url, abort.signal);
                 // Reconcile the reservation to the real size.
                 reservedBytes += blob.size - projected;
+                songReserved = blob.size;
                 // Re-check the cap against the real committed total before
                 // writing — catches the case where the real size exceeded the
                 // reservation enough to blow the cap.
                 if (Number.isFinite(maxBytes) && bytesDownloaded + blob.size > maxBytes) {
                     reservedBytes -= blob.size;
+                    songReserved = 0;
                     capHit = true;
                     console.warn(`${TAG} byte cap reached after fetch — discarding`, {
                         key,
@@ -410,6 +432,9 @@ export const syncTarget = async (args: SyncTargetArgs): Promise<OfflineTargetRow
                     songId: song.id,
                 });
                 if (isNew) {
+                    // Reservation has now become committed bytes; nothing left
+                    // to release for this song.
+                    songReserved = 0;
                     bytesDownloaded += blob.size;
                     done += 1;
                     console.info(`${TAG} item downloaded`, {
@@ -425,14 +450,17 @@ export const syncTarget = async (args: SyncTargetArgs): Promise<OfflineTargetRow
                     // bytes. Release this song's reservation so a shared
                     // album/playlist doesn't eat cap headroom it never used.
                     reservedBytes -= blob.size;
+                    songReserved = 0;
                     done += 1;
                 }
                 await store.patchTarget(key, { Bytes: bytesDownloaded, DownloadedCount: done });
                 pushProgress();
             } catch (err) {
-                // Release this song's reservation so a 404 doesn't
+                // Release whatever this song currently holds reserved so a
+                // failure (404, or a Dexie write that throws after the
+                // reservation was reconciled to the real blob size) doesn't
                 // permanently eat cap headroom.
-                reservedBytes -= projected;
+                reservedBytes -= songReserved;
                 if (abort.signal.aborted) return;
                 failed = true;
                 console.warn(`${TAG} item failed`, { err, key, songId: song.id });
