@@ -253,7 +253,7 @@ const normalizeSong = (
         imageUrl: null,
         lastPlayedAt: null,
         lyrics: null,
-        mbzRecordingId: null,
+        mbzRecordingId: item.ProviderIds?.MusicBrainzRecording || null,
         mbzTrackId: item.ProviderIds?.MusicBrainzTrack || null,
         name: item.Name,
         participants,
