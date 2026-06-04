@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router';
 
+import { getSelectedPlayArgs } from '/@/renderer/components/item-list/helpers/get-selected-play-args';
 import { getTitlePath } from '/@/renderer/components/item-list/helpers/get-title-path';
 import { isRangeSelectableItem } from '/@/renderer/components/item-list/helpers/is-range-selectable-item';
 import { ItemListStateItemWithRequiredProperties } from '/@/renderer/components/item-list/helpers/item-list-state';
@@ -396,6 +397,39 @@ export const useDefaultItemListControls = (args?: UseDefaultItemListControlsArgs
                 }
 
                 playerRef.current.addToQueueByFetch(item._serverId, [item.id], itemType, playType);
+            },
+
+            // Plays the FULL current selection (every selected row, in
+            // selection/display order) — used by the list play-HOTKEYS so they
+            // match the context-menu play path. Distinct from `onPlay`, which
+            // intentionally stays single-item for the per-row hover button.
+            onPlaySelected: ({
+                internalState,
+                itemType,
+                playType,
+            }: DefaultItemControlProps & { playType: Play }) => {
+                if (!internalState) {
+                    return;
+                }
+
+                const selected = internalState
+                    .getSelected()
+                    .filter(
+                        (item): item is ItemListStateItemWithRequiredProperties =>
+                            typeof item === 'object' &&
+                            item !== null &&
+                            typeof (item as { id?: unknown }).id === 'string' &&
+                            typeof (item as { _serverId?: unknown })._serverId === 'string',
+                    );
+
+                if (selected.length === 0) {
+                    return;
+                }
+
+                for (const { ids, serverId } of getSelectedPlayArgs(selected)) {
+                    if (ids.length === 0) continue;
+                    playerRef.current.addToQueueByFetch(serverId, ids, itemType, playType);
+                }
             },
 
             onRating: ({

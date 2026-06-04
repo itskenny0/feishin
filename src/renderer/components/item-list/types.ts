@@ -48,6 +48,11 @@ export interface ItemControls {
         itemType,
         playType,
     }: DefaultItemControlProps & { playType: Play }) => void;
+    onPlaySelected?: ({
+        internalState,
+        itemType,
+        playType,
+    }: DefaultItemControlProps & { playType: Play }) => void;
     onRating?: ({
         index,
         internalState,

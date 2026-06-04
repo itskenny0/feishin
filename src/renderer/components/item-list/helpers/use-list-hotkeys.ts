@@ -61,49 +61,55 @@ export const useListHotkeys = ({
             bindings.listPlayDefault.hotkey,
             () => {
                 if (!focused) return;
-                const selected = internalState.getSelected();
-                const validSelected = selected.filter(hasRequiredStateItemProperties);
-                if (validSelected.length === 0) return;
-
-                const item = validSelected[0];
-                const playType = playButtonBehavior;
-                controls.onPlay?.({ item, itemType, playType } as any);
+                // Play the FULL selection (every selected row), matching the
+                // context-menu play path. `onPlaySelected` reads
+                // internalState.getSelected() itself and guards empty selection.
+                controls.onPlaySelected?.({
+                    event: null,
+                    internalState,
+                    item: undefined,
+                    itemType,
+                    playType: playButtonBehavior,
+                });
             },
         ],
         [
             bindings.listPlayNow.hotkey,
             () => {
                 if (!focused) return;
-                const selected = internalState.getSelected();
-                const validSelected = selected.filter(hasRequiredStateItemProperties);
-                if (validSelected.length === 0) return;
-
-                const item = validSelected[0];
-                controls.onPlay?.({ item, itemType, playType: Play.NOW } as any);
+                controls.onPlaySelected?.({
+                    event: null,
+                    internalState,
+                    item: undefined,
+                    itemType,
+                    playType: Play.NOW,
+                });
             },
         ],
         [
             bindings.listPlayNext.hotkey,
             () => {
                 if (!focused) return;
-                const selected = internalState.getSelected();
-                const validSelected = selected.filter(hasRequiredStateItemProperties);
-                if (validSelected.length === 0) return;
-
-                const item = validSelected[0];
-                controls.onPlay?.({ item, itemType, playType: Play.NEXT } as any);
+                controls.onPlaySelected?.({
+                    event: null,
+                    internalState,
+                    item: undefined,
+                    itemType,
+                    playType: Play.NEXT,
+                });
             },
         ],
         [
             bindings.listPlayLast.hotkey,
             () => {
                 if (!focused) return;
-                const selected = internalState.getSelected();
-                const validSelected = selected.filter(hasRequiredStateItemProperties);
-                if (validSelected.length === 0) return;
-
-                const item = validSelected[0];
-                controls.onPlay?.({ item, itemType, playType: Play.LAST } as any);
+                controls.onPlaySelected?.({
+                    event: null,
+                    internalState,
+                    item: undefined,
+                    itemType,
+                    playType: Play.LAST,
+                });
             },
         ],
         [
