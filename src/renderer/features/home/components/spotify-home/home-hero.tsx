@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 
 import styles from './home-hero.module.css';
 
+import { FeelingLuckyButton } from '/@/renderer/features/home/components/feeling-lucky-button';
 import { useDominantColor } from '/@/renderer/features/player/hooks/use-dominant-color';
 import { usePlayerSong } from '/@/renderer/store';
 import { Text } from '/@/shared/components/text/text';
@@ -53,6 +54,13 @@ export const HomeHero = () => {
             <Text className={styles.greeting} component="h1" isNoSelect overflow="hidden">
                 {greeting}
             </Text>
+            {/*
+             * "I'm feeling lucky" — restored from the previous home. Tap plays
+             * a random pick from the local cache (long-press / right-click
+             * fetches a fresh remote set). Sits opposite the greeting and wraps
+             * below it on narrow phones via the hero's flex-wrap.
+             */}
+            <FeelingLuckyButton />
         </div>
     );
 };

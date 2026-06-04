@@ -10,9 +10,12 @@
 .hero {
     position: relative;
     display: flex;
-    align-items: flex-end;
-    min-height: 7rem;
-    padding-top: 0.5rem;
+    flex-wrap: wrap;
+    gap: 0.75rem 1rem;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 2.75rem;
+    padding-top: 0;
 }
 
 /*
@@ -25,7 +28,7 @@
 .glow {
     position: absolute;
     inset: -2rem -3rem auto;
-    height: 16rem;
+    height: 11rem;
     pointer-events: none;
     background:
         radial-gradient(
@@ -55,7 +58,7 @@
 
 @media (width >= 835px) {
     .hero {
-        min-height: 8rem;
+        min-height: 3.5rem;
     }
 
     .greeting {
