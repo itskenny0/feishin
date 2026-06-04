@@ -3,6 +3,10 @@ import dayjs from 'dayjs';
 import { useTranslation } from 'react-i18next';
 
 import { useShareItem } from '/@/renderer/features/sharing/mutations/share-item-mutation';
+import {
+    isShareExpiryValid,
+    toShareExpiryTimestamp,
+} from '/@/renderer/features/sharing/utils/share-expiry';
 import { useIsMobileShell } from '/@/renderer/hooks/use-breakpoint';
 import { useCurrentServer } from '/@/renderer/store';
 import { getServerUrl } from '/@/renderer/utils/normalize-server-url';
@@ -41,8 +45,11 @@ export const ShareItemContextModal = ({
             expires: defaultDate,
         },
         validate: {
+            // An empty value is intentional: it means "never expires" (the
+            // picker is clearable and its description advertises this). Only
+            // reject a value that is present *and* not in the future.
             expires: (value) =>
-                dayjs(value).isAfter(dayjs()) ? null : t('form.shareItem.expireInvalid'),
+                isShareExpiryValid(value) ? null : t('form.shareItem.expireInvalid'),
         },
     });
 
@@ -83,7 +90,9 @@ export const ShareItemContextModal = ({
                 body: {
                     description: values.description,
                     downloadable: values.allowDownloading,
-                    expires: dayjs(values.expires).valueOf(),
+                    // Empty expiry => "never expires" (mapped to 0). See
+                    // share-expiry util.
+                    expires: toShareExpiryTimestamp(values.expires),
                     resourceIds: itemIds.join(),
                     resourceType,
                 },
