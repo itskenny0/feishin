@@ -271,6 +271,20 @@
     grid-area: image;
     align-items: center;
     justify-content: center;
+
+    /*
+     * Critical: this is the grid item in the fixed-width `image` column.
+     * Grid items default to min-width:auto, so without this the section
+     * refuses to shrink below the cover's intrinsic width and EXPANDS past
+     * its track — spilling the cover across the metadata column and over the
+     * Play/Next/Last buttons (the recurring oversized-cover bug). min-width:0
+     * lets it honor the track; overflow:hidden clips any residual. With the
+     * section clamped, the cover's own max-width:100% finally resolves to the
+     * track width instead of to an already-overgrown section.
+     */
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
     filter: drop-shadow(0 0 8px rgb(0 0 0 / 50%));
 
     /* 600px tablet threshold — must match the .library-header rule above
