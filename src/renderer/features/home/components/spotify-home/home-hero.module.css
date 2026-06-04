@@ -27,8 +27,16 @@
  */
 .glow {
     position: absolute;
-    inset: -2rem -3rem auto;
-    height: 11rem;
+
+    /*
+     * Bleed the wash UP past the hero (and the small top padding / device
+     * chip row above it) so the colour reaches the top of the page rather
+     * than leaving a band of page-background black under the status bar.
+     * Clipped to the scroll origin at the very top, so it reads as the page
+     * opening on the accent wash, Spotify-style.
+     */
+    inset: -7rem -3rem auto;
+    height: 17rem;
     pointer-events: none;
     background:
         radial-gradient(

@@ -237,7 +237,13 @@ const HomeRoute = () => {
                         className={styles.contentStack}
                         gap="2xl"
                         mb="5rem"
-                        pt={windowBarStyle === Platform.WEB ? '5rem' : '3rem'}
+                        pt={
+                            isMobileShell
+                                ? 'var(--theme-spacing-md)'
+                                : windowBarStyle === Platform.WEB
+                                  ? '5rem'
+                                  : '3rem'
+                        }
                         ref={containerQuery.ref}
                     >
                         {/* Cold-start Jellyfin Connect entry mirrored in the
