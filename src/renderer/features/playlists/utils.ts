@@ -81,6 +81,50 @@ export function playlistSongsToAlbums(songs: Song[]): PlaylistAlbumRow[] {
     return rows;
 }
 
+// Pure reorder helper shared by the playlist edit-mode tracklist. Given the
+// current ordered list of items (matched by `id`), a set of source ids being
+// moved, the drop target id and the drop edge, returns the new ordering.
+// Multi-select moves keep the relative order of the sources. The math mirrors
+// what the PLAYLIST_REORDER handler needs; extracted here so it can be unit
+// tested in isolation.
+export function reorderPlaylistItems<T extends { id: string }>(
+    items: T[],
+    sourceIds: string[],
+    targetId: string,
+    edge: 'bottom' | 'top',
+): T[] {
+    const currentIds = items.map((item) => item.id);
+
+    const targetIndex = currentIds.indexOf(targetId);
+    if (targetIndex === -1) {
+        return items;
+    }
+
+    const idsWithoutSources = currentIds.filter((id) => !sourceIds.includes(id));
+
+    const sourcesBeforeTarget = sourceIds.filter((id) => {
+        const sourceIndex = currentIds.indexOf(id);
+        return sourceIndex !== -1 && sourceIndex < targetIndex;
+    }).length;
+
+    const insertIndexInFiltered =
+        edge === 'top' ? targetIndex - sourcesBeforeTarget : targetIndex - sourcesBeforeTarget + 1;
+
+    const insertIndex = Math.max(0, Math.min(insertIndexInFiltered, idsWithoutSources.length));
+
+    const reorderedIds = [
+        ...idsWithoutSources.slice(0, insertIndex),
+        ...sourceIds,
+        ...idsWithoutSources.slice(insertIndex),
+    ];
+
+    const itemMap = new Map(items.map((item) => [item.id, item]));
+
+    return reorderedIds
+        .map((id) => itemMap.get(id))
+        .filter((item): item is T => item !== undefined);
+}
+
 export const parseQueryBuilderChildren = (groups: QueryBuilderGroup[], data: any[]) => {
     if (groups.length === 0) {
         return data;

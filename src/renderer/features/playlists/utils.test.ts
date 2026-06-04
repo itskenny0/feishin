@@ -4,6 +4,7 @@ import {
     convertNDQueryToQueryGroup,
     convertQueryGroupToNDQuery,
     playlistSongsToAlbums,
+    reorderPlaylistItems,
 } from '/@/renderer/features/playlists/utils';
 import { Song } from '/@/shared/types/domain-types';
 import { QueryBuilderGroup } from '/@/shared/types/types';
@@ -187,5 +188,126 @@ describe('convertQueryGroupToNDQuery / convertNDQueryToQueryGroup', () => {
         expect(group.group).toHaveLength(1);
         expect(group.group[0].type).toBe('any');
         expect(group.group[0].rules[0].field).toBe('artist');
+    });
+
+    it('serializes two sibling subgroups without dropping or duplicating either', () => {
+        const filter: QueryBuilderGroup = {
+            group: [
+                {
+                    group: [],
+                    rules: [{ field: 'artist', operator: 'is', uniqueId: 'r1', value: 'a' }],
+                    type: 'any',
+                    uniqueId: 'g1',
+                },
+                {
+                    group: [],
+                    rules: [{ field: 'album', operator: 'is', uniqueId: 'r2', value: 'b' }],
+                    type: 'any',
+                    uniqueId: 'g2',
+                },
+            ],
+            rules: [{ field: 'title', operator: 'contains', uniqueId: 'r0', value: 'x' }],
+            type: 'all',
+            uniqueId: 'root',
+        };
+
+        const nd = convertQueryGroupToNDQuery(filter) as Record<string, unknown[]>;
+
+        expect(nd.all).toEqual([
+            { contains: { title: 'x' } },
+            { any: [{ is: { artist: 'a' } }] },
+            { any: [{ is: { album: 'b' } }] },
+        ]);
+    });
+
+    it('serializes a nested subgroup inside a sibling without leaking it to the parent', () => {
+        const filter: QueryBuilderGroup = {
+            group: [
+                {
+                    group: [
+                        {
+                            group: [],
+                            rules: [
+                                { field: 'genre', operator: 'is', uniqueId: 'r1a', value: 'rock' },
+                            ],
+                            type: 'all',
+                            uniqueId: 'g1a',
+                        },
+                    ],
+                    rules: [{ field: 'artist', operator: 'is', uniqueId: 'r1', value: 'a' }],
+                    type: 'any',
+                    uniqueId: 'g1',
+                },
+                {
+                    group: [],
+                    rules: [{ field: 'album', operator: 'is', uniqueId: 'r2', value: 'b' }],
+                    type: 'any',
+                    uniqueId: 'g2',
+                },
+            ],
+            rules: [],
+            type: 'all',
+            uniqueId: 'root',
+        };
+
+        const nd = convertQueryGroupToNDQuery(filter) as Record<string, unknown[]>;
+
+        // The nested g1a must appear only inside g1, and g2 must remain a
+        // top-level sibling (no duplication / leakage from the shared
+        // accumulator in parseQueryBuilderChildren).
+        expect(nd.all).toEqual([
+            {
+                any: [{ is: { artist: 'a' } }, { all: [{ is: { genre: 'rock' } }] }],
+            },
+            { any: [{ is: { album: 'b' } }] },
+        ]);
+    });
+
+    it('emits an empty root array for an all-group with no usable rules', () => {
+        const filter: QueryBuilderGroup = {
+            group: [],
+            rules: [{ field: '', operator: '', uniqueId: 'r0', value: '' }],
+            type: 'all',
+            uniqueId: 'root',
+        };
+
+        const nd = convertQueryGroupToNDQuery(filter) as Record<string, unknown[]>;
+        expect(nd).toEqual({ all: [] });
+    });
+});
+
+describe('reorderPlaylistItems', () => {
+    const ids = (items: { id: string }[]) => items.map((i) => i.id);
+    const make = (list: string[]) => list.map((id) => ({ id }));
+
+    it('moves a single item below the target on a bottom-edge drop', () => {
+        const result = reorderPlaylistItems(make(['A', 'B', 'C', 'D']), ['A'], 'D', 'bottom');
+        expect(ids(result)).toEqual(['B', 'C', 'D', 'A']);
+    });
+
+    it('moves a single item above the target on a top-edge drop', () => {
+        const result = reorderPlaylistItems(make(['A', 'B', 'C', 'D']), ['D'], 'B', 'top');
+        expect(ids(result)).toEqual(['A', 'D', 'B', 'C']);
+    });
+
+    it('keeps multi-select sources contiguous and ordered when moving down', () => {
+        const result = reorderPlaylistItems(make(['A', 'B', 'C', 'D']), ['A', 'B'], 'D', 'bottom');
+        expect(ids(result)).toEqual(['C', 'D', 'A', 'B']);
+    });
+
+    it('keeps multi-select sources contiguous and ordered when moving up', () => {
+        const result = reorderPlaylistItems(make(['A', 'B', 'C', 'D']), ['C', 'D'], 'A', 'top');
+        expect(ids(result)).toEqual(['C', 'D', 'A', 'B']);
+    });
+
+    it('is a no-op when the source is dropped on its own top edge', () => {
+        const result = reorderPlaylistItems(make(['A', 'B', 'C', 'D']), ['A'], 'A', 'top');
+        expect(ids(result)).toEqual(['A', 'B', 'C', 'D']);
+    });
+
+    it('returns the original list when the target id is missing', () => {
+        const input = make(['A', 'B', 'C']);
+        const result = reorderPlaylistItems(input, ['A'], 'ZZZ', 'bottom');
+        expect(result).toBe(input);
     });
 });
