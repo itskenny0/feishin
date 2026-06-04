@@ -232,12 +232,19 @@ export const useItemListPaginatedLoader = ({
                 return;
             }
 
-            const idToIndexMap = data.items
-                .filter(Boolean)
-                .reduce((acc: Record<string, number>, item: any, index: number) => {
-                    acc[item.id] = index;
+            // NOTE: build the index map against the UNFILTERED array so the
+            // indexes line up with the array `updateItems` mutates. Filtering
+            // out falsy placeholder slots here would shift every subsequent
+            // index and corrupt unrelated rows.
+            const idToIndexMap = data.items.reduce(
+                (acc: Record<string, number>, item: any, index: number) => {
+                    if (item) {
+                        acc[item.id] = index;
+                    }
                     return acc;
-                }, {});
+                },
+                {},
+            );
 
             const dataIndexes = payload.id
                 .map((id: string) => idToIndexMap[id])
