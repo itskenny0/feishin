@@ -124,6 +124,7 @@ export const useListHotkeys = ({
         [
             bindings.listShowPlayingSong.hotkey,
             () => {
+                if (!focused) return;
                 onShowPlayingSong?.();
             },
         ],
