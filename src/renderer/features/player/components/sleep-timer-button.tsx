@@ -71,9 +71,15 @@ const useSleepTimer = () => {
     setVolumeRef.current = setVolume;
     const fadeSecondsRef = useRef(fadeSeconds);
     fadeSecondsRef.current = fadeSeconds;
-    // Tracks the in-flight fade interval so we can clear it if the owner
-    // unmounts mid-fade — otherwise the self-clearing interval keeps
-    // firing setVolume against an unmounted owner until it self-terminates.
+    // Tracks the in-flight fade interval purely so a second fade can clear a
+    // prior one. We intentionally do NOT clear this on unmount: a fade is only
+    // ever started at timer expiry, which immediately calls cancelTimer() and
+    // unmounts this hook. The fade must outlive that unmount so it can run to
+    // completion — pausing and restoring volume in its final tick. Clearing it
+    // on unmount would abort the fade before it ever paused, leaving playback
+    // running at a reduced volume (the whole point of the timer defeated). The
+    // interval is self-clearing and only calls store-level actions (setVolume /
+    // mediaPause via refs), so it is safe to let it finish post-unmount.
     const fadeIntervalRef = useRef<null | number>(null);
 
     /**
@@ -113,16 +119,6 @@ const useSleepTimer = () => {
             }
         }, tickMs);
         fadeIntervalRef.current = id;
-    }, []);
-
-    // Clear an in-flight fade if the hook unmounts mid-fade.
-    useEffect(() => {
-        return () => {
-            if (fadeIntervalRef.current !== null) {
-                window.clearInterval(fadeIntervalRef.current);
-                fadeIntervalRef.current = null;
-            }
-        };
     }, []);
 
     // End of album mode. Set the pauseOnNextSongEnd flag whenever the current track
