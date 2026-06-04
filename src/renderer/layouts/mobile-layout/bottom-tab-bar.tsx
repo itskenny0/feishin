@@ -29,11 +29,6 @@ interface BottomTabBarProps {
     /** Open the drawer when the More tab is tapped. */
     onMoreTab: () => void;
     /**
-     * Open the global command palette when the Search tab is tapped.
-     * Falls back to navigating to /search if not provided.
-     */
-    onOpenSearch?: () => void;
-    /**
      * Called when the user taps a tab whose route is already active —
      * the host scrolls the main content to top (Spotify pattern).
      */
@@ -66,12 +61,7 @@ type TabKey = 'home' | 'library' | 'more' | 'search' | 'settings';
  * than a re-navigation, so the user doesn't lose scroll position when they
  * accidentally tap the active tab.
  */
-export const BottomTabBar = ({
-    drawerOpen,
-    onMoreTab,
-    onOpenSearch,
-    onScrollToTop,
-}: BottomTabBarProps) => {
+export const BottomTabBar = ({ drawerOpen, onMoreTab, onScrollToTop }: BottomTabBarProps) => {
     const { t } = useTranslation();
     const location = useLocation();
     const navigate = useNavigate();
@@ -108,16 +98,16 @@ export const BottomTabBar = ({
             {
                 icon: (active) =>
                     active ? <RiSearchFill size="1.5rem" /> : <RiSearchLine size="1.5rem" />,
-                // Search tab is "active" while either the search route is
-                // displayed OR the command-palette overlay is showing.
+                // Search tab is "active" whenever the dedicated search route
+                // is displayed.
                 isActive: (p) => p.startsWith('/search'),
                 key: 'search',
                 label: t('page.sidebar.search', { defaultValue: 'Search' }),
-                // Per Spotify pattern: tap the Search tab on mobile to bring
-                // up the global command palette (which has search + commands
-                // built in). Falls back to navigating to /search only when
-                // the host didn't wire a palette opener.
-                onClick: () => (onOpenSearch ? onOpenSearch() : navigate(searchPath)),
+                // Navigate to the real in-layout search PAGE (with the bottom
+                // tab bar + mini-player visible), NOT the command-palette
+                // overlay. The palette stays mounted globally and is reachable
+                // from the search page header's "commands" affordance.
+                onClick: () => navigate(searchPath),
             },
             {
                 icon: (active) =>
@@ -156,16 +146,7 @@ export const BottomTabBar = ({
                 onClick: onMoreTab,
             },
         ],
-        [
-            drawerOpen,
-            libraryPopoverOpen,
-            navigate,
-            onMoreTab,
-            onOpenSearch,
-            openLibraryPopover,
-            searchPath,
-            t,
-        ],
+        [drawerOpen, libraryPopoverOpen, navigate, onMoreTab, openLibraryPopover, searchPath, t],
     );
 
     /*

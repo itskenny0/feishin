@@ -16,7 +16,10 @@ import {
     SONG_DISPLAY_TYPES,
 } from '/@/renderer/features/shared/components/list-config-menu';
 import { SearchInput } from '/@/renderer/features/shared/components/search-input';
+import { useIsMobileShell } from '/@/renderer/hooks/use-breakpoint';
 import { AppRoute } from '/@/renderer/router/routes';
+import { useCommandPalette } from '/@/renderer/store';
+import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Button, ButtonGroup } from '/@/shared/components/button/button';
 import { Flex } from '/@/shared/components/flex/flex';
 import { Group } from '/@/shared/components/group/group';
@@ -32,6 +35,13 @@ export const SearchHeader = ({ navigationId }: SearchHeaderProps) => {
     const { t } = useTranslation();
     const { itemType } = useParams() as { itemType: LibraryItem };
     const [searchParams, setSearchParams] = useSearchParams();
+    // The Search tab navigates here (the real page). The global command
+    // palette — Search…/Create Playlist…/Go to page…/Server commands… — is
+    // still mounted globally; on the mobile shell this header is its single
+    // entry point (desktop reaches it via hotkeys / app menu, so the button
+    // is hidden there to avoid a redundant affordance).
+    const isMobileShell = useIsMobileShell();
+    const { open: openCommandPalette } = useCommandPalette();
 
     // Memoize the debounced handler so the underlying timer persists across
     // re-renders. A bare `debounce(...)` in the render body produces a fresh
@@ -81,11 +91,28 @@ export const SearchHeader = ({ navigationId }: SearchHeaderProps) => {
                             {t('common.search', { defaultValue: 'Search' })}
                         </LibraryHeaderBar.Title>
                     </LibraryHeaderBar>
-                    <Group>
+                    <Group gap="xs">
                         <SearchInput
                             defaultValue={searchParams.get('query') || ''}
                             onChange={handleSearch}
                         />
+                        {isMobileShell && (
+                            <ActionIcon
+                                aria-label={t('page.appMenu.commandPalette', {
+                                    defaultValue: 'Open command palette',
+                                })}
+                                icon="keyboard"
+                                iconProps={{ size: 'lg' }}
+                                onClick={openCommandPalette}
+                                tooltip={{
+                                    label: t('page.appMenu.commandPalette', {
+                                        defaultValue: 'Open command palette',
+                                    }),
+                                    openDelay: 400,
+                                }}
+                                variant="subtle"
+                            />
+                        )}
                     </Group>
                 </Flex>
             </PageHeader>

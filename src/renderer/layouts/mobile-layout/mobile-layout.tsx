@@ -21,7 +21,6 @@ import { PlayerBar } from '/@/renderer/layouts/default-layout/player-bar';
 import { BottomTabBar } from '/@/renderer/layouts/mobile-layout/bottom-tab-bar';
 import { WindowBar } from '/@/renderer/layouts/window-bar';
 import {
-    useCommandPaletteState,
     useFullScreenPlayerOverlayState,
     usePlayerSong,
     useWindowBarStyle,
@@ -46,7 +45,6 @@ export const MobileLayout = ({ shell }: MobileLayoutProps) => {
     const isBigPhone = useIsBigPhone();
     const mainContentRef = useRef<HTMLElement>(null);
     const queryClient = useQueryClient();
-    const { open: openCommandPalette } = useCommandPaletteState();
     /*
      * Hide the mobile mini-player when nothing is queued. Without this
      * the grid still reserves --mobile-playerbar-height for an empty
@@ -145,7 +143,6 @@ export const MobileLayout = ({ shell }: MobileLayoutProps) => {
                 <BottomTabBar
                     drawerOpen={sidebarOpened}
                     onMoreTab={sidebarOpened ? closeSidebar : openSidebar}
-                    onOpenSearch={openCommandPalette}
                     onScrollToTop={() => {
                         // Soft-scroll the main content + any inner
                         // scrollables back to the top so re-tapping the
