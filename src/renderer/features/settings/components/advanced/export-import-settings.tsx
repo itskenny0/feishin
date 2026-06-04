@@ -1,4 +1,4 @@
-import { openModal } from '@mantine/modals';
+import { closeAllModals, openModal } from '@mantine/modals';
 import { t } from 'i18next';
 import { memo, useCallback } from 'react';
 
@@ -7,11 +7,14 @@ import {
     SettingOption,
     SettingsSection,
 } from '/@/renderer/features/settings/components/settings-section';
-import { useSettingsForExport } from '/@/renderer/store';
+import { useSettingsForExport, useSettingsStoreActions } from '/@/renderer/store';
 import { Button } from '/@/shared/components/button/button';
+import { ConfirmModal } from '/@/shared/components/modal/modal';
+import { Text } from '/@/shared/components/text/text';
 
 export const ExportImportSettings = memo(() => {
     const settingForExport = useSettingsForExport();
+    const { reset } = useSettingsStoreActions();
 
     const onExportSettings = useCallback(() => {
         const settingsFile = new File([JSON.stringify(settingForExport)], 'feishin-settings.json', {
@@ -35,6 +38,22 @@ export const ExportImportSettings = memo(() => {
         });
     };
 
+    const handleResetToDefault = () => {
+        reset();
+        closeAllModals();
+    };
+
+    const openResetConfirmModal = () => {
+        openModal({
+            children: (
+                <ConfirmModal onConfirm={handleResetToDefault}>
+                    <Text>{t('common.areYouSure')}</Text>
+                </ConfirmModal>
+            ),
+            title: t('common.resetToDefault'),
+        });
+    };
+
     const options: SettingOption[] = [
         {
             control: (
@@ -49,6 +68,18 @@ export const ExportImportSettings = memo(() => {
             ),
             description: t('setting.exportImportSettings_control_description'),
             title: t('setting.exportImportSettings_control_title'),
+        },
+        {
+            control: (
+                <Button onClick={openResetConfirmModal} size="compact-sm" variant="default">
+                    {t('common.resetToDefault')}
+                </Button>
+            ),
+            description: t('setting.resetToDefault', {
+                context: 'description',
+                defaultValue: 'Clear all saved settings and restore the defaults.',
+            }),
+            title: t('common.resetToDefault'),
         },
     ];
 
