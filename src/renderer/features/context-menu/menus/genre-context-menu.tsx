@@ -21,9 +21,9 @@ export const GenreContextMenu = ({ items, type }: GenreContextMenuProps) => {
 
     return (
         <MenuContent bottomStickyContent={<ContextMenuPreview items={items} itemType={type} />}>
-            <PlayAction ids={ids} itemType={LibraryItem.ALBUM} />
+            <PlayAction ids={ids} itemType={LibraryItem.GENRE} />
             <ContextMenu.Divider />
-            <AddToPlaylistAction items={ids} itemType={LibraryItem.ALBUM} />
+            <AddToPlaylistAction items={ids} itemType={LibraryItem.GENRE} />
             <ContextMenu.Divider />
             <OfflineDownloadAction items={items} itemType={LibraryItem.GENRE} />
         </MenuContent>
