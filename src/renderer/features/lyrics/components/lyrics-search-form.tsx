@@ -48,7 +48,11 @@ const SearchResult = ({ data, isSelected, onClick }: SearchResultProps) => {
     const { artist, id, isSync, name, score, source } = data;
 
     const percentageScore = useMemo(() => {
-        if (!score) return 0;
+        // fuse.js score is in [0, 1] where 0 is a *perfect* match. Only bail
+        // when the score is genuinely absent — `score === 0` is the best
+        // possible result and must map to 100%, not 0% (the old `!score`
+        // guard treated a perfect match as "no score" and showed 0%).
+        if (score === undefined || score === null) return 0;
         return ((1 - score) * 100).toFixed(2);
     }, [score]);
 
