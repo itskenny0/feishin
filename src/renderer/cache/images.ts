@@ -9,6 +9,8 @@ import type { ImageRequest } from '/@/shared/types/domain-types';
 import { getActiveCacheDb } from './db';
 import { recordStat } from './stats';
 
+import { registerThumbnailUrlCache } from '/@/shared/components/image/use-native-image';
+
 // Single cache size for every blob. Covers any reasonable mobile / tablet
 // / desktop full-screen player display; on lower-DPR display surfaces the
 // browser downscales cleanly via CSS. Exposed so the sweep can request
@@ -89,6 +91,141 @@ export interface ResolverResult {
 }
 const inFlight = new Map<string, Promise<ResolverResult>>();
 
+// ---------------------------------------------------------------------------
+// Shared object-URL keep-alive (refcounted).
+//
+// Previously every mounted consumer called `URL.createObjectURL` for the
+// SAME cached Blob, so scrolling a grid churned thousands of short-lived
+// blob: URLs (each holding a live Blob reference until revoked). This map
+// keeps ONE object URL per item alive for the lifetime of its mounted
+// consumers and revokes it only once the last consumer releases it.
+//
+// Keyed by `itemId` to match the single-blob-per-item cache model. A
+// consumer calls `acquireThumbnailUrl` (which resolves the blob, mints the
+// URL once, and bumps the refcount) and `releaseThumbnailUrl` on unmount /
+// input change. Legacy callers that still use `resolveThumbnail` directly
+// keep their own per-call URL + revoke lifecycle and are unaffected.
+interface SharedObjectUrl {
+    refCount: number;
+    url: string;
+}
+const sharedObjectUrls = new Map<string, SharedObjectUrl>();
+
+// In-flight dedup for `acquireThumbnailUrl`. Concurrent acquires for the
+// same item (the common case while a grid mounts a row of cards) share a
+// single resolve + a single `URL.createObjectURL`, then each bumps the
+// shared refcount once their promise settles. Without this, racing
+// acquires could each mint their own URL and leak all but one.
+interface AcquireResult {
+    // The shared blob: URL when the resolve produced a cached blob, or
+    // undefined on miss/failure (caller falls back to the raw URL).
+    objectUrl: string | undefined;
+}
+const acquireInFlight = new Map<string, Promise<AcquireResult>>();
+
+// Transient hand-off slot: `resolveThumbnail` run with `_wantBlob` stashes
+// the resolved Blob here keyed by itemId so the (deduped) acquire task can
+// mint exactly one shared object URL. Drained immediately by the task.
+const lastResolvedBlob = new Map<string, Blob>();
+const takeResolvedBlob = (itemId: string): Blob | undefined => {
+    const blob = lastResolvedBlob.get(itemId);
+    if (blob) lastResolvedBlob.delete(itemId);
+    return blob;
+};
+
+/**
+ * Acquire a stable, shared `blob:` URL for an item's cached thumbnail,
+ * resolving the blob through the cache pipeline if needed. The returned
+ * URL is reference-counted: the caller MUST pair every successful acquire
+ * (one that returns a `blob:` URL) with a `releaseThumbnailUrl(itemId)`
+ * once it is done displaying it. On a cache miss / failure the resolver's
+ * fallback (the raw URL) is returned and is NOT refcounted — releasing it
+ * is a no-op.
+ */
+export const acquireThumbnailUrl = async (
+    itemId: string,
+    size: number,
+    request: ImageRequest | string,
+    options?: ResolveThumbnailOptions,
+): Promise<string> => {
+    const { url } = normaliseRequest(request);
+
+    // Fast path: a live shared URL already exists for this item. Bump the
+    // refcount and hand the same string back — no new blob: URL minted.
+    const existing = sharedObjectUrls.get(itemId);
+    if (existing) {
+        existing.refCount += 1;
+        return existing.url;
+    }
+
+    // Dedup concurrent acquires so the blob is resolved and the object URL
+    // minted exactly once, regardless of how many cards mount at the same
+    // tick. Each awaiter bumps the refcount below.
+    let task = acquireInFlight.get(itemId);
+    if (!task) {
+        task = (async (): Promise<AcquireResult> => {
+            try {
+                await resolveThumbnail(itemId, size, request, {
+                    ...options,
+                    // Stash the raw Blob (if any) without minting a per-call
+                    // URL; we mint exactly one shared URL here instead.
+                    _wantBlob: true,
+                });
+                const blob = takeResolvedBlob(itemId);
+                if (!blob) {
+                    return { objectUrl: undefined };
+                }
+                // Seed the shared entry with refCount 0; every awaiter
+                // (including this one) bumps it to its final value after
+                // the task settles.
+                const objectUrl = URL.createObjectURL(blob);
+                sharedObjectUrls.set(itemId, { refCount: 0, url: objectUrl });
+                return { objectUrl };
+            } finally {
+                acquireInFlight.delete(itemId);
+            }
+        })();
+        acquireInFlight.set(itemId, task);
+    }
+
+    const result = await task;
+    if (!result.objectUrl) {
+        // Cache miss / failure — fall back to the raw URL (un-refcounted).
+        return url;
+    }
+    // The shared entry may already have been fully released + revoked
+    // between the task settling and this awaiter resuming (rare: every
+    // earlier awaiter mounted and unmounted before we got here). If so the
+    // URL is dead; fall back to the raw URL and let a fresh acquire run.
+    const entry = sharedObjectUrls.get(itemId);
+    if (!entry || entry.url !== result.objectUrl) {
+        return url;
+    }
+    entry.refCount += 1;
+    return entry.url;
+};
+
+/**
+ * Release a previously-acquired shared thumbnail URL. Decrements the
+ * refcount and revokes the underlying object URL once the last consumer
+ * lets go. Safe to call with a non-shared (raw fallback) itemId — it is a
+ * no-op when the item isn't tracked.
+ */
+export const releaseThumbnailUrl = (itemId: string): void => {
+    const entry = sharedObjectUrls.get(itemId);
+    if (!entry) return;
+    entry.refCount -= 1;
+    if (entry.refCount <= 0) {
+        sharedObjectUrls.delete(itemId);
+        try {
+            URL.revokeObjectURL(entry.url);
+        } catch {
+            // Revoke can throw on already-revoked / invalid URLs in some
+            // runtimes; nothing actionable, the entry is already gone.
+        }
+    }
+};
+
 // Sampled-logging counters. Hits fire on every render; logging each one
 // would flood devtools, so we sample. Misses are interesting and always log.
 let hitCount = 0;
@@ -125,6 +262,11 @@ export interface ResolveThumbnailOptions {
     // Blob), causing progressive memory growth that eventually triggered
     // frequent GC pauses and dropped throughput below 0.1 items/sec.
     _skipBlobUrl?: boolean;
+    // Internal flag used by acquireThumbnailUrl. When true the resolver
+    // stashes the resolved Blob on the shared hand-off slot (keyed by
+    // itemId) so the acquire path can mint exactly ONE shared object URL.
+    // Implies _skipBlobUrl semantics for the return value.
+    _wantBlob?: boolean;
     // When set, the fetch is aborted when the signal fires. The cache
     // pipeline returns `undefined` (caller falls back to the raw URL).
     signal?: AbortSignal;
@@ -375,6 +517,13 @@ export const resolveThumbnail = async (
 
     inFlight.set(itemId, task);
     const result = await task;
+    if (options?._wantBlob) {
+        // Hand the Blob off to acquireThumbnailUrl, which mints exactly
+        // one shared object URL. Return the raw URL as a sentinel — the
+        // acquire path keys off the stashed Blob, not this return value.
+        if (result.blob) lastResolvedBlob.set(itemId, result.blob);
+        return url;
+    }
     if (options?._skipBlobUrl) return url;
     return result.blob ? URL.createObjectURL(result.blob) : url;
 };
@@ -433,3 +582,11 @@ export const clearThumbnailsTable = async (): Promise<void> => {
     await db.thumbnails.clear();
     console.info('[cache] thumbnails cleared');
 };
+
+// Bridge the refcounted shared-URL cache into the shared `useNativeImage`
+// hook. Registered eagerly at module load so the first `<ItemImage>` mount
+// can reuse object URLs across remounts during scroll instead of churning
+// one blob: URL per mount. The hook falls back to the per-call resolver
+// when this isn't registered (e.g. the shared bundle imported outside the
+// renderer), so registration is purely additive.
+registerThumbnailUrlCache(acquireThumbnailUrl, releaseThumbnailUrl);

@@ -1,10 +1,17 @@
 import { openContextModal } from '@mantine/modals';
 import isElectron from 'is-electron';
-import { useCallback, useEffect, useMemo } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router';
 
-import { CommandPalette } from '/@/renderer/features/search/components/command-palette';
+// Lazy-load the command palette: it is mounted by the always-on layout but
+// only ever rendered/opened on demand, so deferring its import keeps its
+// (and fuse.js's) graph out of the first-paint entry chunk.
+const CommandPalette = lazy(() =>
+    import('/@/renderer/features/search/components/command-palette').then((m) => ({
+        default: m.CommandPalette,
+    })),
+);
 import { useGarbageCollection } from '/@/renderer/hooks/use-garbage-collection';
 import { HotkeyItem, useHotkeys } from '/@/renderer/hooks/use-hotkeys';
 import { useIsMobile } from '/@/renderer/hooks/use-is-mobile';
@@ -122,7 +129,11 @@ const LayoutHotkeys = () => {
 
     useHotkeys(hotkeys);
 
-    return <CommandPalette modalProps={modalProps} />;
+    return (
+        <Suspense fallback={null}>
+            <CommandPalette modalProps={modalProps} />
+        </Suspense>
+    );
 };
 
 const GarbageCollection = () => {

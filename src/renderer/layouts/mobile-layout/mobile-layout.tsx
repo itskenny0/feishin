@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
 import { AnimatePresence, motion } from 'motion/react';
-import { Suspense, useCallback, useEffect, useRef } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Outlet, useLocation } from 'react-router';
 
@@ -10,8 +10,6 @@ import styles from './mobile-layout.module.css';
 import { OfflineDownloadBanner } from '/@/renderer/cache';
 import { ContextMenuController } from '/@/renderer/features/context-menu/context-menu-controller';
 import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
-import { FullScreenVisualizer } from '/@/renderer/features/player/components/full-screen-visualizer';
-import { MobileFullscreenPlayer } from '/@/renderer/features/player/components/mobile-fullscreen-player';
 import { RouteSkeleton } from '/@/renderer/features/shared/components/route-skeleton';
 import { MobileSidebar } from '/@/renderer/features/sidebar/components/mobile-sidebar';
 import { useIsBigPhone } from '/@/renderer/hooks/use-breakpoint';
@@ -29,6 +27,20 @@ import { Drawer } from '/@/shared/components/drawer/drawer';
 import { Icon } from '/@/shared/components/icon/icon';
 import { useDisclosure } from '/@/shared/hooks/use-disclosure';
 import { Platform } from '/@/shared/types/types';
+
+// Both overlays are only ever mounted on demand (fullscreen player / visualizer
+// expanded), so lazy-load them to keep their heavy graphs out of the
+// first-paint entry chunk. The null Suspense fallback is invisible.
+const FullScreenVisualizer = lazy(() =>
+    import('/@/renderer/features/player/components/full-screen-visualizer').then((m) => ({
+        default: m.FullScreenVisualizer,
+    })),
+);
+const MobileFullscreenPlayer = lazy(() =>
+    import('/@/renderer/features/player/components/mobile-fullscreen-player').then((m) => ({
+        default: m.MobileFullscreenPlayer,
+    })),
+);
 
 interface MobileLayoutProps {
     shell?: boolean;
@@ -212,14 +224,18 @@ export const MobileLayout = ({ shell }: MobileLayoutProps) => {
                  */}
                 {isFullScreenPlayerExpanded && !isFullScreenVisualizerExpanded && (
                     <div className={styles.fullScreenPlayerOverlay}>
-                        <MobileFullscreenPlayer />
+                        <Suspense fallback={null}>
+                            <MobileFullscreenPlayer />
+                        </Suspense>
                     </div>
                 )}
             </AnimatePresence>
             <AnimatePresence initial={false}>
                 {isFullScreenVisualizerExpanded && (
                     <div className={styles.fullScreenPlayerOverlay}>
-                        <FullScreenVisualizer />
+                        <Suspense fallback={null}>
+                            <FullScreenVisualizer />
+                        </Suspense>
                     </div>
                 )}
             </AnimatePresence>

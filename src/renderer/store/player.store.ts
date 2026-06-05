@@ -1266,13 +1266,6 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                     set((state) => {
                         state.player.seekToTimestamp = uniqueSeekToTimestamp(timestamp);
                     });
-                    // Propagate the new position to the timestamp store
-                    // immediately. The audio engine's setInterval would
-                    // otherwise leave every consumer (seek slider, scrobble
-                    // status, trackmap playhead) lagging the actual seek by
-                    // up to 500 ms. The interval will still emit on its
-                    // next tick and re-anchor with the engine's reality.
-                    setTimestampStore(timestamp);
                 },
                 mediaSkipBackward: (offset?: number) => {
                     const offsetFromSettings =
@@ -1289,8 +1282,6 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                     set((state) => {
                         state.player.seekToTimestamp = uniqueSeekToTimestamp(newTimestamp);
                     });
-                    // Same propagation as mediaSeekToTimestamp.
-                    setTimestampStore(newTimestamp);
                 },
                 mediaSkipForward: (offset?: number) => {
                     const state = get();
@@ -1315,8 +1306,6 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                     set((state) => {
                         state.player.seekToTimestamp = uniqueSeekToTimestamp(newTimestamp);
                     });
-                    // Same propagation as mediaSeekToTimestamp.
-                    setTimestampStore(newTimestamp);
                 },
                 mediaStop: (options?: { reset?: boolean }) => {
                     const reset = options?.reset !== false;
@@ -1844,23 +1833,38 @@ export const subscribeCurrentTrack = (
         prev: { index: number; song: QueueSong | undefined },
     ) => void,
 ) => {
+    const resolveSong = (sel: {
+        index: number;
+        songId: string | undefined;
+    }): { index: number; song: QueueSong | undefined } => {
+        const song =
+            sel.songId !== undefined
+                ? usePlayerStoreBase.getState().queue.songs[sel.songId]
+                : undefined;
+        return { index: sel.index, song };
+    };
+
     return usePlayerStoreBase.subscribe(
+        // Index-only selector: this fires on every position tick, so it must
+        // stay cheap. Resolve just the songId (the id at the current default
+        // position) instead of rebuilding the entire queue array via getQueue().
         (state) => {
-            const queue = state.getQueue();
             let index = state.player.index;
 
             if (isShuffleEnabled(state)) {
                 index = mapShuffledToQueueIndex(index, state.queue.shuffled);
             }
 
-            return { index, song: queue.items[index] };
+            return { index, songId: state.queue.default[index] };
         },
-        (song, prevSong) => {
-            onChange(song, prevSong);
+        // The full QueueSong is resolved here, in the change callback, which
+        // fires rarely (only when the equalityFn below reports a change).
+        (sel, prevSel) => {
+            onChange(resolveSong(sel), resolveSong(prevSel));
         },
         {
             equalityFn: (a, b) => {
-                return a.song?._uniqueId === b.song?._uniqueId;
+                return a.songId === b.songId;
             },
         },
     );

@@ -81,6 +81,11 @@ const useSleepTimer = () => {
     // interval is self-clearing and only calls store-level actions (setVolume /
     // mediaPause via refs), so it is safe to let it finish post-unmount.
     const fadeIntervalRef = useRef<null | number>(null);
+    // The trailing volume-restore timeout scheduled in the fade's final tick.
+    // Tracked so a second fade (or any path that clears fadeIntervalRef) can
+    // also cancel a still-pending restore, never letting it fire after the
+    // interval it belonged to has been superseded.
+    const fadeRestoreTimeoutRef = useRef<null | number>(null);
 
     /**
      * Smoothly fade volume to 0 over {@link fadeSecondsRef} seconds, then pause
@@ -102,9 +107,15 @@ const useSleepTimer = () => {
         const totalTicks = Math.max(1, Math.round((fade * 1000) / tickMs));
         let tick = 0;
         // Clear any prior fade before starting a new one so we never leak a
-        // second concurrent interval.
+        // second concurrent interval — and cancel its still-pending trailing
+        // volume-restore so it can't fire after this new fade supersedes it.
         if (fadeIntervalRef.current !== null) {
             window.clearInterval(fadeIntervalRef.current);
+            fadeIntervalRef.current = null;
+        }
+        if (fadeRestoreTimeoutRef.current !== null) {
+            window.clearTimeout(fadeRestoreTimeoutRef.current);
+            fadeRestoreTimeoutRef.current = null;
         }
         const id = window.setInterval(() => {
             tick += 1;
@@ -115,7 +126,10 @@ const useSleepTimer = () => {
                 fadeIntervalRef.current = null;
                 mediaPauseRef.current();
                 // Give the engine one tick to apply pause, then restore volume.
-                window.setTimeout(() => setVolumeRef.current(startingVolume), tickMs);
+                fadeRestoreTimeoutRef.current = window.setTimeout(() => {
+                    fadeRestoreTimeoutRef.current = null;
+                    setVolumeRef.current(startingVolume);
+                }, tickMs);
             }
         }, tickMs);
         fadeIntervalRef.current = id;

@@ -56,7 +56,11 @@ const VisualizerInner = () => {
         };
     }, []);
 
-    // Check if a gradient name is a custom gradient
+    // Check if a gradient name is a custom gradient. Keyed on the narrow
+    // slices it actually reads (type + customGradients) rather than the whole
+    // `visualizer` object, so live tuning of unrelated knobs (barSpace, fftSize,
+    // …) doesn't churn this callback's identity and, through it, the options
+    // memo + setOptions effect below.
     const isCustomGradient = useCallback(
         (gradientName: string | undefined): boolean => {
             if (!gradientName || visualizer.type !== 'audiomotionanalyzer') {
@@ -66,7 +70,7 @@ const VisualizerInner = () => {
             const customGradients = visualizer.audiomotionanalyzer.customGradients || [];
             return customGradients.some((gradient) => gradient.name === gradientName);
         },
-        [visualizer],
+        [visualizer.type, visualizer.audiomotionanalyzer.customGradients],
     );
 
     const [gradientsRegistered, setGradientsRegistered] = useState(false);
@@ -154,7 +158,10 @@ const VisualizerInner = () => {
             volume: ama.volume,
             weightingFilter: (ama.weightingFilter || '') as any,
         };
-    }, [visualizer, gradientsRegistered, isCustomGradient]);
+        // Narrowed from the whole `visualizer` object to the two slices read
+        // here (type + audiomotionanalyzer) so changes to other visualizer
+        // backends' settings don't rebuild this ~60-key object.
+    }, [visualizer.type, visualizer.audiomotionanalyzer, gradientsRegistered, isCustomGradient]);
 
     const transformGradientForVisualizer = useCallback(
         (gradient: {
@@ -345,11 +352,20 @@ const VisualizerInner = () => {
         visualizer.type,
     ]);
 
-    // Update visualizer settings when they change
+    // Update visualizer settings when they change. Debounce the apply so that
+    // dragging a settings slider (which emits a flurry of option objects)
+    // coalesces into a single setOptions call once the drag settles, instead
+    // of reconfiguring the analyzer on every intermediate value.
     useEffect(() => {
-        if (motion) {
+        if (!motion) return;
+
+        const handle = setTimeout(() => {
             motion.setOptions(options);
-        }
+        }, 50);
+
+        return () => {
+            clearTimeout(handle);
+        };
     }, [motion, options]);
 
     // Fully suspend AudioMotionAnalyzer's internal rAF loop while the

@@ -1,5 +1,5 @@
 import formatDuration from 'format-duration';
-import { memo, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { CustomPlayerbarSlider } from './playerbar-slider';
 
@@ -33,9 +33,57 @@ const PlayerbarSeekSliderBase = ({ max, min }: PlayerbarSeekSliderProps) => {
     const canSeek = useTransportEnabled('Seek');
     const { mediaSeekToTimestamp } = usePlayer();
 
-    const handleSeekToTimestamp = (timestamp: number) => {
-        mediaSeekToTimestamp(timestamp);
-    };
+    // All of the slider's props except `value` are hoisted to stable
+    // identities (memoized callbacks / style / label fn) so that — together
+    // with CustomPlayerbarSlider being React.memo'd — only the per-tick
+    // `value` change forces a slider re-render, instead of every callback +
+    // the inline style object being rebuilt on each ~20fps position emit.
+    const label = useCallback((value: number) => formatDuration(value * 1000), []);
+
+    const handleChange = useCallback((e: number) => {
+        // Cancel any pending timeout if user starts seeking again
+        if (seekTimeoutRef.current) {
+            clearTimeout(seekTimeoutRef.current);
+            seekTimeoutRef.current = null;
+        }
+        setIsSeeking(true);
+        setSeekValue(e);
+    }, []);
+
+    const handleChangeEnd = useCallback(
+        (e: number) => {
+            setSeekValue(e);
+            lastSeekValueRef.current = e;
+            mediaSeekToTimestamp(e);
+
+            if (seekTimeoutRef.current) {
+                clearTimeout(seekTimeoutRef.current);
+            }
+
+            // Keep isSeeking true to prevent slider from snapping back.
+            // The useEffect will detect when currentTime catches up and clear isSeeking.
+            // Also set a fallback timeout to clear isSeeking after a max delay
+            // in case the seek doesn't complete (e.g., network issues).
+            //
+            // Bumped from 1000ms → 5000ms: transcoded streams (high-bit-
+            // rate FLAC, radio re-encoding) routinely take 2-4s to land
+            // a seek; the previous 1s fallback snapped the slider back
+            // to the old position before the seek completed, making the
+            // user think the seek didn't take.
+            seekTimeoutRef.current = setTimeout(() => {
+                setIsSeeking(false);
+                lastSeekValueRef.current = null;
+                seekTimeoutRef.current = null;
+            }, 5000);
+        },
+        [mediaSeekToTimestamp],
+    );
+
+    const handleClick = useCallback((e?: { stopPropagation: () => void }) => {
+        e?.stopPropagation();
+    }, []);
+
+    const sliderStyle = useMemo(() => ({ opacity: canSeek ? undefined : 0.4 }), [canSeek]);
 
     // Sync isSeeking state when currentTime catches up to seek value
     useEffect(() => {
@@ -63,48 +111,14 @@ const PlayerbarSeekSliderBase = ({ max, min }: PlayerbarSeekSliderProps) => {
     return (
         <CustomPlayerbarSlider
             disabled={!canSeek}
-            label={(value) => formatDuration(value * 1000)}
+            label={label}
             max={max}
             min={min}
-            onChange={(e) => {
-                // Cancel any pending timeout if user starts seeking again
-                if (seekTimeoutRef.current) {
-                    clearTimeout(seekTimeoutRef.current);
-                    seekTimeoutRef.current = null;
-                }
-                setIsSeeking(true);
-                setSeekValue(e);
-            }}
-            onChangeEnd={(e) => {
-                setSeekValue(e);
-                lastSeekValueRef.current = e;
-                handleSeekToTimestamp(e);
-
-                if (seekTimeoutRef.current) {
-                    clearTimeout(seekTimeoutRef.current);
-                }
-
-                // Keep isSeeking true to prevent slider from snapping back.
-                // The useEffect will detect when currentTime catches up and clear isSeeking.
-                // Also set a fallback timeout to clear isSeeking after a max delay
-                // in case the seek doesn't complete (e.g., network issues).
-                //
-                // Bumped from 1000ms → 5000ms: transcoded streams (high-bit-
-                // rate FLAC, radio re-encoding) routinely take 2-4s to land
-                // a seek; the previous 1s fallback snapped the slider back
-                // to the old position before the seek completed, making the
-                // user think the seek didn't take.
-                seekTimeoutRef.current = setTimeout(() => {
-                    setIsSeeking(false);
-                    lastSeekValueRef.current = null;
-                    seekTimeoutRef.current = null;
-                }, 5000);
-            }}
-            onClick={(e) => {
-                e?.stopPropagation();
-            }}
+            onChange={handleChange}
+            onChangeEnd={handleChangeEnd}
+            onClick={handleClick}
             size={6}
-            style={{ opacity: canSeek ? undefined : 0.4 }}
+            style={sliderStyle}
             value={
                 isSeeking
                     ? seekValue

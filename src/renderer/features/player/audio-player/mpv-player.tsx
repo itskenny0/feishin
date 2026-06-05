@@ -1,4 +1,3 @@
-import isElectron from 'is-electron';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { MpvPlayerEngine, MpvPlayerEngineHandle } from './engine/mpv-player-engine';
@@ -19,12 +18,10 @@ import { PlayerStatus } from '/@/shared/types/types';
 const PLAY_PAUSE_FADE_DURATION = 300;
 const PLAY_PAUSE_FADE_INTERVAL = 10;
 
-const mpvPlayer = isElectron() ? window.api.mpvPlayer : null;
-
 export function MpvPlayer() {
     const playerRef = useRef<MpvPlayerEngineHandle>(null);
-    const { currentSong, status } = useActiveSongStatus();
-    const { mediaAutoNext, setTimestamp } = usePlayerActions();
+    const { status } = useActiveSongStatus();
+    const { mediaAutoNext } = usePlayerActions();
     const speed = usePlayerSpeed();
     const isMuted = usePlayerMuted();
     const volume = usePlayerVolume();
@@ -146,31 +143,6 @@ export function MpvPlayer() {
             }
         };
     }, []);
-
-    const hasCurrentSong = !!currentSong?.id;
-
-    useEffect(() => {
-        if (localPlayerStatus !== PlayerStatus.PLAYING || !hasCurrentSong) {
-            return;
-        }
-
-        const interval = setInterval(async () => {
-            if (!mpvPlayer) {
-                return;
-            }
-
-            try {
-                const time = await mpvPlayer.getCurrentTime();
-                if (time !== undefined) {
-                    setTimestamp(Number(time.toFixed(0)));
-                }
-            } catch {
-                // Do nothing
-            }
-        }, 500);
-
-        return () => clearInterval(interval);
-    }, [hasCurrentSong, localPlayerStatus, setTimestamp]);
 
     return (
         <MpvPlayerEngine

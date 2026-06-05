@@ -37,6 +37,20 @@ const manualChunks = (id: string): string | undefined => {
     if (id.includes('/lodash')) return 'vendor-lodash';
     if (id.includes('/@atlaskit/')) return 'vendor-dnd';
     if (id.includes('/zod/')) return 'vendor-zod';
+    if (
+        id.includes('/motion/') ||
+        id.includes('/motion-dom/') ||
+        id.includes('/framer-motion/') ||
+        id.includes('/motion-utils/')
+    ) {
+        return 'vendor-motion';
+    }
+    if (id.includes('/axios/')) return 'vendor-axios';
+    if (id.includes('/dexie/')) return 'vendor-dexie';
+    if (id.includes('/dompurify/')) return 'vendor-dompurify';
+    if (id.includes('/overlayscrollbars')) return 'vendor-overlayscrollbars';
+    if (id.includes('/fuse.js/') || id.includes('/fuse/')) return 'vendor-fuse';
+    if (id.includes('/buffer/')) return 'vendor-buffer';
     // MQTT peer-sync transport. Only reachable through async boundaries (the
     // lazy PeerSyncHook, the lazy peer-dispatcher facade, the lazy Settings
     // route), so isolating it keeps the ~360 KB mqtt graph out of the entry

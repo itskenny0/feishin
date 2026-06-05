@@ -4,7 +4,16 @@
 import type { TableGroupHeader } from '/@/renderer/components/item-list/item-table-list/item-table-list';
 
 import clsx from 'clsx';
-import { forwardRef, lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import {
+    forwardRef,
+    lazy,
+    Suspense,
+    useCallback,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 
 import styles from './play-queue.module.css';
@@ -64,10 +73,10 @@ export const PlayQueue = forwardRef<ItemListHandle, QueueProps>(
         // below re-apply it after mount so "follow current song" works on first
         // open after app boot.
         const [tableReady, setTableReady] = useState(false);
-        const handleTableRef = (instance: ItemListHandle | null) => {
+        const handleTableRef = useCallback((instance: ItemListHandle | null) => {
             tableRef.current = instance;
             setTableReady(instance !== null);
-        };
+        }, []);
         const mergedRef = useMergedRef(ref, handleTableRef);
         const { getVisibleQueue } = usePlayerActions();
         const followCurrentSong = useFollowCurrentSong();

@@ -76,6 +76,24 @@ export interface ItemTableListColumn extends CellComponentProps<TableItemProps> 
     columnType?: TableColumn;
 }
 
+/**
+ * react-window-v2 regenerates the `style` object on every grid render, so a
+ * reference comparison in a cell memo comparator never bails out. Compare the
+ * layout geometry by value instead, so an unrelated grid re-render that yields
+ * an identical box skips re-rendering the cell.
+ */
+export const isSameCellStyle = (a?: CSSProperties, b?: CSSProperties): boolean => {
+    if (a === b) return true;
+    if (!a || !b) return false;
+    return (
+        a.top === b.top &&
+        a.left === b.left &&
+        a.width === b.width &&
+        a.height === b.height &&
+        a.position === b.position
+    );
+};
+
 export interface ItemTableListInnerColumn extends ItemTableListColumn {
     controls: ItemControls;
     dragRef?: null | React.Ref<HTMLDivElement>;
@@ -363,7 +381,9 @@ export const ItemTableListColumn = memo(ItemTableListColumnBase, (prevProps, nex
         prevProps.columnIndex === nextProps.columnIndex &&
         prevProps.data === nextProps.data &&
         prevProps.columns === nextProps.columns &&
-        prevProps.style === nextProps.style &&
+        // Compare style by VALUE: react-window-v2 hands every render a fresh
+        // `style` object, so a reference check would never bail out here.
+        isSameCellStyle(prevProps.style, nextProps.style) &&
         prevProps.columnType === nextProps.columnType &&
         prevProps.itemType === nextProps.itemType &&
         prevProps.enableHeader === nextProps.enableHeader &&

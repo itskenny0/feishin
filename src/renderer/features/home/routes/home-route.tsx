@@ -1,4 +1,4 @@
-import { CSSProperties, ReactNode, Suspense, useRef } from 'react';
+import { CSSProperties, ReactNode, Suspense, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import styles from './home-route.module.css';
@@ -26,6 +26,7 @@ import { LibraryHeaderBar } from '/@/renderer/features/shared/components/library
 import { PageErrorBoundary } from '/@/renderer/features/shared/components/page-error-boundary';
 import { SongInfiniteCarousel } from '/@/renderer/features/songs/components/song-infinite-carousel';
 import { useIsMobileShell } from '/@/renderer/hooks/use-breakpoint';
+import { useStableContainerQuery } from '/@/renderer/hooks/use-container-query';
 import { AppRoute } from '/@/renderer/router/routes';
 import { useCurrentServer, useWindowSettings } from '/@/renderer/store';
 import { Stack } from '/@/shared/components/stack/stack';
@@ -57,161 +58,176 @@ const HomeRoute = () => {
     const server = useCurrentServer();
     const { windowBarStyle } = useWindowSettings();
     const isMobileShell = useIsMobileShell();
-    const containerQuery = useGridCarouselContainerQuery();
+    // The raw container query produces a fresh object (new `width`/`height`) on
+    // every ResizeObserver tick. Threading that straight through would re-render
+    // HomeRoute and bust every shelf's `memo` on each pixel change. Derive a
+    // referentially-stable variant whose identity only changes when a
+    // breakpoint boolean actually crosses; its `ref` is preserved so the
+    // ResizeObserver stays attached to the content Stack below.
+    const rawContainerQuery = useGridCarouselContainerQuery();
+    const containerQuery = useStableContainerQuery(rawContainerQuery);
 
     const isJellyfin = server?.type === ServerType.JELLYFIN;
 
     // Each row knows its slot index so the CSS stagger lines up with painted
-    // order. We collect rows up-front, then `.map` them with a running index.
-    const rows: ReactNode[] = [];
+    // order. We build the rows once and only rebuild them when the inputs they
+    // actually depend on change (translation, server type, and the *stable*
+    // container query) — not on every ResizeObserver tick. Recreating all ~10
+    // shelf elements on each resize is what previously re-mounted the page's
+    // entire shelf tree.
+    const rows: ReactNode[] = useMemo(() => {
+        const built: ReactNode[] = [];
 
-    // 1. Hero greeting + atmosphere.
-    rows.push(
-        <ComponentErrorBoundary key="hero">
-            <HomeHero />
-        </ComponentErrorBoundary>,
-    );
+        // 1. Hero greeting + atmosphere.
+        built.push(
+            <ComponentErrorBoundary key="hero">
+                <HomeHero />
+            </ComponentErrorBoundary>,
+        );
 
-    // 2. Quick picks (recently-played albums as wide tiles).
-    rows.push(
-        <ComponentErrorBoundary key="quick-picks">
-            <QuickPicks />
-        </ComponentErrorBoundary>,
-    );
+        // 2. Quick picks (recently-played albums as wide tiles).
+        built.push(
+            <ComponentErrorBoundary key="quick-picks">
+                <QuickPicks />
+            </ComponentErrorBoundary>,
+        );
 
-    // 3a. Recently played. Jellyfin tracks play recency on songs, not albums,
-    // so use the song carousel there (mirrors the previous home behaviour);
-    // everything else uses albums.
-    rows.push(
-        <ComponentErrorBoundary key="recently-played">
-            {isJellyfin ? (
-                <SongInfiniteCarousel
-                    containerQuery={containerQuery}
-                    enableRefresh
-                    queryKey={['home', 'song', 'recentlyPlayed'] as const}
-                    rowCount={1}
-                    sortBy={SongListSort.RECENTLY_PLAYED}
-                    sortOrder={SortOrder.DESC}
-                    title={<ShelfTitle title={t('page.home.recentlyPlayed')} />}
-                />
-            ) : (
+        // 3a. Recently played. Jellyfin tracks play recency on songs, not
+        // albums, so use the song carousel there (mirrors the previous home
+        // behaviour); everything else uses albums.
+        built.push(
+            <ComponentErrorBoundary key="recently-played">
+                {isJellyfin ? (
+                    <SongInfiniteCarousel
+                        containerQuery={containerQuery}
+                        enableRefresh
+                        queryKey={['home', 'song', 'recentlyPlayed'] as const}
+                        rowCount={1}
+                        sortBy={SongListSort.RECENTLY_PLAYED}
+                        sortOrder={SortOrder.DESC}
+                        title={<ShelfTitle title={t('page.home.recentlyPlayed')} />}
+                    />
+                ) : (
+                    <AlbumInfiniteCarousel
+                        containerQuery={containerQuery}
+                        enableRefresh
+                        queryKey={['home', 'album', 'recentlyPlayed'] as const}
+                        rowCount={1}
+                        sortBy={AlbumListSort.RECENTLY_PLAYED}
+                        sortOrder={SortOrder.DESC}
+                        title={<ShelfTitle title={t('page.home.recentlyPlayed')} />}
+                    />
+                )}
+            </ComponentErrorBoundary>,
+        );
+
+        // 3b. On repeat (most played).
+        built.push(
+            <ComponentErrorBoundary key="most-played">
+                {isJellyfin ? (
+                    <SongInfiniteCarousel
+                        containerQuery={containerQuery}
+                        enableRefresh
+                        queryKey={['home', 'song', 'mostPlayed'] as const}
+                        rowCount={1}
+                        sortBy={SongListSort.PLAY_COUNT}
+                        sortOrder={SortOrder.DESC}
+                        title={<ShelfTitle title={t('page.home.mostPlayed')} />}
+                    />
+                ) : (
+                    <AlbumInfiniteCarousel
+                        containerQuery={containerQuery}
+                        enableRefresh
+                        queryKey={['home', 'album', 'mostPlayed'] as const}
+                        rowCount={1}
+                        sortBy={AlbumListSort.PLAY_COUNT}
+                        sortOrder={SortOrder.DESC}
+                        title={<ShelfTitle title={t('page.home.mostPlayed')} />}
+                    />
+                )}
+            </ComponentErrorBoundary>,
+        );
+
+        // 3c. Recently added.
+        built.push(
+            <ComponentErrorBoundary key="recently-added">
                 <AlbumInfiniteCarousel
                     containerQuery={containerQuery}
                     enableRefresh
-                    queryKey={['home', 'album', 'recentlyPlayed'] as const}
+                    queryKey={['home', 'album', 'recentlyAdded'] as const}
                     rowCount={1}
-                    sortBy={AlbumListSort.RECENTLY_PLAYED}
+                    sortBy={AlbumListSort.RECENTLY_ADDED}
                     sortOrder={SortOrder.DESC}
-                    title={<ShelfTitle title={t('page.home.recentlyPlayed')} />}
+                    title={
+                        <ShelfTitle
+                            showAllRoute={AppRoute.LIBRARY_ALBUMS}
+                            title={t('page.home.newlyAdded')}
+                        />
+                    }
                 />
-            )}
-        </ComponentErrorBoundary>,
-    );
+            </ComponentErrorBoundary>,
+        );
 
-    // 3b. On repeat (most played).
-    rows.push(
-        <ComponentErrorBoundary key="most-played">
-            {isJellyfin ? (
-                <SongInfiniteCarousel
-                    containerQuery={containerQuery}
-                    enableRefresh
-                    queryKey={['home', 'song', 'mostPlayed'] as const}
-                    rowCount={1}
-                    sortBy={SongListSort.PLAY_COUNT}
-                    sortOrder={SortOrder.DESC}
-                    title={<ShelfTitle title={t('page.home.mostPlayed')} />}
-                />
-            ) : (
+        // 3d. Your favourite artists (circular shelf).
+        built.push(
+            <ComponentErrorBoundary key="artists">
+                <ArtistShelf />
+            </ComponentErrorBoundary>,
+        );
+
+        // 3e. Jump back in / discover (random albums).
+        built.push(
+            <ComponentErrorBoundary key="random">
                 <AlbumInfiniteCarousel
                     containerQuery={containerQuery}
                     enableRefresh
-                    queryKey={['home', 'album', 'mostPlayed'] as const}
+                    queryKey={['home', 'album', 'random'] as const}
                     rowCount={1}
-                    sortBy={AlbumListSort.PLAY_COUNT}
-                    sortOrder={SortOrder.DESC}
-                    title={<ShelfTitle title={t('page.home.mostPlayed')} />}
+                    sortBy={AlbumListSort.RANDOM}
+                    sortOrder={SortOrder.ASC}
+                    title={
+                        <ShelfTitle
+                            showAllRoute={AppRoute.LIBRARY_ALBUMS}
+                            title={t('page.home.explore')}
+                        />
+                    }
                 />
-            )}
-        </ComponentErrorBoundary>,
-    );
+            </ComponentErrorBoundary>,
+        );
 
-    // 3c. Recently added.
-    rows.push(
-        <ComponentErrorBoundary key="recently-added">
-            <AlbumInfiniteCarousel
-                containerQuery={containerQuery}
-                enableRefresh
-                queryKey={['home', 'album', 'recentlyAdded'] as const}
-                rowCount={1}
-                sortBy={AlbumListSort.RECENTLY_ADDED}
-                sortOrder={SortOrder.DESC}
-                title={
-                    <ShelfTitle
-                        showAllRoute={AppRoute.LIBRARY_ALBUMS}
-                        title={t('page.home.newlyAdded')}
-                    />
-                }
-            />
-        </ComponentErrorBoundary>,
-    );
+        // 3f. Your playlists (rounded-square shelf).
+        built.push(
+            <ComponentErrorBoundary key="playlists">
+                <PlaylistShelf />
+            </ComponentErrorBoundary>,
+        );
 
-    // 3d. Your favourite artists (circular shelf).
-    rows.push(
-        <ComponentErrorBoundary key="artists">
-            <ArtistShelf />
-        </ComponentErrorBoundary>,
-    );
+        // 3g. Recently released.
+        built.push(
+            <ComponentErrorBoundary key="recently-released">
+                <AlbumInfiniteCarousel
+                    containerQuery={containerQuery}
+                    enableRefresh
+                    queryKey={['home', 'album', 'recentlyReleased'] as const}
+                    rowCount={1}
+                    sortBy={AlbumListSort.RELEASE_DATE}
+                    sortOrder={SortOrder.DESC}
+                    title={<ShelfTitle title={t('page.home.recentlyReleased')} />}
+                />
+            </ComponentErrorBoundary>,
+        );
 
-    // 3e. Jump back in / discover (random albums).
-    rows.push(
-        <ComponentErrorBoundary key="random">
-            <AlbumInfiniteCarousel
-                containerQuery={containerQuery}
-                enableRefresh
-                queryKey={['home', 'album', 'random'] as const}
-                rowCount={1}
-                sortBy={AlbumListSort.RANDOM}
-                sortOrder={SortOrder.ASC}
-                title={
-                    <ShelfTitle
-                        showAllRoute={AppRoute.LIBRARY_ALBUMS}
-                        title={t('page.home.explore')}
-                    />
-                }
-            />
-        </ComponentErrorBoundary>,
-    );
+        // 3h. Featured genres grid.
+        built.push(
+            <ComponentErrorBoundary key="featured-genres">
+                <Suspense fallback={<GenreGridSkeleton />}>
+                    <FeaturedGenres />
+                </Suspense>
+            </ComponentErrorBoundary>,
+        );
 
-    // 3f. Your playlists (rounded-square shelf).
-    rows.push(
-        <ComponentErrorBoundary key="playlists">
-            <PlaylistShelf />
-        </ComponentErrorBoundary>,
-    );
-
-    // 3g. Recently released.
-    rows.push(
-        <ComponentErrorBoundary key="recently-released">
-            <AlbumInfiniteCarousel
-                containerQuery={containerQuery}
-                enableRefresh
-                queryKey={['home', 'album', 'recentlyReleased'] as const}
-                rowCount={1}
-                sortBy={AlbumListSort.RELEASE_DATE}
-                sortOrder={SortOrder.DESC}
-                title={<ShelfTitle title={t('page.home.recentlyReleased')} />}
-            />
-        </ComponentErrorBoundary>,
-    );
-
-    // 3h. Featured genres grid.
-    rows.push(
-        <ComponentErrorBoundary key="featured-genres">
-            <Suspense fallback={<GenreGridSkeleton />}>
-                <FeaturedGenres />
-            </Suspense>
-        </ComponentErrorBoundary>,
-    );
+        return built;
+    }, [containerQuery, isJellyfin, t]);
 
     return (
         <AnimatedPage>

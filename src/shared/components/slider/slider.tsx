@@ -1,14 +1,14 @@
 import type { SliderProps as MantineSliderProps } from '@mantine/core';
 
 import { Slider as MantineSlider } from '@mantine/core';
-import { forwardRef } from 'react';
+import { forwardRef, memo } from 'react';
 
 import styles from './slider.module.css';
 
 export interface SliderProps extends MantineSliderProps {}
 
-export const Slider = forwardRef<HTMLDivElement, SliderProps>(
-    ({ classNames, style, ...props }, ref) => {
+export const Slider = memo(
+    forwardRef<HTMLDivElement, SliderProps>(({ classNames, style, ...props }, ref) => {
         return (
             <MantineSlider
                 classNames={{
@@ -19,11 +19,11 @@ export const Slider = forwardRef<HTMLDivElement, SliderProps>(
                     ...classNames,
                 }}
                 ref={ref}
-                style={{
-                    ...style,
-                }}
+                style={style}
                 {...props}
             />
         );
-    },
+    }),
 );
+
+Slider.displayName = 'Slider';

@@ -1,5 +1,5 @@
 import formatDuration from 'format-duration';
-import { lazy, Suspense } from 'react';
+import { lazy, memo, Suspense } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
 
 import { PlayerbarSeekSlider } from './playerbar-seek-slider';
@@ -128,17 +128,21 @@ export const PlayerbarSlider = () => {
     );
 };
 
-export const CustomPlayerbarSlider = ({ ...props }: SliderProps) => {
-    return (
-        <Slider
-            classNames={{
-                bar: styles.bar,
-                label: styles.label,
-                root: styles.root,
-                thumb: styles.thumb,
-            }}
-            {...props}
-            size={6}
-        />
-    );
+// Hoisted to a module constant so the classNames object identity is stable
+// across the ~20fps position ticks; otherwise a fresh object every tick forces
+// Mantine's Slider to reconcile its whole subtree on each frame.
+const PLAYERBAR_SLIDER_CLASSNAMES = {
+    bar: styles.bar,
+    label: styles.label,
+    root: styles.root,
+    thumb: styles.thumb,
 };
+
+// Wrapped in React.memo so that, with the seek slider now passing stable
+// (memoized) callbacks/style props, only `value` changing per tick triggers a
+// re-render here instead of a full reconciliation on every parent render.
+export const CustomPlayerbarSlider = memo(({ ...props }: SliderProps) => {
+    return <Slider classNames={PLAYERBAR_SLIDER_CLASSNAMES} {...props} size={6} />;
+});
+
+CustomPlayerbarSlider.displayName = 'CustomPlayerbarSlider';

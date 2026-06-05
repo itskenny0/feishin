@@ -51,7 +51,7 @@ export const AlbumGroupHeader = ({
                 <ItemImage
                     className={imageColumnStyles.compactImage}
                     enableDebounce
-                    enableViewport={false}
+                    enableViewport={true}
                     id={song?.imageId}
                     itemType={LibraryItem.SONG}
                     src={song?.imageUrl}

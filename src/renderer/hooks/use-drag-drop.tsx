@@ -54,53 +54,73 @@ export const useDragDrop = <TElement extends HTMLElement>({
     const [isDragging, setIsDragging] = useState(false);
     const [isDraggedOver, setIsDraggedOver] = useState<Edge | null>(null);
 
+    // Read the latest drag/drop config (and presence) via refs so the registration
+    // effect does not need them in its deps. pragmatic-dnd reads data lazily via
+    // getInitialData/getData, so handlers seeing the current config is correct.
+    const dragRef = useRef(drag);
+    const dropRef = useRef(drop);
+    dragRef.current = drag;
+    dropRef.current = drop;
+
+    // Whether a drag/drop config is present. Toggling presence must re-register, so
+    // these participate in the effect deps; their internals do not.
+    const hasDrag = !!drag;
+    const hasDrop = !!drop;
+
     useEffect(() => {
-        if (!ref.current || !isEnabled) return;
+        const element = ref.current;
+        if (!element || !isEnabled) return;
 
         const functions: CleanupFn[] = [];
 
-        if (drag) {
+        if (hasDrag) {
             functions.push(
                 draggable({
-                    element: ref.current,
+                    element,
                     getInitialData: () => {
-                        const id = drag.getId();
-                        const item = drag.getItem();
+                        const currentDrag = dragRef.current;
+                        if (!currentDrag) return {};
+
+                        const id = currentDrag.getId();
+                        const item = currentDrag.getItem();
 
                         const data = dndUtils.generateDragData(
                             {
                                 id,
                                 item,
-                                itemType: drag.itemType,
-                                operation: drag.operation,
-                                type: drag.target,
+                                itemType: currentDrag.itemType,
+                                operation: currentDrag.operation,
+                                type: currentDrag.target,
                             },
-                            drag.metadata,
+                            currentDrag.metadata,
                         );
                         return data;
                     },
                     onDragStart: () => {
                         setIsDragging(true);
-                        drag.onDragStart?.();
+                        dragRef.current?.onDragStart?.();
                     },
                     onDrop: () => {
                         setIsDragging(false);
-                        drag.onDrop?.();
+                        dragRef.current?.onDrop?.();
                     },
                     onGenerateDragPreview: (data) => {
-                        if (drag.onGenerateDragPreview) {
-                            return drag.onGenerateDragPreview(data);
+                        const currentDrag = dragRef.current;
+                        if (!currentDrag) return;
+
+                        if (currentDrag.onGenerateDragPreview) {
+                            return currentDrag.onGenerateDragPreview(data);
                         }
 
                         const dragData = dndUtils.generateDragData(
                             {
-                                id: drag.getId(),
-                                item: drag.getItem(),
-                                itemType: drag.itemType,
-                                operation: drag.operation,
-                                type: drag.target,
+                                id: currentDrag.getId(),
+                                item: currentDrag.getItem(),
+                                itemType: currentDrag.itemType,
+                                operation: currentDrag.operation,
+                                type: currentDrag.target,
                             },
-                            drag.metadata,
+                            currentDrag.metadata,
                         ) as DragData;
 
                         disableNativeDragPreview({ nativeSetDragImage: data.nativeSetDragImage });
@@ -109,6 +129,7 @@ export const useDragDrop = <TElement extends HTMLElement>({
                             render: ({ container }) => {
                                 const root = createRoot(container);
                                 root.render(<DragPreview data={dragData} />);
+                                return () => root.unmount();
                             },
                         });
                     },
@@ -116,18 +137,22 @@ export const useDragDrop = <TElement extends HTMLElement>({
             );
         }
 
-        if (drop) {
+        if (hasDrop) {
             functions.push(
                 dropTargetForElements({
                     canDrop: (args) => {
                         return (
-                            drop.canDrop?.({ source: args.source.data as unknown as DragData }) ||
-                            false
+                            dropRef.current?.canDrop?.({
+                                source: args.source.data as unknown as DragData,
+                            }) || false
                         );
                     },
-                    element: ref.current,
+                    element,
                     getData: (args) => {
-                        const dropData = drop.getData();
+                        const currentDrop = dropRef.current;
+                        if (!currentDrop) return dndUtils.generateDragData({} as DragData);
+
+                        const dropData = currentDrop.getData();
 
                         const data = dndUtils.generateDragData(dropData);
 
@@ -139,19 +164,19 @@ export const useDragDrop = <TElement extends HTMLElement>({
                     },
                     onDrag: (args) => {
                         const closestEdgeOfTarget: Edge | null = extractClosestEdge(args.self.data);
-                        drop.onDrag?.({
+                        dropRef.current?.onDrag?.({
                             edge: closestEdgeOfTarget,
                             source: args.source.data as unknown as DragData,
                         });
                         setIsDraggedOver(closestEdgeOfTarget);
                     },
                     onDragLeave: () => {
-                        drop.onDragLeave?.();
+                        dropRef.current?.onDragLeave?.();
                         setIsDraggedOver(null);
                     },
                     onDrop: (args) => {
                         const closestEdgeOfTarget: Edge | null = extractClosestEdge(args.self.data);
-                        drop.onDrop?.({
+                        dropRef.current?.onDrop?.({
                             edge: closestEdgeOfTarget,
                             self: args.self.data as unknown as DragData,
                             source: args.source.data as unknown as DragData,
@@ -163,7 +188,12 @@ export const useDragDrop = <TElement extends HTMLElement>({
         }
 
         return combine(...functions);
-    }, [drag, drop, isDragging, isDraggedOver, isEnabled]);
+        // Register exactly once per element mount / enablement change. The drag/drop
+        // config internals are read via refs inside the handlers, and isDragging /
+        // isDraggedOver are OUTPUTS of those handlers, not inputs — so neither belongs
+        // in the deps. Only enablement and the presence of a drag/drop config force
+        // re-registration.
+    }, [isEnabled, hasDrag, hasDrop]);
 
     return {
         isDraggedOver,

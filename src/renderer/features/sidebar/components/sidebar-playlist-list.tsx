@@ -1,6 +1,5 @@
 import { openContextModal } from '@mantine/modals';
 import clsx from 'clsx';
-import { motion } from 'motion/react';
 import { createContext, memo, MouseEvent, useCallback, useContext, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { generatePath, Link } from 'react-router';
@@ -38,8 +37,6 @@ import {
 import { formatDurationString } from '/@/renderer/utils';
 import { Accordion } from '/@/shared/components/accordion/accordion';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
-import { animationProps } from '/@/shared/components/animations/animation-props';
-import { animationVariants } from '/@/shared/components/animations/animation-variants';
 import { ButtonProps } from '/@/shared/components/button/button';
 import { Group } from '/@/shared/components/group/group';
 import { Icon } from '/@/shared/components/icon/icon';
@@ -57,12 +54,6 @@ import {
 } from '/@/shared/types/domain-types';
 import { DragData, DragOperation, DragTarget } from '/@/shared/types/drag-and-drop';
 import { Play } from '/@/shared/types/types';
-
-const MotionLink = motion.create(Link);
-
-const playlistRowDimVariants = animationVariants.combine(animationVariants.fadeIn, {
-    hidden: { opacity: 0.5 },
-});
 
 const getPlaylistOrderKey = (serverId: string | undefined, scope: 'owned' | 'shared') => {
     const sid = serverId || 'local';
@@ -283,15 +274,18 @@ export const PlaylistRowButton = memo(
         const isDimmed = isDragging || (isSmartPlaylist && isAddDragActive);
 
         return (
-            <MotionLink
-                {...animationProps.fadeIn}
-                animate={isDimmed ? 'hidden' : 'show'}
+            // Plain Link instead of motion.create(Link): these lists are not
+            // virtualized, so a per-row Framer mount/dim animation means
+            // hundreds of motion components mounting at once. The only motion
+            // here was a fade-in on mount plus an opacity dim while dragging —
+            // both are expressible as a cheap inline opacity transition that
+            // doesn't allocate a motion node per row.
+            <Link
                 className={clsx(styles.row, {
                     [styles.rowCompact]: isCompact,
                     [styles.rowDraggedOver]: isDraggedOver && !isSmartPlaylist,
                     [styles.rowHover]: isHovered,
                 })}
-                initial={false}
                 onContextMenu={(e: MouseEvent<HTMLAnchorElement>) => {
                     e.preventDefault();
                     onContextMenu(e, item);
@@ -300,8 +294,8 @@ export const PlaylistRowButton = memo(
                 onMouseEnter={handleHoverPreload}
                 onMouseLeave={() => setIsHovered(false)}
                 ref={ref}
+                style={{ opacity: isDimmed ? 0.5 : 1, transition: 'opacity 0.2s ease-in-out' }}
                 to={url}
-                variants={playlistRowDimVariants}
             >
                 {isCompact ? (
                     <>
@@ -369,7 +363,7 @@ export const PlaylistRowButton = memo(
                         )}
                     </>
                 )}
-            </MotionLink>
+            </Link>
         );
     },
 );

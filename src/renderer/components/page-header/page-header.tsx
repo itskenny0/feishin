@@ -1,7 +1,15 @@
 import clsx from 'clsx';
 import { useInView } from 'motion/react';
 import { AnimatePresence, motion, Variants } from 'motion/react';
-import { CSSProperties, memo, ReactNode, RefObject, useEffect, useRef } from 'react';
+import {
+    CSSProperties,
+    memo,
+    MutableRefObject,
+    ReactNode,
+    RefObject,
+    useEffect,
+    useRef,
+} from 'react';
 
 import styles from './page-header.module.css';
 
@@ -23,6 +31,14 @@ export interface PageHeaderProps extends Omit<
     position?: string;
     scrollContainerRef?: RefObject<HTMLDivElement | null>;
     target?: RefObject<HTMLElement | null>;
+    /**
+     * Populated by the header with a function that recomputes its
+     * `data-visible` state from the scroll container's current
+     * `data-scrolled` attribute. The scroll owner (NativeScrollArea) calls it
+     * from its existing throttled scroll handler, so the header no longer needs
+     * its own MutationObserver to react to scroll changes.
+     */
+    visibilityUpdaterRef?: MutableRefObject<(() => void) | null>;
 }
 
 const variants: Variants = {
@@ -46,15 +62,28 @@ const BasePageHeader = ({
     position,
     scrollContainerRef,
     target,
+    visibilityUpdaterRef,
     ...props
 }: PageHeaderProps) => {
     const ref = useRef(null);
     const padRight = useShouldPadTitlebar();
     const { windowBarStyle } = useWindowSettings();
 
+    // Only observe an intersection target when one is actually provided —
+    // detail routes that fade the header in once the page title scrolls out of
+    // view. Without a target this stays false and adds no observer.
+    const hasTarget = Boolean(target);
     const isInView = useInView({
         current: target?.current || null,
     });
+    const effectiveInView = hasTarget && isInView;
+
+    // Keep the latest scroll-dependent inputs in refs so the updater the scroll
+    // owner calls always reads fresh values without being recreated each render.
+    const effectiveInViewRef = useRef(effectiveInView);
+    effectiveInViewRef.current = effectiveInView;
+    const isHiddenRef = useRef(isHidden);
+    isHiddenRef.current = isHidden;
 
     useEffect(() => {
         const headerElement = ref.current as HTMLElement | null;
@@ -74,28 +103,30 @@ const BasePageHeader = ({
             return undefined;
         }
 
+        // Recompute visibility from the scroll container's current
+        // `data-scrolled` flag. The scroll owner writes that flag in its
+        // throttled scroll handler and then invokes this same function via
+        // `visibilityUpdaterRef`, so we react to scroll without a dedicated
+        // MutationObserver. We still run it on mount and whenever `isInView`
+        // changes (intersection observer fires independently of scroll events).
         const updateVisibility = () => {
-            const dataScrolled = scrollContainer.getAttribute('data-scrolled');
-            const isScrolled = dataScrolled === 'true';
-            const shouldShow = isScrolled && !isInView;
-
-            if (shouldShow) {
-                headerElement.setAttribute('data-visible', 'true');
-            } else {
-                headerElement.setAttribute('data-visible', 'false');
-            }
+            const isScrolled = scrollContainer.getAttribute('data-scrolled') === 'true';
+            const shouldShow = isScrolled && !effectiveInViewRef.current;
+            headerElement.setAttribute('data-visible', shouldShow ? 'true' : 'false');
         };
 
         updateVisibility();
 
-        const observer = new MutationObserver(updateVisibility);
-        observer.observe(scrollContainer, {
-            attributeFilter: ['data-scrolled'],
-            attributes: true,
-        });
+        if (visibilityUpdaterRef) {
+            visibilityUpdaterRef.current = updateVisibility;
+        }
 
-        return () => observer.disconnect();
-    }, [isInView, scrollContainerRef, isHidden]);
+        return () => {
+            if (visibilityUpdaterRef && visibilityUpdaterRef.current === updateVisibility) {
+                visibilityUpdaterRef.current = null;
+            }
+        };
+    }, [effectiveInView, scrollContainerRef, isHidden, visibilityUpdaterRef]);
 
     return (
         <>

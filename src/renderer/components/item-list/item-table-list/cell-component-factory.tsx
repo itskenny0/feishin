@@ -2,7 +2,10 @@ import React from 'react';
 import { CellComponentProps } from 'react-window-v2';
 
 import { TableItemProps } from '/@/renderer/components/item-list/item-table-list/item-table-list';
-import { ItemTableListColumn } from '/@/renderer/components/item-list/item-table-list/item-table-list-column';
+import {
+    isSameCellStyle,
+    ItemTableListColumn,
+} from '/@/renderer/components/item-list/item-table-list/item-table-list-column';
 import { LibraryItem } from '/@/shared/types/domain-types';
 import { TableColumn } from '/@/shared/types/types';
 
@@ -19,7 +22,7 @@ export const createColumnCellComponent = (
                 prevProps.rowIndex === nextProps.rowIndex &&
                 prevProps.columnIndex === nextProps.columnIndex &&
                 prevProps.data === nextProps.data &&
-                prevProps.style === nextProps.style &&
+                isSameCellStyle(prevProps.style, nextProps.style) &&
                 prevProps.columns === nextProps.columns &&
                 prevProps.playlistId === nextProps.playlistId
             );

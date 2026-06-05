@@ -3,7 +3,7 @@ import { CellComponentProps } from 'react-window-v2';
 
 import { createColumnCellComponents } from './cell-component-factory';
 import { TableItemProps } from './item-table-list';
-import { ItemTableListColumn } from './item-table-list-column';
+import { isSameCellStyle, ItemTableListColumn } from './item-table-list-column';
 
 import { LibraryItem } from '/@/shared/types/domain-types';
 import { TableColumn } from '/@/shared/types/types';
@@ -24,7 +24,20 @@ const MemoizedCellRouterBase = (props: MemoizedCellRouterProps) => {
     return <ItemTableListColumn {...props} />;
 };
 
-export const MemoizedCellRouter = MemoizedCellRouterBase;
+// Name says "memoized" — actually wrap it. The inner ColumnComponent is itself
+// memoized, but without this the router re-runs (and re-creates the child
+// element) on every parent grid render even when nothing relevant changed.
+export const MemoizedCellRouter = React.memo(MemoizedCellRouterBase, (prevProps, nextProps) => {
+    return (
+        prevProps.rowIndex === nextProps.rowIndex &&
+        prevProps.columnIndex === nextProps.columnIndex &&
+        prevProps.data === nextProps.data &&
+        isSameCellStyle(prevProps.style, nextProps.style) &&
+        prevProps.columns === nextProps.columns &&
+        prevProps.columnCellComponents === nextProps.columnCellComponents &&
+        prevProps.playlistId === nextProps.playlistId
+    );
+});
 
 export const useColumnCellComponents = (
     columns: TableColumn[],

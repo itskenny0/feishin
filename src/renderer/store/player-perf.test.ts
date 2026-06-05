@@ -25,6 +25,7 @@ import { act, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
+    subscribeCurrentTrack,
     useActiveSongStatus,
     usePlayerCoreData,
     usePlayerStoreBase,
@@ -237,6 +238,68 @@ describe('player-store hot-path perf', () => {
             rerender();
             expect(result.current).not.toBe(initial);
             expect(result.current.transitionType).toBe(PlayerStyle.CROSSFADE);
+        });
+    });
+
+    describe('subscribeCurrentTrack index-only selector', () => {
+        it('does not call getQueue() on a position-tick mutation', () => {
+            seedQueue(500, 0);
+
+            const baseGetQueue = usePlayerStoreBase.getState().getQueue;
+            let getQueueCalls = 0;
+            const wrapped = ((...args: Parameters<typeof baseGetQueue>) => {
+                getQueueCalls++;
+                return baseGetQueue(...args);
+            }) as typeof baseGetQueue;
+            usePlayerStoreBase.setState((s) => {
+                s.getQueue = wrapped;
+            });
+
+            const unsubscribe = subscribeCurrentTrack(() => {});
+
+            // A status flip is a typical hot-path mutation (it happens on every
+            // play/pause). The selector must not materialise the full queue.
+            act(() => {
+                usePlayerStoreBase.setState((s) => {
+                    s.player.status = PlayerStatus.PLAYING;
+                });
+            });
+
+            expect(getQueueCalls).toBe(0);
+            unsubscribe();
+        });
+
+        it('fires once with the resolved song only when the active track changes', () => {
+            seedQueue(5, 0);
+
+            const calls: Array<string | undefined> = [];
+            const unsubscribe = subscribeCurrentTrack(({ song }) => {
+                calls.push(song?.id);
+            });
+
+            // Unrelated mutation (volume) must not fire the subscriber.
+            act(() => {
+                usePlayerStoreBase.getState().setVolume(80);
+            });
+            expect(calls).toHaveLength(0);
+
+            // Moving the index resolves and emits the new song.
+            act(() => {
+                usePlayerStoreBase.setState((s) => {
+                    s.player.index = 3;
+                });
+            });
+            expect(calls).toEqual(['song-3']);
+
+            // Same index again (no change) must not re-fire.
+            act(() => {
+                usePlayerStoreBase.setState((s) => {
+                    s.player.status = PlayerStatus.PLAYING;
+                });
+            });
+            expect(calls).toEqual(['song-3']);
+
+            unsubscribe();
         });
     });
 

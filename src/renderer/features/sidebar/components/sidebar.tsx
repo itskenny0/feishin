@@ -1,8 +1,9 @@
 import clsx from 'clsx';
 import { AnimatePresence, motion } from 'motion/react';
-import { MouseEvent, useEffect, useMemo } from 'react';
+import { memo, MouseEvent, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
+import { useLocation } from 'react-router';
 
 import styles from './sidebar.module.css';
 
@@ -17,7 +18,10 @@ import { ActionBar } from '/@/renderer/features/sidebar/components/action-bar';
 import { SidebarCollectionList } from '/@/renderer/features/sidebar/components/sidebar-collection-list';
 import { SidebarFavoriteAlbumsList } from '/@/renderer/features/sidebar/components/sidebar-favorite-albums-list';
 import { SidebarIcon } from '/@/renderer/features/sidebar/components/sidebar-icon';
-import { SidebarItem } from '/@/renderer/features/sidebar/components/sidebar-item';
+import {
+    computeSidebarItemActive,
+    SidebarItem,
+} from '/@/renderer/features/sidebar/components/sidebar-item';
 import {
     SidebarPlaylistAddDragContext,
     SidebarPlaylistList,
@@ -62,8 +66,37 @@ const SidebarPlaylistSection = () => {
     );
 };
 
+interface LibraryNavItemProps {
+    // Button highlight: startsWith so detail sub-routes still highlight the
+    // parent nav row (matches the previous SidebarItem behavior).
+    isActive: boolean;
+    // Icon highlight: exact match, preserving SidebarIcon's previous default
+    // (fill variant only on the exact route, outline on sub-routes).
+    isIconActive: boolean;
+    label: string;
+    route: string;
+}
+
+// Memoized nav row. Receives only primitive props so that when the Sidebar
+// re-renders on navigation, every row whose active state did not change bails
+// out of re-rendering. The icon receives a precomputed active state too so it
+// doesn't re-subscribe to the router on its own.
+const LibraryNavItem = memo(({ isActive, isIconActive, label, route }: LibraryNavItemProps) => {
+    return (
+        <SidebarItem isActive={isActive} to={route}>
+            <Group gap="md">
+                <SidebarIcon active={isIconActive} route={route} />
+                {label}
+            </Group>
+        </SidebarItem>
+    );
+});
+
+LibraryNavItem.displayName = 'LibraryNavItem';
+
 export const Sidebar = () => {
     const { t } = useTranslation();
+    const location = useLocation();
 
     const sidebarBottomSection = useSidebarBottomSection();
 
@@ -177,13 +210,18 @@ export const Sidebar = () => {
                         </Accordion.Control>
                         <Accordion.Panel>
                             {libraryItemsWithRoute.map((item) => {
+                                const route = item.route ?? '';
                                 return (
-                                    <SidebarItem key={`sidebar-${item.route}`} to={item.route}>
-                                        <Group gap="md">
-                                            <SidebarIcon route={item.route} />
-                                            {item.label}
-                                        </Group>
-                                    </SidebarItem>
+                                    <LibraryNavItem
+                                        isActive={computeSidebarItemActive(
+                                            route,
+                                            location.pathname,
+                                        )}
+                                        isIconActive={location.pathname === route}
+                                        key={`sidebar-${item.route}`}
+                                        label={item.label ?? ''}
+                                        route={route}
+                                    />
                                 );
                             })}
                         </Accordion.Panel>

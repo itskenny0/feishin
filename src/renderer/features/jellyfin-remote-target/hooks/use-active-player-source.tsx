@@ -40,6 +40,15 @@ export const useActivePlayerSource = (): ActivePlayerSource => {
     // so leaf references (capabilities/nowPlayingItem/queue) stay stable
     // across polls that don't touch them — the shallow compare then holds and
     // the memo below doesn't invalidate every ~3s tick.
+    // `positionMs` is deliberately NOT in this shallow selection. It advances
+    // every ~3s /Sessions poll (and every interpolation tick the controller
+    // mirrors), which would churn this object's identity — and therefore the
+    // memo below, and every PlayerbarSlider / VolumeButton / waveform consumer
+    // of useActivePlayerSource — on every position update. Consumers that need
+    // the live position read it from useRemoteInterpolatedPositionMs instead,
+    // so the source object stays stable across position-only polls and only
+    // re-emits when an actually-surfaced leaf (queue, song, volume, paused…)
+    // changes. The returned `positionMs` is pinned to 0 in both modes.
     const remote = useRemoteTargetStore(
         useShallow((s) => ({
             capabilities: s.mirrored.capabilities,
@@ -47,7 +56,6 @@ export const useActivePlayerSource = (): ActivePlayerSource => {
             isPaused: s.mirrored.playState.isPaused,
             isRemote: s.targetDeviceId !== null,
             nowPlayingItem: s.mirrored.nowPlayingItem,
-            positionMs: s.mirrored.playState.positionMs,
             queue: s.mirrored.queue,
             queueIndex: s.mirrored.queueIndex,
             volume: s.mirrored.playState.volume,
@@ -65,7 +73,10 @@ export const useActivePlayerSource = (): ActivePlayerSource => {
                 isPaused: remote.isPaused,
                 mode: 'remote',
                 nowPlayingItem: remote.nowPlayingItem,
-                positionMs: remote.positionMs,
+                // Live position is read via useRemoteInterpolatedPositionMs by
+                // the leaves that need it; pinned to 0 here so position-only
+                // polls don't invalidate this memo. See the selection comment.
+                positionMs: 0,
                 queue: remote.queue,
                 queueIndex: remote.queueIndex,
                 volume: remote.volume,

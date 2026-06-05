@@ -90,7 +90,7 @@ const ImageColumnBase = (props: ItemTableListInnerColumn) => {
                                 props.size === 'default' || props.size === 'large',
                         })}
                         enableDebounce={true}
-                        enableViewport={false}
+                        enableViewport={true}
                         explicitStatus={item?.explicitStatus}
                         id={item?.imageId}
                         itemType={item?._itemType}

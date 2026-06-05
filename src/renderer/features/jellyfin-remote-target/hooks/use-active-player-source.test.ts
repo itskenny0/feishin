@@ -245,6 +245,48 @@ describe('useActivePlayerSource (G4: slice-narrowed selector)', () => {
         expect(result.current).toBe(first);
     });
 
+    it('keeps a stable object reference when only positionMs advances', () => {
+        // Position is intentionally excluded from the shallow selection, so a
+        // poll frame that only advances playState.positionMs must NOT churn the
+        // source object identity (consumers read live position from
+        // useRemoteInterpolatedPositionMs instead).
+        vi.spyOn(Date, 'now').mockReturnValue(10_000);
+        useRemoteTargetStore.getState().actions.setTarget({
+            capabilities: ['SetVolume'],
+            deviceId: 'dev-1',
+            deviceName: 'Living Room',
+            sessionId: 'sess-1',
+        });
+        const np = song('track-1', 300_000);
+        act(() => {
+            useRemoteTargetStore.getState().actions.applyMirrorFromServer({
+                nowPlayingItem: np,
+                playState: { isPaused: false, positionMs: 1_000, positionSampledAt: 10_000 },
+            });
+        });
+
+        let renders = 0;
+        let result!: { current: ReturnType<typeof useActivePlayerSource> };
+        act(() => {
+            ({ result } = renderHook(() => {
+                renders += 1;
+                return useActivePlayerSource();
+            }));
+        });
+        const first = result.current;
+        const rendersAfterMount = renders;
+        expect(first.positionMs).toBe(0);
+
+        // Next poll: position has advanced, nothing else changed.
+        act(() => {
+            useRemoteTargetStore.getState().actions.applyMirrorFromServer({
+                playState: { isPaused: false, positionMs: 42_000, positionSampledAt: 11_000 },
+            });
+        });
+        expect(renders).toBe(rendersAfterMount);
+        expect(result.current).toBe(first);
+    });
+
     it('re-renders and updates when a surfaced field changes', () => {
         vi.spyOn(Date, 'now').mockReturnValue(10_000);
         useRemoteTargetStore.getState().actions.setTarget({

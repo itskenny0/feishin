@@ -8,7 +8,7 @@ import {
 import { ItemTableListInnerColumn } from '/@/renderer/components/item-list/item-table-list/item-table-list-column';
 import { useIsActiveRow } from '/@/renderer/components/item-list/item-table-list/item-table-list-context';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
-import { usePlayerSong, usePlayerStatus } from '/@/renderer/store';
+import { usePlayerStoreBase } from '/@/renderer/store';
 import {
     Album,
     AlbumArtist,
@@ -47,8 +47,6 @@ export const hasPlayableRowItem = (
 };
 
 export const useRowPlayControl = (props: ItemTableListInnerColumn) => {
-    const status = usePlayerStatus();
-    const currentSong = usePlayerSong();
     const player = usePlayer();
     const rowItem = props.getRowItem?.(props.rowIndex) ?? props.data[props.rowIndex];
     const song = rowItem as QueueSong;
@@ -56,28 +54,59 @@ export const useRowPlayControl = (props: ItemTableListInnerColumn) => {
     const artist = rowItem as AlbumArtist | Artist;
 
     const isActiveFromRow = useIsActiveRow(song?.id, song?._uniqueId);
-    const isActive = (() => {
-        switch (props.itemType) {
+
+    // Whether this row is the active (currently-loaded) one. For SONG-like rows
+    // this comes from the per-row active-row context (no global subscription).
+    // For ALBUM/ALBUM_ARTIST/ARTIST it has to be derived from the current song,
+    // but we collapse it to a primitive `boolean` inside the store selector so
+    // Zustand bails out for every row whose active-ness didn't change — a track
+    // change no longer re-renders the whole visible index column.
+    const itemType = props.itemType;
+    const albumId = album?.id;
+    const artistId = artist?.id;
+
+    const isActiveFromStore = usePlayerStoreBase((state): boolean => {
+        if (
+            itemType !== LibraryItem.ALBUM &&
+            itemType !== LibraryItem.ALBUM_ARTIST &&
+            itemType !== LibraryItem.ARTIST
+        ) {
+            return false;
+        }
+        const currentSong = state.getCurrentSong();
+        switch (itemType) {
             case LibraryItem.ALBUM:
-                return !!album?.id && currentSong?.albumId === album.id;
+                return !!albumId && currentSong?.albumId === albumId;
             case LibraryItem.ALBUM_ARTIST:
                 return (
-                    !!artist?.id &&
+                    !!artistId &&
                     !!currentSong?.albumArtists?.some(
-                        (relatedArtist) => relatedArtist.id === artist.id,
+                        (relatedArtist) => relatedArtist.id === artistId,
                     )
                 );
             case LibraryItem.ARTIST:
                 return (
-                    !!artist?.id &&
-                    !!currentSong?.artists?.some((relatedArtist) => relatedArtist.id === artist.id)
+                    !!artistId &&
+                    !!currentSong?.artists?.some((relatedArtist) => relatedArtist.id === artistId)
                 );
             default:
-                return isActiveFromRow;
+                return false;
         }
-    })();
+    });
 
-    const isPlaying = isActive && status === PlayerStatus.PLAYING;
+    const isActive =
+        itemType === LibraryItem.ALBUM ||
+        itemType === LibraryItem.ALBUM_ARTIST ||
+        itemType === LibraryItem.ARTIST
+            ? isActiveFromStore
+            : isActiveFromRow;
+
+    // Only the active row subscribes to the play/pause status; inactive rows
+    // get a constant `false`, so a play/pause toggle re-renders just that one
+    // row instead of every visible play-control cell.
+    const isPlaying = usePlayerStoreBase((state): boolean =>
+        isActive ? state.player.status === PlayerStatus.PLAYING : false,
+    );
 
     const showPlayControls =
         supportsRowPlayControls(props.itemType) &&

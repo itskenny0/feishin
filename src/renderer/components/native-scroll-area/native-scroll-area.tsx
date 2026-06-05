@@ -46,6 +46,10 @@ const BaseNativeScrollArea = forwardRef(
     ) => {
         const { windowBarStyle } = useWindowSettings();
         const containerRef = useRef<HTMLDivElement | null>(null);
+        // Populated by PageHeader with its visibility recompute fn. We call it
+        // from the throttled scroll handler below so the header reacts to
+        // `data-scrolled` changes without its own MutationObserver.
+        const headerVisibilityUpdaterRef = useRef<(() => void) | null>(null);
 
         const scrollHandler = useThrottledCallback((e: Event) => {
             const scrollElement = e?.target as HTMLDivElement;
@@ -73,6 +77,10 @@ const BaseNativeScrollArea = forwardRef(
             } else {
                 containerRef.current.setAttribute('data-scrolled', 'false');
             }
+
+            // Drive the header's visibility off this same throttled tick now
+            // that it no longer runs its own MutationObserver.
+            headerVisibilityUpdaterRef.current?.();
         }, 100);
 
         const [initialize] = useOverlayScrollbars({
@@ -127,6 +135,7 @@ const BaseNativeScrollArea = forwardRef(
                         animated
                         position="absolute"
                         scrollContainerRef={containerRef}
+                        visibilityUpdaterRef={headerVisibilityUpdaterRef}
                         {...pageHeaderProps}
                     />
                 )}

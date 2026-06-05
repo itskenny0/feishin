@@ -65,19 +65,32 @@ export const SynchronizedLyrics = ({
     const playbackType = usePlaybackType();
     const lyricsSettings = useLyricsSettings();
     const displaySettings = useLyricsDisplaySettings(settingsKey);
-    const settings = {
-        ...lyricsSettings,
-        fontSize:
-            displaySettings.fontSize && displaySettings.fontSize !== 0
-                ? displaySettings.fontSize
-                : 24,
-        gap: displaySettings.gap && displaySettings.gap !== 0 ? displaySettings.gap : 24,
-        opacityNonActive: displaySettings.opacityNonActive,
-        scaleNonActive:
-            displaySettings.scaleNonActive && displaySettings.scaleNonActive !== 0
-                ? displaySettings.scaleNonActive
-                : 0.95,
-    };
+    // Memoize the derived settings object keyed on the underlying scalars so it
+    // keeps a stable identity across unrelated re-renders (timestamp ticks,
+    // active-line advances). A fresh object every render would re-run the
+    // container-style memo below and re-render every LyricLine via new props.
+    const settings = useMemo(
+        () => ({
+            ...lyricsSettings,
+            fontSize:
+                displaySettings.fontSize && displaySettings.fontSize !== 0
+                    ? displaySettings.fontSize
+                    : 24,
+            gap: displaySettings.gap && displaySettings.gap !== 0 ? displaySettings.gap : 24,
+            opacityNonActive: displaySettings.opacityNonActive,
+            scaleNonActive:
+                displaySettings.scaleNonActive && displaySettings.scaleNonActive !== 0
+                    ? displaySettings.scaleNonActive
+                    : 0.95,
+        }),
+        [
+            lyricsSettings,
+            displaySettings.fontSize,
+            displaySettings.gap,
+            displaySettings.opacityNonActive,
+            displaySettings.scaleNonActive,
+        ],
+    );
     const { mediaSeekToTimestamp } = usePlayerActions();
     const status = usePlayerStatus();
     const timestamp = usePlayerTimestamp();
@@ -232,6 +245,17 @@ export const SynchronizedLyrics = ({
                     container.offsetTop -
                     container.clientHeight / 2 +
                     target.clientHeight / 2;
+
+                // If the active line already sits within a center band of the
+                // viewport, skip issuing another smooth scroll. Re-anchoring to
+                // a target only a few pixels away looks like jitter and burns a
+                // smooth-scroll animation (plus a programmatic-scroll guard
+                // window) on every advance. The band is a fraction of the
+                // viewport height so adjacent lines still trigger a scroll.
+                const centerBand = Math.max(24, container.clientHeight * 0.15);
+                if (Math.abs(container.scrollTop - targetTop) <= centerBand) {
+                    return;
+                }
 
                 // Mark the upcoming scroll event chain as programmatic so the
                 // user scroll handler doesn't mistake them for human input.
@@ -459,6 +483,30 @@ export const SynchronizedLyrics = ({
         [handleSeek],
     );
 
+    // Memoize the container style keyed on the scalars it reads so the inline
+    // object identity is stable across timestamp ticks / active-line advances;
+    // otherwise React diffs (and re-applies) the style attribute every tick.
+    const containerStyle = useMemo(
+        () =>
+            ({
+                // opacity/scale is set here for every lyric,
+                // and then overwritten by CSS for active lyrics
+                // to prevent expensive rerenders each lyric
+                '--lyric-opacity': settings.opacityNonActive,
+                '--lyric-scale': settings.scaleNonActive,
+                '--lyric-scale-origin': settings.alignment,
+                gap: `${settings.gap}px`,
+                ...style,
+            }) as React.CSSProperties,
+        [
+            settings.opacityNonActive,
+            settings.scaleNonActive,
+            settings.alignment,
+            settings.gap,
+            style,
+        ],
+    );
+
     return (
         <div
             className={clsx(styles.container, 'synchronized-lyrics overlay-scrollbar')}
@@ -467,18 +515,7 @@ export const SynchronizedLyrics = ({
             onMouseEnter={showScrollbar}
             onMouseLeave={hideScrollbar}
             ref={containerRef}
-            style={
-                {
-                    // opacity/scale is set here for every lyric,
-                    // and then overwritten by CSS for active lyrics
-                    // to prevent expensive rerenders each lyric
-                    '--lyric-opacity': settings.opacityNonActive,
-                    '--lyric-scale': settings.scaleNonActive,
-                    '--lyric-scale-origin': settings.alignment,
-                    gap: `${settings.gap}px`,
-                    ...style,
-                } as React.CSSProperties
-            }
+            style={containerStyle}
         >
             {settings.showProvider && source && (
                 <LyricLine

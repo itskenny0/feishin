@@ -6,7 +6,7 @@ import { generatePath, Link } from 'react-router';
 
 import styles from './feature-carousel.module.css';
 
-import { ItemImage, useItemImageUrl } from '/@/renderer/components/item-image/item-image';
+import { ItemImage, useItemImageRequest } from '/@/renderer/components/item-image/item-image';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
 import { BackgroundOverlay } from '/@/renderer/features/shared/components/library-background-overlay';
 import { calculateTitleSize } from '/@/renderer/features/shared/components/library-header';
@@ -17,6 +17,7 @@ import { useCurrentServer } from '/@/renderer/store';
 import { useShowFilesystemNameForAlbums } from '/@/renderer/store/settings.store';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Group } from '/@/shared/components/group/group';
+import { useNativeImage } from '/@/shared/components/image/use-native-image';
 import { Separator } from '/@/shared/components/separator/separator';
 import { Stack } from '/@/shared/components/stack/stack';
 import { TextTitle } from '/@/shared/components/text-title/text-title';
@@ -73,15 +74,27 @@ interface SingleFeatureCarouselProps {
 // const CAROUSEL_AUTOPLAY_INTERVAL = 10000;
 
 const CarouselItem = ({ album }: CarouselItemProps) => {
-    const imageUrl = useItemImageUrl({
+    const imageRequest = useItemImageRequest({
         id: album.imageId || undefined,
         itemType: LibraryItem.ALBUM,
         type: 'itemCard',
     });
 
+    // Resolve the artwork ONCE through the shared cache pipeline (the same
+    // blob the ItemImage below renders — deduped by itemId, so no second
+    // network fetch and the Jellyfin auth header is honored). The resulting
+    // blob: URL drives both the blurred backdrop and the dominant-colour
+    // sampling, replacing the previous raw-remote-URL CSS background which
+    // double-loaded the artwork and 401'd on Jellyfin (no auth header on a
+    // CSS background).
+    const { displaySrc: resolvedImageUrl } = useNativeImage({
+        enabled: true,
+        request: imageRequest,
+    });
+
     const { background: backgroundColor } = useFastAverageColor({
         algorithm: 'dominant',
-        src: imageUrl || null,
+        src: resolvedImageUrl || null,
         srcLoaded: true,
     });
 
@@ -106,11 +119,11 @@ const CarouselItem = ({ album }: CarouselItemProps) => {
 
     return (
         <div className={styles.carouselItem}>
-            {imageUrl && (
+            {resolvedImageUrl && (
                 <div
                     className={styles.blurredBackground}
                     style={{
-                        backgroundImage: `url(${imageUrl})`,
+                        backgroundImage: `url(${resolvedImageUrl})`,
                         filter: 'blur(3rem)',
                     }}
                 />

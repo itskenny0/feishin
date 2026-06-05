@@ -10,6 +10,7 @@ import { AudioPlayer, PlayerOnProgressProps } from '/@/renderer/features/player/
 import { useRadioStore } from '/@/renderer/features/radio/hooks/use-radio-player';
 import { getMpvProperties } from '/@/renderer/features/settings/components/playback/mpv-properties';
 import {
+    setTimestamp,
     usePlaybackSettings,
     usePlayerActions,
     usePlayerSong,
@@ -228,6 +229,13 @@ export const MpvPlayerEngine = (props: MpvPlayerEngineProps) => {
             try {
                 const time = await mpvPlayer.getCurrentTime();
                 if (time !== undefined && isMountedRef.current) {
+                    // Single source of truth for MPV progress: feed both the
+                    // transition logic (onProgress) and the timestamp store from
+                    // this one poll. Previously mpv-player.tsx ran a second 500ms
+                    // interval issuing a duplicate getCurrentTime IPC just to push
+                    // the timestamp; that has been removed. The timestamp store's
+                    // no-op guard drops the unchanged integer-second ticks.
+                    setTimestamp(Number(time.toFixed(0)));
                     onProgress({
                         played: time / (time + 10),
                         playedSeconds: time,

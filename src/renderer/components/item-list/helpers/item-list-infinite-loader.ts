@@ -34,9 +34,14 @@ export const getListQueryKeyName = (itemType: LibraryItem): string => {
     }
 };
 
+// The page-load bookkeeping kept in the React Query cache. The heavy
+// per-index item map and the id→index map are NOT stored here — cloning a
+// multi-thousand-entry Map on every page write / favorite toggle showed up in
+// the perf audit (the persister re-walks them, and each clone is O(n)). They
+// now live in component-held refs (see `dataMapRef` / `idToIndexMapRef`) that
+// are mutated in place; this object only carries the cheap `pagesLoaded` flags
+// plus a `version` counter that's bumped to signal a render.
 type InfiniteLoaderCacheData = {
-    dataMap: Map<number, unknown>;
-    idToIndexMap: Map<string, number>;
     pagesLoaded: Record<string, boolean>;
     version: number;
 };
@@ -64,8 +69,6 @@ interface UseItemListInfiniteLoaderProps {
 
 function getInitialData(): InfiniteLoaderCacheData {
     return {
-        dataMap: new Map(),
-        idToIndexMap: new Map(),
         pagesLoaded: {},
         version: 0,
     };
@@ -102,6 +105,24 @@ export const useItemListInfiniteLoader = ({
     const previousDataQueryKeyRef = useRef<string>('');
     const isRefetchingRef = useRef<boolean>(false);
 
+    // The heavy per-index item map and id→index map are held in refs and
+    // mutated IN PLACE. Previously these lived in the React Query cache and
+    // were fully cloned (`new Map(...)`) on every page write and every
+    // favorite/rating toggle — O(n) per mutation over thousands of entries,
+    // which the persister then re-walked. Reads (`getItem`/`getItemIndex`)
+    // now go through stable accessors that close over these refs, so their
+    // identity no longer changes on a version bump.
+    const dataMapRef = useRef<Map<number, unknown>>(new Map());
+    const idToIndexMapRef = useRef<Map<string, number>>(new Map());
+
+    // Replace the ref-held maps with empty ones. Allocating fresh Maps (rather
+    // than `.clear()`ing in place) keeps any in-flight `loadedItems` snapshot
+    // referencing the old data until the next version bump swaps it out.
+    const resetDataMaps = useCallback(() => {
+        dataMapRef.current = new Map();
+        idToIndexMapRef.current = new Map();
+    }, []);
+
     const { data: totalItemCount } = useSuspenseQuery<number, any, number, any>(listCountQuery);
 
     const { setItemCount } = useListContext();
@@ -125,23 +146,24 @@ export const useItemListInfiniteLoader = ({
     // freshly-fetched items overwrite the cached ones.
     const writePageIntoDataMap = useCallback(
         (pageNumber: number, startIndex: number, items: unknown[], markLoaded: boolean) => {
+            // Mutate the ref-held maps in place (no clone) …
+            const dataMap = dataMapRef.current;
+            const idToIndexMap = idToIndexMapRef.current;
+
+            items.forEach((item, offset) => {
+                const index = startIndex + offset;
+                dataMap.set(index, item);
+                if (item && typeof item === 'object' && 'id' in (item as any)) {
+                    const id = String((item as any).id);
+                    idToIndexMap.set(id, index);
+                }
+            });
+
+            // … then bump the small version/pagesLoaded blob in the query cache
+            // to schedule a render.
             queryClient.setQueryData(dataQueryKey, (oldData: InfiniteLoaderCacheData) => {
                 const base = oldData ?? getInitialData();
-                const nextDataMap = new Map(base.dataMap);
-                const nextIdToIndexMap = new Map(base.idToIndexMap);
-
-                items.forEach((item, offset) => {
-                    const index = startIndex + offset;
-                    nextDataMap.set(index, item);
-                    if (item && typeof item === 'object' && 'id' in (item as any)) {
-                        const id = String((item as any).id);
-                        nextIdToIndexMap.set(id, index);
-                    }
-                });
-
                 return {
-                    dataMap: nextDataMap,
-                    idToIndexMap: nextIdToIndexMap,
                     pagesLoaded: markLoaded
                         ? { ...base.pagesLoaded, [pageNumber]: true }
                         : { ...base.pagesLoaded },
@@ -261,13 +283,11 @@ export const useItemListInfiniteLoader = ({
         setIsRefetching(true);
         const refetchPromise = (async () => {
             try {
-                // Reset the loaded pages
+                // Reset the loaded pages (and the ref-held item maps).
+                resetDataMaps();
                 queryClient.setQueryData(dataQueryKey, (oldData: any) => {
                     if (!oldData) return oldData;
                     return {
-                        ...oldData,
-                        dataMap: new Map(),
-                        idToIndexMap: new Map(),
                         pagesLoaded: {},
                         version: (oldData?.version ?? 0) + 1,
                     };
@@ -330,10 +350,7 @@ export const useItemListInfiniteLoader = ({
 
             const pageNumber = Math.floor(range.startIndex / itemsPerPage);
 
-            const currentData = queryClient.getQueryData<{
-                dataMap: Map<number, unknown>;
-                pagesLoaded: Record<string, boolean>;
-            }>(dataQueryKey);
+            const currentData = queryClient.getQueryData<InfiniteLoaderCacheData>(dataQueryKey);
 
             const startPageBoundary = pageNumber * itemsPerPage;
             const endPageBoundary = (pageNumber + 1) * itemsPerPage;
@@ -392,19 +409,14 @@ export const useItemListInfiniteLoader = ({
             });
 
             // Reset the infinite list data
-            const currentData = queryClient.getQueryData<{
-                dataMap: Map<number, unknown>;
-                pagesLoaded: Record<string, boolean>;
-            }>(dataQueryKey);
+            const currentData = queryClient.getQueryData<InfiniteLoaderCacheData>(dataQueryKey);
 
             if (force || currentData) {
                 // Reset data to initial state and clear all loaded pages
+                resetDataMaps();
                 await queryClient.setQueryData(dataQueryKey, (oldData: any) => {
                     if (!oldData) return getInitialData();
                     return {
-                        ...oldData,
-                        dataMap: new Map(),
-                        idToIndexMap: new Map(),
                         pagesLoaded: {},
                         version: (oldData?.version ?? 0) + 1,
                     };
@@ -450,21 +462,34 @@ export const useItemListInfiniteLoader = ({
 
     const updateItems = useCallback(
         (indexes: number[], value: object) => {
+            // Per-item, in-place update. We replace ONLY the touched indexes
+            // with a freshly-merged object (so the memoized card at that index
+            // sees a new `data` reference and re-renders) while leaving every
+            // other entry — and the Map itself — untouched. The previous code
+            // cloned the entire multi-thousand-entry Map on every heart click.
+            const dataMap = dataMapRef.current;
+            let changed = false;
+
+            indexes.forEach((index) => {
+                const existing = dataMap.get(index);
+                if (!existing || typeof existing !== 'object') {
+                    return;
+                }
+                dataMap.set(index, { ...(existing as any), ...(value as any) });
+                changed = true;
+            });
+
+            if (!changed) {
+                return;
+            }
+
+            // Bump the version so the list re-renders and re-reads the touched
+            // indexes via the stable `getItem` accessor.
             queryClient.setQueryData(dataQueryKey, (prev: InfiniteLoaderCacheData) => {
-                const nextDataMap = new Map(prev.dataMap);
-
-                indexes.forEach((index) => {
-                    const existing = nextDataMap.get(index);
-                    if (!existing || typeof existing !== 'object') {
-                        return;
-                    }
-                    nextDataMap.set(index, { ...(existing as any), ...(value as any) });
-                });
-
+                const base = prev ?? getInitialData();
                 return {
-                    ...prev,
-                    dataMap: nextDataMap,
-                    version: prev.version + 1,
+                    ...base,
+                    version: base.version + 1,
                 };
             });
         },
@@ -494,7 +519,7 @@ export const useItemListInfiniteLoader = ({
             }
 
             const dataIndexes = payload.id
-                .map((id: string) => (data as any).idToIndexMap?.get(id))
+                .map((id: string) => idToIndexMapRef.current.get(id))
                 .filter((idx): idx is number => typeof idx === 'number');
 
             if (dataIndexes.length === 0) {
@@ -510,7 +535,7 @@ export const useItemListInfiniteLoader = ({
             }
 
             const dataIndexes = payload.id
-                .map((id: string) => (data as any).idToIndexMap?.get(id))
+                .map((id: string) => idToIndexMapRef.current.get(id))
                 .filter((idx): idx is number => typeof idx === 'number');
 
             if (dataIndexes.length === 0) {
@@ -527,34 +552,44 @@ export const useItemListInfiniteLoader = ({
             eventEmitter.off('USER_FAVORITE', handleFavorite);
             eventEmitter.off('USER_RATING', handleRating);
         };
-    }, [data, eventKey, itemType, serverId, updateItems]);
+        // `idToIndexMapRef` is a stable ref; the handlers read its current
+        // value, so this effect no longer re-subscribes on every version bump
+        // (it previously depended on `data`).
+    }, [eventKey, itemType, serverId, updateItems]);
 
     const itemCount = totalItemCount ?? 0;
 
-    const getItem = useCallback(
-        (index: number) => {
-            return (data as any).dataMap?.get(index);
-        },
-        [data],
-    );
+    const dataVersion = data?.version ?? 0;
 
-    const getItemIndex = useCallback(
-        (id: string) => {
-            return (data as any).idToIndexMap?.get(id);
-        },
-        [data],
-    );
+    // Stable accessors. They read through the refs, so their identity never
+    // changes across version bumps — the grid's `itemData` memo (and every
+    // memoized cell that closes over `getItem`) no longer churns when a
+    // favorite/rating toggle or a page revalidation bumps the version.
+    const getItem = useCallback((index: number) => {
+        // The ref-held map is typed `unknown` for storage; callers (the
+        // entity-typed `*-infinite-grid` components) expect the item union, so
+        // cast on read — matching the pre-refactor `(data as any).dataMap.get`.
+        return dataMapRef.current.get(index) as any;
+    }, []);
 
+    const getItemIndex = useCallback((id: string) => {
+        return idToIndexMapRef.current.get(id);
+    }, []);
+
+    // Snapshot the ref-held map into a sorted array. Recomputed only when the
+    // version actually changes (a real data mutation), not on unrelated
+    // re-renders.
     const loadedItems = useMemo(() => {
-        const map: Map<number, unknown> | undefined = (data as any).dataMap;
+        const map = dataMapRef.current;
         if (!map || map.size === 0) return [];
         return Array.from(map.entries())
             .sort(([a], [b]) => a - b)
             .map(([, v]) => v);
-    }, [data]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [dataVersion]);
 
     return {
-        dataVersion: (data as any).version ?? 0,
+        dataVersion,
         getItem,
         getItemIndex,
         itemCount,

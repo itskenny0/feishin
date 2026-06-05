@@ -1,4 +1,6 @@
 import clsx from 'clsx';
+import { TFunction } from 'i18next';
+import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import styles from './center-controls.module.css';
@@ -27,6 +29,15 @@ import { PlayerRepeat, PlayerShuffle } from '/@/shared/types/types';
 
 export const CenterControls = () => {
     const skip = useSkipButtons();
+    const { t } = useTranslation();
+    // Lifted here and threaded down as primitives so the nine transport
+    // buttons don't each independently subscribe to the button-size store +
+    // spin up their own i18next subscription. With these as props and the
+    // leaf buttons React.memo'd, a button-size change re-renders the small
+    // parent once instead of nine separate subscribers, and the leaves only
+    // reconcile when one of their own props (active state, enabled, size)
+    // actually changes.
+    const buttonSize = useButtonSize();
 
     const isRadioActive = useIsRadioActive();
     /*
@@ -47,19 +58,37 @@ export const CenterControls = () => {
             <>
                 <div className={styles.controlsContainer}>
                     <div className={styles.buttonsContainer}>
-                        {!isCompactTablet && <RadioStopButton />}
-                        {!isCompactTablet && <ShuffleButton disabled={isRadioActive} />}
-                        <PreviousButton disabled={isRadioActive} />
+                        {!isCompactTablet && <RadioStopButton buttonSize={buttonSize} t={t} />}
+                        {!isCompactTablet && (
+                            <ShuffleButton buttonSize={buttonSize} disabled={isRadioActive} t={t} />
+                        )}
+                        <PreviousButton buttonSize={buttonSize} disabled={isRadioActive} t={t} />
                         {!isCompactTablet && skip?.enabled && (
-                            <SkipBackwardButton disabled={isRadioActive} />
+                            <SkipBackwardButton
+                                buttonSize={buttonSize}
+                                disabled={isRadioActive}
+                                t={t}
+                            />
                         )}
                         <RadioCenterPlayButton />
                         {!isCompactTablet && skip?.enabled && (
-                            <SkipForwardButton disabled={isRadioActive} />
+                            <SkipForwardButton
+                                buttonSize={buttonSize}
+                                disabled={isRadioActive}
+                                t={t}
+                            />
                         )}
-                        <NextButton disabled={isRadioActive} />
-                        {!isCompactTablet && <RepeatButton disabled={isRadioActive} />}
-                        {!isCompactTablet && <ShuffleAllButton disabled={isRadioActive} />}
+                        <NextButton buttonSize={buttonSize} disabled={isRadioActive} t={t} />
+                        {!isCompactTablet && (
+                            <RepeatButton buttonSize={buttonSize} disabled={isRadioActive} t={t} />
+                        )}
+                        {!isCompactTablet && (
+                            <ShuffleAllButton
+                                buttonSize={buttonSize}
+                                disabled={isRadioActive}
+                                t={t}
+                            />
+                        )}
                     </div>
                 </div>
             </>
@@ -70,21 +99,35 @@ export const CenterControls = () => {
         <>
             <div className={styles.controlsContainer}>
                 <div className={styles.buttonsContainer}>
-                    {!isCompactTablet && <StopButton />}
-                    {!isCompactTablet && <ShuffleButton />}
-                    <PreviousButton />
-                    {!isCompactTablet && skip?.enabled && <SkipBackwardButton />}
+                    {!isCompactTablet && <StopButton buttonSize={buttonSize} t={t} />}
+                    {!isCompactTablet && <ShuffleButton buttonSize={buttonSize} t={t} />}
+                    <PreviousButton buttonSize={buttonSize} t={t} />
+                    {!isCompactTablet && skip?.enabled && (
+                        <SkipBackwardButton buttonSize={buttonSize} t={t} />
+                    )}
                     <CenterPlayButton />
-                    {!isCompactTablet && skip?.enabled && <SkipForwardButton />}
-                    <NextButton />
-                    {!isCompactTablet && <RepeatButton />}
-                    {!isCompactTablet && <ShuffleAllButton />}
+                    {!isCompactTablet && skip?.enabled && (
+                        <SkipForwardButton buttonSize={buttonSize} t={t} />
+                    )}
+                    <NextButton buttonSize={buttonSize} t={t} />
+                    {!isCompactTablet && <RepeatButton buttonSize={buttonSize} t={t} />}
+                    {!isCompactTablet && <ShuffleAllButton buttonSize={buttonSize} t={t} />}
                 </div>
             </div>
             <PlayerbarSlider />
         </>
     );
 };
+
+// Shared props for the transport leaf buttons. `buttonSize` and `t` are lifted
+// into CenterControls (the single parent) and threaded down so each leaf
+// avoids its own useButtonSize/useTranslation subscription; the leaves are
+// React.memo'd so they only reconcile when their own props change.
+interface TransportButtonProps {
+    buttonSize: number;
+    disabled?: boolean;
+    t: TFunction;
+}
 
 const RadioCenterPlayButton = ({ disabled }: { disabled?: boolean }) => {
     const { currentStreamUrl } = useRadioPlayer();
@@ -110,9 +153,7 @@ const RadioCenterPlayButton = ({ disabled }: { disabled?: boolean }) => {
     );
 };
 
-const RadioStopButton = ({ disabled }: { disabled?: boolean }) => {
-    const { t } = useTranslation();
-    const buttonSize = useButtonSize();
+const RadioStopButton = memo(({ buttonSize, disabled, t }: TransportButtonProps) => {
     const { stop } = useRadioControls();
 
     return (
@@ -127,11 +168,10 @@ const RadioStopButton = ({ disabled }: { disabled?: boolean }) => {
             variant="tertiary"
         />
     );
-};
+});
+RadioStopButton.displayName = 'RadioStopButton';
 
-const StopButton = ({ disabled }: { disabled?: boolean }) => {
-    const { t } = useTranslation();
-    const buttonSize = useButtonSize();
+const StopButton = memo(({ buttonSize, disabled, t }: TransportButtonProps) => {
     const { mediaStop } = usePlayer();
 
     return (
@@ -146,11 +186,10 @@ const StopButton = ({ disabled }: { disabled?: boolean }) => {
             variant="tertiary"
         />
     );
-};
+});
+StopButton.displayName = 'StopButton';
 
-const ShuffleButton = ({ disabled }: { disabled?: boolean }) => {
-    const { t } = useTranslation();
-    const buttonSize = useButtonSize();
+const ShuffleButton = memo(({ buttonSize, disabled, t }: TransportButtonProps) => {
     const shuffle = useActiveShuffle();
     const { toggleShuffle } = usePlayer();
     const canShuffle = useTransportEnabled('SetShuffleQueue');
@@ -180,11 +219,10 @@ const ShuffleButton = ({ disabled }: { disabled?: boolean }) => {
             variant="tertiary"
         />
     );
-};
+});
+ShuffleButton.displayName = 'ShuffleButton';
 
-const PreviousButton = ({ disabled }: { disabled?: boolean }) => {
-    const { t } = useTranslation();
-    const buttonSize = useButtonSize();
+const PreviousButton = memo(({ buttonSize, disabled, t }: TransportButtonProps) => {
     const { mediaPrevious } = usePlayer();
     const canPrevious = useTransportEnabled('PreviousTrack');
 
@@ -201,11 +239,10 @@ const PreviousButton = ({ disabled }: { disabled?: boolean }) => {
             variant="secondary"
         />
     );
-};
+});
+PreviousButton.displayName = 'PreviousButton';
 
-const SkipBackwardButton = ({ disabled }: { disabled?: boolean }) => {
-    const { t } = useTranslation();
-    const buttonSize = useButtonSize();
+const SkipBackwardButton = memo(({ buttonSize, disabled, t }: TransportButtonProps) => {
     const { mediaSkipBackward } = usePlayer();
 
     return (
@@ -222,7 +259,8 @@ const SkipBackwardButton = ({ disabled }: { disabled?: boolean }) => {
             variant="secondary"
         />
     );
-};
+});
+SkipBackwardButton.displayName = 'SkipBackwardButton';
 
 const CenterPlayButton = ({ disabled }: { disabled?: boolean }) => {
     const currentSong = useActiveNowPlayingItem();
@@ -249,9 +287,7 @@ const CenterPlayButton = ({ disabled }: { disabled?: boolean }) => {
     );
 };
 
-const SkipForwardButton = ({ disabled }: { disabled?: boolean }) => {
-    const { t } = useTranslation();
-    const buttonSize = useButtonSize();
+const SkipForwardButton = memo(({ buttonSize, disabled, t }: TransportButtonProps) => {
     const { mediaSkipForward } = usePlayer();
 
     return (
@@ -268,11 +304,10 @@ const SkipForwardButton = ({ disabled }: { disabled?: boolean }) => {
             variant="secondary"
         />
     );
-};
+});
+SkipForwardButton.displayName = 'SkipForwardButton';
 
-const NextButton = ({ disabled }: { disabled?: boolean }) => {
-    const { t } = useTranslation();
-    const buttonSize = useButtonSize();
+const NextButton = memo(({ buttonSize, disabled, t }: TransportButtonProps) => {
     const { mediaNext } = usePlayer();
     const canNext = useTransportEnabled('NextTrack');
 
@@ -289,11 +324,10 @@ const NextButton = ({ disabled }: { disabled?: boolean }) => {
             variant="secondary"
         />
     );
-};
+});
+NextButton.displayName = 'NextButton';
 
-const RepeatButton = ({ disabled }: { disabled?: boolean }) => {
-    const { t } = useTranslation();
-    const buttonSize = useButtonSize();
+const RepeatButton = memo(({ buttonSize, disabled, t }: TransportButtonProps) => {
     const repeat = useActiveRepeat();
     const { toggleRepeat } = usePlayer();
     const canRepeat = useTransportEnabled('SetRepeatMode');
@@ -334,12 +368,10 @@ const RepeatButton = ({ disabled }: { disabled?: boolean }) => {
             variant="tertiary"
         />
     );
-};
+});
+RepeatButton.displayName = 'RepeatButton';
 
-const ShuffleAllButton = ({ disabled }: { disabled?: boolean }) => {
-    const { t } = useTranslation();
-    const buttonSize = useButtonSize();
-
+const ShuffleAllButton = memo(({ buttonSize, disabled, t }: TransportButtonProps) => {
     return (
         <PlayerButton
             disabled={disabled}
@@ -352,4 +384,5 @@ const ShuffleAllButton = ({ disabled }: { disabled?: boolean }) => {
             variant="tertiary"
         />
     );
-};
+});
+ShuffleAllButton.displayName = 'ShuffleAllButton';

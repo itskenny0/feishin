@@ -49,14 +49,22 @@ interface PlaylistFolderCollapseProps {
     open: boolean;
 }
 
+// Collapse without animating `height: auto`. Animating height forces motion to
+// measure the natural height and drives a layout reflow every frame — and the
+// tree recurses, so a single drag-driven auto-expand could thrash layout for
+// dozens of folders at once. Instead we animate `grid-template-rows` between
+// `0fr` and `1fr`: the browser interpolates the track size with no JS height
+// measurement, and the inner `min-height: 0` + `overflow: hidden` wrapper clips
+// the content as it grows/shrinks. opacity rides along for the fade.
 const PlaylistFolderCollapse = ({ children, className, open }: PlaylistFolderCollapseProps) => (
     <motion.div
-        animate={{ height: open ? 'auto' : 0, opacity: open ? 1 : 0 }}
+        animate={{ gridTemplateRows: open ? '1fr' : '0fr', opacity: open ? 1 : 0 }}
         className={clsx(styles.collapse, className)}
         initial={false}
+        style={{ display: 'grid' }}
         transition={FOLDER_COLLAPSE_TRANSITION}
     >
-        {children}
+        <div style={{ minHeight: 0, overflow: 'hidden' }}>{children}</div>
     </motion.div>
 );
 

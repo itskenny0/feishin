@@ -46,14 +46,10 @@ const BaseItemImage = (
     const { explicitStatus, serverId, src, ...rest } = props;
     const blurExplicitImages = useBlurExplicitImages();
 
-    const imageUrl = useItemImageUrl({
-        id: props.id,
-        imageUrl: src,
-        itemType: props.itemType,
-        serverId: serverId || undefined,
-        type: props.type,
-    });
-
+    // Compute the request once and derive the display `src` from it. The
+    // request already carries the resolved URL (`imageRequest.url`), so the
+    // previous separate `useItemImageUrl` call was a duplicate store
+    // subscription + memo per card — pure overhead on large grids.
     const imageRequest = useItemImageRequest({
         id: props.id,
         imageUrl: src,
@@ -61,6 +57,8 @@ const BaseItemImage = (
         serverId: serverId || undefined,
         type: props.type,
     });
+
+    const imageUrl = imageRequest?.url;
 
     const isExplicit = blurExplicitImages && explicitStatus === ExplicitStatus.EXPLICIT;
 

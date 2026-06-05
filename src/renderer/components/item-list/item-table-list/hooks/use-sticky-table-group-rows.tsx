@@ -71,6 +71,44 @@ export const useStickyTableGroupRows = ({
         return indexes;
     }, [groups]);
 
+    // Precompute, once per [groups/heights] change, each group row's absolute
+    // top offset (from the top of the grid, including the header) and its own
+    // height. Previously the scroll handler re-summed getRowHeight() for every
+    // row before every group on every scroll tick — O(groups x rowIndex) per
+    // event. We now walk the rows a single time here and index straight into
+    // the precomputed values during scroll.
+    const groupRowOffsets = useMemo(() => {
+        if (groupRowIndexes.length === 0) {
+            return [] as Array<{ groupIndex: number; rowHeight: number; rowTop: number }>;
+        }
+
+        const offsets: Array<{ groupIndex: number; rowHeight: number; rowTop: number }> = [];
+        // Walk rows from 0 up to the last group row index exactly once, keeping
+        // a running cumulative offset (starting after the header). For each
+        // group row we record its top and height as we reach it.
+        let cumulative = headerHeight;
+        let nextGroup = 0;
+        const maxRowIndex = groupRowIndexes[groupRowIndexes.length - 1].rowIndex;
+
+        for (let r = 0; r <= maxRowIndex && nextGroup < groupRowIndexes.length; r++) {
+            const target = groupRowIndexes[nextGroup];
+            if (r === target.rowIndex) {
+                const rowHeight = getRowHeight(r);
+                offsets.push({
+                    groupIndex: target.groupIndex,
+                    rowHeight,
+                    rowTop: cumulative,
+                });
+                cumulative += rowHeight;
+                nextGroup++;
+            } else {
+                cumulative += getRowHeight(r);
+            }
+        }
+
+        return offsets;
+    }, [groupRowIndexes, getRowHeight, headerHeight]);
+
     useEffect(() => {
         if (
             !enabled ||
@@ -90,7 +128,11 @@ export const useStickyTableGroupRows = ({
             return;
         }
 
-        const updateStickyGroup = () => {
+        let rafId: null | number = null;
+
+        const computeStickyGroup = () => {
+            rafId = null;
+
             const scrollTop = mainGrid.scrollTop || 0;
             const containerRect = containerRef.current?.getBoundingClientRect();
 
@@ -109,22 +151,14 @@ export const useStickyTableGroupRows = ({
             // This way it updates "on scroll" when scrolling into a new group section
             let targetGroupIndex: null | number = null;
 
-            // Iterate forward through groups to find which one is at or about to reach the sticky position
-            for (let i = 0; i < groupRowIndexes.length; i++) {
-                const { groupIndex, rowIndex } = groupRowIndexes[i];
-
-                // Calculate the top position of this group row relative to the grid scroll
-                let rowTop = headerHeight;
-                for (let r = 0; r < rowIndex; r++) {
-                    rowTop += getRowHeight(r);
-                }
+            // Iterate forward through the precomputed group-row offsets to find
+            // which one is at or about to reach the sticky position. No per-row
+            // height re-summing here — `rowTop`/`rowHeight` are precomputed.
+            for (let i = 0; i < groupRowOffsets.length; i++) {
+                const { groupIndex, rowHeight: groupRowHeight, rowTop } = groupRowOffsets[i];
 
                 // Calculate where this row would be in the viewport (absolute position from top of viewport)
                 const rowViewportTop = containerTop + rowTop - scrollTop;
-
-                // Get the height of this group row to account for its own offset
-                // Use getRowHeight to get the actual row height for the group header row
-                const groupRowHeight = getRowHeight(rowIndex);
 
                 // Calculate the sticky position accounting for the sticky group row's own height
                 // Similar to how stickyTop accounts for sticky header height, we add the group row height
@@ -155,27 +189,29 @@ export const useStickyTableGroupRows = ({
             });
         };
 
-        updateStickyGroup();
+        // Coalesce a burst of scroll/resize events into a single read+state
+        // update per frame.
+        const updateStickyGroup = () => {
+            if (rafId !== null) return;
+            rafId = requestAnimationFrame(computeStickyGroup);
+        };
+
+        computeStickyGroup();
 
         mainGrid.addEventListener('scroll', updateStickyGroup, { passive: true });
-        window.addEventListener('scroll', updateStickyGroup, true);
-        window.addEventListener('resize', updateStickyGroup);
+        window.addEventListener('scroll', updateStickyGroup, { capture: true, passive: true });
+        window.addEventListener('resize', updateStickyGroup, { passive: true });
 
         return () => {
+            if (rafId !== null) {
+                cancelAnimationFrame(rafId);
+                rafId = null;
+            }
             mainGrid.removeEventListener('scroll', updateStickyGroup);
             window.removeEventListener('scroll', updateStickyGroup, true);
             window.removeEventListener('resize', updateStickyGroup);
         };
-    }, [
-        enabled,
-        groups,
-        groupRowIndexes,
-        mainGridRef,
-        containerRef,
-        getRowHeight,
-        headerHeight,
-        stickyTop,
-    ]);
+    }, [enabled, groups, groupRowOffsets, mainGridRef, containerRef, stickyTop]);
 
     const shouldShowStickyGroupRow = useMemo(() => {
         return enabled && stickyGroupIndex !== null && isTableInView;

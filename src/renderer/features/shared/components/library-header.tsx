@@ -99,7 +99,16 @@ export const LibraryHeader = forwardRef(
             () =>
                 imageUrl ||
                 (item.imageId && item.type
-                    ? getItemImageUrl({ id: item.imageId, itemType: item.type as LibraryItem })
+                    ? getItemImageUrl({
+                          id: item.imageId,
+                          itemType: item.type as LibraryItem,
+                          // Dominant-colour extraction only needs a few
+                          // representative pixels — decode a 300px thumbnail
+                          // instead of the original full-res cover. The
+                          // explicit click-to-zoom modal below still fetches
+                          // full-res.
+                          size: 300,
+                      })
                     : null),
             [imageUrl, item.imageId, item.type],
         );

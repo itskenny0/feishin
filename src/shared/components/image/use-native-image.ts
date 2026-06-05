@@ -14,10 +14,53 @@ type ThumbnailResolver = (
     request: ImageRequest | string,
 ) => Promise<string>;
 
+// Refcounted shared-URL pair. When registered, the hook prefers these over
+// the per-call `resolveThumbnailRef` so concurrent mounts of the same item
+// share ONE object URL (revoked only when the last consumer releases it),
+// instead of each mount minting + revoking its own blob: URL during scroll.
+type ThumbnailUrlAcquirer = (
+    itemId: string,
+    size: number,
+    request: ImageRequest | string,
+) => Promise<string>;
+type ThumbnailUrlReleaser = (itemId: string) => void;
+
 let resolveThumbnailRef: null | ThumbnailResolver = null;
+let acquireThumbnailUrlRef: null | ThumbnailUrlAcquirer = null;
+let releaseThumbnailUrlRef: null | ThumbnailUrlReleaser = null;
 
 export const registerThumbnailResolver = (fn: null | ThumbnailResolver): void => {
     resolveThumbnailRef = fn;
+};
+
+export const registerThumbnailUrlCache = (
+    acquire: null | ThumbnailUrlAcquirer,
+    release: null | ThumbnailUrlReleaser,
+): void => {
+    acquireThumbnailUrlRef = acquire;
+    releaseThumbnailUrlRef = release;
+};
+
+// Resolve via the shared refcounted cache when available. Returns the
+// shared (already-refcounted) URL on a hit, or undefined on a miss so the
+// caller falls through to a direct fetch. The caller owns releasing the
+// returned URL's refcount via `releaseSharedThumbnailUrl`.
+const tryAcquireSharedThumbnail = async (
+    itemId: string,
+    size: number,
+    request: ImageRequest,
+): Promise<string | undefined> => {
+    if (!acquireThumbnailUrlRef) return undefined;
+    try {
+        const resolved = await acquireThumbnailUrlRef(itemId, size, request);
+        return resolved === request.url ? undefined : resolved;
+    } catch {
+        return undefined;
+    }
+};
+
+const releaseSharedThumbnailUrl = (itemId: string): void => {
+    releaseThumbnailUrlRef?.(itemId);
 };
 
 const tryResolveThumbnail = async (
@@ -57,6 +100,12 @@ export function useNativeImage({
     const abortControllerRef = useRef<AbortController | null>(null);
     const loadedRequestSignatureRef = useRef<null | string>(null);
     const objectUrlRef = useRef<null | string>(null);
+    // When the current objectUrl came from the shared refcounted cache we
+    // release it (decrement refcount) rather than revoking it directly —
+    // another mounted consumer of the same item may still be displaying
+    // the same blob: URL. Holds the itemId whose refcount we own, or null
+    // when objectUrlRef is a self-minted (fetch->blob) URL we must revoke.
+    const sharedUrlItemIdRef = useRef<null | string>(null);
     const onFetchErrorRef = useRef(onFetchError);
     const [state, setState] = useState<NativeImageState>({ status: 'idle' });
 
@@ -86,7 +135,15 @@ export function useNativeImage({
                 return;
             }
 
-            URL.revokeObjectURL(objectUrlRef.current);
+            if (sharedUrlItemIdRef.current) {
+                // Shared refcounted URL: release our reference instead of
+                // revoking — the cache revokes once the last consumer lets
+                // go.
+                releaseSharedThumbnailUrl(sharedUrlItemIdRef.current);
+                sharedUrlItemIdRef.current = null;
+            } else {
+                URL.revokeObjectURL(objectUrlRef.current);
+            }
             objectUrlRef.current = null;
             loadedRequestSignatureRef.current = null;
         };
@@ -129,31 +186,58 @@ export function useNativeImage({
                 // so the subsequent network branch is a fall-back for
                 // bundles where the cache module isn't available.
                 if (request.cacheItemId && request.cacheSize) {
+                    // Prefer the shared refcounted cache so concurrent
+                    // mounts of the same item reuse ONE object URL. Falls
+                    // back to the per-call resolver when the shared cache
+                    // isn't registered (e.g. the shared bundle imported
+                    // outside the renderer).
+                    const useShared = Boolean(acquireThumbnailUrlRef);
+                    const cacheItemId = request.cacheItemId;
                     // Race the cache lookup against a 5s cap. The lookup
                     // may await a shared in-flight promise from the thumbnail
                     // sweep (which has its own 20s network timeout); without
                     // the race the image component spins for up to 20s before
                     // the sweep task resolves and we can fall through to a
                     // direct fetch.
+                    let timedOut = false;
                     const cacheTimeout = new Promise<undefined>((resolve) => {
-                        setTimeout(() => resolve(undefined), 5_000);
+                        setTimeout(() => {
+                            timedOut = true;
+                            resolve(undefined);
+                        }, 5_000);
                     });
-                    const cached = await Promise.race([
-                        tryResolveThumbnail(request.cacheItemId, request.cacheSize, request),
-                        cacheTimeout,
-                    ]);
+                    // Keep the acquire promise around so that if the 5s cap
+                    // wins the race we can still release the (shared) ref it
+                    // eventually acquires — otherwise the refcount leaks and
+                    // the blob: URL is never revoked.
+                    const lookupPromise = useShared
+                        ? tryAcquireSharedThumbnail(cacheItemId, request.cacheSize, request)
+                        : tryResolveThumbnail(cacheItemId, request.cacheSize, request);
+                    if (useShared) {
+                        void lookupPromise.then((late) => {
+                            if (timedOut && late && late.startsWith('blob:')) {
+                                releaseSharedThumbnailUrl(cacheItemId);
+                            }
+                        });
+                    }
+                    const cached = await Promise.race([lookupPromise, cacheTimeout]);
                     if (abortController.signal.aborted) {
-                        // The resolver creates a fresh blob: URL even on a
+                        // The resolver hands back a blob: URL even on a
                         // cache hit. If the consumer unmounted while the
-                        // resolver was in flight, revoke it before bailing
-                        // so we don't leak the object URL.
+                        // resolver was in flight, release/revoke it before
+                        // bailing so we don't leak the object URL.
                         if (cached && cached.startsWith('blob:')) {
-                            URL.revokeObjectURL(cached);
+                            if (useShared) {
+                                releaseSharedThumbnailUrl(cacheItemId);
+                            } else {
+                                URL.revokeObjectURL(cached);
+                            }
                         }
                         return;
                     }
                     if (cached) {
                         objectUrlRef.current = cached;
+                        sharedUrlItemIdRef.current = useShared ? cacheItemId : null;
                         loadedRequestSignatureRef.current = requestSignature;
                         setState({ displaySrc: cached, status: 'loaded' });
                         return;
@@ -184,6 +268,7 @@ export function useNativeImage({
 
                 const objectUrl = URL.createObjectURL(blob);
                 objectUrlRef.current = objectUrl;
+                sharedUrlItemIdRef.current = null;
                 loadedRequestSignatureRef.current = requestSignature;
                 setState({ displaySrc: objectUrl, status: 'loaded' });
             } catch {
@@ -215,7 +300,13 @@ export function useNativeImage({
             abortControllerRef.current?.abort();
 
             if (objectUrlRef.current) {
-                URL.revokeObjectURL(objectUrlRef.current);
+                if (sharedUrlItemIdRef.current) {
+                    releaseSharedThumbnailUrl(sharedUrlItemIdRef.current);
+                    sharedUrlItemIdRef.current = null;
+                } else {
+                    URL.revokeObjectURL(objectUrlRef.current);
+                }
+                objectUrlRef.current = null;
             }
         };
     }, []);

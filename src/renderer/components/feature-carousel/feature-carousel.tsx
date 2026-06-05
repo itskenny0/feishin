@@ -6,7 +6,7 @@ import { generatePath, Link } from 'react-router';
 
 import styles from './feature-carousel.module.css';
 
-import { ItemImage, useItemImageUrl } from '/@/renderer/components/item-image/item-image';
+import { ItemImage, useItemImageRequest } from '/@/renderer/components/item-image/item-image';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
 import { BackgroundOverlay } from '/@/renderer/features/shared/components/library-background-overlay';
 import { PlayButtonGroup } from '/@/renderer/features/shared/components/play-button-group';
@@ -17,6 +17,7 @@ import { useShowFilesystemNameForAlbums } from '/@/renderer/store/settings.store
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Badge } from '/@/shared/components/badge/badge';
 import { Group } from '/@/shared/components/group/group';
+import { useNativeImage } from '/@/shared/components/image/use-native-image';
 import { Stack } from '/@/shared/components/stack/stack';
 import { Text } from '/@/shared/components/text/text';
 import { Album, LibraryItem } from '/@/shared/types/domain-types';
@@ -86,15 +87,24 @@ interface CarouselItemProps {
 }
 
 const CarouselItem = ({ album }: CarouselItemProps) => {
-    const imageUrl = useItemImageUrl({
+    const imageRequest = useItemImageRequest({
         id: album.imageId || undefined,
         itemType: LibraryItem.ALBUM,
         type: 'itemCard',
     });
 
+    // Resolve the artwork ONCE through the shared cache (the same blob the
+    // ItemImage below renders — deduped by itemId). Sampling the dominant
+    // colour from the resolved blob: URL avoids a second, uncached,
+    // auth-header-less load of the raw remote URL.
+    const { displaySrc: resolvedImageUrl } = useNativeImage({
+        enabled: true,
+        request: imageRequest,
+    });
+
     const { background: backgroundColor } = useFastAverageColor({
         algorithm: 'dominant',
-        src: imageUrl || null,
+        src: resolvedImageUrl || null,
         srcLoaded: true,
     });
 
@@ -136,7 +146,6 @@ const CarouselItem = ({ album }: CarouselItemProps) => {
                             fetchPriority="high"
                             id={album.imageId}
                             itemType={LibraryItem.ALBUM}
-                            src={imageUrl}
                             type="itemCard"
                         />
                         <div className={styles.playButtonOverlay}>

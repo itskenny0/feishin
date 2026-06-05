@@ -2,7 +2,7 @@ import { memo, useMemo } from 'react';
 
 import styles from './list-skeleton.module.css';
 
-import { getDynamicItemsPerRow } from '/@/renderer/components/item-list/item-grid-list/item-grid-list';
+import { getDynamicItemsPerRow } from '/@/renderer/components/item-list/helpers/grid-layout';
 import { Skeleton } from '/@/shared/components/skeleton/skeleton';
 import { useElementSize } from '/@/shared/hooks/use-element-size';
 

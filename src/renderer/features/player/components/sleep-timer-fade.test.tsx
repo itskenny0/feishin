@@ -126,6 +126,35 @@ describe('sleep timer fade-out lifecycle', () => {
         expect(lastVolume).toBe(80);
     });
 
+    it("does not fire a prior fade's trailing volume-restore once a new fade supersedes it", () => {
+        const view = render(<SleepTimerHookInner />);
+
+        // First fade: expire, then run it to completion so it pauses and
+        // SCHEDULES the trailing volume-restore (but don't let that timeout
+        // fire yet — it's queued at tickMs=100ms after the final tick).
+        mocks.onCurrentSongChange.current!();
+        vi.advanceTimersByTime(2000); // full 2s fade → pause + schedule restore
+        expect(mocks.mediaPause).toHaveBeenCalledTimes(1);
+
+        // Before the trailing restore (100ms) lands, a second fade starts.
+        // It must cancel the first fade's pending restore so the queued
+        // setVolume(80) never fires after this new fade has taken over.
+        mocks.setVolume.mockClear();
+        mocks.onCurrentSongChange.current!();
+
+        // Advance past where the FIRST restore would have fired.
+        vi.advanceTimersByTime(150);
+
+        // The stale restore (a jump straight back to 80) must not appear; the
+        // new fade is ramping down from 80, so any setVolume here is a fade
+        // step strictly below the starting volume.
+        for (const call of mocks.setVolume.mock.calls) {
+            expect(call[0]).toBeLessThan(80);
+        }
+
+        view.unmount();
+    });
+
     it('pauses immediately (no fade) when fade is disabled', () => {
         mocks.fadeSeconds.current = 0;
         const view = render(<SleepTimerHookInner />);

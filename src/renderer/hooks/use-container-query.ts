@@ -1,3 +1,5 @@
+import { useMemo } from 'react';
+
 import { useElementSize } from '/@/shared/hooks/use-element-size';
 
 interface UseContainerQueryProps {
@@ -53,4 +55,62 @@ export const useContainerQuery = (props?: UseContainerQueryProps) => {
         ref,
         width,
     };
+};
+
+export type ContainerQueryResult = ReturnType<typeof useContainerQuery>;
+
+/**
+ * Returns a referentially-stable subset of a container-query result whose
+ * identity only changes when a *breakpoint boolean* actually crosses — not on
+ * every ResizeObserver tick. The raw `useContainerQuery` object gets a fresh
+ * `width`/`height` (and therefore a fresh object identity) on every observed
+ * pixel change, which busts the `memo` of any consumer that only reads the
+ * booleans (e.g. the home shelves' GridCarousel) and re-renders large trees
+ * needlessly.
+ *
+ * `ref` identity is preserved from the source so the ResizeObserver stays
+ * attached. `width`/`height` are carried through but intentionally snapshotted
+ * to the last breakpoint-crossing values: no consumer of the stable variant
+ * reads them, and pinning them keeps the object identity stable.
+ */
+export const useStableContainerQuery = (source: ContainerQueryResult): ContainerQueryResult => {
+    const {
+        height,
+        is2xl,
+        is3xl,
+        is4xl,
+        is5xl,
+        isCalculated,
+        isLg,
+        isMd,
+        isSm,
+        isXl,
+        isXs,
+        ref,
+        width,
+    } = source;
+
+    return useMemo(
+        () => ({
+            height,
+            is2xl,
+            is3xl,
+            is4xl,
+            is5xl,
+            isCalculated,
+            isLg,
+            isMd,
+            isSm,
+            isXl,
+            isXs,
+            ref,
+            width,
+        }),
+        // Width/height deliberately excluded — only re-create the object when a
+        // breakpoint boolean (or `ref`) changes. The width/height closed over
+        // here are the values at the last crossing, which is fine since no
+        // stable-variant consumer reads them.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [is2xl, is3xl, is4xl, is5xl, isCalculated, isLg, isMd, isSm, isXl, isXs, ref],
+    );
 };

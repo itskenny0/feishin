@@ -63,8 +63,6 @@ import {
     JoinedArtists,
 } from '/@/renderer/features/albums/components/joined-artists';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
-import { useIsMutatingCreateFavorite } from '/@/renderer/features/shared/mutations/create-favorite-mutation';
-import { useIsMutatingDeleteFavorite } from '/@/renderer/features/shared/mutations/delete-favorite-mutation';
 import { useSongListQuery } from '/@/renderer/features/songs/queries/songs-queries';
 import { useDragDrop } from '/@/renderer/hooks/use-drag-drop';
 import { useLongPress } from '/@/renderer/hooks/use-long-press';
@@ -85,6 +83,20 @@ import { ItemListKey, Play, TableColumn } from '/@/shared/types/types';
 const DEFAULT_ROW_HEIGHT = 300;
 
 const SKELETON_TRACK_ROW_COUNT = 6;
+
+// Columns whose rendered content actually depends on the row's hover state
+// (hover-only reveal columns + interactive columns that toggle `readOnly` on
+// hover). Only these cells receive the live `isRowHovered` prop; every other
+// (static) cell is fed a constant so its `memo` survives row hover changes and
+// the whole album table no longer re-renders on each mouse enter/leave.
+const HOVER_DEPENDENT_COLUMNS = new Set<TableColumn>([
+    TableColumn.ACTIONS,
+    TableColumn.ALBUM_ARTIST,
+    TableColumn.ARTIST,
+    TableColumn.GENRE,
+    TableColumn.USER_FAVORITE,
+    TableColumn.USER_RATING,
+]);
 
 const albumFolderNameFromPath = (path?: null | string): null | string => {
     if (!path) return null;
@@ -133,7 +145,6 @@ interface RowData {
     enableVerticalBorders: boolean;
     getItem?: (index: number) => unknown;
     internalState: ItemListStateActions;
-    isMutatingFavorite: boolean;
     onSongRowDoubleClick?: (params: {
         index: number;
         internalState: ItemListStateActions;
@@ -155,7 +166,6 @@ interface TrackRowProps {
     enableRowHoverHighlight: boolean;
     enableVerticalBorders: boolean;
     internalState: ItemListStateActions;
-    isMutatingFavorite: boolean;
     isSongsLoading?: boolean;
     onSongRowDoubleClick?: (params: {
         index: number;
@@ -179,7 +189,6 @@ interface TrackCellProps {
     controls?: ItemControls;
     enableVerticalBorders: boolean;
     internalState: ItemListStateActions;
-    isMutatingFavorite: boolean;
     isRowHovered: boolean;
     isSongsLoading?: boolean;
     rowIndex: number;
@@ -197,7 +206,6 @@ const TrackCell = memo(
         controls,
         enableVerticalBorders,
         internalState,
-        isMutatingFavorite,
         isRowHovered,
         isSongsLoading,
         rowIndex,
@@ -224,7 +232,6 @@ const TrackCell = memo(
                     columns,
                     controls,
                     internalState,
-                    isMutatingFavorite,
                     isRowHovered,
                     rowIndex,
                     size,
@@ -266,7 +273,6 @@ const TrackRow = memo(
         enableRowHoverHighlight,
         enableVerticalBorders,
         internalState,
-        isMutatingFavorite,
         isSongsLoading,
         onSongRowDoubleClick,
         rowIndex,
@@ -470,8 +476,11 @@ const TrackRow = memo(
                         controls={controls}
                         enableVerticalBorders={enableVerticalBorders}
                         internalState={internalState}
-                        isMutatingFavorite={isMutatingFavorite}
-                        isRowHovered={isRowHovered}
+                        // Only hover-dependent columns receive the live hover
+                        // state; static cells get a constant `false` so their
+                        // `memo` survives row hover and the album table doesn't
+                        // re-render on every mouse enter/leave.
+                        isRowHovered={HOVER_DEPENDENT_COLUMNS.has(col.id) ? isRowHovered : false}
                         isSongsLoading={isSongsLoading}
                         key={col.id}
                         rowIndex={rowIndex}
@@ -792,6 +801,76 @@ const ItemDetailSkeletonRow = memo(
 
 ItemDetailSkeletonRow.displayName = 'ItemDetailSkeletonRow';
 
+interface TrackRowsSkeletonProps {
+    columnWidthPercents: number[];
+    enableAlternateRowColors: boolean;
+    enableHorizontalBorders: boolean;
+    rowCount: number;
+    trackColumns: ItemTableListColumnConfig[];
+    trackTableSize: 'compact' | 'default' | 'large';
+}
+
+// Lightweight, fully-static placeholder rows shown while an album's tracks are
+// still loading. These are plain divs with no drag refs, selection
+// subscriptions, store reads or per-cell wiring — unlike `TrackRow` — so the
+// loading state is cheap even for large albums and there is nothing to tear
+// down once the real rows arrive.
+const TrackRowsSkeleton = memo(
+    ({
+        columnWidthPercents,
+        enableAlternateRowColors,
+        enableHorizontalBorders,
+        rowCount,
+        trackColumns,
+        trackTableSize,
+    }: TrackRowsSkeletonProps) => {
+        return (
+            <>
+                {Array.from({ length: rowCount }).map((_, rowIndex) => (
+                    <div
+                        className={clsx(styles.trackRow, {
+                            [styles.trackRowAlternateEven]:
+                                enableAlternateRowColors && rowIndex % 2 === 0,
+                            [styles.trackRowAlternateOdd]:
+                                enableAlternateRowColors && rowIndex % 2 === 1,
+                            [styles.trackRowHorizontalBorderVisible]:
+                                enableHorizontalBorders && rowIndex > 0,
+                            [styles.trackRowSizeCompact]: trackTableSize === 'compact',
+                            [styles.trackRowSizeDefault]: trackTableSize === 'default',
+                            [styles.trackRowSizeLarge]: trackTableSize === 'large',
+                            [styles.trackRowWithHorizontalBorder]: rowIndex > 0,
+                        })}
+                        key={rowIndex}
+                        role="row"
+                    >
+                        {trackColumns.map((col, colIndex) => {
+                            const { fixedWidth, isFixedColumn } = getTrackColumnFixed(col.id);
+                            const style: React.CSSProperties = {
+                                flex: isFixedColumn
+                                    ? `0 0 ${fixedWidth}px`
+                                    : `${columnWidthPercents[colIndex] ?? 0} 1 0`,
+                                minWidth: isFixedColumn ? fixedWidth : 0,
+                            };
+                            return (
+                                <div
+                                    className={styles.trackCell}
+                                    key={col.id}
+                                    role="cell"
+                                    style={style}
+                                >
+                                    {col.id === TableColumn.TITLE && <Skeleton height="1rem" />}
+                                </div>
+                            );
+                        })}
+                    </div>
+                ))}
+            </>
+        );
+    },
+);
+
+TrackRowsSkeleton.displayName = 'TrackRowsSkeleton';
+
 type RowContentProps = Omit<RowComponentProps<RowData>, 'style'>;
 
 const RowContent = memo(
@@ -807,7 +886,6 @@ const RowContent = memo(
         getItem,
         index,
         internalState,
-        isMutatingFavorite,
         onSongRowDoubleClick,
         registerSongs,
         songsByAlbumId,
@@ -902,26 +980,40 @@ const RowContent = memo(
 
                 <div className={styles.right}>
                     <div className={styles.tracksTable} role="table">
-                        {songs.map((song, rowIndex) => (
-                            <TrackRow
-                                albumSongs={songItems ? (songItems as Song[]) : []}
-                                columns={trackColumns}
+                        {isSongsLoading ? (
+                            <TrackRowsSkeleton
                                 columnWidthPercents={columnWidthPercents}
-                                controls={controls}
                                 enableAlternateRowColors={enableAlternateRowColors}
                                 enableHorizontalBorders={enableHorizontalBorders}
-                                enableRowHoverHighlight={enableRowHoverHighlight}
-                                enableVerticalBorders={enableVerticalBorders}
-                                internalState={internalState}
-                                isMutatingFavorite={isMutatingFavorite}
-                                isSongsLoading={isSongsLoading}
-                                key={song.id}
-                                onSongRowDoubleClick={onSongRowDoubleClick}
-                                rowIndex={rowIndex}
-                                size={trackTableSize}
-                                song={song as Song}
+                                rowCount={
+                                    item.songCount && item.songCount > 0
+                                        ? Math.min(item.songCount, SKELETON_TRACK_ROW_COUNT)
+                                        : SKELETON_TRACK_ROW_COUNT
+                                }
+                                trackColumns={trackColumns}
+                                trackTableSize={trackTableSize}
                             />
-                        ))}
+                        ) : (
+                            songs.map((song, rowIndex) => (
+                                <TrackRow
+                                    albumSongs={songItems ? (songItems as Song[]) : []}
+                                    columns={trackColumns}
+                                    columnWidthPercents={columnWidthPercents}
+                                    controls={controls}
+                                    enableAlternateRowColors={enableAlternateRowColors}
+                                    enableHorizontalBorders={enableHorizontalBorders}
+                                    enableRowHoverHighlight={enableRowHoverHighlight}
+                                    enableVerticalBorders={enableVerticalBorders}
+                                    internalState={internalState}
+                                    isSongsLoading={isSongsLoading}
+                                    key={song.id}
+                                    onSongRowDoubleClick={onSongRowDoubleClick}
+                                    rowIndex={rowIndex}
+                                    size={trackTableSize}
+                                    song={song as Song}
+                                />
+                            ))
+                        )}
                     </div>
                 </div>
             </>
@@ -938,7 +1030,6 @@ const RowContent = memo(
         prev.enableVerticalBorders === next.enableVerticalBorders &&
         prev.getItem === next.getItem &&
         prev.internalState === next.internalState &&
-        prev.isMutatingFavorite === next.isMutatingFavorite &&
         prev.controls === next.controls &&
         prev.registerSongs === next.registerSongs &&
         prev.songsByAlbumId === next.songsByAlbumId &&
@@ -1362,10 +1453,6 @@ export const ItemDetailList = ({
         onColumnResized,
         overrides: overrideControls,
     });
-    const isMutatingCreateFavorite = useIsMutatingCreateFavorite();
-    const isMutatingDeleteFavorite = useIsMutatingDeleteFavorite();
-    const isMutatingFavorite = isMutatingCreateFavorite || isMutatingDeleteFavorite;
-
     const rowHeight = useDynamicRowHeight({
         defaultRowHeight: DEFAULT_ROW_HEIGHT,
     });
@@ -1529,7 +1616,6 @@ export const ItemDetailList = ({
             enableVerticalBorders,
             getItem,
             internalState,
-            isMutatingFavorite,
             onSongRowDoubleClick,
             queryClient,
             registerSongs,
@@ -1547,7 +1633,6 @@ export const ItemDetailList = ({
             enableVerticalBorders,
             getItem,
             internalState,
-            isMutatingFavorite,
             onSongRowDoubleClick,
             queryClient,
             registerSongs,

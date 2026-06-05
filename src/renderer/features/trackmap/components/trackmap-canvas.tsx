@@ -149,6 +149,12 @@ export const TrackmapCanvas = () => {
     /** Cursor X in canvas device pixels, or null when not hovering the
      *  playerbar. Drives the unplayed-side spotlight in the dim mask. */
     const cursorXRef = useRef<null | number>(null);
+    /** Whether the canvas is currently intersecting the viewport. When the
+     *  playerbar trackmap is scrolled/collapsed offscreen (e.g. the mobile
+     *  fullscreen player canvas while the bar canvas is hidden, or vice
+     *  versa) we pause the per-frame breath/interpolation redraw entirely —
+     *  there's nothing to see, so the ~30fps canvas loop is pure waste. */
+    const isVisibleRef = useRef(true);
 
     heightRef.current = height;
     glowRef.current = glow;
@@ -239,6 +245,35 @@ export const TrackmapCanvas = () => {
         };
     }, []);
 
+    // Visibility gating. An IntersectionObserver flips isVisibleRef; while the
+    // canvas is offscreen the draw loop stops re-arming its rAF (see the
+    // `isAnimating && isVisibleRef.current` guard below), so a collapsed
+    // fullscreen player or a scrolled-away playerbar costs nothing. When the
+    // canvas scrolls back into view we schedule a single catch-up draw, which
+    // re-arms the chain if playback is still animating.
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas || typeof IntersectionObserver === 'undefined') return;
+
+        const io = new IntersectionObserver(
+            (entries) => {
+                const entry = entries[0];
+                if (!entry) return;
+                const wasVisible = isVisibleRef.current;
+                isVisibleRef.current = entry.isIntersecting;
+                if (entry.isIntersecting && !wasVisible) {
+                    scheduleDrawRef.current?.();
+                }
+            },
+            { threshold: 0 },
+        );
+        io.observe(canvas);
+
+        return () => {
+            io.disconnect();
+        };
+    }, []);
+
     // Draw loop. Every settings field is read off `advancedRef.current` so
     // settings tweaks apply on the next paint.
     useEffect(() => {
@@ -299,8 +334,33 @@ export const TrackmapCanvas = () => {
             return cachedAccent;
         };
 
+        // Throttle the animated redraw to ~30fps. The breath modulation and
+        // the playhead interpolation are visually indistinguishable from the
+        // native ~60Hz rAF cadence at 30fps (the playhead's minimum visible
+        // step is one device pixel, and the breath period is measured in
+        // seconds), but this halves the per-frame canvas work across the up to
+        // three live trackmap canvases (desktop + mobile bar + mobile
+        // fullscreen). One-off redraws (resize, cursor move, settings tweak,
+        // progress event) bypass the throttle via the `forceDraw` flag.
+        const FRAME_INTERVAL_MS = 1000 / 30;
+        let lastDrawAtMs = 0;
+        let forceDraw = false;
+
         const draw = () => {
             rafId = null;
+            // Animated-frame throttle: when this draw was scheduled by the rAF
+            // chain (not a one-off force), skip the actual paint if we're
+            // still inside the frame budget, but keep the chain alive so the
+            // next eligible frame lands on time.
+            if (!forceDraw && isAnimating && isVisibleRef.current) {
+                const sinceLast = performance.now() - lastDrawAtMs;
+                if (sinceLast < FRAME_INTERVAL_MS) {
+                    rafId = requestAnimationFrame(draw);
+                    return;
+                }
+            }
+            forceDraw = false;
+            lastDrawAtMs = performance.now();
             const w = canvas.width;
             const h = canvas.height;
             ctx2d.clearRect(0, 0, w, h);
@@ -312,7 +372,7 @@ export const TrackmapCanvas = () => {
                 !trackmap.bins ||
                 trackmap.bins.length < 2
             ) {
-                if (isAnimating) rafId = requestAnimationFrame(draw);
+                if (isAnimating && isVisibleRef.current) rafId = requestAnimationFrame(draw);
                 return;
             }
 
@@ -581,14 +641,20 @@ export const TrackmapCanvas = () => {
                 }
             }
 
-            // Chain the rAF while playing so the breath modulation and the
-            // smooth playhead interpolation stay frame-rate fluid.
-            if (isAnimating) {
+            // Chain the rAF while playing (and visible) so the breath
+            // modulation and the smooth playhead interpolation stay fluid. The
+            // chain stops re-arming while offscreen — the IntersectionObserver
+            // schedules a catch-up draw when the canvas returns to view.
+            if (isAnimating && isVisibleRef.current) {
                 rafId = requestAnimationFrame(draw);
             }
         };
 
+        // Schedule a single immediate (throttle-bypassing) draw — used for
+        // resize, cursor moves, settings tweaks, progress events, and the
+        // visibility catch-up. Distinct from the rAF chain's throttled frames.
         const schedule = () => {
+            forceDraw = true;
             if (rafId !== null) return;
             rafId = requestAnimationFrame(draw);
         };

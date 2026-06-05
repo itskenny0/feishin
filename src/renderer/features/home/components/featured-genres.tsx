@@ -1,6 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { shuffle } from 'lodash';
-import { memo, useCallback, useMemo } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { generatePath, Link } from 'react-router';
 
@@ -39,6 +38,18 @@ import {
 import { Play } from '/@/shared/types/types';
 import { stringToColor } from '/@/shared/utils/string-to-color';
 
+// Largest tile count any breakpoint renders. We only ever need this many
+// usable genres, so the fetch and the sample are both bounded to a small
+// multiple of it instead of pulling/shuffling the entire genre table.
+const MAX_VISIBLE_GENRES = 18;
+// Fetch a bounded slice rather than the whole genre table (`limit: -1`). A few
+// hundred is far more than the <=18 tiles we show, and large enough that the
+// random sample stays varied across home visits even on big libraries.
+const GENRE_FETCH_LIMIT = 300;
+// Sample headroom so the clean-name filter can drop a few candidates and we
+// still have MAX_VISIBLE_GENRES usable tiles.
+const GENRE_SAMPLE_SIZE = MAX_VISIBLE_GENRES * 2;
+
 function getGenresToShow(breakpoints: {
     isLargerThanLg: boolean;
     isLargerThanMd: boolean;
@@ -74,6 +85,30 @@ function getGenresToShow(breakpoints: {
     return 6;
 }
 
+/**
+ * Randomly samples up to `count` items from `items` using a partial
+ * Fisher-Yates shuffle — only `count` swaps, so the work is O(count), not
+ * O(items.length). Avoids `lodash.shuffle`'s full-array shuffle (which copied
+ * and shuffled every genre just to show a handful of tiles).
+ */
+function sampleN<T>(items: readonly T[], count: number): T[] {
+    const n = items.length;
+    if (n === 0 || count <= 0) return [];
+    const take = Math.min(count, n);
+    // Shallow copy so we never mutate the source (React Query data). The copy
+    // is bounded by GENRE_FETCH_LIMIT upstream, so this stays cheap.
+    const pool = items.slice();
+    const out: T[] = [];
+    for (let i = 0; i < take; i += 1) {
+        const j = i + Math.floor(Math.random() * (n - i));
+        const picked = pool[j];
+        pool[j] = pool[i];
+        pool[i] = picked;
+        out.push(picked);
+    }
+    return out;
+}
+
 export const FeaturedGenres = () => {
     const { t } = useTranslation();
     const server = useCurrentServer();
@@ -85,7 +120,7 @@ export const FeaturedGenres = () => {
 
     const genresQuery = useGenreListSuspenseQuery({
         query: {
-            limit: -1,
+            limit: GENRE_FETCH_LIMIT,
             sortBy: GenreListSort.NAME,
             sortOrder: SortOrder.ASC,
             startIndex: 0,
@@ -96,11 +131,12 @@ export const FeaturedGenres = () => {
 
     const randomGenres = useMemo(() => {
         if (!genresQuery.data?.items) return [];
-        // Drop garbage names before shuffling so the visible-N slice is
+        // Drop garbage names before sampling so the visible-N slice is
         // guaranteed to be N usable tiles, not N candidates we then filter
-        // down to (which produced fewer-than-expected tiles).
+        // down to (which produced fewer-than-expected tiles). Sample a small
+        // bounded set instead of shuffling the entire (capped) genre list.
         const clean = genresQuery.data.items.filter((g: Genre) => isCleanGenreName(g.name));
-        return shuffle(clean);
+        return sampleN(clean, GENRE_SAMPLE_SIZE);
     }, [genresQuery.data]);
 
     const genresToShow = useMemo(() => {
@@ -167,9 +203,9 @@ export const FeaturedGenres = () => {
  * as a backdrop. Cached aggressively — covers don't change and re-fetching
  * on every home visit wasted requests.
  */
-const useGenreCoverAlbum = (genreId: string, serverId: string) =>
+const useGenreCoverAlbum = (genreId: string, serverId: string, enabled: boolean) =>
     useQuery({
-        enabled: Boolean(genreId && serverId),
+        enabled: enabled && Boolean(genreId && serverId),
         gcTime: 1000 * 60 * 60 * 24,
         placeholderData: (() =>
             readSnapshot<Album | null>(['featured-genre-cover', serverId, genreId])) as never,
@@ -267,7 +303,43 @@ const GenrePlayButton = ({ genre }: { genre: Genre }) => {
 
 const GenreItem = memo(({ genre }: { genre: Genre & { color: string; path: string } }) => {
     const serverId = useCurrentServerId() ?? '';
-    const { data: coverAlbum } = useGenreCoverAlbum(genre.id, serverId);
+    const containerRef = useRef<HTMLDivElement>(null);
+    // Defer the per-tile cover request until the tile scrolls near the
+    // viewport. The genres grid is the bottom-most home shelf and usually
+    // offscreen at first paint, so firing one album-list request per tile on
+    // mount competed with the (visible) shelf queries for no visible benefit.
+    // Once visible we latch on — the cover is cached for 24h and never needs
+    // re-gating, so this only ever gates the initial burst.
+    const [isVisible, setIsVisible] = useState(false);
+
+    useEffect(() => {
+        if (isVisible) return;
+        const el = containerRef.current;
+        if (!el) return;
+
+        if (typeof IntersectionObserver === 'undefined') {
+            // Safe fallback for environments without IO (older webviews,
+            // tests): just enable the query.
+            setIsVisible(true);
+            return;
+        }
+
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (entries.some((entry) => entry.isIntersecting)) {
+                    setIsVisible(true);
+                    observer.disconnect();
+                }
+            },
+            // Pre-load a little before the tile is actually on screen so the
+            // cover is ready by the time the user scrolls to it.
+            { rootMargin: '200px' },
+        );
+        observer.observe(el);
+        return () => observer.disconnect();
+    }, [isVisible]);
+
+    const { data: coverAlbum } = useGenreCoverAlbum(genre.id, serverId, isVisible);
     const coverImageUrl = useItemImageUrl({
         id: coverAlbum?.imageId || undefined,
         imageUrl: coverAlbum?.imageUrl || undefined,
@@ -280,6 +352,7 @@ const GenreItem = memo(({ genre }: { genre: Genre & { color: string; path: strin
         <div
             className={styles.genreContainer}
             key={genre.id}
+            ref={containerRef}
             style={
                 {
                     '--genre-color': genre.color,

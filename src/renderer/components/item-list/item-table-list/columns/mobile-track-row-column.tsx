@@ -107,7 +107,7 @@ export const MobileTrackRowColumn = (props: ItemTableListInnerColumn) => {
                     <ItemImage
                         containerClassName={styles.coverImage}
                         enableDebounce={true}
-                        enableViewport={false}
+                        enableViewport={true}
                         explicitStatus={item?.explicitStatus}
                         id={item?.imageId}
                         itemType={item?._itemType}

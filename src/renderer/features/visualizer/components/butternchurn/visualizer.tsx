@@ -265,6 +265,8 @@ const VisualizerInner = () => {
         const visualizer = visualizerRef.current;
         if (!container || !visualizer) return;
 
+        let resizeRaf: number | undefined;
+
         const handleResize = () => {
             const rect = container.getBoundingClientRect();
             const width = rect.width;
@@ -278,13 +280,26 @@ const VisualizerInner = () => {
             visualizer.setRendererSize(width, height);
         };
 
-        resizeObserverRef.current = new ResizeObserver(handleResize);
+        // Coalesce bursts of ResizeObserver callbacks (e.g. during a drag-
+        // resize) into a single layout read + canvas resize per frame, instead
+        // of reallocating the WebGL backbuffer on every observer fire. The
+        // window 'resize' listener that previously lived here was redundant —
+        // ResizeObserver already fires when the container's box changes.
+        const onResize = () => {
+            if (resizeRaf !== undefined) return;
+            resizeRaf = requestAnimationFrame(() => {
+                resizeRaf = undefined;
+                handleResize();
+            });
+        };
+
+        resizeObserverRef.current = new ResizeObserver(onResize);
         resizeObserverRef.current.observe(container);
 
-        window.addEventListener('resize', handleResize);
-
         return () => {
-            window.removeEventListener('resize', handleResize);
+            if (resizeRaf !== undefined) {
+                cancelAnimationFrame(resizeRaf);
+            }
             if (resizeObserverRef.current) {
                 resizeObserverRef.current.disconnect();
                 resizeObserverRef.current = undefined;
@@ -356,6 +371,16 @@ const VisualizerInner = () => {
         const cycleToNextPreset = () => {
             const currentVisualizer = visualizerRef.current;
             if (!currentVisualizer) return;
+
+            // Don't compile a new WebGL preset (or write to the settings store)
+            // while the window/tab is hidden — the render loop is already
+            // suspended, so cycling presets the user can't see is pure waste.
+            // Re-anchor the cycle clock so a fresh full interval elapses once
+            // the window becomes visible again, instead of immediately firing.
+            if (typeof document !== 'undefined' && document.hidden) {
+                cycleStartTimeRef.current = Date.now();
+                return;
+            }
 
             const currentPresetName =
                 useSettingsStore.getState().visualizer.butterchurn.currentPreset;
