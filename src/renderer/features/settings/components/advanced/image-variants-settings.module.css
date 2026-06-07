@@ -1,0 +1,27 @@
+/*
+ * Artwork-variant advanced tree. The variant table reuses the shared
+ * settings option idioms (subheader + indented rows); these classes only
+ * cover the few bespoke bits the variant block needs.
+ */
+.variant-table {
+    width: 100%;
+}
+
+.variant-name {
+    font-weight: 500;
+}
+
+/*
+ * Greyed-out hint for the downscale-only controls when the global mode is
+ * set to "download per size" — the re-encode format / quality have no
+ * effect there because the server bytes are stored as-is.
+ */
+.downscale-disabled {
+    pointer-events: none;
+    opacity: 0.5;
+}
+
+.regenerate-row {
+    align-items: center;
+    margin-top: var(--theme-spacing-sm);
+}

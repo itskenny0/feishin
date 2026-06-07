@@ -6,9 +6,17 @@
 
 import type { ImageRequest } from '/@/shared/types/domain-types';
 
+import type { CachedThumbnail } from './types';
+
 import { getActiveCacheDb } from './db';
 import { recordStat } from './stats';
+import { nearestLargerVariant, variantConfigHash, type VariantName } from './variant-config';
 
+import {
+    DEFAULT_IMAGE_VARIANTS,
+    type LocalCacheImageVariants,
+    useSettingsStore,
+} from '/@/renderer/store/settings.store';
 import { registerThumbnailUrlCache } from '/@/shared/components/image/use-native-image';
 
 // Single cache size for every blob. Covers any reasonable mobile / tablet
@@ -16,6 +24,22 @@ import { registerThumbnailUrlCache } from '/@/shared/components/image/use-native
 // browser downscales cleanly via CSS. Exposed so the sweep can request
 // the same upstream resize the resolver does.
 export const MAX_CACHE_SIZE = 1024;
+
+// The variant served to callers that haven't (yet) declared a surface
+// bucket — the original/full-resolution cover. Task 6 wires `ItemImage`'s
+// surface `type` through as the real variant; until then (and for the
+// legacy `<CachedImage>` / lifecycle resolver path) we resolve against the
+// full-size bucket. `0` px in the config means "original", which matches
+// the historical single-blob-at-MAX_CACHE_SIZE behaviour closely enough.
+export const DEFAULT_VARIANT = 'fullScreen';
+
+// Normalise the resolver's 2nd argument. Historically this was the caller's
+// numeric display `size` (ignored for keying); the variant cache (schema
+// v11) keys on the surface bucket instead. Legacy callers that still pass a
+// number — or anything non-string — collapse to the full-size variant so
+// they keep working until Task 6 threads the real bucket through.
+const normaliseVariant = (variant: number | string | undefined): string =>
+    typeof variant === 'string' && variant.length > 0 ? variant : DEFAULT_VARIANT;
 
 // Normalises the resolver's request argument so callers can pass either a
 // bare URL (legacy callers like `<CachedImage>`) OR a full `ImageRequest`
@@ -42,29 +66,38 @@ const normaliseRequest = (
     };
 };
 
-// Rewrite any size-bearing query params on the upstream URL to
-// MAX_CACHE_SIZE so every cache fetch lands the same blob regardless of
-// the caller's display size. Jellyfin uses `width`/`height`; Subsonic
-// uses `size`; we cover the wider Jellyfin family (`fillWidth`,
-// `fillHeight`, `maxWidth`, `maxHeight`) defensively. If the URL can't
-// be parsed (some Capacitor schemes) we return it unchanged and let the
-// browser fetch what the caller provided.
-const rewriteUrlToCacheSize = (url: string): string => {
+// Size-bearing query params we know how to rewrite. Jellyfin uses
+// `width`/`height` (+ the `fillWidth`/`fillHeight`/`maxWidth`/`maxHeight`
+// family); Subsonic/Navidrome use `size` (some servers also expose
+// `imageSize`).
+const SIZE_PARAMS = [
+    'width',
+    'height',
+    'fillWidth',
+    'fillHeight',
+    'maxWidth',
+    'maxHeight',
+    'size',
+    'imageSize',
+];
+
+// Rewrite any size-bearing query params on the upstream URL to a target
+// pixel size, so a "download per size" variant fetch lands the exact
+// resolution the surface needs. `px === 0` means "original" — we strip the
+// size params entirely so the server returns its native-resolution cover.
+// If the URL can't be parsed (some Capacitor schemes) we return it
+// unchanged and let the browser fetch what the caller provided.
+export const rewriteUrlToVariantSize = (url: string, px: number): string => {
     try {
         const parsed = new URL(url);
         const params = parsed.searchParams;
-        const target = String(MAX_CACHE_SIZE);
+        const original = px === 0;
+        const target = String(px);
         let touched = false;
-        for (const key of ['width', 'height', 'fillWidth', 'fillHeight', 'maxWidth', 'maxHeight']) {
+        for (const key of SIZE_PARAMS) {
             if (params.has(key)) {
-                params.set(key, target);
-                touched = true;
-            }
-        }
-        // Subsonic uses `size`. Some servers also expose `imageSize`.
-        for (const key of ['size', 'imageSize']) {
-            if (params.has(key)) {
-                params.set(key, target);
+                if (original) params.delete(key);
+                else params.set(key, target);
                 touched = true;
             }
         }
@@ -74,6 +107,10 @@ const rewriteUrlToCacheSize = (url: string): string => {
         return url;
     }
 };
+
+// Back-compat shim: force the upstream URL to `MAX_CACHE_SIZE`. Kept for any
+// remaining callers that pre-date the per-variant px rewrite.
+const rewriteUrlToCacheSize = (url: string): string => rewriteUrlToVariantSize(url, MAX_CACHE_SIZE);
 
 // Module-level dedup map. Keyed by `itemId` — any concurrent calls for
 // the same item, regardless of caller-supplied display size, share the
@@ -90,6 +127,11 @@ export interface ResolverResult {
     bytes: number;
 }
 const inFlight = new Map<string, Promise<ResolverResult>>();
+
+// Compose the per-variant key used by every dedup / shared-URL map below.
+// Two consumers of the SAME (item, surface bucket) share one fetch + one
+// object URL; a different bucket of the same item resolves independently.
+const variantKey = (itemId: string, variant: string): string => `${itemId}::${variant}`;
 
 // ---------------------------------------------------------------------------
 // Shared object-URL keep-alive (refcounted).
@@ -127,9 +169,9 @@ const acquireInFlight = new Map<string, Promise<AcquireResult>>();
 // the resolved Blob here keyed by itemId so the (deduped) acquire task can
 // mint exactly one shared object URL. Drained immediately by the task.
 const lastResolvedBlob = new Map<string, Blob>();
-const takeResolvedBlob = (itemId: string): Blob | undefined => {
-    const blob = lastResolvedBlob.get(itemId);
-    if (blob) lastResolvedBlob.delete(itemId);
+const takeResolvedBlob = (key: string): Blob | undefined => {
+    const blob = lastResolvedBlob.get(key);
+    if (blob) lastResolvedBlob.delete(key);
     return blob;
 };
 
@@ -144,11 +186,17 @@ const takeResolvedBlob = (itemId: string): Blob | undefined => {
  */
 export const acquireThumbnailUrl = async (
     itemId: string,
-    size: number,
+    variant: number | string,
     request: ImageRequest | string,
     options?: ResolveThumbnailOptions,
 ): Promise<string> => {
     const { url } = normaliseRequest(request);
+    const resolvedVariant = normaliseVariant(variant);
+    // The hand-off slot is per (item, variant) so two surfaces of the same
+    // item don't clobber each other's resolved blob. The shared-URL +
+    // acquire-dedup maps stay keyed by `itemId` because `releaseThumbnailUrl`
+    // only receives the itemId — one live shared URL per item is the model.
+    const handoffKey = variantKey(itemId, resolvedVariant);
 
     // Fast path: a live shared URL already exists for this item. Bump the
     // refcount and hand the same string back — no new blob: URL minted.
@@ -165,13 +213,13 @@ export const acquireThumbnailUrl = async (
     if (!task) {
         task = (async (): Promise<AcquireResult> => {
             try {
-                await resolveThumbnail(itemId, size, request, {
+                await resolveThumbnail(itemId, resolvedVariant, request, {
                     ...options,
                     // Stash the raw Blob (if any) without minting a per-call
                     // URL; we mint exactly one shared URL here instead.
                     _wantBlob: true,
                 });
-                const blob = takeResolvedBlob(itemId);
+                const blob = takeResolvedBlob(handoffKey);
                 if (!blob) {
                     return { objectUrl: undefined };
                 }
@@ -272,6 +320,128 @@ export interface ResolveThumbnailOptions {
     signal?: AbortSignal;
 }
 
+// Map a response content-type to the stored `Format`. In download mode we
+// keep the server bytes as-is; only WebP and JPEG are distinguished for
+// accounting (anything non-WebP is recorded as 'jpeg', which is by far the
+// most common cover format servers emit).
+const formatFromContentType = (contentType: string): 'jpeg' | 'webp' =>
+    contentType.toLowerCase().includes('webp') ? 'webp' : 'jpeg';
+
+// Read the live variant config, falling back to the canonical defaults when
+// the settings slice hasn't been seeded yet (fresh install / pre-migrate).
+const getImageVariantsConfig = (): LocalCacheImageVariants => {
+    try {
+        return useSettingsStore.getState().localCache?.imageVariants ?? DEFAULT_IMAGE_VARIANTS;
+    } catch {
+        return DEFAULT_IMAGE_VARIANTS;
+    }
+};
+
+// Fingerprint of the live variant config. Stamped on every blob row at write
+// time (`__cfgHash`) so the resolver can detect rows produced under an older
+// config (a px / format / quality / mode change) and regenerate them lazily.
+const currentConfigHash = (): string => variantConfigHash(getImageVariantsConfig());
+
+// A cached blob row is stale when it carries a `__cfgHash` that no longer
+// matches the live config. Rows WITHOUT a stored hash (legacy / pre-staleness)
+// are treated as fresh — regenerating every one on first access after an
+// upgrade would stampede the network for no visible benefit.
+const isStaleRow = (row: CachedThumbnail | undefined): boolean => {
+    if (!row?.__cfgHash) return false;
+    return row.__cfgHash !== currentConfigHash();
+};
+
+// Debounce window for background variant generation kicked off by a
+// nearest-larger fallback hit. A list cell that shows a slightly-too-big
+// cover schedules the exact-size variant once; rapid re-renders / re-scrolls
+// for the same (item, variant) collapse into a single pending generate.
+const GENERATE_DEBOUNCE_MS = 750;
+const pendingGenerate = new Map<string, ReturnType<typeof setTimeout>>();
+
+/**
+ * Schedule a background generate of the EXACT requested variant after a
+ * nearest-larger fallback served a substitute. Debounced per (item, variant)
+ * so scrolling doesn't queue redundant fetches. The generate re-enters
+ * `resolveThumbnail` with `_skipBlobUrl` (no object URL minted) so the row is
+ * persisted for the next render without touching the URL registry.
+ *
+ * Routed through `imageVariantsInternals` at the call site so tests can spy
+ * on it without firing a real network request.
+ */
+export const scheduleVariantGenerate = (
+    itemId: string,
+    variant: string,
+    request: ImageRequest | string,
+): void => {
+    const key = variantKey(itemId, variant);
+    const existing = pendingGenerate.get(key);
+    if (existing) clearTimeout(existing);
+    const timer = setTimeout(() => {
+        pendingGenerate.delete(key);
+        console.info('[image-variants] background generate (fallback)', { itemId, variant });
+        void resolveThumbnail(itemId, variant, request, { _skipBlobUrl: true });
+    }, GENERATE_DEBOUNCE_MS);
+    pendingGenerate.set(key, timer);
+};
+
+// Indirection holder so internal callers (the resolver's fallback path) and
+// test spies reference the SAME function binding. `vi.spyOn(internals, ...)`
+// then intercepts the internal call (ESM live bindings would not).
+export const imageVariantsInternals = {
+    scheduleVariantGenerate,
+};
+
+/**
+ * On an exact-variant miss (offline, 404, or fetch failure), look up the
+ * other variants already cached for this item and return the nearest-larger
+ * one's blob so the surface renders immediately instead of blocking on the
+ * raw URL. When a substitute is served, schedule a debounced background
+ * generate of the exact requested variant. Returns `undefined` when nothing
+ * usable is cached (caller falls back to the raw URL).
+ */
+const resolveFallbackBlob = async (
+    itemId: string,
+    requestedVariant: string,
+    request: ImageRequest | string,
+): Promise<Blob | undefined> => {
+    const db = getActiveCacheDb();
+    if (!db) return undefined;
+    try {
+        const rows = await db.thumbnails.where('ItemId').equals(itemId).toArray();
+        const cached: Record<string, number> = {};
+        const blobByVariant = new Map<string, Blob>();
+        for (const row of rows) {
+            if (row?.Blob && row.Variant) {
+                cached[row.Variant] = typeof row.Size === 'number' ? row.Size : 0;
+                blobByVariant.set(row.Variant, row.Blob);
+            }
+        }
+        if (blobByVariant.size === 0) return undefined;
+
+        const cfg = getImageVariantsConfig();
+        const pick = nearestLargerVariant(requestedVariant as VariantName, cached, cfg);
+        if (!pick) return undefined;
+        const blob = blobByVariant.get(pick);
+        if (!blob) return undefined;
+
+        console.info('[image-variants] fallback served nearest-larger variant', {
+            itemId,
+            requested: requestedVariant,
+            served: pick,
+        });
+        // Kick off the exact-size variant in the background (debounced).
+        imageVariantsInternals.scheduleVariantGenerate(itemId, requestedVariant, request);
+        return blob;
+    } catch (err) {
+        console.warn('[image-variants] fallback lookup failed', {
+            error: (err as Error)?.message ?? String(err),
+            itemId,
+            variant: requestedVariant,
+        });
+        return undefined;
+    }
+};
+
 /**
  * Resolve a thumbnail to a `blob:` URL backed by the local cache. Accepts
  * either a bare URL (legacy callers) or a full `ImageRequest` so the
@@ -279,15 +449,18 @@ export interface ResolveThumbnailOptions {
  * no cookies, so without the header every Jellyfin image fetch 401s and
  * the Dexie table never gets populated.
  *
- * The `size` argument is the caller's desired display size; the cache
- * IGNORES it for keying (one blob per item) and the upstream fetch
- * always requests `MAX_CACHE_SIZE`, letting the browser downscale via
- * CSS for smaller surfaces. Falls back to the original URL whenever the
- * cache is unavailable or any step fails.
+ * `variant` is the surface bucket (`table`, `itemCard`, `sidebar`, `header`,
+ * `fullScreen`) the caller is rendering. Every Dexie read/write is keyed on
+ * the compound `[itemId, variant]` (schema v11), so each surface holds its
+ * own pre-sized cover, and in-flight dedup is per-variant — two cards
+ * wanting the same bucket share one fetch while a different bucket of the
+ * same item resolves independently. Legacy callers that still pass a numeric
+ * display size collapse to the `fullScreen` (original) variant. Falls back to
+ * the original URL whenever the cache is unavailable or any step fails.
  */
 export const resolveThumbnail = async (
     itemId: string,
-    _size: number,
+    variant: number | string,
     request: ImageRequest | string,
     options?: ResolveThumbnailOptions,
 ): Promise<string> => {
@@ -295,25 +468,44 @@ export const resolveThumbnail = async (
     const db = getActiveCacheDb();
     if (!db) return url;
 
+    const resolvedVariant = normaliseVariant(variant);
+    const dbKey: [string, string] = [itemId, resolvedVariant];
+    const dedupKey = variantKey(itemId, resolvedVariant);
+
     const signal = options?.signal;
     if (signal?.aborted) return url;
 
-    const existing = inFlight.get(itemId);
+    const wantsDisplayBlob = !options?._skipBlobUrl;
+
+    const existing = inFlight.get(dedupKey);
     if (existing) {
         const result = await existing;
-        return result.blob ? URL.createObjectURL(result.blob) : url;
+        if (result.blob) return URL.createObjectURL(result.blob);
+        // Exact miss for a render path — try the nearest-larger cached variant
+        // before giving up to the raw URL.
+        if (wantsDisplayBlob) {
+            const fallback = await resolveFallbackBlob(itemId, resolvedVariant, request);
+            if (fallback) {
+                if (options?._wantBlob) {
+                    lastResolvedBlob.set(dedupKey, fallback);
+                    return url;
+                }
+                return URL.createObjectURL(fallback);
+            }
+        }
+        return url;
     }
 
     const task = (async (): Promise<ResolverResult> => {
         try {
             if (signal?.aborted) return { blob: undefined, bytes: 0 };
-            const row = await db.thumbnails.get(itemId);
+            const row = await db.thumbnails.get(dbKey);
             // Early-attempt diagnostic — logs what the resolver is
             // being asked to look up and whether the cache hit.
             // Bounded so it doesn't spam.
             if (lookupAttempts < LOOKUP_LOG_LIMIT) {
                 lookupAttempts += 1;
-                console.info('[cache] resolver lookup', {
+                console.info('[image-variants] resolver lookup', {
                     attempt: lookupAttempts,
                     found: Boolean(row),
                     hasBlob: Boolean(row?.Blob),
@@ -326,10 +518,20 @@ export const resolveThumbnail = async (
                             return '<unparseable>';
                         }
                     })(),
+                    variant: resolvedVariant,
                 });
             }
             if (row) {
-                if (row.Blob) {
+                if (row.Blob && isStaleRow(row)) {
+                    // The cover was generated under an older variant config
+                    // (px / format / quality / mode / enable changed). Drop the
+                    // hit and fall through to refetch so the row is regenerated
+                    // under the live config.
+                    console.info('[image-variants] stale variant, regenerating', {
+                        itemId,
+                        variant: resolvedVariant,
+                    });
+                } else if (row.Blob) {
                     // Throttle LastUsed writes to once per hour per
                     // item. Without this, every cache HIT issues an
                     // IndexedDB write — under a 24-worker sweep that
@@ -340,12 +542,12 @@ export const resolveThumbnail = async (
                     // is overkill.
                     const now = Date.now();
                     if (now - (row.LastUsed ?? 0) > 3_600_000) {
-                        void db.thumbnails.update(itemId, { LastUsed: now });
+                        void db.thumbnails.update(dbKey, { LastUsed: now });
                     }
                     hitCount += 1;
                     recordStat('blobHit');
                     if (hitCount % HIT_LOG_SAMPLE === 0) {
-                        console.info('[cache] thumbnail hits', { total: hitCount });
+                        console.info('[image-variants] thumbnail hits', { total: hitCount });
                     }
                     return { blob: row.Blob, bytes: 0 };
                 }
@@ -353,7 +555,7 @@ export const resolveThumbnail = async (
                 const nowMs = Date.now();
                 if (nowMs - missAt < MISS_TTL_MS) {
                     if (nowMs - (row.LastUsed ?? 0) > 3_600_000) {
-                        void db.thumbnails.update(itemId, { LastUsed: nowMs });
+                        void db.thumbnails.update(dbKey, { LastUsed: nowMs });
                     }
                     recordStat('missMarkerHit');
                     return { blob: undefined, bytes: 0 };
@@ -391,14 +593,17 @@ export const resolveThumbnail = async (
                 });
             } catch (err) {
                 if (timedOut) {
-                    console.warn('[cache] thumbnail fetch timed out', { itemId });
+                    console.warn('[image-variants] thumbnail fetch timed out', {
+                        itemId,
+                        variant: resolvedVariant,
+                    });
                     recordStat('failed');
                     return { blob: undefined, bytes: 0 };
                 }
                 if ((err as Error)?.name === 'AbortError') {
                     return { blob: undefined, bytes: 0 };
                 }
-                console.warn('[cache] thumbnail fetch threw', {
+                console.warn('[image-variants] thumbnail fetch threw', {
                     error: (err as Error)?.message ?? String(err),
                     errorName: (err as Error)?.name,
                     hasAuthHeader: Boolean(headers?.Authorization),
@@ -425,17 +630,19 @@ export const resolveThumbnail = async (
                                 LastUsed: Date.now(),
                                 MissAt: Date.now(),
                                 Size: MAX_CACHE_SIZE,
+                                Variant: resolvedVariant,
                             });
                             recordStat('missWrite');
                         } catch (err) {
-                            console.warn('[cache] thumbnail miss-write failed', {
+                            console.warn('[image-variants] thumbnail miss-write failed', {
                                 error: (err as Error)?.message,
                                 itemId,
+                                variant: resolvedVariant,
                             });
                         }
                     }
                 } else {
-                    console.warn('[cache] thumbnail HTTP error', {
+                    console.warn('[image-variants] thumbnail HTTP error', {
                         hasAuthHeader: Boolean(headers?.Authorization),
                         itemId,
                         status: res.status,
@@ -484,48 +691,64 @@ export const resolveThumbnail = async (
 
             await db.thumbnails.put({
                 __cachedAt: Date.now(),
+                __cfgHash: currentConfigHash(),
                 Blob: blob,
                 ByteSize: blob.size,
                 Etag: res.headers.get('etag') ?? undefined,
+                Format: formatFromContentType(contentType),
                 ItemId: itemId,
                 LastUsed: Date.now(),
                 MissAt: undefined,
                 Size: MAX_CACHE_SIZE,
+                Variant: resolvedVariant,
             });
             emitWritten();
             missCount += 1;
             recordStat('fetched', blob.size);
-            console.info('[cache] thumbnail fetched', {
+            console.info('[image-variants] thumbnail fetched', {
                 bytes: blob.size,
                 itemId,
                 missesSoFar: missCount,
+                variant: resolvedVariant,
             });
             return { blob, bytes: blob.size };
         } catch (err) {
             if ((err as Error)?.name === 'AbortError') return { blob: undefined, bytes: 0 };
-            console.warn('[cache] thumbnail fetch failed', {
+            console.warn('[image-variants] thumbnail fetch failed', {
                 error: (err as Error)?.message ?? String(err),
                 errorName: (err as Error)?.name,
                 itemId,
+                variant: resolvedVariant,
             });
             recordStat('failed');
             return { blob: undefined, bytes: 0 };
         } finally {
-            inFlight.delete(itemId);
+            inFlight.delete(dedupKey);
         }
     })();
 
-    inFlight.set(itemId, task);
+    inFlight.set(dedupKey, task);
     const result = await task;
+
+    // On an exact-variant miss for a render path, serve the nearest-larger
+    // cached variant (and schedule the exact one in the background) so the
+    // surface never blocks on / re-fetches the full-res original mid-scroll.
+    // The sweep / background-generate path (`_skipBlobUrl`) is excluded to
+    // avoid pointless fallback work and re-scheduling loops.
+    let displayBlob = result.blob;
+    if (!displayBlob && wantsDisplayBlob) {
+        displayBlob = await resolveFallbackBlob(itemId, resolvedVariant, request);
+    }
+
     if (options?._wantBlob) {
         // Hand the Blob off to acquireThumbnailUrl, which mints exactly
         // one shared object URL. Return the raw URL as a sentinel — the
         // acquire path keys off the stashed Blob, not this return value.
-        if (result.blob) lastResolvedBlob.set(itemId, result.blob);
+        if (displayBlob) lastResolvedBlob.set(dedupKey, displayBlob);
         return url;
     }
     if (options?._skipBlobUrl) return url;
-    return result.blob ? URL.createObjectURL(result.blob) : url;
+    return displayBlob ? URL.createObjectURL(displayBlob) : url;
 };
 
 /**
@@ -538,7 +761,7 @@ export const resolveThumbnail = async (
  */
 export const resolveThumbnailWithBytes = async (
     itemId: string,
-    _size: number,
+    variant: number | string,
     request: ImageRequest | string,
     options?: ResolveThumbnailOptions,
 ): Promise<{ bytes: number; url: string }> => {
@@ -546,15 +769,18 @@ export const resolveThumbnailWithBytes = async (
     const db = getActiveCacheDb();
     if (!db) return { bytes: 0, url };
 
+    const resolvedVariant = normaliseVariant(variant);
+    const dedupKey = variantKey(itemId, resolvedVariant);
+
     const signal = options?.signal;
     if (signal?.aborted) return { bytes: 0, url };
 
     // Share the in-flight task with `resolveThumbnail`. If the task
     // hasn't started yet, kick it off; both APIs end up awaiting the
-    // same inFlight entry. Reading only `result.bytes` means we
+    // same per-variant inFlight entry. Reading only `result.bytes` means we
     // never createObjectURL on this path, so the sweep can no longer
     // leak per-item blob URLs.
-    if (!inFlight.has(itemId)) {
+    if (!inFlight.has(dedupKey)) {
         // Pass _skipBlobUrl so resolveThumbnail does not call
         // URL.createObjectURL — the returned string is discarded but the
         // browser URL registry would hold the Blob indefinitely, causing
@@ -562,12 +788,12 @@ export const resolveThumbnailWithBytes = async (
         // ~1k thumbnails → GC pressure → throughput collapses to <0.1/s).
         void resolveThumbnail(
             itemId,
-            _size,
+            resolvedVariant,
             { cacheKey: url, credentials, headers, url },
             { ...options, _skipBlobUrl: true },
         );
     }
-    const task = inFlight.get(itemId);
+    const task = inFlight.get(dedupKey);
     if (!task) return { bytes: 0, url };
     const result = await task;
     return { bytes: result.bytes, url };

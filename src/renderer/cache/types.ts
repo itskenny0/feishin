@@ -117,6 +117,13 @@ export interface CachedSong extends CachedBase {
 }
 
 export interface CachedThumbnail extends CachedBase {
+    // Fingerprint of the `localCache.imageVariants` config in effect when this
+    // row was written (see `variantConfigHash`). The resolver compares it to
+    // the live config's hash and treats a mismatch as stale — a px / format /
+    // quality / mode / enable change regenerates the cover lazily on next
+    // access. Undefined on legacy rows written before config-hash staleness was
+    // introduced; those are honoured as-is (no upgrade-time re-fetch stampede).
+    __cfgHash?: string;
     // Optional: a row without a Blob is a negative-cache marker meaning
     // "we tried, the server returned 404 / no artwork at time MissAt".
     // The thumbnail resolver and sweep both treat such rows as
@@ -124,16 +131,26 @@ export interface CachedThumbnail extends CachedBase {
     Blob: Blob | undefined;
     ByteSize: number;
     Etag: string | undefined;
+    // Encoding of the stored blob. In downscale mode covers are re-encoded
+    // to WebP (with an automatic JPEG fallback when the webview can't
+    // produce WebP); in download mode the server bytes are stored as-is
+    // (treated as 'jpeg' for accounting). Part of the row payload, not the
+    // key. Optional on legacy/negative-cache rows written before v11.
+    Format?: 'jpeg' | 'webp';
     ItemId: string;
     LastUsed: number;
     // Set when the row was written as a negative-cache marker (a 404
     // from the server). Undefined on real blob rows.
     MissAt: number | undefined;
-    // Metadata only: the pixel size we actually requested upstream when
-    // the row was last written. Not part of the primary key — the cache
-    // holds one blob per item at MAX_CACHE_SIZE and the browser
-    // downscales for smaller display surfaces.
+    // The actual stored pixel size for this variant (the longest edge after
+    // downscale, or 0 for the original/full-size variant). Metadata only —
+    // the variant bucket, not Size, is part of the primary key.
     Size?: number;
+    // Surface bucket this row was cached for (`table`, `itemCard`, `sidebar`,
+    // `header`, `fullScreen`). Together with `ItemId` it forms the compound
+    // primary key `[ItemId+Variant]` introduced in schema v11, so the cache
+    // holds one blob per (item, surface) at that surface's target px.
+    Variant: string;
 }
 
 /**

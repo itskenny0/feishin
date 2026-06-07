@@ -10,7 +10,7 @@ import { Text } from '/@/shared/components/text/text';
 import { Tooltip } from '/@/shared/components/tooltip/tooltip';
 
 interface SettingsOptionProps {
-    control: React.ReactNode;
+    control?: React.ReactNode;
     description?: React.ReactNode | string;
     indent?: boolean;
     isSubheader?: boolean;

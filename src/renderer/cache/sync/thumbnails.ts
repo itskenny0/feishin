@@ -1,23 +1,36 @@
-// Thumbnail pre-cache sweep. Iterates every album / artist / playlist row
-// in Dexie and fetches its thumbnail blob through `resolveThumbnail`. The
-// cache stores ONE blob per item at `MAX_CACHE_SIZE` — the resolver
-// rewrites the upstream URL to that size and the browser downscales for
-// smaller display surfaces. The earlier per-(itemId,size) variant table
-// has been collapsed to a single primary key (see db.ts v4 + images.ts),
-// so the sweep no longer fans out across `imageRes` buckets.
+// Thumbnail pre-cache sweep (schema v11 — multi-resolution variant cache).
+// Iterates every album / artist / playlist row in Dexie and fills the
+// `[ItemId+Variant]` table with one pre-sized cover per enabled surface
+// bucket.
 //
-// The sweep is opt-in: an empty `localCache.thumbnailSizes` array means
-// "no pre-cache" (the lazy `<BaseImage>` path still fills the table
-// incidentally as the user browses). Any non-empty value enables it.
+// Two generation modes (the global `localCache.imageVariants.mode` switch):
+//  - download:  one server request per (item × enabled variant) at that
+//               variant's px (`rewriteUrlToVariantSize`). The sweep fans out
+//               to one work unit per (item, variant).
+//  - downscale: one server request per item at the largest enabled px, then
+//               the worker downscales locally to every enabled variant
+//               (`downscaleToVariants`). The sweep keeps one work unit per
+//               item but writes N rows.
+//
+// The sweep is opt-in: zero enabled variants (`enabledVariants(cfg).length
+// === 0`) means "no pre-cache" — the lazy `<BaseImage>` path still fills the
+// table incidentally as the user browses.
 
+import type { LocalCacheImageVariants } from '/@/renderer/store/settings.store';
 import type { ServerListItem } from '/@/shared/types/domain-types';
 
 import { api } from '/@/renderer/api';
 import { getActiveCacheDb } from '/@/renderer/cache/db';
 import { evict } from '/@/renderer/cache/eviction';
-import { MAX_CACHE_SIZE, resolveThumbnailWithBytes } from '/@/renderer/cache/images';
+import {
+    MAX_CACHE_SIZE,
+    resolveThumbnailWithBytes,
+    rewriteUrlToVariantSize,
+} from '/@/renderer/cache/images';
 import { useCacheStore } from '/@/renderer/cache/store';
-import { useSettingsStore } from '/@/renderer/store';
+import { type EnabledVariant, enabledVariants } from '/@/renderer/cache/variant-config';
+import { downscaleToVariants } from '/@/renderer/cache/variant-downscale';
+import { DEFAULT_IMAGE_VARIANTS, useSettingsStore } from '/@/renderer/store';
 import { LibraryItem } from '/@/shared/types/domain-types';
 
 // Concurrency cap on the parallel thumbnail fetches. The user-tunable
@@ -31,75 +44,101 @@ const MAX_CONCURRENCY = 64;
 
 type EntityKind = 'album' | 'artist' | 'playlist';
 
+/**
+ * One unit of sweep work.
+ *
+ *  - download mode:  a single (item, variant) pair fetched at `px` directly
+ *    from the server. The queue holds one of these per enabled variant, so a
+ *    single album expands to N units.
+ *  - downscale mode: a single item fetched ONCE at `px` (= the largest
+ *    enabled px), then downscaled into every variant listed in
+ *    `downscaleVariants`. The queue holds one unit per item.
+ */
 interface PendingThumbnail {
+    // download: the variants to produce from the single source fetch. Always
+    // present in downscale mode, absent in download mode.
+    downscaleVariants?: EnabledVariant[];
     itemId: string;
     itemType: LibraryItem;
     kind: EntityKind;
+    // The upstream px to request for THIS unit (download: the variant px;
+    // downscale: the largest enabled px so every smaller variant can be
+    // produced without upscaling).
+    px: number;
+    // The surface bucket this unit writes (download mode only — downscale
+    // writes every bucket in `downscaleVariants`).
+    variant?: string;
 }
 
 /**
- * Collect the items we want to fetch — one entry per (album / artist /
- * playlist) row regardless of any display-size configuration, because the
- * cache holds one blob per item. We attempt every row that has an `id` —
- * `imageId` is unreliable on some servers (Jellyfin omits it from list
- * endpoints even when the entity has artwork accessible via the per-item
- * endpoint), so the earlier `if (!row.Payload?.imageId)` guard was
- * rejecting most candidates. Let the server return 404 instead.
+ * Collect the sweep work units, fanned out according to the variant config.
+ *
+ * We attempt every row that has an `id` — `imageId` is unreliable on some
+ * servers (Jellyfin omits it from list endpoints even when the entity has
+ * artwork accessible via the per-item endpoint), so we let the server return
+ * 404 rather than pre-filtering.
+ *
+ * Fan-out:
+ *  - download:  one unit per (item × enabled variant), each carrying that
+ *    variant's name + target px.
+ *  - downscale: one unit per item, carrying the largest enabled px (so the
+ *    single fetch is large enough for every variant) and the full enabled
+ *    list for local downscaling.
+ *
+ * Exported for unit testing the fan-out shape.
  */
-const collectPending = async (): Promise<PendingThumbnail[]> => {
+export const collectPending = async (cfg: LocalCacheImageVariants): Promise<PendingThumbnail[]> => {
     const db = getActiveCacheDb();
     if (!db) return [];
-    const out: PendingThumbnail[] = [];
+
+    const enabled = enabledVariants(cfg);
+    if (enabled.length === 0) return [];
+
+    // The single source fetch in downscale mode must be at least as large as
+    // the largest enabled variant so no variant has to upscale. `enabled` is
+    // sorted ascending with `px === 0` (original) sorting last, so the final
+    // entry is the largest. `0` (original) is the largest of all.
+    const largestPx = enabled[enabled.length - 1].px;
+
+    const items: { itemId: string; itemType: LibraryItem; kind: EntityKind }[] = [];
 
     const albums = await db.albums.toArray();
     for (const row of albums) {
         if (!row.Id) continue;
-        out.push({
-            itemId: row.Id,
-            itemType: LibraryItem.ALBUM,
-            kind: 'album',
-        });
+        items.push({ itemId: row.Id, itemType: LibraryItem.ALBUM, kind: 'album' });
     }
 
     const artists = await db.artists.toArray();
     for (const row of artists) {
         if (!row.Id) continue;
-        out.push({
-            itemId: row.Id,
-            itemType: LibraryItem.ALBUM_ARTIST,
-            kind: 'artist',
-        });
+        items.push({ itemId: row.Id, itemType: LibraryItem.ALBUM_ARTIST, kind: 'artist' });
     }
 
     const playlists = await db.playlists.toArray();
     for (const row of playlists) {
         if (!row.Id) continue;
-        out.push({
-            itemId: row.Id,
-            itemType: LibraryItem.PLAYLIST,
-            kind: 'playlist',
-        });
+        items.push({ itemId: row.Id, itemType: LibraryItem.PLAYLIST, kind: 'playlist' });
+    }
+
+    const out: PendingThumbnail[] = [];
+    if (cfg.mode === 'download') {
+        // One unit per (item × enabled variant).
+        for (const item of items) {
+            for (const v of enabled) {
+                out.push({ ...item, px: v.px, variant: v.variant });
+            }
+        }
+    } else {
+        // downscale: one unit per item; the worker fetches once and produces
+        // every enabled variant locally.
+        for (const item of items) {
+            out.push({ ...item, downscaleVariants: enabled, px: largestPx });
+        }
     }
 
     return out;
 };
 
-/**
- * Run one thumbnail fetch through the shared resolver. The resolver
- * dedups in-flight requests, checks the existing Dexie row, and writes
- * back to the table on miss — we don't have to do any of that here. We
- * always request `MAX_CACHE_SIZE` because that's what the resolver
- * persists; the upstream URL is rewritten internally either way, but
- * building the request at the cache size keeps the network request
- * shape identical to what the cache lookup expects.
- *
- * `existingKeys` is a pre-computed set of itemIds built ONCE at sweep
- * start. Without it, each of the 64 workers ran its own
- * `db.thumbnails.get()` against IndexedDB just to discover a row already
- * existed; the user reported 2.6 items/sec on re-syncs because every
- * cached item paid that Dexie round-trip. Bypassing the lookup makes
- * already-cached items effectively free.
- */
 // Pre-built request templates by itemType. The sweep iterates 18k+
 // items; rebuilding the full ImageRequest each iteration (which reads
 // the auth store, runs URL serialization, etc.) is wasted work since
@@ -133,19 +172,36 @@ const buildRequestTemplate = (
     };
 };
 
-const fetchOne = async (
+// Per-item-type request templates, looked up by itemType. Built once per
+// sweep so the workers don't re-read the auth store / re-serialize URLs.
+type TemplateMap = Partial<Record<LibraryItem, RequestTemplate>>;
+
+const buildTemplates = (serverId: string): TemplateMap => {
+    const templates: TemplateMap = {};
+    for (const lt of [LibraryItem.ALBUM, LibraryItem.ALBUM_ARTIST, LibraryItem.PLAYLIST]) {
+        const tpl = buildRequestTemplate(serverId, lt);
+        if (tpl) templates[lt] = tpl;
+    }
+    return templates;
+};
+
+/**
+ * Fetch + persist one DOWNLOAD-mode work unit: request the cover at the
+ * variant's px directly from the server and store it under `[itemId, variant]`
+ * via the shared resolver (which handles dedup, miss markers, and the write).
+ */
+const fetchDownloadUnit = async (
     pending: PendingThumbnail,
     template: RequestTemplate,
     signal: AbortSignal,
-    existingKeys: Set<string>,
 ): Promise<{ bytes: number }> => {
     if (signal.aborted) return { bytes: 0 };
-    if (existingKeys.has(pending.itemId)) return { bytes: 0 };
-
     const db = getActiveCacheDb();
     if (!db) return { bytes: 0 };
 
-    const url = template.urlBefore + pending.itemId + template.urlAfter;
+    const variant = pending.variant ?? 'fullScreen';
+    const baseUrl = template.urlBefore + pending.itemId + template.urlAfter;
+    const url = rewriteUrlToVariantSize(baseUrl, pending.px);
     const request = {
         cacheKey: url,
         credentials: template.credentials,
@@ -153,11 +209,142 @@ const fetchOne = async (
         url,
     };
 
-    const result = await resolveThumbnailWithBytes(pending.itemId, MAX_CACHE_SIZE, request, {
-        signal,
-    });
-    if (result.bytes > 0) existingKeys.add(pending.itemId);
+    const result = await resolveThumbnailWithBytes(pending.itemId, variant, request, { signal });
     return { bytes: result.bytes };
+};
+
+/**
+ * Fetch + persist one DOWNSCALE-mode work unit: fetch the cover ONCE at the
+ * largest enabled px, decode it, and write one re-encoded row per enabled
+ * variant via `downscaleToVariants`. One network request, N Dexie rows.
+ */
+const fetchDownscaleUnit = async (
+    pending: PendingThumbnail,
+    template: RequestTemplate,
+    cfg: LocalCacheImageVariants,
+    signal: AbortSignal,
+): Promise<{ bytes: number }> => {
+    if (signal.aborted) return { bytes: 0 };
+    const db = getActiveCacheDb();
+    if (!db) return { bytes: 0 };
+
+    const variants = pending.downscaleVariants ?? [];
+    if (variants.length === 0) return { bytes: 0 };
+
+    const baseUrl = template.urlBefore + pending.itemId + template.urlAfter;
+    const url = rewriteUrlToVariantSize(baseUrl, pending.px);
+
+    // Manual timeout (mirrors the resolver) — AbortSignal.timeout/any aren't
+    // universally available on older Android WebViews.
+    const controller = new AbortController();
+    let timedOut = false;
+    const timeoutId = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+    }, 20_000);
+    const upstreamAbort = (): void => controller.abort();
+    if (signal.aborted) controller.abort();
+    else signal.addEventListener('abort', upstreamAbort);
+
+    let srcBlob: Blob;
+    try {
+        const res = await fetch(url, {
+            credentials: template.credentials,
+            headers: template.headers,
+            signal: controller.signal,
+        });
+        if (!res.ok) {
+            // Persist a per-variant miss marker so the sweep doesn't re-attempt
+            // a 404 every pass (mirrors the resolver's negative cache).
+            if (res.status === 404 && db === getActiveCacheDb()) {
+                const now = Date.now();
+                await Promise.all(
+                    variants.map((v) =>
+                        db.thumbnails
+                            .put({
+                                __cachedAt: now,
+                                Blob: undefined,
+                                ByteSize: 0,
+                                Etag: undefined,
+                                ItemId: pending.itemId,
+                                LastUsed: now,
+                                MissAt: now,
+                                Size: v.px,
+                                Variant: v.variant,
+                            })
+                            .catch(() => undefined),
+                    ),
+                );
+            }
+            return { bytes: 0 };
+        }
+        srcBlob = await res.blob();
+    } catch (err) {
+        if (timedOut) {
+            console.warn('[image-variants] sweep: downscale source fetch timed out', {
+                itemId: pending.itemId,
+            });
+        } else if ((err as Error)?.name !== 'AbortError') {
+            console.warn('[image-variants] sweep: downscale source fetch failed', {
+                error: (err as Error)?.message ?? String(err),
+                itemId: pending.itemId,
+            });
+        }
+        return { bytes: 0 };
+    } finally {
+        clearTimeout(timeoutId);
+        signal.removeEventListener('abort', upstreamAbort);
+    }
+
+    if (signal.aborted || db !== getActiveCacheDb()) return { bytes: 0 };
+
+    let produced: Map<string, { blob: Blob; format: 'jpeg' | 'webp' }>;
+    try {
+        produced = await downscaleToVariants(
+            srcBlob,
+            variants.map((v) => ({ px: v.px, variant: v.variant })),
+            { format: cfg.format, quality: cfg.quality },
+        );
+    } catch (err) {
+        console.warn('[image-variants] sweep: downscale failed', {
+            error: (err as Error)?.message ?? String(err),
+            itemId: pending.itemId,
+        });
+        return { bytes: 0 };
+    }
+
+    if (signal.aborted || db !== getActiveCacheDb()) return { bytes: 0 };
+
+    let bytes = 0;
+    const now = Date.now();
+    const variantPx = new Map<string, number>(variants.map((v) => [v.variant, v.px]));
+    await Promise.all(
+        [...produced.entries()].map(async ([variant, { blob, format }]) => {
+            bytes += blob.size;
+            try {
+                await db.thumbnails.put({
+                    __cachedAt: now,
+                    Blob: blob,
+                    ByteSize: blob.size,
+                    Etag: undefined,
+                    Format: format,
+                    ItemId: pending.itemId,
+                    LastUsed: now,
+                    MissAt: undefined,
+                    Size: variantPx.get(variant) ?? 0,
+                    Variant: variant,
+                });
+            } catch (err) {
+                console.warn('[image-variants] sweep: downscale write failed', {
+                    error: (err as Error)?.message ?? String(err),
+                    itemId: pending.itemId,
+                    variant,
+                });
+            }
+        }),
+    );
+
+    return { bytes };
 };
 
 /**
@@ -170,22 +357,32 @@ export const runThumbnailsSweep = async (
 ): Promise<void> => {
     const { signal } = args;
     const localCache = useSettingsStore.getState().localCache;
-    // Empty `thumbnailSizes` array = explicit opt-out. Any non-empty
-    // value (the legacy multi-bucket array, or the new sentinel
-    // `[MAX_CACHE_SIZE]` written by the dashboard toggle) enables the
-    // sweep — the cache stores one blob per item regardless.
-    const buckets = localCache?.thumbnailSizes ?? [];
-    if (buckets.length === 0) {
-        console.info('[cache] thumbnails sweep: pre-cache disabled, skipping');
+    const cfg: LocalCacheImageVariants = localCache?.imageVariants ?? DEFAULT_IMAGE_VARIANTS;
+    // Opt-out: zero enabled variants = "no pre-cache" (replaces the vestigial
+    // `thumbnailSizes` sentinel). The lazy `<BaseImage>` path still fills the
+    // table incidentally as the user browses.
+    const enabled = enabledVariants(cfg);
+    if (enabled.length === 0) {
+        console.info('[image-variants] sweep: no enabled variants, skipping');
         return;
     }
 
-    const pending = await collectPending();
+    const pending = await collectPending(cfg);
     const total = pending.length;
     if (total === 0) {
         console.info('[cache] thumbnails sweep: no items to pre-cache yet');
         return;
     }
+
+    // The fan-out is what drives the progress denominator: in download mode
+    // `total` is items × enabled-variants; in downscale mode it's one unit per
+    // item (each producing every variant). Logged so the dashboard total is
+    // explainable.
+    console.info('[image-variants] sweep: ' + `${enabled.length} variants × items`, {
+        mode: cfg.mode,
+        variants: enabled.length,
+        workUnits: total,
+    });
 
     // Honour the user-tunable concurrency setting. Clamped to the
     // [MIN_CONCURRENCY, MAX_CONCURRENCY] range to keep typos / hostile
@@ -223,51 +420,55 @@ export const runThumbnailsSweep = async (
     let failed = 0;
     let lastAnomalyWarnAt = 0;
 
-    // Pre-fetch every existing thumbnail row's itemId so the worker
-    // pool can skip them without a Dexie round-trip per item. On a
-    // re-sync where the cache is mostly warm this turns a 2.6 items/sec
-    // crawl into a near-instant scan.
+    // Pre-fetch every existing thumbnail row's `[ItemId, Variant]` key so the
+    // worker pool can skip already-cached (item, variant) pairs without a Dexie
+    // round-trip per unit. On a re-sync where the cache is mostly warm this
+    // turns a crawl into a near-instant scan.
     //
-    // Negative-cache markers (Blob === undefined) are included as long
-    // as they're still fresh — the server already told us 404, no point
-    // re-asking on every sweep. Once a marker is older than MISS_TTL_MS
-    // we let it through so the sweep retries (newly-added artwork on
-    // the server should eventually populate). The TTL matches the
-    // window used by `resolveThumbnail` in images.ts.
+    // Negative-cache markers (Blob === undefined) are honoured per-variant as
+    // long as they're still fresh — the server already told us 404 for THAT
+    // variant, no point re-asking on every sweep. Once a marker is older than
+    // MISS_TTL_MS we let it through so the sweep retries (newly-added artwork
+    // should eventually populate). The TTL matches `resolveThumbnail`.
     const MISS_TTL_MS = 7 * 24 * 60 * 60 * 1000;
     const db = getActiveCacheDb();
+    // Keyed `${itemId}::${variant}` — one entry per cached (item, variant).
     const existingKeys = new Set<string>();
+    const skipKey = (itemId: string, variant: string): string => `${itemId}::${variant}`;
     let staleMissCount = 0;
     let freshMissCount = 0;
     if (db) {
         try {
-            // CRITICAL: do NOT call db.thumbnails.toArray() here — that
-            // would pull every Blob into memory. Instead read just the
-            // primary keys for the full table (which skips the row
-            // store entirely), and separately read only the small
-            // miss-marker rows to decide fresh vs stale.
+            // CRITICAL: do NOT call db.thumbnails.toArray() here — that would
+            // pull every Blob into memory. Read just the compound primary keys
+            // (skips the row store entirely), and separately read only the
+            // small miss-marker rows to decide fresh vs stale.
             const [allKeys, missRows] = await Promise.all([
-                db.thumbnails.toCollection().primaryKeys() as Promise<string[]>,
+                db.thumbnails.toCollection().primaryKeys() as Promise<[string, string][]>,
                 db.thumbnails.where('MissAt').above(0).toArray(),
             ]);
             const now = Date.now();
+            // Stale miss markers, keyed per (item, variant) so a stale miss on
+            // one variant doesn't force a re-fetch of an item's other variants.
             const staleMissKeys = new Set<string>();
             for (const row of missRows) {
                 const missAt = row.MissAt ?? 0;
                 if (now - missAt >= MISS_TTL_MS) {
-                    staleMissKeys.add(row.ItemId);
+                    staleMissKeys.add(skipKey(row.ItemId, row.Variant));
                     staleMissCount += 1;
                 } else {
                     freshMissCount += 1;
                 }
             }
-            for (const itemId of allKeys) {
-                if (!staleMissKeys.has(itemId)) existingKeys.add(itemId);
+            for (const key of allKeys) {
+                // Dexie returns compound keys as `[ItemId, Variant]` tuples.
+                if (!Array.isArray(key)) continue;
+                const composite = skipKey(key[0], key[1]);
+                if (!staleMissKeys.has(composite)) existingKeys.add(composite);
             }
             console.info('[cache] thumbnails sweep: prefetched existing keys', {
                 count: existingKeys.size,
                 freshMissCount,
-                queueToFetch: total - existingKeys.size,
                 staleMissCount,
                 totalRows: allKeys.length,
             });
@@ -275,6 +476,30 @@ export const runThumbnailsSweep = async (
             console.warn('[cache] thumbnails sweep: prefetch failed', err);
         }
     }
+
+    // Whether a work unit is already fully satisfied by cached rows. In
+    // download mode that's a single (item, variant); in downscale mode the
+    // unit produces every enabled variant, so it can only be skipped when ALL
+    // of them are already cached.
+    const isUnitCached = (unit: PendingThumbnail): boolean => {
+        if (cfg.mode === 'download') {
+            return existingKeys.has(skipKey(unit.itemId, unit.variant ?? 'fullScreen'));
+        }
+        const vs = unit.downscaleVariants ?? [];
+        return vs.length > 0 && vs.every((v) => existingKeys.has(skipKey(unit.itemId, v.variant)));
+    };
+
+    // Mark a unit's variants cached after a successful fetch so a later unit
+    // for the same item (or a re-scan) skips it.
+    const markUnitCached = (unit: PendingThumbnail): void => {
+        if (cfg.mode === 'download') {
+            existingKeys.add(skipKey(unit.itemId, unit.variant ?? 'fullScreen'));
+            return;
+        }
+        for (const v of unit.downscaleVariants ?? []) {
+            existingKeys.add(skipKey(unit.itemId, v.variant));
+        }
+    };
 
     // Throttle setSweep so the dashboard / sync chip don't re-render at
     // worker speed (which was causing the main thread to choke). One
@@ -308,12 +533,8 @@ export const runThumbnailsSweep = async (
     // ~18k items; rebuilding the ImageRequest per iteration (which
     // reads the auth store and re-serializes the URL) is wasted work
     // since only the ID varies. Cache the URL prefix/suffix and auth
-    // headers once and string-substitute the ID per fetch.
-    const templates: Partial<Record<LibraryItem, RequestTemplate>> = {};
-    for (const lt of [LibraryItem.ALBUM, LibraryItem.ALBUM_ARTIST, LibraryItem.PLAYLIST]) {
-        const tpl = buildRequestTemplate(server.id, lt);
-        if (tpl) templates[lt] = tpl;
-    }
+    // headers once and string-substitute the ID + variant px per fetch.
+    const templates = buildTemplates(server.id);
 
     // Cursor-based dispatch instead of queue.shift() — workers each
     // grab their next index via a shared monotonic counter, avoiding
@@ -417,12 +638,20 @@ export const runThumbnailsSweep = async (
                 skipped += 1;
                 continue;
             }
-            const wasCached = existingKeys.has(next.itemId);
+            const wasCached = isUnitCached(next);
+            if (wasCached) {
+                // Every variant this unit would produce is already cached —
+                // skip without a Dexie round-trip or a network request.
+                done += 1;
+                skipped += 1;
+                flushProgress();
+                continue;
+            }
             const itemStart = Date.now();
             workerStates[workerId] = {
                 itemId: next.itemId,
                 startedAt: itemStart,
-                status: wasCached ? 'cache-skip' : 'fetching',
+                status: 'fetching',
             };
             const stuckTimer = setTimeout(() => {
                 console.warn('[cache] thumbnails sweep: worker stuck >5s on item', {
@@ -431,14 +660,18 @@ export const runThumbnailsSweep = async (
                 });
             }, 5_000);
             try {
-                const { bytes } = await fetchOne(next, template, signal, existingKeys);
+                const { bytes } =
+                    cfg.mode === 'download'
+                        ? await fetchDownloadUnit(next, template, signal)
+                        : await fetchDownscaleUnit(next, template, cfg, signal);
                 bytesDownloaded += bytes;
-                if (wasCached) {
-                    skipped += 1;
-                } else if (bytes > 0) {
+                if (bytes > 0) {
                     fetched += 1;
+                    markUnitCached(next);
                 } else {
-                    existingKeys.add(next.itemId);
+                    // Treat a zero-byte result as a (negative-cached) skip so a
+                    // re-scan doesn't re-attempt it within the miss TTL.
+                    markUnitCached(next);
                     skipped += 1;
                 }
                 const elapsedMs = Date.now() - itemStart;

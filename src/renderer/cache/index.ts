@@ -13,6 +13,7 @@ export {
     setActiveCacheDb,
 } from './db';
 export { EnableCacheModal } from './enable-cache-modal';
+export { clearThumbnails } from './eviction';
 export { formatBytes, formatCount } from './format';
 export {
     resolveAlbumArtistPage,

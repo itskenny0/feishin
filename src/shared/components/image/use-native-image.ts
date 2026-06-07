@@ -10,7 +10,7 @@ import { ImageRequest } from '/@/shared/types/domain-types';
 // network fetch.
 type ThumbnailResolver = (
     itemId: string,
-    size: number,
+    variant: string,
     request: ImageRequest | string,
 ) => Promise<string>;
 
@@ -20,10 +20,15 @@ type ThumbnailResolver = (
 // instead of each mount minting + revoking its own blob: URL during scroll.
 type ThumbnailUrlAcquirer = (
     itemId: string,
-    size: number,
+    variant: string,
     request: ImageRequest | string,
 ) => Promise<string>;
 type ThumbnailUrlReleaser = (itemId: string) => void;
+
+// Surface bucket used when a request doesn't declare one (legacy callers,
+// the `imageUrl` branch, or anything that hasn't threaded a `type` through).
+// Matches the resolver's own DEFAULT_VARIANT — the full-resolution cover.
+const DEFAULT_VARIANT = 'fullScreen';
 
 let resolveThumbnailRef: null | ThumbnailResolver = null;
 let acquireThumbnailUrlRef: null | ThumbnailUrlAcquirer = null;
@@ -47,12 +52,12 @@ export const registerThumbnailUrlCache = (
 // returned URL's refcount via `releaseSharedThumbnailUrl`.
 const tryAcquireSharedThumbnail = async (
     itemId: string,
-    size: number,
+    variant: string,
     request: ImageRequest,
 ): Promise<string | undefined> => {
     if (!acquireThumbnailUrlRef) return undefined;
     try {
-        const resolved = await acquireThumbnailUrlRef(itemId, size, request);
+        const resolved = await acquireThumbnailUrlRef(itemId, variant, request);
         return resolved === request.url ? undefined : resolved;
     } catch {
         return undefined;
@@ -65,12 +70,12 @@ const releaseSharedThumbnailUrl = (itemId: string): void => {
 
 const tryResolveThumbnail = async (
     itemId: string,
-    size: number,
+    variant: string,
     request: ImageRequest,
 ): Promise<string | undefined> => {
     if (!resolveThumbnailRef) return undefined;
     try {
-        const resolved = await resolveThumbnailRef(itemId, size, request);
+        const resolved = await resolveThumbnailRef(itemId, variant, request);
         return resolved === request.url ? undefined : resolved;
     } catch {
         return undefined;
@@ -119,6 +124,7 @@ export function useNativeImage({
             credentials: request.credentials,
             headers: request.headers,
             url: request.url,
+            variant: request.variant,
         });
     }, [request]);
 
@@ -193,6 +199,11 @@ export function useNativeImage({
                     // outside the renderer).
                     const useShared = Boolean(acquireThumbnailUrlRef);
                     const cacheItemId = request.cacheItemId;
+                    // The surface bucket selects which pre-sized cover the
+                    // resolver serves (schema v11 keys `[itemId, variant]`).
+                    // `ItemImage` threads its `type` through as `variant`;
+                    // anything without one collapses to the full-res cover.
+                    const cacheVariant = request.variant ?? DEFAULT_VARIANT;
                     // Race the cache lookup against a 5s cap. The lookup
                     // may await a shared in-flight promise from the thumbnail
                     // sweep (which has its own 20s network timeout); without
@@ -211,8 +222,8 @@ export function useNativeImage({
                     // eventually acquires — otherwise the refcount leaks and
                     // the blob: URL is never revoked.
                     const lookupPromise = useShared
-                        ? tryAcquireSharedThumbnail(cacheItemId, request.cacheSize, request)
-                        : tryResolveThumbnail(cacheItemId, request.cacheSize, request);
+                        ? tryAcquireSharedThumbnail(cacheItemId, cacheVariant, request)
+                        : tryResolveThumbnail(cacheItemId, cacheVariant, request);
                     if (useShared) {
                         void lookupPromise.then((late) => {
                             if (timedOut && late && late.startsWith('blob:')) {

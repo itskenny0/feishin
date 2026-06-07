@@ -1611,6 +1611,12 @@ export type ImageRequest = {
     credentials?: RequestCredentials;
     headers?: Record<string, string>;
     url: string;
+    // Surface bucket (`table`, `itemCard`, `sidebar`, `header`, `fullScreen`)
+    // the request is rendered for. The thumbnail cache keys each variant
+    // independently (schema v11), so this selects which pre-sized cover the
+    // resolver serves. Absent → the resolver collapses to the `fullScreen`
+    // (original) variant.
+    variant?: string;
 };
 
 export type InternalControllerEndpoint = {

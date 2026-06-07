@@ -44,7 +44,10 @@ export class LibraryCacheDb extends Dexie {
     playlistSongs!: Table<CachedPlaylistSong, [string, number]>;
     songs!: EntityTable<CachedSong, 'Id'>;
     syncMeta!: EntityTable<SyncMetaRow, 'EntityType'>;
-    thumbnails!: EntityTable<CachedThumbnail, 'ItemId'>;
+    // Compound `[ItemId+Variant]` primary key (schema v11) — one row per
+    // (item, surface bucket). Uses the lower-level Table<T, K> type because
+    // EntityTable<T, K> only supports a single string-literal key field.
+    thumbnails!: Table<CachedThumbnail, [string, string]>;
     // Lazily-generated trackmap spectrum analyses. Compound primary key
     // `[SongId+Sensitivity+Version]` (see CachedTrackmap). Never populated by
     // the sync sweep — written only on first play/visualise of a song.
@@ -296,6 +299,87 @@ export class LibraryCacheDb extends Dexie {
             songs: 'Id, AlbumId, [AlbumId+ParentIndexNumber+IndexNumber], AlbumArtistId, DateLastSaved, [AlbumId+IndexNumber], __cachedAt',
             syncMeta: 'EntityType',
             thumbnails: 'ItemId, LastUsed, ByteSize, MissAt, __cachedAt',
+            trackmaps: '[SongId+Sensitivity+Version], SongId, LastUsed, ByteSize, __cachedAt',
+        });
+
+        // v11: re-unify the `thumbnails` table back to the compound
+        // `[ItemId+Variant]` primary key (reversing the v4 single-blob
+        // collapse). The artwork-variant cache now stores one blob per
+        // (item, surface bucket) — `table`/`itemCard`/`sidebar`/`header`/
+        // `fullScreen` — so dense lists/grids read a small pre-downscaled
+        // cover instead of decoding the full-res original. `ItemId` is kept
+        // as a standalone index so the resolver can enumerate every cached
+        // variant of one item (for nearest-larger fallback) without scanning.
+        //
+        // Dexie cannot change a table's primary key in a single version
+        // ("Not yet support for changing primary key"), so the rekey is done
+        // as a delete-then-recreate across two version steps:
+        //   - v11 deletes the single-keyed `thumbnails` table (`null`) and
+        //     drops the thumbnails `syncMeta` marker so the next launch
+        //     doesn't see hydrationState:'full' against an empty table and
+        //     skip the re-sweep;
+        //   - v12 recreates the table under the compound `[ItemId+Variant]`
+        //     key.
+        // The thumbnail cache is fully rebuildable from the server, so
+        // clearing it (rather than a row-by-row remap of single-keyed rows
+        // into a compound-keyed schema) is the safe path — covers re-download
+        // lazily on view in the meantime. Every other store is re-declared
+        // identically (zero row-copy work).
+        this.version(11)
+            .stores({
+                albums: 'Id, AlbumArtistId, [AlbumArtistId+SortName], DateLastSaved, SortName, ProductionYear, *GenreIds, __cachedAt',
+                artists: 'Id, SortName, Name, DateLastSaved, Kind, __cachedAt',
+                favorites:
+                    '[ItemId+ItemType], ItemType, IsFavorite, Rating, LastPlayedDate, PlayCount, __cachedAt',
+                genres: 'Id, SortName, Name, __cachedAt',
+                lyrics: 'SongId, __cachedAt',
+                mediaBlobs: 'Key, SongId, *EntityKeys, ByteSize, DownloadedAt',
+                mutationQueue: 'id, status, createdAt, idempotencyKey',
+                offlineTargets: 'Key, EntityType, Status, AddedAt',
+                playlists: 'Id, SortName, DateLastSaved, __cachedAt',
+                playlistSongs: '[PlaylistId+ListOrder], PlaylistId, SongId, __cachedAt',
+                songs: 'Id, AlbumId, [AlbumId+ParentIndexNumber+IndexNumber], AlbumArtistId, DateLastSaved, [AlbumId+IndexNumber], __cachedAt',
+                syncMeta: 'EntityType',
+                // Dropped here; recreated with the compound key in v12.
+                thumbnails: null,
+                trackmaps: '[SongId+Sensitivity+Version], SongId, LastUsed, ByteSize, __cachedAt',
+            })
+            .upgrade(async (tx) => {
+                let cleared = 0;
+                try {
+                    cleared = await tx.table('thumbnails').count();
+                } catch {
+                    /* table may already be gone in this transaction */
+                }
+                try {
+                    await tx.table('syncMeta').delete('thumbnails');
+                } catch (err) {
+                    console.warn('[cache] v11 upgrade: syncMeta.delete(thumbnails) failed', err);
+                }
+                console.info(
+                    `[cache] thumbnails v11: rekeyed to [ItemId+Variant], cleared ${cleared} rows`,
+                );
+            });
+
+        // v12: recreate `thumbnails` under the compound `[ItemId+Variant]`
+        // primary key the v11 delete made room for. The `Variant` bucket
+        // (not `Size`) is part of the key, so one item holds one row per
+        // enabled surface. Every other store is re-declared identically.
+        this.version(12).stores({
+            albums: 'Id, AlbumArtistId, [AlbumArtistId+SortName], DateLastSaved, SortName, ProductionYear, *GenreIds, __cachedAt',
+            artists: 'Id, SortName, Name, DateLastSaved, Kind, __cachedAt',
+            favorites:
+                '[ItemId+ItemType], ItemType, IsFavorite, Rating, LastPlayedDate, PlayCount, __cachedAt',
+            genres: 'Id, SortName, Name, __cachedAt',
+            lyrics: 'SongId, __cachedAt',
+            mediaBlobs: 'Key, SongId, *EntityKeys, ByteSize, DownloadedAt',
+            mutationQueue: 'id, status, createdAt, idempotencyKey',
+            offlineTargets: 'Key, EntityType, Status, AddedAt',
+            playlists: 'Id, SortName, DateLastSaved, __cachedAt',
+            playlistSongs: '[PlaylistId+ListOrder], PlaylistId, SongId, __cachedAt',
+            songs: 'Id, AlbumId, [AlbumId+ParentIndexNumber+IndexNumber], AlbumArtistId, DateLastSaved, [AlbumId+IndexNumber], __cachedAt',
+            syncMeta: 'EntityType',
+            thumbnails: '[ItemId+Variant], ItemId, LastUsed, ByteSize, MissAt, __cachedAt',
             trackmaps: '[SongId+Sensitivity+Version], SongId, LastUsed, ByteSize, __cachedAt',
         });
     }

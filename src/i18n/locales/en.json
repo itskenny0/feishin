@@ -1113,7 +1113,32 @@
             "window": "Window",
             "discordDescription": "Rich Presence integration.",
             "passwordDescription": "OS keychain credential storage.",
-            "password": "Keychain"
+            "password": "Keychain",
+            "imageVariants": {
+                "title": "Artwork variants",
+                "description": "Cache several cover sizes per item so dense lists and grids load without decoding full-resolution artwork.",
+                "modeLabel": "Variant source",
+                "modeDownload": "Download per size",
+                "modeDownscale": "Downscale locally",
+                "modeHelp": "Download per size requests each resolution from the server. Downscale locally fetches each cover once and resizes it in the app (more CPU, fewer requests).",
+                "variantsHeader": "Sizes to pre-cache",
+                "colVariant": "Surface",
+                "colEnabled": "Pre-cache",
+                "colPx": "Target px",
+                "pxHelp": "0 = keep the original resolution (no resize).",
+                "variantTable": "List / table row",
+                "variantItemCard": "Grid card",
+                "variantSidebar": "Sidebar",
+                "variantHeader": "Page header",
+                "variantFullScreen": "Full-screen player",
+                "formatLabel": "Re-encode format",
+                "formatHelp": "Format used when re-encoding downscaled covers. WebP is smaller; JPEG keeps maximum compatibility. Only applies in downscale mode.",
+                "qualityLabel": "Quality",
+                "qualityHelp": "Encoder quality (1-100). 82 is a good balance. Only applies in downscale mode.",
+                "regenerate": "Regenerate variants now",
+                "regenerateHelp": "Clears the cached covers and rebuilds every enabled size under the current settings.",
+                "regenerateStarted": "Artwork variants cleared - regenerating in the background."
+            }
         },
         "sidebar": {
             "albumArtists": "$t(entity.albumArtist, {\"count\": 2})",

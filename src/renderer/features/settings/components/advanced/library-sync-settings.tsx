@@ -32,6 +32,7 @@ import {
 import { cancelHydration } from '/@/renderer/cache/sync';
 import { CacheStatsWidget } from '/@/renderer/features/settings/components/advanced/cache-stats-widget';
 import { ConsoleLogViewer } from '/@/renderer/features/settings/components/advanced/console-log-viewer';
+import { ImageVariantsSettings } from '/@/renderer/features/settings/components/advanced/image-variants-settings';
 import { useAuthStore, useSettingsStore } from '/@/renderer/store';
 import { toast } from '/@/shared/components/toast/toast';
 
@@ -732,6 +733,12 @@ export const LibrarySyncSettings = () => {
                             })}
                         </Text>
                     </Stack>
+
+                    {/* Multi-resolution artwork variant cache (advanced tree).
+                        Caches several cover sizes per item so dense lists/grids
+                        load without decoding full-res JPEGs. Reuses the
+                        thumbnail concurrency slider above. */}
+                    <ImageVariantsSettings server={currentServer ?? undefined} />
                 </Stack>
             )}
 

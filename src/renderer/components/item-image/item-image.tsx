@@ -76,6 +76,20 @@ const BaseItemImage = (
 
 export const ItemImage = memo(BaseItemImage);
 
+// The thumbnail cache keys each surface bucket independently (schema v11).
+// `ItemImage`'s `type` selects a `general.imageRes` entry whose names line up
+// with the variant buckets one-for-one, EXCEPT the full-screen player, which
+// `imageRes` calls `fullScreenPlayer` while the variant config calls it
+// `fullScreen`. Map that one; pass every other surface name through verbatim.
+// Anything without a `type` resolves against the full-resolution cover.
+const FULL_SCREEN_VARIANT = 'fullScreen';
+const surfaceToVariant = (
+    type: keyof z.infer<typeof GeneralSettingsSchema>['imageRes'] | undefined,
+): string => {
+    if (!type) return FULL_SCREEN_VARIANT;
+    return type === 'fullScreenPlayer' ? FULL_SCREEN_VARIANT : type;
+};
+
 interface UseItemImageUrlProps {
     id?: null | string;
     imageUrl?: null | string;
@@ -127,6 +141,8 @@ export const useItemImageRequest = (args: UseItemImageUrlProps) => {
     const imageRes = useImageRes();
     const sizeByType: number | undefined = type ? imageRes[type] : undefined;
 
+    const variant = surfaceToVariant(type);
+
     return useMemo(() => {
         const effectiveSize = size ?? sizeByType;
         if (imageUrl) {
@@ -141,6 +157,7 @@ export const useItemImageRequest = (args: UseItemImageUrlProps) => {
                 cacheKey: imageUrl,
                 cacheSize: effectiveSize,
                 url: imageUrl,
+                variant,
             } satisfies ImageRequest;
         }
 
@@ -166,8 +183,9 @@ export const useItemImageRequest = (args: UseItemImageUrlProps) => {
             ...remote,
             cacheItemId: id,
             cacheSize: effectiveSize,
+            variant,
         } satisfies ImageRequest;
-    }, [args.serverId, id, imageUrl, itemType, serverId, size, sizeByType, useRemoteUrl]);
+    }, [args.serverId, id, imageUrl, itemType, serverId, size, sizeByType, useRemoteUrl, variant]);
 };
 
 export function getItemImageRequest(args: UseItemImageUrlProps) {

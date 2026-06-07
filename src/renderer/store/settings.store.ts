@@ -929,10 +929,42 @@ const OfflineMediaSettingsSchema = z.object({
     maxBytes: z.number().default(2 * 1024 * 1024 * 1024),
 });
 
+/**
+ * One surface bucket's variant config: whether the thumbnail sweep pre-caches
+ * this resolution and the target longest-edge px (`0` = original / no resize).
+ */
+const LocalCacheImageVariantSchema = z.object({
+    enabled: z.boolean(),
+    px: z.number().int().min(0),
+});
+
+/**
+ * Multi-resolution artwork variant cache config. `mode` is a global switch:
+ *  - `downscale` (default) — fetch each cover once, canvas-resize + re-encode
+ *    (`format`/`quality`) to every enabled variant.
+ *  - `download` — request each enabled variant's px from the server directly;
+ *    server bytes are stored as-is (`format`/`quality` are downscale-only).
+ * `variants` keys mirror the existing surface buckets so the surface→variant
+ * mapping needs no call-site plumbing.
+ */
+const LocalCacheImageVariantsSchema = z.object({
+    format: z.enum(['webp', 'jpeg']).default('webp'),
+    mode: z.enum(['download', 'downscale']).default('downscale'),
+    quality: z.number().int().min(1).max(100).default(82),
+    variants: z.object({
+        fullScreen: LocalCacheImageVariantSchema,
+        header: LocalCacheImageVariantSchema,
+        itemCard: LocalCacheImageVariantSchema,
+        sidebar: LocalCacheImageVariantSchema,
+        table: LocalCacheImageVariantSchema,
+    }),
+});
+
 const LocalCacheSettingsSchema = z.object({
     capacityBytes: z.number().optional(),
     enabled: z.boolean().optional(),
     entities: LocalCacheEntitiesSchema.optional(),
+    imageVariants: LocalCacheImageVariantsSchema.optional(),
     offlineMedia: OfflineMediaSettingsSchema.optional(),
     sweepProgressSmoothing: z.boolean().default(true),
     // Worker count for the thumbnail pre-cache sweep. Higher = faster but
@@ -941,6 +973,24 @@ const LocalCacheSettingsSchema = z.object({
     thumbnailConcurrency: z.number().int().min(1).max(64).optional(),
     thumbnailSizes: z.array(LocalCacheThumbnailSizeSchema).optional(),
 });
+
+/**
+ * Canonical default for `localCache.imageVariants`. Surface buckets mirror the
+ * `general.imageRes` names. Shared by the initial state and the v55→56
+ * migration so they can't drift.
+ */
+export const DEFAULT_IMAGE_VARIANTS: z.infer<typeof LocalCacheImageVariantsSchema> = {
+    format: 'webp',
+    mode: 'downscale',
+    quality: 82,
+    variants: {
+        fullScreen: { enabled: true, px: 0 },
+        header: { enabled: true, px: 300 },
+        itemCard: { enabled: true, px: 300 },
+        sidebar: { enabled: false, px: 400 },
+        table: { enabled: true, px: 80 },
+    },
+};
 
 /**
  * Peer-sync (MQTT) settings slice. Disabled by default; existing installs
@@ -1233,6 +1283,8 @@ export type ItemListSettings = {
     table: DataTableProps;
 };
 
+export type LocalCacheImageVariant = z.infer<typeof LocalCacheImageVariantSchema>;
+export type LocalCacheImageVariants = z.infer<typeof LocalCacheImageVariantsSchema>;
 export type LocalCacheSettings = z.infer<typeof LocalCacheSettingsSchema>;
 
 export type OfflineMediaSettings = z.infer<typeof OfflineMediaSettingsSchema>;
@@ -2251,6 +2303,7 @@ const initialState: SettingsState = {
             playlists: true,
             songs: true,
         },
+        imageVariants: DEFAULT_IMAGE_VARIANTS,
         offlineMedia: {
             downloadOriginal: true,
             maxBytes: 2 * 1024 * 1024 * 1024,
@@ -3348,10 +3401,26 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     delete (state.window as { releaseChannel?: unknown }).releaseChannel;
                 }
 
+                if (version <= 55) {
+                    // Seed the new multi-resolution artwork variant config under
+                    // the existing localCache slice. Inert until the thumbnail
+                    // sweep / resolver read it; gated behind localCache.enabled
+                    // like the rest of the cache. Mirrors DEFAULT_IMAGE_VARIANTS
+                    // so the upgrade default can't drift from the initial state.
+                    if (state.localCache && typeof state.localCache === 'object') {
+                        if (
+                            !state.localCache.imageVariants ||
+                            typeof state.localCache.imageVariants !== 'object'
+                        ) {
+                            state.localCache.imageVariants = DEFAULT_IMAGE_VARIANTS;
+                        }
+                    }
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 55,
+            version: 56,
         },
     ),
 );
@@ -3412,6 +3481,9 @@ export const useLyricsDisplaySettings = (key: string = 'default') =>
 export const useRemoteSettings = () => useSettingsStore((state) => state.remote, shallow);
 
 export const usePeerSyncSettings = () => useSettingsStore((state) => state.peerSync, shallow);
+
+export const useImageVariants = () =>
+    useSettingsStore((state) => state.localCache.imageVariants, shallow);
 
 export const useFontSettings = () => useSettingsStore((state) => state.font, shallow);
 

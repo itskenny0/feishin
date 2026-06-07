@@ -225,13 +225,18 @@ export const evict = async (): Promise<void> => {
         for (const row of oldRows) {
             if (used - dropped <= cap) break;
             try {
-                await db.thumbnails.delete(row.ItemId);
+                // Schema v12 keys the table on the compound `[ItemId+Variant]`,
+                // so each variant of an item is its own row and MUST be deleted
+                // by its full key — a bare `ItemId` delete matches nothing and
+                // silently leaves every variant row in place.
+                await db.thumbnails.delete([row.ItemId, row.Variant]);
                 dropped += row.ByteSize;
                 droppedCount += 1;
             } catch (err) {
                 console.warn('[cache] eviction: failed to delete row', {
                     err,
                     itemId: row.ItemId,
+                    variant: row.Variant,
                 });
             }
         }
@@ -261,12 +266,15 @@ export const evict = async (): Promise<void> => {
     if (used - dropped > cap) {
         try {
             const FLUSH_AT = 256;
-            const toDelete: string[] = [];
+            // Compound `[ItemId, Variant]` keys — the v12 primary key. A bare
+            // `ItemId` would delete nothing (see phase 1).
+            const toDelete: [string, string][] = [];
             await db.thumbnails
                 .orderBy('LastUsed')
                 .until(() => used - dropped <= cap)
                 .each((row) => {
                     const itemId = row.ItemId;
+                    const variant = row.Variant;
                     const byteSize = row.ByteSize;
                     // Drop the Blob ref ASAP — see comment block
                     // above. The row object is about to go out of
@@ -274,7 +282,7 @@ export const evict = async (): Promise<void> => {
                     // field, so explicit nulling lets the GC reclaim
                     // it without waiting for the cursor microtask.
                     (row as { Blob?: Blob }).Blob = undefined;
-                    toDelete.push(itemId);
+                    toDelete.push([itemId, variant]);
                     dropped += byteSize;
                     droppedCount += 1;
                 });
