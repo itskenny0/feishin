@@ -35,6 +35,7 @@ export enum AppTheme {
     TOKYO_NIGHT = 'tokyoNight',
     VSCODE_DARK_PLUS = 'vscodeDarkPlus',
     VSCODE_LIGHT_PLUS = 'vscodeLightPlus',
+    ZENBURN = 'zenburn',
 }
 
 export type AppThemeConfiguration = Partial<BaseAppThemeConfiguration>;
