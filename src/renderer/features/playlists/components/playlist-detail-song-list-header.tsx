@@ -250,6 +250,11 @@ export const PlaylistDetailSongListHeader = ({
                                     size="sm"
                                     style={{
                                         maxWidth: '100%',
+                                        // Left-aligned even inside the centered
+                                        // mobile hero — a multi-line description
+                                        // is far easier to read ragged-right than
+                                        // centered.
+                                        textAlign: 'left',
                                         whiteSpace: 'pre-wrap',
                                         wordBreak: 'break-word',
                                     }}

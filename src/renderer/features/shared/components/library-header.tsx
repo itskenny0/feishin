@@ -431,56 +431,64 @@ export const LibraryHeaderMenu = ({
         : t('player.artistRadio', { defaultValue: 'Artist radio' });
     const onRadio = onAlbumRadio ?? onArtistRadio;
 
+    // Only emit the secondary cluster when at least one secondary affordance is
+    // wired. Playlists pass just play/shuffle (+ sometimes offline), so without
+    // this guard an empty .menu-secondary div would still claim a flex slot and
+    // skew the row's space-between distribution.
+    const hasSecondary = Boolean(onFavorite || onRadio || onRating || offlineSource || onMore);
+
     return (
         <div className={styles.libraryHeaderMenu}>
-            <div className={styles.menuSecondary}>
-                {onFavorite && (
-                    <ActionIcon
-                        aria-label={t('common.favorite', { defaultValue: 'Favorite' })}
-                        aria-pressed={Boolean(favorite)}
-                        disabled={isMutatingFavorite}
-                        icon="favorite"
-                        iconProps={{ fill: favorite ? 'primary' : undefined }}
-                        onClick={onFavorite}
-                        size="lg"
-                        tooltip={{
-                            label: t('common.favorite', { defaultValue: 'Favorite' }),
-                            openDelay: 400,
-                        }}
-                        variant="transparent"
-                    />
-                )}
-                {onRadio && (
-                    <ActionIcon
-                        aria-label={radioLabel}
-                        disabled={isPlayerFetching}
-                        icon="radio"
-                        onClick={onRadio}
-                        size="lg"
-                        tooltip={{ label: radioLabel, openDelay: 400 }}
-                        variant="transparent"
-                    />
-                )}
-                {onRating && (
-                    <Rating
-                        onChange={onRating}
-                        readOnly={isMutatingRating}
-                        size="lg"
-                        value={rating || 0}
-                    />
-                )}
-                {offlineSource && <LibraryHeaderBar.OfflineButton source={offlineSource} />}
-                {onMore && (
-                    <ActionIcon
-                        aria-label={t('common.menu')}
-                        icon="ellipsisHorizontal"
-                        onClick={onMore}
-                        size="lg"
-                        tooltip={{ label: t('common.menu'), openDelay: 400 }}
-                        variant="transparent"
-                    />
-                )}
-            </div>
+            {hasSecondary && (
+                <div className={styles.menuSecondary}>
+                    {onFavorite && (
+                        <ActionIcon
+                            aria-label={t('common.favorite', { defaultValue: 'Favorite' })}
+                            aria-pressed={Boolean(favorite)}
+                            disabled={isMutatingFavorite}
+                            icon="favorite"
+                            iconProps={{ fill: favorite ? 'primary' : undefined }}
+                            onClick={onFavorite}
+                            size="lg"
+                            tooltip={{
+                                label: t('common.favorite', { defaultValue: 'Favorite' }),
+                                openDelay: 400,
+                            }}
+                            variant="transparent"
+                        />
+                    )}
+                    {onRadio && (
+                        <ActionIcon
+                            aria-label={radioLabel}
+                            disabled={isPlayerFetching}
+                            icon="radio"
+                            onClick={onRadio}
+                            size="lg"
+                            tooltip={{ label: radioLabel, openDelay: 400 }}
+                            variant="transparent"
+                        />
+                    )}
+                    {onRating && (
+                        <Rating
+                            onChange={onRating}
+                            readOnly={isMutatingRating}
+                            size="lg"
+                            value={rating || 0}
+                        />
+                    )}
+                    {offlineSource && <LibraryHeaderBar.OfflineButton source={offlineSource} />}
+                    {onMore && (
+                        <ActionIcon
+                            aria-label={t('common.menu')}
+                            icon="ellipsisHorizontal"
+                            onClick={onMore}
+                            size="lg"
+                            tooltip={{ label: t('common.menu'), openDelay: 400 }}
+                            variant="transparent"
+                        />
+                    )}
+                </div>
+            )}
             <div className={styles.menuPrimary}>
                 {onShuffle && (
                     <ActionIcon
