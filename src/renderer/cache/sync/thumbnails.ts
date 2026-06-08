@@ -29,7 +29,7 @@ import {
 } from '/@/renderer/cache/images';
 import { useCacheStore } from '/@/renderer/cache/store';
 import { type EnabledVariant, enabledVariants } from '/@/renderer/cache/variant-config';
-import { downscaleToVariants } from '/@/renderer/cache/variant-downscale';
+import { downscaleVariantsPooled } from '/@/renderer/cache/variant-downscale-pool';
 import { DEFAULT_IMAGE_VARIANTS, useSettingsStore } from '/@/renderer/store';
 import { LibraryItem } from '/@/shared/types/domain-types';
 
@@ -108,22 +108,25 @@ export const collectPending = async (cfg: LocalCacheImageVariants): Promise<Pend
 
     const items: { itemId: string; itemType: LibraryItem; kind: EntityKind }[] = [];
 
-    const albums = await db.albums.toArray();
-    for (const row of albums) {
-        if (!row.Id) continue;
-        items.push({ itemId: row.Id, itemType: LibraryItem.ALBUM, kind: 'album' });
+    // Only the primary key (Id) is needed here, so read keys instead of whole
+    // rows — `toArray()` structured-clones every full Payload into memory (a
+    // multi-MB allocation + GC spike on a populated library) just to read .Id.
+    const albumIds = (await db.albums.toCollection().primaryKeys()) as string[];
+    for (const id of albumIds) {
+        if (!id) continue;
+        items.push({ itemId: id, itemType: LibraryItem.ALBUM, kind: 'album' });
     }
 
-    const artists = await db.artists.toArray();
-    for (const row of artists) {
-        if (!row.Id) continue;
-        items.push({ itemId: row.Id, itemType: LibraryItem.ALBUM_ARTIST, kind: 'artist' });
+    const artistIds = (await db.artists.toCollection().primaryKeys()) as string[];
+    for (const id of artistIds) {
+        if (!id) continue;
+        items.push({ itemId: id, itemType: LibraryItem.ALBUM_ARTIST, kind: 'artist' });
     }
 
-    const playlists = await db.playlists.toArray();
-    for (const row of playlists) {
-        if (!row.Id) continue;
-        items.push({ itemId: row.Id, itemType: LibraryItem.PLAYLIST, kind: 'playlist' });
+    const playlistIds = (await db.playlists.toCollection().primaryKeys()) as string[];
+    for (const id of playlistIds) {
+        if (!id) continue;
+        items.push({ itemId: id, itemType: LibraryItem.PLAYLIST, kind: 'playlist' });
     }
 
     const out: PendingThumbnail[] = [];
@@ -306,7 +309,7 @@ const fetchDownscaleUnit = async (
 
     let produced: Map<string, { blob: Blob; format: 'jpeg' | 'webp' }>;
     try {
-        produced = await downscaleToVariants(
+        produced = await downscaleVariantsPooled(
             srcBlob,
             variants.map((v) => ({ px: v.px, variant: v.variant })),
             { format: cfg.format, quality: cfg.quality },

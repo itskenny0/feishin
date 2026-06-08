@@ -153,50 +153,60 @@ export const downscaleToVariants = async (
     const srcHeight = bitmap.height;
 
     try {
-        for (const { px, variant } of variants) {
-            const { height, width } = targetDimensions(srcWidth, srcHeight, px);
+        // Each variant gets its OWN canvas and only READS the shared (immutable)
+        // bitmap via drawImage, so the encodes don't share a surface and can run
+        // concurrently. Producing them in parallel lets a single source's N
+        // re-encodes overlap (and, inside a worker, use the event loop fully)
+        // instead of serialising one webp encode after another.
+        const produced = await Promise.all(
+            variants.map(async ({ px, variant }) => {
+                const { height, width } = targetDimensions(srcWidth, srcHeight, px);
 
-            const canvas = createCanvas(width, height);
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext('2d');
-            if (!ctx) {
-                console.warn(`[image-variants] no 2d context for variant "${variant}", skipping`);
-                continue;
-            }
-            ctx.drawImage(
-                bitmap as unknown as CanvasImageSource,
-                0,
-                0,
-                srcWidth,
-                srcHeight,
-                0,
-                0,
-                width,
-                height,
-            );
-
-            // Variants are produced sequentially on purpose: a single shared
-            // bitmap is reused and concurrent encodes would race the surface.
-            let blob = await encodeCanvas(canvas, mimeFor(format), normalizedQuality);
-            let producedFormat: VariantFormat = format;
-
-            if (!blob && format === 'webp') {
-                console.warn(
-                    `[image-variants] webp unsupported, fell back to jpeg (variant "${variant}")`,
+                const canvas = createCanvas(width, height);
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) {
+                    console.warn(
+                        `[image-variants] no 2d context for variant "${variant}", skipping`,
+                    );
+                    return null;
+                }
+                ctx.drawImage(
+                    bitmap as unknown as CanvasImageSource,
+                    0,
+                    0,
+                    srcWidth,
+                    srcHeight,
+                    0,
+                    0,
+                    width,
+                    height,
                 );
-                blob = await encodeCanvas(canvas, mimeFor('jpeg'), normalizedQuality);
-                producedFormat = 'jpeg';
-            }
 
-            if (!blob) {
-                console.warn(
-                    `[image-variants] failed to encode variant "${variant}" (${width}x${height})`,
-                );
-                continue;
-            }
+                let blob = await encodeCanvas(canvas, mimeFor(format), normalizedQuality);
+                let producedFormat: VariantFormat = format;
 
-            out.set(variant, { blob, format: producedFormat });
+                if (!blob && format === 'webp') {
+                    console.warn(
+                        `[image-variants] webp unsupported, fell back to jpeg (variant "${variant}")`,
+                    );
+                    blob = await encodeCanvas(canvas, mimeFor('jpeg'), normalizedQuality);
+                    producedFormat = 'jpeg';
+                }
+
+                if (!blob) {
+                    console.warn(
+                        `[image-variants] failed to encode variant "${variant}" (${width}x${height})`,
+                    );
+                    return null;
+                }
+
+                return { blob, format: producedFormat, variant };
+            }),
+        );
+        for (const entry of produced) {
+            if (entry) out.set(entry.variant, { blob: entry.blob, format: entry.format });
         }
     } finally {
         // Free the decoded bitmap promptly (no-op if unsupported).

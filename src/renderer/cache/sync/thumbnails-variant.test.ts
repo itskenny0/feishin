@@ -18,10 +18,14 @@ const mocks = vi.hoisted(() => {
     const albums: { Id: string }[] = [];
     const artists: { Id: string }[] = [];
     const playlists: { Id: string }[] = [];
+    const keyColl = (rows: { Id: string }[]) => ({
+        toArray: vi.fn(async () => rows),
+        toCollection: () => ({ primaryKeys: async () => rows.map((r) => r.Id) }),
+    });
     const db = {
-        albums: { toArray: vi.fn(async () => albums) },
-        artists: { toArray: vi.fn(async () => artists) },
-        playlists: { toArray: vi.fn(async () => playlists) },
+        albums: keyColl(albums),
+        artists: keyColl(artists),
+        playlists: keyColl(playlists),
     };
     return { albums, artists, db, playlists };
 });
