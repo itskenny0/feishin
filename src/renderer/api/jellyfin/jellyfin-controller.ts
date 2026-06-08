@@ -1957,6 +1957,20 @@ export const JellyfinController: InternalControllerEndpoint = {
             return null;
         }
 
+        if (query.event === 'stop') {
+            jfApiClient(apiClientProps)
+                .scrobbleStopped({
+                    body: {
+                        ItemId: query.id,
+                        PositionTicks: position,
+                        ...queueFields,
+                    },
+                })
+                .catch(swallowScrobbleError);
+
+            return null;
+        }
+
         jfApiClient(apiClientProps)
             .scrobbleProgress({
                 body: {
