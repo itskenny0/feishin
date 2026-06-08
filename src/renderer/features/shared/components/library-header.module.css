@@ -58,8 +58,8 @@
 .library-header[data-layout='mobile'] {
     display: flex;
     flex-direction: column;
-    align-items: center;
     gap: var(--theme-spacing-md);
+    align-items: center;
     padding: calc(
             var(--theme-spacing-lg) +
                 max(env(safe-area-inset-top, 0px), var(--android-safe-top, 0px))
@@ -85,6 +85,7 @@
 
 .library-header[data-layout='mobile'] .title {
     justify-content: center;
+
     /* Fixed mobile scale (centered) — the desktop per-title clamp would read
        far too large stacked on a phone. */
     font-size: clamp(1.65rem, 7.5vw, 2.4rem);
@@ -169,8 +170,8 @@
     flex-direction: column;
     grid-area: info;
     gap: var(--theme-spacing-sm);
-    width: 100%;
     justify-content: flex-end;
+    width: 100%;
 }
 
 .item-type {
@@ -180,8 +181,8 @@
 .title {
     display: flex;
     flex-wrap: wrap;
-    align-items: center;
     gap: 0.35em;
+    align-items: center;
     width: 100%;
     margin: 0;
     font-size: clamp(1.75rem, 6dvw, 6rem);
@@ -208,13 +209,29 @@
 }
 
 .library-header[data-layout='mobile'] .library-header-menu {
+    flex-wrap: wrap;
+    row-gap: var(--theme-spacing-sm);
     justify-content: space-between;
     margin-top: var(--theme-spacing-xs);
 }
 
+/* On the smallest phones a heavy secondary cluster (favorite + radio + 5-star
+   rating + offline + more) plus shuffle + filled Play would overflow a single
+   nowrap row. Let the secondary cluster wrap/shrink so it can never clip; the
+   primary cluster (shuffle + Play) stays intact on the right. */
+.library-header[data-layout='mobile'] .menu-secondary {
+    flex-wrap: wrap;
+    row-gap: var(--theme-spacing-xs);
+    min-width: 0;
+}
+
+.library-header[data-layout='mobile'] .menu-primary {
+    flex-shrink: 0;
+}
+
 .library-header[data-layout='desktop'] .library-header-menu {
-    justify-content: flex-start;
     gap: var(--theme-spacing-md);
+    justify-content: flex-start;
     margin-top: var(--theme-spacing-sm);
 }
 

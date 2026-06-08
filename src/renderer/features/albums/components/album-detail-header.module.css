@@ -1,17 +1,20 @@
 .metadata-group {
     flex-wrap: wrap;
+
+    /* Centered by default to match the hero's CENTERED mobile mode. */
     justify-content: center;
     width: 100%;
 
-    /* On narrow viewports the long-list of metadata items (release
-       year, song count, duration, size, play count, etc.) wraps to the
-       next line instead of getting cut off by the page edge. */
+    /* On narrow viewports the long list of metadata items (release year, song
+       count, duration, size, play count, etc.) wraps instead of clipping. */
     overflow-wrap: anywhere;
+}
 
-    /* Match the 600px hero-layout threshold in library-header.module.css —
-       once the cover snaps to the left side, the metadata row should
-       left-align too instead of clinging to the centred phone layout. */
-    @container (min-width: 600px) {
-        justify-content: flex-start;
-    }
+/* Track the shared hero's layout MODE (data-layout on the LibraryHeader host),
+   not a standalone container width — the hero now switches mobile/desktop via
+   useIsMobileShell, so left-align the metadata only when the hero is editorial
+   (desktop). Fixes the metadata mis-aligning against a centered cover/title at
+   600–767px and whenever force-mobile is on. */
+:global([data-layout='desktop']) .metadata-group {
+    justify-content: flex-start;
 }
