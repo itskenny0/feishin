@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
     computeRemotePlay,
@@ -30,8 +30,26 @@ describe('computeRemotePlay', () => {
         });
     });
 
-    it('does not set startIndex when playSongId is the first item', () => {
-        expect(computeRemotePlay(songs('a', 'b'), Play.NOW, 'a')?.startIndex).toBeUndefined();
+    it('sets startIndex=0 explicitly when playSongId is the first item (idx>=0)', () => {
+        expect(computeRemotePlay(songs('a', 'b'), Play.NOW, 'a')?.startIndex).toBe(0);
+    });
+
+    it('carries the selected index for a mid-album selection', () => {
+        const push = computeRemotePlay(songs('t1', 't2', 't3', 't4', 't5'), Play.NOW, 't4');
+        expect(push?.itemIds).toEqual(['t1', 't2', 't3', 't4', 't5']);
+        expect(push?.startIndex).toBe(3);
+    });
+
+    it('warns and sends the full list (no startIndex) when playSongId is not in the list', () => {
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const push = computeRemotePlay(songs('a', 'b', 'c'), Play.NOW, 'missing');
+        expect(push?.itemIds).toEqual(['a', 'b', 'c']);
+        expect(push?.startIndex).toBeUndefined();
+        expect(warnSpy).toHaveBeenCalledWith(
+            expect.stringContaining('[peer-sync]'),
+            expect.objectContaining({ playSongId: 'missing' }),
+        );
+        warnSpy.mockRestore();
     });
 
     it('maps Play.NEXT and Play.LAST and ignores playSongId for them', () => {

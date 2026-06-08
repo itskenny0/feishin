@@ -18,7 +18,7 @@ import { usePlayButtonBehavior } from '/@/renderer/store';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { ExplicitIndicator } from '/@/shared/components/explicit-indicator/explicit-indicator';
 import { Text } from '/@/shared/components/text/text';
-import { QueueSong } from '/@/shared/types/domain-types';
+import { LibraryItem, QueueSong } from '/@/shared/types/domain-types';
 
 /**
  * Single-column track row used on phone viewports in place of the wide
@@ -63,6 +63,17 @@ export const MobileTrackRowColumn = (props: ItemTableListInnerColumn) => {
             return;
         }
         const index = props.enableHeader ? props.rowIndex - 1 : props.rowIndex;
+        // For song rows (album/playlist/songs detail lists) we want the SAME
+        // behaviour as a desktop double-click: play the full visible list
+        // starting at the tapped song (so both local playback and a remote
+        // target get the album/playlist queue + selected index, not just the
+        // single tapped track). The desktop `onDoubleClick` SONG/PLAYLIST_SONG
+        // branch already builds that windowed list from `internalState.getData()`
+        // and passes the clicked id as `playSongId`; forcing `singleSongOnly`
+        // here is exactly what broke that. Only fall back to single-song for
+        // non-song rows (where there is no list context to carry).
+        const isSongRow =
+            props.itemType === LibraryItem.SONG || props.itemType === LibraryItem.PLAYLIST_SONG;
         props.controls.onDoubleClick({
             event: null,
             index,
@@ -71,7 +82,7 @@ export const MobileTrackRowColumn = (props: ItemTableListInnerColumn) => {
             itemType: props.itemType,
             meta: {
                 playType: playButtonBehavior,
-                singleSongOnly: true,
+                ...(isSongRow ? {} : { singleSongOnly: true }),
             },
         });
     };

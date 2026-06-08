@@ -33,7 +33,22 @@ export const computeRemotePlay = (
     let startIndex: number | undefined;
     if (playCommand === 'PlayNow' && playSongId) {
         const idx = itemIds.indexOf(playSongId);
-        if (idx > 0) startIndex = idx;
+        if (idx >= 0) {
+            // idx >= 0 (not > 0): a deliberate index 0 is sent explicitly, and any
+            // off-by-one resolution path stays robust. The receiver still defaults
+            // a missing startIndex to 0, but making it explicit avoids relying on
+            // that fallback.
+            startIndex = idx;
+        } else {
+            // playSongId was supplied but isn't in the pushed list — don't silently
+            // default to playing from the top. Send the full list (receiver starts
+            // at 0) but surface the dropped selection so the mismatch is visible.
+            console.warn(
+                '[peer-sync] computeRemotePlay: playSongId not found in itemIds; ' +
+                    'sending full list, remote will start at index 0',
+                { itemCount: itemIds.length, playSongId },
+            );
+        }
     }
 
     return { itemIds, playCommand, startIndex };
