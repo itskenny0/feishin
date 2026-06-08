@@ -32,7 +32,7 @@ export const ActionBar = () => {
                     },
                 }}
             >
-                <Grid.Col span={7}>
+                <Grid.Col span={8}>
                     <TextInput
                         aria-label={t('common.search')}
                         leftSection={<Icon icon="search" />}
@@ -58,12 +58,12 @@ export const ActionBar = () => {
                         // mousetrap uses internally (mod = Ctrl on
                         // Windows/Linux, ⌘ on macOS).
                         rightSection={<Kbd size="xs">Mod+K</Kbd>}
-                        rightSectionWidth={70}
-                        size="md"
+                        rightSectionWidth={52}
+                        size="sm"
                     />
                 </Grid.Col>
-                <Grid.Col span={5}>
-                    <Group gap="sm" justify="flex-end" wrap="nowrap">
+                <Grid.Col span={4}>
+                    <Group gap="xs" grow wrap="nowrap">
                         <DropdownMenu position="bottom-start">
                             <DropdownMenu.Target>
                                 <Button

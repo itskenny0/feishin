@@ -12,12 +12,21 @@
 
 .action-bar-button {
     display: flex;
+    flex: 1 1 0;
     align-items: center;
     justify-content: center;
     width: 40px;
-    min-width: 40px;
+
+    /* Let the buttons shrink to share the controls column in a narrow
+       sidebar (260px min) instead of each claiming a rigid 40px and
+       overflowing the bar. Square aspect keeps them circular; max-width
+       caps them at the original 40px in a roomy sidebar. */
+    min-width: 0;
+    max-width: 40px;
     height: 40px;
+    aspect-ratio: 1 / 1;
     border-radius: 9999px;
+    -webkit-app-region: no-drag;
     transition:
         transform 150ms ease-out,
         background-color 150ms ease-out;
