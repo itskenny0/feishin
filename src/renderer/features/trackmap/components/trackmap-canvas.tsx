@@ -128,7 +128,26 @@ const buildEnergyGradient = (
  * Motion (all gated on `prefers-reduced-motion`):
  *  - Amplitude breath (period + amplitude configurable)
  */
-export const TrackmapCanvas = () => {
+/** Default slider geometry inset, in CSS px per side. Matches the Mantine
+ *  seek slider's `padding-inline` (2 * --slider-size, with --slider-size = 6
+ *  CSS px for the playerbar's size={6}) so the playhead lines up with the
+ *  slider bar's right edge on slider-backed mounts. */
+const DEFAULT_SLIDER_INSET_CSS_PX = 12;
+
+interface TrackmapCanvasProps {
+    /**
+     * CSS px to inset the playhead from each edge so it aligns with the
+     * seek slider rendered behind/over the canvas. Defaults to 12 (the
+     * Mantine slider's padding-inline). Pass 0 for standalone, edge-to-edge
+     * mounts with no slider (e.g. the mobile mini-playerbar) so the playhead
+     * tracks a progress strip that fills from the very left edge.
+     */
+    sliderInsetPx?: number;
+}
+
+export const TrackmapCanvas = ({
+    sliderInsetPx = DEFAULT_SLIDER_INSET_CSS_PX,
+}: TrackmapCanvasProps = {}) => {
     const currentSong = usePlayerSong();
     const playerStatus = usePlayerStatus();
     const style = useTrackmapStyle();
@@ -144,6 +163,7 @@ export const TrackmapCanvas = () => {
     const dataRef = useRef(data);
     const styleRef = useRef(style);
     const advancedRef = useRef<TrackmapAdvancedSettings>(advanced);
+    const sliderInsetPxRef = useRef<number>(sliderInsetPx);
     const songDurationMsRef = useRef<number>(0);
     const scheduleDrawRef = useRef<(() => void) | null>(null);
     /** Cursor X in canvas device pixels, or null when not hovering the
@@ -161,6 +181,7 @@ export const TrackmapCanvas = () => {
     dataRef.current = data;
     styleRef.current = style;
     advancedRef.current = advanced;
+    sliderInsetPxRef.current = sliderInsetPx;
     songDurationMsRef.current = currentSong?.duration ?? 0;
 
     // Resize observer + DPR-change watcher.
@@ -466,11 +487,12 @@ export const TrackmapCanvas = () => {
             // edge in slider-wrapper coordinates is
             //   12px + frac * (root_width - 12px)
             // where 12 = 2 * --slider-size and --slider-size = 6 CSS px for
-            // the playerbar's size={6}. Match that exactly. Keep
-            // SLIDER_SIZE_CSS_PX in sync with the size prop passed to
-            // CustomPlayerbarSlider in playerbar-slider.tsx.
-            const SLIDER_SIZE_CSS_PX = 6;
-            const insetPx = 2 * SLIDER_SIZE_CSS_PX * dpr;
+            // the playerbar's size={6}. Match that exactly via the
+            // sliderInsetPx prop (default 12). Standalone, edge-to-edge
+            // mounts with no slider behind them (e.g. the mobile
+            // mini-playerbar) pass 0 so the playhead tracks the progress
+            // strip from the very left edge instead of leading it by ~12px.
+            const insetPx = sliderInsetPxRef.current * dpr;
             const playheadX = insetPx + playheadFrac * Math.max(0, w - insetPx);
 
             // === Pass 1: background ribbon glow =============================

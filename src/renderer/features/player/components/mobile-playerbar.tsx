@@ -240,7 +240,11 @@ export const MobilePlayerbar = () => {
             {trackmapEnabled && isSongDefined && (
                 <div aria-hidden className={styles.trackmapBackdrop}>
                     <ComponentErrorBoundary>
-                        <TrackmapCanvas />
+                        {/* Mini-bar renders the trackmap standalone, edge-to-edge,
+                            with no seek slider behind it — so disable the slider
+                            geometry inset that would otherwise make the playhead
+                            lead the true progress by ~12px. */}
+                        <TrackmapCanvas sliderInsetPx={0} />
                     </ComponentErrorBoundary>
                 </div>
             )}
