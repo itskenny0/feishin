@@ -3643,8 +3643,16 @@ export const useMobilePlayerbarShowNavButtons = () =>
 export const useMobileShellForce = () =>
     useSettingsStore((state) => state.general.mobileShellForce, shallow);
 
-export const useDetailSectionCollapsed = (key: string): boolean =>
-    useSettingsStore((state) => Boolean(state.general.collapsedDetailSections?.[key]));
+// `defaultCollapsed` applies only when the user hasn't explicitly toggled this
+// section yet (no stored value). Callers pass `isMobileShell` so detail-header
+// sections default to COLLAPSED on the mobile shell (where vertical space is
+// precious) while staying expanded by default on desktop. Once the user toggles
+// a section, their explicit choice (true/false) wins on every platform.
+export const useDetailSectionCollapsed = (key: string, defaultCollapsed = false): boolean =>
+    useSettingsStore((state) => {
+        const stored = state.general.collapsedDetailSections?.[key];
+        return stored === undefined ? defaultCollapsed : Boolean(stored);
+    });
 
 export const useSetDetailSectionCollapsed = () => {
     const { setSettings } = useSettingsStoreActions();

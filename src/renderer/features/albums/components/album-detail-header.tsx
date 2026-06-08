@@ -18,6 +18,7 @@ import {
 import { useSetFavorite } from '/@/renderer/features/shared/hooks/use-set-favorite';
 import { useSetRating } from '/@/renderer/features/shared/hooks/use-set-rating';
 import { songsQueries } from '/@/renderer/features/songs/api/songs-api';
+import { useIsMobileShell } from '/@/renderer/hooks/use-breakpoint';
 import { AppRoute } from '/@/renderer/router/routes';
 import { useCurrentServer, useShowRatings } from '/@/renderer/store';
 import {
@@ -51,6 +52,10 @@ export const AlbumDetailHeader = forwardRef<HTMLDivElement>((_props, ref) => {
     const useFilesystemName = useShowFilesystemNameForAlbums();
     const queryClient = useQueryClient();
     const albumRadioCount = useArtistRadioCount();
+    const isMobile = useIsMobileShell();
+    // Show fewer artists before "Show more" on the mobile shell to keep the
+    // header compact (the desktop threshold is roomier).
+    const artistThreshold = isMobile ? 3 : ARTIST_COLLAPSE_THRESHOLD;
     const [artistsExpanded, setArtistsExpanded] = useState(false);
     const detailQuery = useAlbumDetailQuery({
         query: { id: albumId },
@@ -280,12 +285,11 @@ export const AlbumDetailHeader = forwardRef<HTMLDivElement>((_props, ref) => {
     const album = detailQuery?.data;
     const albumArtists = album?.albumArtists ?? [];
     const albumArtistName = album?.albumArtistName ?? '';
-    const shouldCollapseArtists =
-        !artistsExpanded && albumArtists.length > ARTIST_COLLAPSE_THRESHOLD;
+    const shouldCollapseArtists = !artistsExpanded && albumArtists.length > artistThreshold;
     const visibleArtists = shouldCollapseArtists
-        ? albumArtists.slice(0, ARTIST_COLLAPSE_THRESHOLD)
+        ? albumArtists.slice(0, artistThreshold)
         : albumArtists;
-    const hiddenArtistCount = albumArtists.length - ARTIST_COLLAPSE_THRESHOLD;
+    const hiddenArtistCount = albumArtists.length - artistThreshold;
 
     const filesystemTitle = useFilesystemName ? filesystemNameFromPath(album?.path) : null;
     const displayTitle = filesystemTitle || album?.name || '';
@@ -344,7 +348,7 @@ export const AlbumDetailHeader = forwardRef<HTMLDivElement>((_props, ref) => {
                         )}
                         {!shouldCollapseArtists &&
                             artistsExpanded &&
-                            albumArtists.length > ARTIST_COLLAPSE_THRESHOLD && (
+                            albumArtists.length > artistThreshold && (
                                 <Text
                                     component="span"
                                     fw={500}

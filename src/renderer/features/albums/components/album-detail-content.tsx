@@ -38,6 +38,7 @@ import {
     SocialLinksDisplay,
 } from '/@/renderer/features/shared/components/social-links-display';
 import { FILTER_KEYS, searchLibraryItems } from '/@/renderer/features/shared/utils';
+import { useIsMobileShell } from '/@/renderer/hooks/use-breakpoint';
 import { useHotkeys } from '/@/renderer/hooks/use-hotkeys';
 import { AppRoute } from '/@/renderer/router/routes';
 import { useCurrentServer, usePlayerSong } from '/@/renderer/store';
@@ -290,7 +291,9 @@ interface AlbumMetadataGenresProps {
 const AlbumMetadataGenres = ({ genres }: AlbumMetadataGenresProps) => {
     const { t } = useTranslation();
     const genresDisplay = useGenresDisplay();
-    const collapsed = useDetailSectionCollapsed('album.genres');
+    const isMobile = useIsMobileShell();
+    // Genres default collapsed on the mobile shell to keep the header compact.
+    const collapsed = useDetailSectionCollapsed('album.genres', isMobile);
     const setCollapsed = useSetDetailSectionCollapsed();
 
     if (!genresDisplay) return null;

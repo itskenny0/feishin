@@ -74,7 +74,9 @@ export const SocialLinksDisplay = ({
 }: SocialLinksDisplayProps) => {
     const { t } = useTranslation();
     const isMobile = useIsMobileShell();
-    const collapsed = useDetailSectionCollapsed(collapseKey);
+    // Default external links collapsed on the mobile shell to keep the detail
+    // header compact; the user's explicit toggle still persists + wins.
+    const collapsed = useDetailSectionCollapsed(collapseKey, isMobile);
     const setCollapsed = useSetDetailSectionCollapsed();
 
     if (links.length === 0) return null;
