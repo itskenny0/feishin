@@ -7,8 +7,6 @@ import {
     RiAlbumLine,
     RiHome6Fill,
     RiHome6Line,
-    RiMenuFill,
-    RiMenuLine,
     RiSearchFill,
     RiSearchLine,
     RiSettings3Fill,
@@ -23,10 +21,6 @@ import { useHaptic } from '/@/renderer/hooks/use-haptic';
 import { AppRoute } from '/@/renderer/router/routes';
 
 interface BottomTabBarProps {
-    /** Whether the side drawer (the More tab's destination) is currently open. */
-    drawerOpen: boolean;
-    /** Open the drawer when the More tab is tapped. */
-    onMoreTab: () => void;
     /**
      * Called when the user taps a tab whose route is already active —
      * the host scrolls the main content to top (Spotify pattern).
@@ -47,7 +41,7 @@ interface Tab {
     onClick: () => void;
 }
 
-type TabKey = 'home' | 'library' | 'more' | 'search' | 'settings';
+type TabKey = 'home' | 'library' | 'search' | 'settings';
 
 /**
  * Persistent bottom tab bar shown on the mobile shell (<768px).
@@ -60,7 +54,7 @@ type TabKey = 'home' | 'library' | 'more' | 'search' | 'settings';
  * than a re-navigation, so the user doesn't lose scroll position when they
  * accidentally tap the active tab.
  */
-export const BottomTabBar = ({ drawerOpen, onMoreTab, onScrollToTop }: BottomTabBarProps) => {
+export const BottomTabBar = ({ onScrollToTop }: BottomTabBarProps) => {
     const { t } = useTranslation();
     const location = useLocation();
     const navigate = useNavigate();
@@ -130,18 +124,8 @@ export const BottomTabBar = ({ drawerOpen, onMoreTab, onScrollToTop }: BottomTab
                 label: t('page.sidebar.settings', { defaultValue: 'Settings' }),
                 onClick: () => navigate(AppRoute.SETTINGS),
             },
-            {
-                // "More" stays active while the drawer is open so the user has a
-                // visual anchor when they're inside it.
-                icon: (active) =>
-                    active ? <RiMenuFill size="1.5rem" /> : <RiMenuLine size="1.5rem" />,
-                isActive: () => drawerOpen,
-                key: 'more',
-                label: t('common.menu', { defaultValue: 'More' }),
-                onClick: onMoreTab,
-            },
         ],
-        [drawerOpen, libraryPopoverOpen, navigate, onMoreTab, openLibraryPopover, t],
+        [libraryPopoverOpen, navigate, openLibraryPopover, t],
     );
 
     /*
@@ -160,10 +144,9 @@ export const BottomTabBar = ({ drawerOpen, onMoreTab, onScrollToTop }: BottomTab
      * the first route-matched tab in declaration order takes the dot.
      */
     const activeDotKey: null | TabKey = useMemo(() => {
-        if (drawerOpen) return 'more';
         if (libraryPopoverOpen) return 'library';
         return tabs.find((tab) => tab.isActive(location.pathname))?.key ?? null;
-    }, [drawerOpen, libraryPopoverOpen, location.pathname, tabs]);
+    }, [libraryPopoverOpen, location.pathname, tabs]);
 
     return (
         <>
@@ -194,7 +177,7 @@ export const BottomTabBar = ({ drawerOpen, onMoreTab, onScrollToTop }: BottomTab
                                 // either opens or closes the overlay.
                                 // Other tabs only buzz on the move that
                                 // changes routes.
-                                const isToggleTab = tab.key === 'more' || tab.key === 'library';
+                                const isToggleTab = tab.key === 'library';
                                 if (!active || isToggleTab) {
                                     haptic('selection');
                                 }

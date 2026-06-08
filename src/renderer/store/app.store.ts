@@ -52,6 +52,7 @@ export interface AppState {
     genreSelectMode: 'multi' | 'single';
     globalExpanded: GlobalExpandedState | null;
     isReorderingQueue: boolean;
+    mobileDrawer: CommandPaletteProps;
     pageSidebar: Record<string, boolean>;
     platform: Platform;
     privateMode: boolean;
@@ -219,6 +220,27 @@ export const useAppStore = createWithEqualityFn<AppSlice>()(
                 genreSelectMode: 'multi',
                 globalExpanded: null,
                 isReorderingQueue: false,
+                // The mobile side ("More") drawer. Lifted to the store so the
+                // Settings view can surface it now that it's off the bottom tab
+                // bar. Not persisted (see partialize) so it never launches open.
+                mobileDrawer: {
+                    close: () => {
+                        set((state) => {
+                            state.mobileDrawer.opened = false;
+                        });
+                    },
+                    open: () => {
+                        set((state) => {
+                            state.mobileDrawer.opened = true;
+                        });
+                    },
+                    opened: false,
+                    toggle: () => {
+                        set((state) => {
+                            state.mobileDrawer.opened = !state.mobileDrawer.opened;
+                        });
+                    },
+                },
                 pageSidebar: {
                     album: true,
                     song: true,
@@ -260,7 +282,7 @@ export const useAppStore = createWithEqualityFn<AppSlice>()(
             },
             name: 'store_app',
             partialize: (state) => {
-                const { globalExpanded: _, ...rest } = state;
+                const { globalExpanded: _, mobileDrawer: _mobileDrawer, ...rest } = state;
                 return rest;
             },
             version: 5,
@@ -279,6 +301,8 @@ export const useSetTitlebar = () => useAppStore((state) => state.actions.setTitl
 export const useTitlebarStore = () => useAppStore((state) => state.titlebar, shallow);
 
 export const useCommandPalette = () => useAppStore((state) => state.commandPalette, shallow);
+
+export const useMobileDrawer = () => useAppStore((state) => state.mobileDrawer, shallow);
 
 export const useCommandPaletteState = () =>
     useAppStore(

@@ -20,12 +20,12 @@ import { BottomTabBar } from '/@/renderer/layouts/mobile-layout/bottom-tab-bar';
 import { WindowBar } from '/@/renderer/layouts/window-bar';
 import {
     useFullScreenPlayerOverlayState,
+    useMobileDrawer,
     usePlayerSong,
     useWindowBarStyle,
 } from '/@/renderer/store';
 import { Drawer } from '/@/shared/components/drawer/drawer';
 import { Icon } from '/@/shared/components/icon/icon';
-import { useDisclosure } from '/@/shared/hooks/use-disclosure';
 import { Platform } from '/@/shared/types/types';
 
 // Both overlays are only ever mounted on demand (fullscreen player / visualizer
@@ -48,7 +48,10 @@ interface MobileLayoutProps {
 
 export const MobileLayout = ({ shell }: MobileLayoutProps) => {
     const { t } = useTranslation();
-    const [sidebarOpened, { close: closeSidebar, open: openSidebar }] = useDisclosure(false);
+    // The side ("More") drawer state lives in the app store so the Settings
+    // view can open it now that it's no longer a bottom-tab-bar tab. Edge-swipe
+    // + the in-drawer nav-close still drive it here.
+    const { close: closeSidebar, open: openSidebar, opened: sidebarOpened } = useMobileDrawer();
     const {
         expanded: isFullScreenPlayerExpanded,
         visualizerExpanded: isFullScreenVisualizerExpanded,
@@ -153,8 +156,6 @@ export const MobileLayout = ({ shell }: MobileLayoutProps) => {
                 </main>
                 {hasSong && <PlayerBar />}
                 <BottomTabBar
-                    drawerOpen={sidebarOpened}
-                    onMoreTab={sidebarOpened ? closeSidebar : openSidebar}
                     onScrollToTop={() => {
                         // Soft-scroll the main content + any inner
                         // scrollables back to the top so re-tapping the

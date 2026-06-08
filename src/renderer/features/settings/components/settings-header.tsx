@@ -5,7 +5,9 @@ import { useSettingSearchContext } from '/@/renderer/features/settings/context/s
 import { LibraryHeaderBar } from '/@/renderer/features/shared/components/library-header-bar';
 import { SearchInput } from '/@/renderer/features/shared/components/search-input';
 import { useIsMobileShell, useIsTouch } from '/@/renderer/hooks/use-breakpoint';
+import { useMobileDrawer } from '/@/renderer/store';
 import { useSettingsStoreActions } from '/@/renderer/store/settings.store';
+import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Button } from '/@/shared/components/button/button';
 import { Flex } from '/@/shared/components/flex/flex';
 import { Group } from '/@/shared/components/group/group';
@@ -32,6 +34,7 @@ export const SettingsHeader = ({ setSearch }: SettingsHeaderProps) => {
      */
     const isTouch = useIsTouch();
     const isMobileShell = useIsMobileShell();
+    const { open: openDrawer } = useMobileDrawer();
 
     const handleResetToDefault = () => {
         reset();
@@ -63,7 +66,7 @@ export const SettingsHeader = ({ setSearch }: SettingsHeaderProps) => {
      */
     if (isMobileShell) {
         return (
-            <Flex>
+            <Flex align="center" justify="space-between" w="100%">
                 <LibraryHeaderBar>
                     <Group wrap="nowrap">
                         <Icon icon="settings" size="2xl" />
@@ -72,6 +75,19 @@ export const SettingsHeader = ({ setSearch }: SettingsHeaderProps) => {
                         </LibraryHeaderBar.Title>
                     </Group>
                 </LibraryHeaderBar>
+                {/* The "More" drawer moved off the bottom tab bar; surface it
+                    here so it's still reachable (servers, about, etc). */}
+                <ActionIcon
+                    aria-label={t('common.menu', { defaultValue: 'Menu' })}
+                    icon="menu"
+                    iconProps={{ size: 'lg' }}
+                    onClick={openDrawer}
+                    tooltip={{
+                        label: t('common.menu', { defaultValue: 'Menu' }),
+                        openDelay: 400,
+                    }}
+                    variant="subtle"
+                />
             </Flex>
         );
     }
