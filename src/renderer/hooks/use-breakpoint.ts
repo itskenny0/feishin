@@ -105,7 +105,17 @@ export const MOBILE_SHELL_QUERY =
  * the desktop shell.
  */
 export const useIsMobileShell = () => {
-    const matches = useMediaQuery(MOBILE_SHELL_QUERY);
+    // getInitialValueInEffect:false — read window.matchMedia synchronously on the
+    // FIRST render instead of returning false and flipping in an effect. This
+    // hook gates the whole layout subtree (DefaultLayout vs MobileLayout); the
+    // default deferred behaviour mounts the DESKTOP shell for one frame on every
+    // phone cold-load, then unmounts/remounts the entire tree — losing route
+    // mount state + scroll position and double-running every route effect. The
+    // synchronous read is free in an Electron/SPA renderer (no SSR) and lines up
+    // with the CSS, which already evaluates the media query synchronously.
+    const matches = useMediaQuery(MOBILE_SHELL_QUERY, undefined, {
+        getInitialValueInEffect: false,
+    });
     const force = useSettingsStore((state) => state.general.mobileShellForce);
     return matches || force;
 };
