@@ -10,10 +10,13 @@ import { nanoid } from 'nanoid/non-secure';
 
 import type { LibraryCacheDb } from './db';
 import type {
+    CachedAlbum,
+    CachedArtist,
     CachedFavorite,
     CachedFavoriteKind,
     CachedPlaylist,
     CachedPlaylistSong,
+    CachedSong,
     MutationOp,
     MutationRow,
 } from './types';
@@ -175,13 +178,72 @@ const cachedKindFromLibraryItem = (
 // "row existed" and "row didn't exist" cases cleanly.
 // ---------------------------------------------------------------------------
 
+// Prior cached entity row, captured so a favorite/rating rollback restores the
+// patched Payload exactly. We only ever patch rows that already exist, so each
+// snapshot carries a concrete prior row to put back.
+type EntityPayloadSnapshot =
+    | { row: CachedAlbum; table: 'albums' }
+    | { row: CachedArtist; table: 'artists' }
+    | { row: CachedSong; table: 'songs' };
+
 type FavoriteRowSnapshot =
     | { key: [string, string]; kind: 'delete' }
     | { kind: 'restore'; row: CachedFavorite };
 
 interface FavoriteSnapshot {
+    // Entity rows (db.albums/artists/songs) whose Payload we patched so the
+    // change shows on cache-served list rows. Optional: absent on no-op paths.
+    entities?: EntityPayloadSnapshot[];
     rows: FavoriteRowSnapshot[];
 }
+
+// Patch the cached entity row's Payload (db.albums/artists/songs) so a favorite
+// or rating change reflects on cache-served LIST rows — those render straight
+// from db.<entity>.Payload, while applyFavorite/setRating otherwise only touch
+// the db.favorites table (used for filters/sorts, not row glyphs). Records the
+// prior row in `out` for rollback. Only patches rows already present in cache;
+// a missing entity will be materialised correctly by the next sweep/refetch, so
+// inventing a partial row here would be wrong.
+const patchCachedEntityPayload = async (
+    db: LibraryCacheDb,
+    kind: CachedFavoriteKind,
+    id: string,
+    patch: { userFavorite?: boolean; userRating?: null | number },
+    out: EntityPayloadSnapshot[],
+): Promise<void> => {
+    const now = Date.now();
+    if (kind === 'Album') {
+        const cached = await db.albums.get(id);
+        if (cached) {
+            out.push({ row: cached, table: 'albums' });
+            await db.albums.put({
+                ...cached,
+                __cachedAt: now,
+                Payload: { ...cached.Payload, ...patch },
+            });
+        }
+    } else if (kind === 'Artist' || kind === 'AlbumArtist') {
+        const cached = await db.artists.get(id);
+        if (cached) {
+            out.push({ row: cached, table: 'artists' });
+            await db.artists.put({
+                ...cached,
+                __cachedAt: now,
+                Payload: { ...cached.Payload, ...patch },
+            });
+        }
+    } else if (kind === 'Song') {
+        const cached = await db.songs.get(id);
+        if (cached) {
+            out.push({ row: cached, table: 'songs' });
+            await db.songs.put({
+                ...cached,
+                __cachedAt: now,
+                Payload: { ...cached.Payload, ...patch },
+            });
+        }
+    }
+};
 
 interface OpHandler<TArgs, TSnapshot> {
     apply: (db: LibraryCacheDb, args: TArgs) => Promise<TSnapshot>;
@@ -225,6 +287,7 @@ const applyFavorite = async (
     }
     const ids = favoriteIds(args);
     const now = Date.now();
+    const entities: EntityPayloadSnapshot[] = [];
 
     for (const id of ids) {
         const key: [string, string] = [id, kind];
@@ -244,9 +307,11 @@ const applyFavorite = async (
                 Rating: undefined,
             });
         }
+        // Also patch the entity Payload so cache-served list rows reflect it.
+        await patchCachedEntityPayload(db, kind, id, { userFavorite: nextValue }, entities);
     }
 
-    return { rows };
+    return { entities, rows };
 };
 
 const rollbackFavorite = async (db: LibraryCacheDb, snapshot: FavoriteSnapshot): Promise<void> => {
@@ -255,6 +320,17 @@ const rollbackFavorite = async (db: LibraryCacheDb, snapshot: FavoriteSnapshot):
             await db.favorites.put(entry.row);
         } else {
             await db.favorites.delete(entry.key);
+        }
+    }
+    // Restore any entity Payloads we patched (favorite/rating), so a failed
+    // remote leaves the cached list rows exactly as they were.
+    for (const entity of snapshot.entities ?? []) {
+        if (entity.table === 'albums') {
+            await db.albums.put(entity.row);
+        } else if (entity.table === 'artists') {
+            await db.artists.put(entity.row);
+        } else {
+            await db.songs.put(entity.row);
         }
     }
 };
@@ -416,6 +492,8 @@ const setRatingHandler: OpHandler<SetRatingArgs, FavoriteSnapshot> = {
         }
         const ids = Array.isArray(args.query.id) ? args.query.id : [args.query.id];
         const now = Date.now();
+        const entities: EntityPayloadSnapshot[] = [];
+        const nextRating = args.query.rating > 0 ? args.query.rating : undefined;
 
         for (const id of ids) {
             const key: [string, string] = [id, kind];
@@ -425,7 +503,7 @@ const setRatingHandler: OpHandler<SetRatingArgs, FavoriteSnapshot> = {
                 await db.favorites.put({
                     ...prev,
                     __cachedAt: now,
-                    Rating: args.query.rating > 0 ? args.query.rating : undefined,
+                    Rating: nextRating,
                 });
             } else {
                 rows.push({ key, kind: 'delete' });
@@ -436,12 +514,21 @@ const setRatingHandler: OpHandler<SetRatingArgs, FavoriteSnapshot> = {
                     ItemType: kind,
                     LastPlayedDate: undefined,
                     PlayCount: 0,
-                    Rating: args.query.rating > 0 ? args.query.rating : undefined,
+                    Rating: nextRating,
                 });
             }
+            // Also patch the entity Payload so cache-served list rows reflect
+            // the new rating (domain userRating is `null` when cleared).
+            await patchCachedEntityPayload(
+                db,
+                kind,
+                id,
+                { userRating: nextRating ?? null },
+                entities,
+            );
         }
 
-        return { rows };
+        return { entities, rows };
     },
     invalidate: (args) => {
         // SetRatingArgs has the same shape as FavoriteArgs for the scopes we care about.
@@ -694,6 +781,10 @@ const handlers: Record<MutationOp, OpHandler<any, any>> = {
     reorderPlaylist: reorderPlaylistHandler,
     setRating: setRatingHandler,
 };
+
+// Exposed for unit tests that exercise the optimistic apply/rollback in
+// isolation (without the queue worker, which would fire real remote calls).
+export const __testHandlers = handlers;
 
 // ---------------------------------------------------------------------------
 // Conflict resolution — refetch + patch the affected cache entries.
