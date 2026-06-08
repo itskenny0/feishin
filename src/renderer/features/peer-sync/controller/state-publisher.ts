@@ -125,7 +125,12 @@ const buildCurrentState = () => {
         : -1;
 
     return buildState({
-        dur: (song?.duration ?? 0) * 1000,
+        // `song.duration` is ALREADY milliseconds for every server (the
+        // jellyfin/navidrome/subsonic normalizers all yield ms), so it must NOT
+        // be scaled again — it's the same unit as `pos` (positionSec * 1000) and
+        // the wire `dur` contract (PeerState.dur is ms). Scaling it produced a
+        // ms×1000 duration the controller rendered as ~2:04:06:24.
+        dur: song?.duration ?? 0,
         mut: state.player.muted,
         paused: state.player.status !== PlayerStatus.PLAYING,
         pos: Math.max(0, Math.round(positionSec * 1000)),

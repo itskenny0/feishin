@@ -106,6 +106,10 @@ describe('state-publisher', () => {
         expect(f.t).toBe('state');
         expect(f.paused).toBe(false);
         expect(f.track?.id).toBe('song-1');
+        // `dur` is the track's ms duration verbatim — NOT scaled again (the
+        // store already holds ms). Same unit as `pos`. Regression guard for the
+        // ms×1000 duration that rendered as ~2:04:06:24 on the controller.
+        expect(f.dur).toBe(200);
         // A second start does not re-subscribe / double-publish.
         startStatePublisher();
         expect(publishedFrames.length).toBe(1);

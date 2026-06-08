@@ -124,6 +124,11 @@ export const MobileFullscreenPlayerAlbumArt = () => {
     const remoteSong = useActiveNowPlayingItem();
     const remoteImageUrl = useItemImageUrl({
         id: remoteSong?.imageId || undefined,
+        // The MQTT-lane mirror builds a stub Song that carries `imageUrl` (from
+        // the wire `track.art`) but no `imageId`, so resolving by id alone
+        // returns nothing → placeholder disc. Forward imageUrl too (same pattern
+        // MobilePlayerContainer uses); the resolver short-circuits on it.
+        imageUrl: remoteSong?.imageUrl,
         itemType: LibraryItem.SONG,
         size: mainImageDimensions.idealSize,
         type: 'fullScreenPlayer',

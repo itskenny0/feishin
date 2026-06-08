@@ -92,18 +92,22 @@ class SessionsSink {
             positionMs: mirror.mirrored.playState?.positionMs,
             volume: mirror.mirrored.playState?.volume,
         });
-        // Finding 2 + B4: decide a SINGLE queue owner per lane. When the live
-        // lane for this target is MQTT, the MQTT state-mirror is the sole driver
-        // of play-state AND queue/queueIndex (peerStateToMirrored builds a stub
-        // queue from qIds). A Jellyfin poll that was already in flight (or the
-        // 10s fallback heartbeat) must therefore NOT write queue/queueIndex
-        // either — otherwise the queue rows flicker between rich Jellyfin
-        // metadata and bare MQTT stubs every ~10s, and the two lanes can disagree
-        // on queueIndex. So while MQTT owns the lane we strip playState AND
-        // queue/queueIndex and skip the hydrate entirely.
+        // Finding 2 + B4: decide a SINGLE owner per lane. When the live lane for
+        // this target is MQTT, the MQTT state-mirror is the sole driver of
+        // play-state, queue/queueIndex AND the now-playing item (peerStateToMirrored
+        // builds a stub Song + stub queue from the wire frame). A Jellyfin poll
+        // that was already in flight (or the 10s fallback heartbeat) must therefore
+        // NOT write any of these — otherwise the now-playing item (and queue rows)
+        // flicker between the rich Jellyfin Song and the bare MQTT stub every ~10s,
+        // taking the mirror's duration / cover with them, and the two lanes can
+        // disagree on queueIndex. So while MQTT owns the lane we strip playState,
+        // queue/queueIndex, nowPlayingItem AND capabilities, and skip the hydrate
+        // entirely.
         const mqttOwnsLane = pickTransportByJellyfinDeviceId(state.targetDeviceId) === 'mqtt';
         if (mqttOwnsLane) {
             const {
+                capabilities: _droppedCapabilities,
+                nowPlayingItem: _droppedNowPlayingItem,
                 playState: _droppedPlayState,
                 queue: _droppedQueue,
                 queueIndex: _droppedQueueIndex,
