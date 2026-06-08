@@ -984,7 +984,10 @@ export const DEFAULT_IMAGE_VARIANTS: z.infer<typeof LocalCacheImageVariantsSchem
     mode: 'downscale',
     quality: 82,
     variants: {
-        fullScreen: { enabled: true, px: 0 },
+        // Pre-caching full-resolution originals is OFF by default: a bulk sweep
+        // of multi-megabyte originals takes hours. Originals load lazily on
+        // demand; users who want them pre-cached can enable this.
+        fullScreen: { enabled: false, px: 0 },
         header: { enabled: true, px: 300 },
         itemCard: { enabled: true, px: 300 },
         sidebar: { enabled: false, px: 400 },
@@ -3417,10 +3420,27 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
+                if (version <= 56) {
+                    // The first artwork-variant build shipped with fullScreen
+                    // (full-resolution original) pre-caching ENABLED by default,
+                    // which made the thumbnail sweep download multi-megabyte
+                    // originals per item (hours-long syncs). Flip it off for
+                    // anyone still on that exact default; users who want it can
+                    // re-enable it, and a custom px (an intentional change) is
+                    // left untouched.
+                    const iv = state.localCache?.imageVariants;
+                    if (
+                        iv?.variants?.fullScreen?.enabled === true &&
+                        iv.variants.fullScreen.px === 0
+                    ) {
+                        iv.variants.fullScreen.enabled = false;
+                    }
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 56,
+            version: 57,
         },
     ),
 );

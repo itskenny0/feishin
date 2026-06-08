@@ -94,10 +94,16 @@ export const collectPending = async (cfg: LocalCacheImageVariants): Promise<Pend
     const enabled = enabledVariants(cfg);
     if (enabled.length === 0) return [];
 
-    // The single source fetch in downscale mode must be at least as large as
-    // the largest enabled variant so no variant has to upscale. `enabled` is
-    // sorted ascending with `px === 0` (original) sorting last, so the final
-    // entry is the largest. `0` (original) is the largest of all.
+    // The sweep honors whatever variants are enabled. Pre-caching the
+    // full-resolution original (`px === 0`, the fullScreen variant) is OPT-IN
+    // and OFF by default — originals are multi-megabyte and a full sweep of
+    // them takes hours. When fullScreen is disabled (the default) originals
+    // load lazily on demand via `resolveThumbnail`; when a user enables it the
+    // sweep pre-caches them too.
+    //
+    // Downscale source fetch must be at least the largest enabled variant so
+    // nothing upscales. `enabled` is sorted ascending with original (px 0)
+    // sorting last, so the final entry is the largest (original, if enabled).
     const largestPx = enabled[enabled.length - 1].px;
 
     const items: { itemId: string; itemType: LibraryItem; kind: EntityKind }[] = [];
@@ -129,8 +135,8 @@ export const collectPending = async (cfg: LocalCacheImageVariants): Promise<Pend
             }
         }
     } else {
-        // downscale: one unit per item; the worker fetches once and produces
-        // every enabled variant locally.
+        // downscale: one unit per item; the worker fetches once at the largest
+        // enabled px and produces every enabled variant locally.
         for (const item of items) {
             out.push({ ...item, downscaleVariants: enabled, px: largestPx });
         }

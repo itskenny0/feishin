@@ -21,11 +21,21 @@ import { DEFAULT_IMAGE_VARIANTS } from '/@/renderer/store/settings.store';
 const clone = (): LocalCacheImageVariants =>
     JSON.parse(JSON.stringify(DEFAULT_IMAGE_VARIANTS)) as LocalCacheImageVariants;
 
+// The shipping default has fullScreen (original) disabled. These helper tests
+// exercise the "original sorts last / is included when enabled" behavior, so
+// they use a config with fullScreen explicitly enabled, independent of the
+// app default.
+const withFullScreen = (): LocalCacheImageVariants => {
+    const cfg = clone();
+    cfg.variants.fullScreen.enabled = true;
+    return cfg;
+};
+
 describe('enabledVariants', () => {
     it('returns only the enabled buckets with their resolved px', () => {
-        const result = enabledVariants(DEFAULT_IMAGE_VARIANTS);
-        // Defaults: table(80), itemCard(300), header(300), fullScreen(0=orig)
-        // enabled; sidebar(400) disabled.
+        const result = enabledVariants(withFullScreen());
+        // table(80), itemCard(300), header(300), fullScreen(0=orig) enabled;
+        // sidebar(400) disabled.
         const names = result.map((v) => v.variant);
         expect(names).toContain('table');
         expect(names).toContain('itemCard');
@@ -42,7 +52,7 @@ describe('enabledVariants', () => {
     });
 
     it('orders results by effective px ascending (original/0 last), name tiebreak', () => {
-        const result = enabledVariants(DEFAULT_IMAGE_VARIANTS);
+        const result = enabledVariants(withFullScreen());
         // table(80) < header(300)=itemCard(300) < fullScreen(0 -> Infinity).
         expect(result[0].variant).toBe('table');
         expect(result.at(-1)?.variant).toBe('fullScreen');

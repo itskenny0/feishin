@@ -1,12 +1,13 @@
 // Unit tests for the variant-aware thumbnail sweep (schema v11+).
 //
-// The sweep fans out one work unit per (item × enabled variant) in DOWNLOAD
-// mode (each variant is a separate server request at that variant's px) and
-// ONE work unit per item in DOWNSCALE mode (the worker fetches the cover once
-// at the largest enabled px and produces every variant locally). Empty
-// `variants` (none enabled) short-circuits to an empty queue so the sweep is
-// skipped. The progress denominator counts the fanned-out work units, not the
-// raw item count.
+// The sweep HONORS whatever variants are enabled. In DOWNLOAD mode it fans out
+// one work unit per (item × enabled variant); in DOWNSCALE mode it emits ONE
+// unit per item (the worker fetches the cover once at the largest enabled px
+// and produces every enabled variant locally). Pre-caching the full-resolution
+// original (the fullScreen variant, px:0) is OPT-IN and OFF by default — when
+// disabled, originals are simply not swept (they load lazily on demand); when a
+// user enables it, the sweep pre-caches them too. Empty `variants` (none
+// enabled) short-circuits to an empty queue.
 
 import type { LocalCacheImageVariants } from '/@/renderer/store/settings.store';
 
@@ -31,7 +32,10 @@ vi.mock('/@/renderer/cache/db', () => ({
 
 import { collectPending } from '/@/renderer/cache/sync/thumbnails';
 
-const DEFAULTS: LocalCacheImageVariants = {
+// Base config with the original (fullScreen) variant ENABLED — exercises the
+// opt-in path. The shipping default has fullScreen DISABLED (see the
+// "default (fullScreen off)" cases below).
+const WITH_ORIGINAL: LocalCacheImageVariants = {
     format: 'webp',
     mode: 'downscale',
     quality: 82,
@@ -44,10 +48,19 @@ const DEFAULTS: LocalCacheImageVariants = {
     },
 };
 
-const withMode = (mode: 'download' | 'downscale'): LocalCacheImageVariants => ({
-    ...DEFAULTS,
-    mode,
-});
+// The shipping default: fullScreen (original) OFF.
+const DEFAULT_OFF: LocalCacheImageVariants = {
+    ...WITH_ORIGINAL,
+    variants: {
+        ...WITH_ORIGINAL.variants,
+        fullScreen: { enabled: false, px: 0 },
+    },
+};
+
+const withMode = (
+    cfg: LocalCacheImageVariants,
+    mode: 'download' | 'downscale',
+): LocalCacheImageVariants => ({ ...cfg, mode });
 
 beforeEach(() => {
     mocks.albums.length = 0;
@@ -60,43 +73,70 @@ afterEach(() => {
 });
 
 describe('collectPending — variant fan-out', () => {
-    it('download mode: one work unit per (item × enabled variant)', async () => {
+    it('opt-in: download mode sweeps the original when fullScreen is enabled', async () => {
         mocks.albums.push({ Id: 'a1' });
 
-        const pending = await collectPending(withMode('download'));
+        const pending = await collectPending(withMode(WITH_ORIGINAL, 'download'));
 
-        // 4 enabled variants (table, itemCard, header, fullScreen — sidebar
-        // disabled) => 4 work units for the single album.
+        // 4 enabled variants (table, itemCard, header, fullScreen — sidebar off).
         expect(pending).toHaveLength(4);
-        const variants = pending.map((p) => p.variant).sort();
-        expect(variants).toEqual(['fullScreen', 'header', 'itemCard', 'table']);
-        // Every unit carries the per-variant target px.
+        expect(pending.map((p) => p.variant).sort()).toEqual([
+            'fullScreen',
+            'header',
+            'itemCard',
+            'table',
+        ]);
         const byVariant = Object.fromEntries(pending.map((p) => [p.variant, p.px]));
         expect(byVariant.table).toBe(80);
         expect(byVariant.itemCard).toBe(300);
         expect(byVariant.header).toBe(300);
         expect(byVariant.fullScreen).toBe(0);
-        // All point at the same item.
-        expect(pending.every((p) => p.itemId === 'a1')).toBe(true);
     });
 
-    it('downscale mode: ONE work unit per item (worker produces all variants)', async () => {
+    it('opt-in: downscale mode fetches once at the original px when fullScreen is enabled', async () => {
         mocks.albums.push({ Id: 'a1' }, { Id: 'a2' });
+
+        const pending = await collectPending(withMode(WITH_ORIGINAL, 'downscale'));
+
+        expect(pending).toHaveLength(2);
+        for (const unit of pending) {
+            // Original (0) sorts largest, so the single fetch is at the original.
+            expect(unit.px).toBe(0);
+            expect((unit.downscaleVariants ?? []).map((v) => v.variant).sort()).toEqual([
+                'fullScreen',
+                'header',
+                'itemCard',
+                'table',
+            ]);
+        }
+    });
+
+    it('default (fullScreen off): download mode excludes the original', async () => {
+        mocks.albums.push({ Id: 'a1' });
+
+        const pending = await collectPending(withMode(DEFAULT_OFF, 'download'));
+
+        // Only the small surface variants (table, itemCard, header).
+        expect(pending).toHaveLength(3);
+        expect(pending.map((p) => p.variant).sort()).toEqual(['header', 'itemCard', 'table']);
+        expect(pending.some((p) => p.variant === 'fullScreen')).toBe(false);
+        expect(pending.some((p) => p.px === 0)).toBe(false);
+    });
+
+    it('default (fullScreen off): downscale mode fetches at the largest small px (300, not original)', async () => {
+        mocks.albums.push({ Id: 'a1' });
         mocks.artists.push({ Id: 'r1' });
 
-        const pending = await collectPending(withMode('downscale'));
+        const pending = await collectPending(withMode(DEFAULT_OFF, 'downscale'));
 
-        // 3 items, one unit each regardless of the 4 enabled variants.
-        expect(pending).toHaveLength(3);
-        const ids = pending.map((p) => p.itemId).sort();
-        expect(ids).toEqual(['a1', 'a2', 'r1']);
-        // The single unit fetches at the largest enabled px (fullScreen=0 =>
-        // original, the largest), and carries the full enabled-variant list so
-        // the worker can downscale to each.
+        expect(pending).toHaveLength(2);
         for (const unit of pending) {
-            expect(unit.px).toBe(0);
-            const dsVariants = (unit.downscaleVariants ?? []).map((v) => v.variant).sort();
-            expect(dsVariants).toEqual(['fullScreen', 'header', 'itemCard', 'table']);
+            expect(unit.px).toBe(300);
+            expect((unit.downscaleVariants ?? []).map((v) => v.variant).sort()).toEqual([
+                'header',
+                'itemCard',
+                'table',
+            ]);
         }
     });
 
@@ -104,7 +144,7 @@ describe('collectPending — variant fan-out', () => {
         mocks.albums.push({ Id: 'a1' });
 
         const none: LocalCacheImageVariants = {
-            ...DEFAULTS,
+            ...WITH_ORIGINAL,
             variants: {
                 fullScreen: { enabled: false, px: 0 },
                 header: { enabled: false, px: 300 },
@@ -122,13 +162,8 @@ describe('collectPending — variant fan-out', () => {
         mocks.artists.push({ Id: 'r1' });
         mocks.playlists.push({ Id: 'p1' });
 
-        const pending = await collectPending(withMode('download'));
-
-        // 3 items × 4 enabled variants = 12 work units.
-        expect(pending).toHaveLength(12);
-        // Progress total is just the work-unit count — verifies the fan-out is
-        // what drives the denominator.
-        const total = pending.length;
-        expect(total).toBe(12);
+        // Default (fullScreen off) => 3 items × 3 small variants = 9 work units.
+        const pending = await collectPending(withMode(DEFAULT_OFF, 'download'));
+        expect(pending).toHaveLength(9);
     });
 });

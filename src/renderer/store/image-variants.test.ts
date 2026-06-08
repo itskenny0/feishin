@@ -11,7 +11,7 @@ describe('localCache.imageVariants settings slice', () => {
             mode: 'downscale',
             quality: 82,
             variants: {
-                fullScreen: { enabled: true, px: 0 },
+                fullScreen: { enabled: false, px: 0 },
                 header: { enabled: true, px: 300 },
                 itemCard: { enabled: true, px: 300 },
                 sidebar: { enabled: false, px: 400 },
