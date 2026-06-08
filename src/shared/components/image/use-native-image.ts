@@ -23,7 +23,11 @@ type ThumbnailUrlAcquirer = (
     variant: string,
     request: ImageRequest | string,
 ) => Promise<string>;
-type ThumbnailUrlReleaser = (itemId: string) => void;
+// The releaser MUST be keyed by the SAME (itemId, variant) the URL was
+// acquired with — two surfaces of one item at different variants each own
+// their own shared URL + refcount. Releasing by bare itemId would
+// decrement (and prematurely revoke) the wrong variant's entry.
+type ThumbnailUrlReleaser = (itemId: string, variant: string) => void;
 
 // Surface bucket used when a request doesn't declare one (legacy callers,
 // the `imageUrl` branch, or anything that hasn't threaded a `type` through).
@@ -64,8 +68,8 @@ const tryAcquireSharedThumbnail = async (
     }
 };
 
-const releaseSharedThumbnailUrl = (itemId: string): void => {
-    releaseThumbnailUrlRef?.(itemId);
+const releaseSharedThumbnailUrl = (itemId: string, variant: string): void => {
+    releaseThumbnailUrlRef?.(itemId, variant);
 };
 
 const tryResolveThumbnail = async (
@@ -107,20 +111,31 @@ export function useNativeImage({
     const objectUrlRef = useRef<null | string>(null);
     // When the current objectUrl came from the shared refcounted cache we
     // release it (decrement refcount) rather than revoking it directly —
-    // another mounted consumer of the same item may still be displaying
-    // the same blob: URL. Holds the itemId whose refcount we own, or null
-    // when objectUrlRef is a self-minted (fetch->blob) URL we must revoke.
-    const sharedUrlItemIdRef = useRef<null | string>(null);
+    // another mounted consumer of the same (item, variant) may still be
+    // displaying the same blob: URL. Holds the (itemId, variant) whose
+    // refcount we own, or null when objectUrlRef is a self-minted
+    // (fetch->blob) URL we must revoke. The variant MUST match what we
+    // acquired with so we release the correct shared entry.
+    const sharedUrlRef = useRef<null | { itemId: string; variant: string }>(null);
     const onFetchErrorRef = useRef(onFetchError);
     const [state, setState] = useState<NativeImageState>({ status: 'idle' });
 
+    // STABLE signature of the request. Deliberately omits volatile /
+    // identity-only fields: when `home` renders from a snapshot and then
+    // react-query swaps in a fresh data array, the `request` OBJECT is a
+    // new identity but the URL / cache key / variant are unchanged. Keying
+    // the resolve effect off this string (instead of the object) means an
+    // identity-only change does NOT tear down an already-correct image and
+    // re-resolve it from skeleton ("instant then slow redraw").
     const requestSignature = useMemo(() => {
         if (!request) {
             return null;
         }
 
         return JSON.stringify({
+            cacheItemId: request.cacheItemId,
             cacheKey: request.cacheKey,
+            cacheSize: request.cacheSize,
             credentials: request.credentials,
             headers: request.headers,
             url: request.url,
@@ -128,9 +143,21 @@ export function useNativeImage({
         });
     }, [request]);
 
+    // Latest `request` object, read inside the resolve effect WITHOUT making
+    // the effect depend on its identity. The effect is gated on
+    // `requestSignature` (stable) instead, so a new object carrying the same
+    // signature reuses the in-flight / loaded image rather than restarting.
+    const requestRef = useRef(request);
+    requestRef.current = request;
+
     onFetchErrorRef.current = onFetchError;
 
     useEffect(() => {
+        // Read the latest request via the ref so this effect's behaviour is
+        // gated purely on the STABLE `requestSignature` (dep array below),
+        // not on the request object's identity.
+        const request = requestRef.current;
+
         const abortCurrentRequest = () => {
             abortControllerRef.current?.abort();
             abortControllerRef.current = null;
@@ -141,12 +168,15 @@ export function useNativeImage({
                 return;
             }
 
-            if (sharedUrlItemIdRef.current) {
+            if (sharedUrlRef.current) {
                 // Shared refcounted URL: release our reference instead of
                 // revoking — the cache revokes once the last consumer lets
-                // go.
-                releaseSharedThumbnailUrl(sharedUrlItemIdRef.current);
-                sharedUrlItemIdRef.current = null;
+                // go. Release by the SAME (item, variant) we acquired with.
+                releaseSharedThumbnailUrl(
+                    sharedUrlRef.current.itemId,
+                    sharedUrlRef.current.variant,
+                );
+                sharedUrlRef.current = null;
             } else {
                 URL.revokeObjectURL(objectUrlRef.current);
             }
@@ -226,8 +256,18 @@ export function useNativeImage({
                         : tryResolveThumbnail(cacheItemId, cacheVariant, request);
                     if (useShared) {
                         void lookupPromise.then((late) => {
-                            if (timedOut && late && late.startsWith('blob:')) {
-                                releaseSharedThumbnailUrl(cacheItemId);
+                            // If the 5s cap won the race but we ALSO already
+                            // adopted the late result below, don't release it
+                            // (that would revoke a URL we're displaying). Only
+                            // release when it arrived after the timeout AND we
+                            // never adopted it.
+                            if (
+                                timedOut &&
+                                late &&
+                                late.startsWith('blob:') &&
+                                objectUrlRef.current !== late
+                            ) {
+                                releaseSharedThumbnailUrl(cacheItemId, cacheVariant);
                             }
                         });
                     }
@@ -239,7 +279,7 @@ export function useNativeImage({
                         // bailing so we don't leak the object URL.
                         if (cached && cached.startsWith('blob:')) {
                             if (useShared) {
-                                releaseSharedThumbnailUrl(cacheItemId);
+                                releaseSharedThumbnailUrl(cacheItemId, cacheVariant);
                             } else {
                                 URL.revokeObjectURL(cached);
                             }
@@ -248,9 +288,22 @@ export function useNativeImage({
                     }
                     if (cached) {
                         objectUrlRef.current = cached;
-                        sharedUrlItemIdRef.current = useShared ? cacheItemId : null;
+                        sharedUrlRef.current = useShared
+                            ? { itemId: cacheItemId, variant: cacheVariant }
+                            : null;
                         loadedRequestSignatureRef.current = requestSignature;
                         setState({ displaySrc: cached, status: 'loaded' });
+                        return;
+                    }
+                    // Cache lookup lost the 5s race (timedOut) but the
+                    // resolver may still be in flight (e.g. awaiting a shared
+                    // sweep task). Do NOT drop an already-correct displayed
+                    // image back to skeleton: if we already have a loaded
+                    // object URL keep showing it and let the late `.then`
+                    // above reconcile. Only fall through to a direct network
+                    // fetch when nothing is currently displayed.
+                    if (timedOut && objectUrlRef.current) {
+                        setState({ displaySrc: objectUrlRef.current, status: 'loaded' });
                         return;
                     }
                 }
@@ -279,7 +332,7 @@ export function useNativeImage({
 
                 const objectUrl = URL.createObjectURL(blob);
                 objectUrlRef.current = objectUrl;
-                sharedUrlItemIdRef.current = null;
+                sharedUrlRef.current = null;
                 loadedRequestSignatureRef.current = requestSignature;
                 setState({ displaySrc: objectUrl, status: 'loaded' });
             } catch {
@@ -304,16 +357,23 @@ export function useNativeImage({
                 abortControllerRef.current = null;
             }
         };
-    }, [enabled, fetchPriority, request, requestSignature]);
+        // Gated on the STABLE `requestSignature`, NOT on the `request`
+        // object identity. A new request object carrying the same signature
+        // (the home snapshot → react-query swap) is a no-op for this effect,
+        // so an already-loaded image is never torn down and re-resolved.
+    }, [enabled, fetchPriority, requestSignature]);
 
     useEffect(() => {
         return () => {
             abortControllerRef.current?.abort();
 
             if (objectUrlRef.current) {
-                if (sharedUrlItemIdRef.current) {
-                    releaseSharedThumbnailUrl(sharedUrlItemIdRef.current);
-                    sharedUrlItemIdRef.current = null;
+                if (sharedUrlRef.current) {
+                    releaseSharedThumbnailUrl(
+                        sharedUrlRef.current.itemId,
+                        sharedUrlRef.current.variant,
+                    );
+                    sharedUrlRef.current = null;
                 } else {
                     URL.revokeObjectURL(objectUrlRef.current);
                 }

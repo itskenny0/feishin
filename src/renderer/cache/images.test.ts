@@ -144,4 +144,56 @@ describe('acquireThumbnailUrl / releaseThumbnailUrl', () => {
         expect(() => releaseThumbnailUrl('never-acquired')).not.toThrow();
         expect(revoked).toHaveLength(0);
     });
+
+    it('resolves each variant to its OWN blob for concurrent acquires of the same item at different variants', async () => {
+        // Two distinct blobs, one per (item, variant) row. The Dexie mock
+        // keys on the compound `[itemId, variant]` get argument, so each
+        // variant resolves its own row — exactly the offline/cached case
+        // where a grid card (itemCard) and the now-playing cover
+        // (fullScreen) race for the same item.
+        const cardBlob = new Blob(['card-variant-bytes']);
+        const fullBlob = new Blob(['fullscreen-variant-bytes']);
+        mocks.thumbnailsTable.get.mockImplementation(async (key: [string, string]) => {
+            const [, variant] = key;
+            const blob = variant === 'itemCard' ? cardBlob : fullBlob;
+            return {
+                Blob: blob,
+                ItemId: 'abc',
+                LastUsed: Date.now(),
+                Size: 1024,
+                Variant: variant,
+            };
+        });
+
+        // Map each minted blob: URL back to the blob it was created from so
+        // we can assert no cross-variant handoff occurred.
+        const blobForUrl = new Map<string, Blob>();
+        globalThis.URL.createObjectURL = vi.fn((blob: Blob) => {
+            const u = `blob:mock/${++urlCounter}`;
+            blobForUrl.set(u, blob);
+            return u;
+        });
+
+        const [card, full] = await Promise.all([
+            acquireThumbnailUrl('abc', 'itemCard', RAW_URL),
+            acquireThumbnailUrl('abc', 'fullScreen', RAW_URL),
+        ]);
+
+        expect(card).toMatch(/^blob:mock\//);
+        expect(full).toMatch(/^blob:mock\//);
+        // Different variants → different shared URLs (no collapse).
+        expect(card).not.toBe(full);
+        // Two object URLs minted: one per variant.
+        expect(globalThis.URL.createObjectURL).toHaveBeenCalledTimes(2);
+        // Each URL is backed by its OWN variant's blob — the core bug was
+        // the second caller getting the first variant's blob (or undefined).
+        expect(blobForUrl.get(card)).toBe(cardBlob);
+        expect(blobForUrl.get(full)).toBe(fullBlob);
+
+        // Releasing one variant must NOT revoke the other variant's URL.
+        releaseThumbnailUrl('abc', 'itemCard');
+        expect(revoked).toEqual([card]);
+        releaseThumbnailUrl('abc', 'fullScreen');
+        expect(revoked).toEqual([card, full]);
+    });
 });

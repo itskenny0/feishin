@@ -139,14 +139,23 @@ const variantKey = (itemId: string, variant: string): string => `${itemId}::${va
 // Previously every mounted consumer called `URL.createObjectURL` for the
 // SAME cached Blob, so scrolling a grid churned thousands of short-lived
 // blob: URLs (each holding a live Blob reference until revoked). This map
-// keeps ONE object URL per item alive for the lifetime of its mounted
-// consumers and revokes it only once the last consumer releases it.
+// keeps ONE object URL per (item, variant) alive for the lifetime of its
+// mounted consumers and revokes it only once the last consumer releases it.
 //
-// Keyed by `itemId` to match the single-blob-per-item cache model. A
-// consumer calls `acquireThumbnailUrl` (which resolves the blob, mints the
-// URL once, and bumps the refcount) and `releaseThumbnailUrl` on unmount /
-// input change. Legacy callers that still use `resolveThumbnail` directly
-// keep their own per-call URL + revoke lifecycle and are unaffected.
+// Keyed by the SAME `[itemId, variant]` compound key as the blob handoff
+// (`variantKey`) — NOT by bare `itemId`. The variant cache (schema v11)
+// stores a distinct pre-sized blob per surface bucket, so two surfaces of
+// the same item rendering at different variants (e.g. an `itemCard` grid +
+// the `fullScreen` now-playing cover) must each get their OWN object URL.
+// Keying by bare itemId collapsed the second caller onto the first
+// variant's task and handed back the wrong-variant URL (or, when the
+// handoff slot for its variant was empty, `undefined` → the raw network
+// URL, the >10s offline/mobile load). A consumer calls
+// `acquireThumbnailUrl` (which resolves the blob, mints the URL once, and
+// bumps the refcount) and `releaseThumbnailUrl(itemId, variant)` on
+// unmount / input change. Legacy callers that still use `resolveThumbnail`
+// directly keep their own per-call URL + revoke lifecycle and are
+// unaffected.
 interface SharedObjectUrl {
     refCount: number;
     url: string;
@@ -154,10 +163,12 @@ interface SharedObjectUrl {
 const sharedObjectUrls = new Map<string, SharedObjectUrl>();
 
 // In-flight dedup for `acquireThumbnailUrl`. Concurrent acquires for the
-// same item (the common case while a grid mounts a row of cards) share a
-// single resolve + a single `URL.createObjectURL`, then each bumps the
-// shared refcount once their promise settles. Without this, racing
-// acquires could each mint their own URL and leak all but one.
+// same (item, variant) (the common case while a grid mounts a row of
+// cards) share a single resolve + a single `URL.createObjectURL`, then
+// each bumps the shared refcount once their promise settles. Without this,
+// racing acquires could each mint their own URL and leak all but one.
+// Keyed by `variantKey` so a different variant of the same item resolves
+// on its own task and gets its own blob.
 interface AcquireResult {
     // The shared blob: URL when the resolve produced a cached blob, or
     // undefined on miss/failure (caller falls back to the raw URL).
@@ -166,8 +177,9 @@ interface AcquireResult {
 const acquireInFlight = new Map<string, Promise<AcquireResult>>();
 
 // Transient hand-off slot: `resolveThumbnail` run with `_wantBlob` stashes
-// the resolved Blob here keyed by itemId so the (deduped) acquire task can
-// mint exactly one shared object URL. Drained immediately by the task.
+// the resolved Blob here keyed by `[itemId, variant]` so the (deduped)
+// acquire task can mint exactly one shared object URL. Drained immediately
+// by the task.
 const lastResolvedBlob = new Map<string, Blob>();
 const takeResolvedBlob = (key: string): Blob | undefined => {
     const blob = lastResolvedBlob.get(key);
@@ -176,13 +188,18 @@ const takeResolvedBlob = (key: string): Blob | undefined => {
 };
 
 /**
- * Acquire a stable, shared `blob:` URL for an item's cached thumbnail,
- * resolving the blob through the cache pipeline if needed. The returned
- * URL is reference-counted: the caller MUST pair every successful acquire
- * (one that returns a `blob:` URL) with a `releaseThumbnailUrl(itemId)`
- * once it is done displaying it. On a cache miss / failure the resolver's
- * fallback (the raw URL) is returned and is NOT refcounted — releasing it
- * is a no-op.
+ * Acquire a stable, shared `blob:` URL for an item's cached thumbnail at a
+ * specific surface variant, resolving the blob through the cache pipeline
+ * if needed. The returned URL is reference-counted: the caller MUST pair
+ * every successful acquire (one that returns a `blob:` URL) with a
+ * `releaseThumbnailUrl(itemId, variant)` carrying the SAME variant once it
+ * is done displaying it. On a cache miss / failure the resolver's fallback
+ * (the raw URL) is returned and is NOT refcounted — releasing it is a
+ * no-op.
+ *
+ * All dedup / shared-URL bookkeeping is keyed by `[itemId, variant]`, so
+ * two surfaces of the same item rendering at DIFFERENT variants each get
+ * their own variant's blob (no cross-variant handoff).
  */
 export const acquireThumbnailUrl = async (
     itemId: string,
@@ -192,15 +209,16 @@ export const acquireThumbnailUrl = async (
 ): Promise<string> => {
     const { url } = normaliseRequest(request);
     const resolvedVariant = normaliseVariant(variant);
-    // The hand-off slot is per (item, variant) so two surfaces of the same
-    // item don't clobber each other's resolved blob. The shared-URL +
-    // acquire-dedup maps stay keyed by `itemId` because `releaseThumbnailUrl`
-    // only receives the itemId — one live shared URL per item is the model.
-    const handoffKey = variantKey(itemId, resolvedVariant);
+    // Every map below — blob handoff, shared object URL, acquire dedup — is
+    // keyed by this compound `[itemId, variant]` key so concurrent acquires
+    // for the same item at different variants never collapse onto each
+    // other's task or blob.
+    const key = variantKey(itemId, resolvedVariant);
 
-    // Fast path: a live shared URL already exists for this item. Bump the
-    // refcount and hand the same string back — no new blob: URL minted.
-    const existing = sharedObjectUrls.get(itemId);
+    // Fast path: a live shared URL already exists for this (item, variant).
+    // Bump the refcount and hand the same string back — no new blob: URL
+    // minted.
+    const existing = sharedObjectUrls.get(key);
     if (existing) {
         existing.refCount += 1;
         return existing.url;
@@ -209,7 +227,7 @@ export const acquireThumbnailUrl = async (
     // Dedup concurrent acquires so the blob is resolved and the object URL
     // minted exactly once, regardless of how many cards mount at the same
     // tick. Each awaiter bumps the refcount below.
-    let task = acquireInFlight.get(itemId);
+    let task = acquireInFlight.get(key);
     if (!task) {
         task = (async (): Promise<AcquireResult> => {
             try {
@@ -219,7 +237,7 @@ export const acquireThumbnailUrl = async (
                     // URL; we mint exactly one shared URL here instead.
                     _wantBlob: true,
                 });
-                const blob = takeResolvedBlob(handoffKey);
+                const blob = takeResolvedBlob(key);
                 if (!blob) {
                     return { objectUrl: undefined };
                 }
@@ -227,13 +245,13 @@ export const acquireThumbnailUrl = async (
                 // (including this one) bumps it to its final value after
                 // the task settles.
                 const objectUrl = URL.createObjectURL(blob);
-                sharedObjectUrls.set(itemId, { refCount: 0, url: objectUrl });
+                sharedObjectUrls.set(key, { refCount: 0, url: objectUrl });
                 return { objectUrl };
             } finally {
-                acquireInFlight.delete(itemId);
+                acquireInFlight.delete(key);
             }
         })();
-        acquireInFlight.set(itemId, task);
+        acquireInFlight.set(key, task);
     }
 
     const result = await task;
@@ -245,7 +263,7 @@ export const acquireThumbnailUrl = async (
     // between the task settling and this awaiter resuming (rare: every
     // earlier awaiter mounted and unmounted before we got here). If so the
     // URL is dead; fall back to the raw URL and let a fresh acquire run.
-    const entry = sharedObjectUrls.get(itemId);
+    const entry = sharedObjectUrls.get(key);
     if (!entry || entry.url !== result.objectUrl) {
         return url;
     }
@@ -255,16 +273,18 @@ export const acquireThumbnailUrl = async (
 
 /**
  * Release a previously-acquired shared thumbnail URL. Decrements the
- * refcount and revokes the underlying object URL once the last consumer
- * lets go. Safe to call with a non-shared (raw fallback) itemId — it is a
- * no-op when the item isn't tracked.
+ * refcount for the given `[itemId, variant]` and revokes the underlying
+ * object URL once the last consumer lets go. Callers MUST pass the SAME
+ * variant they acquired with. Safe to call with a non-shared (raw
+ * fallback) item/variant — it is a no-op when the pair isn't tracked.
  */
-export const releaseThumbnailUrl = (itemId: string): void => {
-    const entry = sharedObjectUrls.get(itemId);
+export const releaseThumbnailUrl = (itemId: string, variant?: number | string): void => {
+    const key = variantKey(itemId, normaliseVariant(variant));
+    const entry = sharedObjectUrls.get(key);
     if (!entry) return;
     entry.refCount -= 1;
     if (entry.refCount <= 0) {
-        sharedObjectUrls.delete(itemId);
+        sharedObjectUrls.delete(key);
         try {
             URL.revokeObjectURL(entry.url);
         } catch {
