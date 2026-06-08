@@ -1,0 +1,557 @@
+/*
+ * Unified, responsive search RESULTS page. Spotify-flavoured layout that reads
+ * well on a phone and on a wide desktop simultaneously, built on the app's
+ * --theme-* design tokens. No JS branching for layout — every breakpoint is a
+ * pure-CSS reflow:
+ *
+ *   phone   → single column; Top result full-width above the song list;
+ *             album/artist grids 2-up.
+ *   desktop → "spotlight" two-column grid (Top result beside the song list);
+ *             album/artist grids fill multiple auto-fill columns.
+ */
+
+.root {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.page {
+    display: flex;
+    flex-direction: column;
+    gap: var(--theme-spacing-2xl);
+    width: 100%;
+    max-width: 1600px;
+    margin: 0 auto;
+    padding: var(--theme-spacing-xl) var(--theme-spacing-lg)
+        calc(var(--theme-spacing-4xl) + env(safe-area-inset-bottom, 0px));
+}
+
+/* ------------------------------------------------------------------ */
+/* Section header                                                      */
+/* ------------------------------------------------------------------ */
+
+.section-header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: var(--theme-spacing-md);
+    margin-bottom: var(--theme-spacing-md);
+}
+
+.section-title {
+    margin: 0;
+    font-family: var(--theme-content-font-family);
+    font-size: clamp(1.15rem, 1rem + 0.8vw, 1.6rem);
+    font-weight: 700;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    color: var(--theme-colors-foreground-default);
+}
+
+.see-all {
+    display: inline-flex;
+    flex-shrink: 0;
+    gap: 2px;
+    align-items: center;
+    padding: 6px 4px 6px 10px;
+    font-size: var(--theme-font-size-sm);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--theme-colors-foreground-muted);
+    text-decoration: none;
+    border-radius: var(--theme-radius-pill);
+    transition:
+        color 0.15s ease,
+        transform 0.15s ease;
+}
+
+.see-all:hover {
+    color: var(--theme-colors-foreground-default);
+}
+
+.see-all-icon {
+    transition: transform 0.15s ease;
+}
+
+.see-all:hover .see-all-icon {
+    transform: translateX(2px);
+}
+
+/* ------------------------------------------------------------------ */
+/* Spotlight (Top result + Songs)                                      */
+/* ------------------------------------------------------------------ */
+
+.spotlight {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--theme-spacing-2xl);
+}
+
+.top-section,
+.songs-section {
+    min-width: 0;
+}
+
+@media (min-width: 900px) {
+    .spotlight {
+        /* Top result takes a fixed-ish column, songs take the rest. */
+        grid-template-columns: minmax(320px, 0.9fr) 1.4fr;
+        gap: var(--theme-spacing-2xl);
+        align-items: start;
+    }
+}
+
+/* ------------------------------------------------------------------ */
+/* Top result card                                                     */
+/* ------------------------------------------------------------------ */
+
+.top-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: var(--theme-spacing-md);
+    width: 100%;
+    padding: var(--theme-spacing-xl);
+    overflow: hidden;
+    color: inherit;
+    text-align: left;
+    text-decoration: none;
+    cursor: pointer;
+    background:
+        radial-gradient(
+            120% 120% at 0% 0%,
+            alpha(var(--theme-colors-primary), 0.16) 0%,
+            transparent 55%
+        ),
+        var(--theme-colors-surface);
+    border: 1px solid alpha(var(--theme-colors-foreground-muted), 0.1);
+    border-radius: var(--theme-radius-lg);
+    transition:
+        background 0.2s ease,
+        border-color 0.2s ease,
+        transform 0.2s ease;
+}
+
+.top-card-button {
+    appearance: none;
+    font: inherit;
+}
+
+.top-card:hover {
+    background:
+        radial-gradient(
+            120% 120% at 0% 0%,
+            alpha(var(--theme-colors-primary), 0.26) 0%,
+            transparent 55%
+        ),
+        alpha(var(--theme-colors-foreground-muted), 0.06);
+    border-color: alpha(var(--theme-colors-foreground-muted), 0.18);
+}
+
+.top-image-wrap {
+    width: 92px;
+    height: 92px;
+}
+
+.top-image {
+    width: 92px;
+    height: 92px;
+    object-fit: var(--theme-image-fit);
+    background: alpha(var(--theme-colors-foreground-muted), 0.18);
+    border-radius: var(--theme-radius-md);
+    box-shadow: 0 8px 24px rgb(0 0 0 / 35%);
+}
+
+.top-image-round {
+    border-radius: 50%;
+}
+
+.top-body {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.top-name {
+    overflow: hidden;
+    font-size: clamp(1.4rem, 1.1rem + 1.4vw, 2rem);
+    font-weight: 800;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    color: var(--theme-colors-foreground-default);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.top-subtitle {
+    font-size: var(--theme-font-size-sm);
+}
+
+/* Floating circular play / chevron affordance, bottom-right Spotify-style. */
+.top-play {
+    position: absolute;
+    right: var(--theme-spacing-xl);
+    bottom: var(--theme-spacing-xl);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    color: var(--theme-colors-primary-contrast, #000);
+    cursor: pointer;
+    background: var(--theme-colors-primary);
+    border: none;
+    border-radius: 50%;
+    box-shadow: 0 8px 20px rgb(0 0 0 / 45%);
+    opacity: 0;
+    transform: translateY(8px) scale(0.9);
+    transition:
+        opacity 0.18s ease,
+        transform 0.18s ease;
+}
+
+.top-card:hover .top-play,
+.top-card:focus-visible .top-play {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+}
+
+.top-play:hover {
+    transform: scale(1.06);
+}
+
+@media (hover: none) {
+    /* No hover on touch — keep the affordance visible. */
+    .top-play {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+/* ------------------------------------------------------------------ */
+/* Song list                                                           */
+/* ------------------------------------------------------------------ */
+
+.song-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.song-row {
+    display: flex;
+    gap: var(--theme-spacing-md);
+    align-items: center;
+    width: 100%;
+    padding: var(--theme-spacing-xs) var(--theme-spacing-sm);
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+    background: transparent;
+    border: none;
+    border-radius: var(--theme-radius-sm);
+    transition: background-color 0.12s ease;
+}
+
+@media (hover: hover) {
+    .song-row:hover {
+        background: alpha(var(--theme-colors-foreground-muted), 0.08);
+    }
+}
+
+.song-row:active {
+    background: alpha(var(--theme-colors-foreground-muted), 0.14);
+}
+
+.song-thumb-wrap {
+    position: relative;
+    flex-shrink: 0;
+    width: 40px;
+    height: 40px;
+}
+
+.song-thumb {
+    width: 40px;
+    height: 40px;
+    object-fit: var(--theme-image-fit);
+    background: alpha(var(--theme-colors-foreground-muted), 0.18);
+    border-radius: var(--theme-radius-sm);
+}
+
+.song-thumb-play {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    background: rgb(0 0 0 / 45%);
+    border-radius: var(--theme-radius-sm);
+    opacity: 0;
+    transition: opacity 0.12s ease;
+}
+
+@media (hover: hover) {
+    .song-row:hover .song-thumb-play {
+        opacity: 1;
+    }
+}
+
+.song-text {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+}
+
+.song-title {
+    overflow: hidden;
+    font-weight: 500;
+    color: var(--theme-colors-foreground-default);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.song-row:hover .song-title {
+    color: var(--theme-colors-primary);
+}
+
+.song-artist {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.song-duration {
+    flex-shrink: 0;
+    margin-left: var(--theme-spacing-sm);
+    font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------------ */
+/* Card grids (albums / artists)                                       */
+/* ------------------------------------------------------------------ */
+
+.grid-section {
+    min-width: 0;
+}
+
+.card-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--theme-spacing-lg) var(--theme-spacing-md);
+}
+
+@media (min-width: 560px) {
+    .card-grid {
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    }
+}
+
+@media (min-width: 1100px) {
+    .card-grid {
+        grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+    }
+}
+
+.card {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: var(--theme-spacing-md);
+    color: inherit;
+    text-decoration: none;
+    background: transparent;
+    border-radius: var(--theme-radius-md);
+    transition:
+        background-color 0.18s ease,
+        transform 0.18s ease;
+}
+
+@media (hover: hover) {
+    .card:hover {
+        background: alpha(var(--theme-colors-foreground-muted), 0.08);
+    }
+}
+
+.card-art-wrap {
+    position: relative;
+    margin-bottom: var(--theme-spacing-sm);
+    aspect-ratio: 1 / 1;
+}
+
+.card-art-wrap-round {
+    padding: 0 8%;
+}
+
+.card-art {
+    width: 100%;
+    height: 100%;
+    aspect-ratio: 1 / 1;
+    object-fit: var(--theme-image-fit);
+    background: alpha(var(--theme-colors-foreground-muted), 0.18);
+    border-radius: var(--theme-radius-md);
+    box-shadow: 0 8px 22px rgb(0 0 0 / 35%);
+}
+
+.card-art-round {
+    border-radius: 50%;
+}
+
+.card-play {
+    position: absolute;
+    right: 10px;
+    bottom: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    color: var(--theme-colors-primary-contrast, #000);
+    background: var(--theme-colors-primary);
+    border-radius: 50%;
+    box-shadow: 0 8px 18px rgb(0 0 0 / 45%);
+    opacity: 0;
+    transform: translateY(8px);
+    transition:
+        opacity 0.18s ease,
+        transform 0.18s ease;
+}
+
+@media (hover: hover) {
+    .card:hover .card-play {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.card-title {
+    overflow: hidden;
+    font-weight: 600;
+    color: var(--theme-colors-foreground-default);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.card-subtitle {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.card-title-center {
+    text-align: center;
+}
+
+/* ------------------------------------------------------------------ */
+/* Accessibility                                                       */
+/* ------------------------------------------------------------------ */
+
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* Skeleton / loading                                                  */
+/* ------------------------------------------------------------------ */
+
+.skel {
+    position: relative;
+    overflow: hidden;
+    background: alpha(var(--theme-colors-foreground-muted), 0.1);
+    border-radius: var(--theme-radius-sm);
+}
+
+.skel::after {
+    position: absolute;
+    inset: 0;
+    content: '';
+    background: linear-gradient(
+        90deg,
+        transparent,
+        alpha(var(--theme-colors-foreground-muted), 0.12),
+        transparent
+    );
+    transform: translateX(-100%);
+    animation: shimmer 1.4s infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .skel::after {
+        animation: none;
+    }
+}
+
+@keyframes shimmer {
+    100% {
+        transform: translateX(100%);
+    }
+}
+
+.skel-header {
+    width: 30%;
+    max-width: 160px;
+    height: 22px;
+    margin-bottom: var(--theme-spacing-md);
+    background: alpha(var(--theme-colors-foreground-muted), 0.1);
+    border-radius: var(--theme-radius-sm);
+}
+
+.skel-top-card {
+    width: 100%;
+    height: 220px;
+    border-radius: var(--theme-radius-lg);
+}
+
+.skel-song-row {
+    display: flex;
+    gap: var(--theme-spacing-md);
+    align-items: center;
+    padding: var(--theme-spacing-xs) var(--theme-spacing-sm);
+}
+
+.skel-thumb {
+    flex-shrink: 0;
+    width: 40px;
+    height: 40px;
+    border-radius: var(--theme-radius-sm);
+}
+
+.skel-lines {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.skel-line {
+    width: 60%;
+    height: 12px;
+}
+
+.skel-line-short {
+    width: 35%;
+    height: 10px;
+    margin-top: 6px;
+}
+
+.skel-card-art {
+    width: 100%;
+    margin-bottom: var(--theme-spacing-sm);
+    aspect-ratio: 1 / 1;
+    border-radius: var(--theme-radius-md);
+}

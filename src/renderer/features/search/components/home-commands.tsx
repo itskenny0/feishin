@@ -1,13 +1,12 @@
 import { nanoid } from 'nanoid/non-secure';
 import { Dispatch, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { createSearchParams, generatePath, useNavigate } from 'react-router';
+import { createSearchParams, useNavigate } from 'react-router';
 
 import { openCreatePlaylistModal } from '/@/renderer/features/playlists/components/create-playlist-form';
 import { Command, CommandPalettePages } from '/@/renderer/features/search/components/command';
 import { AppRoute } from '/@/renderer/router/routes';
 import { useCurrentServer } from '/@/renderer/store';
-import { LibraryItem } from '/@/shared/types/domain-types';
 
 interface HomeCommandsProps {
     handleClose: () => void;
@@ -36,7 +35,7 @@ export const HomeCommands = ({
     const handleSearch = () => {
         navigate(
             {
-                pathname: generatePath(AppRoute.SEARCH, { itemType: LibraryItem.SONG }),
+                pathname: AppRoute.SEARCH_INDEX,
                 search: createSearchParams({
                     query,
                 }).toString(),

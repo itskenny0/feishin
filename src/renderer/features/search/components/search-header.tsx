@@ -1,7 +1,7 @@
 import debounce from 'lodash/debounce';
 import { ChangeEvent, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { generatePath, Link, useParams, useSearchParams } from 'react-router';
+import { generatePath, Link, useNavigate, useParams, useSearchParams } from 'react-router';
 
 import {
     ALBUM_ARTIST_TABLE_COLUMNS,
@@ -18,7 +18,6 @@ import {
 import { SearchInput } from '/@/renderer/features/shared/components/search-input';
 import { useIsMobileShell } from '/@/renderer/hooks/use-breakpoint';
 import { AppRoute } from '/@/renderer/router/routes';
-import { useCommandPalette } from '/@/renderer/store';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Button, ButtonGroup } from '/@/shared/components/button/button';
 import { Flex } from '/@/shared/components/flex/flex';
@@ -41,7 +40,7 @@ export const SearchHeader = ({ navigationId }: SearchHeaderProps) => {
     // entry point (desktop reaches it via hotkeys / app menu, so the button
     // is hidden there to avoid a redundant affordance).
     const isMobileShell = useIsMobileShell();
-    const { open: openCommandPalette } = useCommandPalette();
+    const navigate = useNavigate();
 
     // Memoize the debounced handler so the underlying timer persists across
     // re-renders. A bare `debounce(...)` in the render body produces a fresh
@@ -103,7 +102,7 @@ export const SearchHeader = ({ navigationId }: SearchHeaderProps) => {
                                 })}
                                 icon="keyboard"
                                 iconProps={{ size: 'lg' }}
-                                onClick={openCommandPalette}
+                                onClick={() => navigate(AppRoute.COMMAND)}
                                 tooltip={{
                                     label: t('page.appMenu.commandPalette', {
                                         defaultValue: 'Open command palette',

@@ -85,6 +85,14 @@ const RadioListRoute = lazy(() => import('/@/renderer/features/radio/routes/radi
 
 const SearchRoute = lazy(() => import('/@/renderer/features/search/routes/search-route'));
 
+const UnifiedSearchRoute = lazy(
+    () => import('/@/renderer/features/search/routes/unified-search-route'),
+);
+
+const CommandPaletteRoute = lazy(
+    () => import('/@/renderer/features/search/routes/command-palette-route'),
+);
+
 const FavoritesRoute = lazy(() => import('/@/renderer/features/favorites/routes/favorites-route'));
 
 const SettingsRoute = lazy(() => import('/@/renderer/features/settings/routes/settings-route'));
@@ -214,7 +222,15 @@ export const AppRouter = () => {
                                     <Route element={<ResponsiveLayout />}>
                                         <Route element={<HomeRoute />} index />
                                         <Route element={<HomeRoute />} path={AppRoute.HOME} />
+                                        <Route
+                                            element={<UnifiedSearchRoute />}
+                                            path={AppRoute.SEARCH_INDEX}
+                                        />
                                         <Route element={<SearchRoute />} path={AppRoute.SEARCH} />
+                                        <Route
+                                            element={<CommandPaletteRoute />}
+                                            path={AppRoute.COMMAND}
+                                        />
                                         <Route
                                             element={<FavoritesRoute />}
                                             path={AppRoute.FAVORITES}

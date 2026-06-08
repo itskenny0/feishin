@@ -4,6 +4,8 @@ import { useNavigate } from 'react-router';
 import styles from './action-bar.module.css';
 
 import { AppMenu } from '/@/renderer/features/titlebar/components/app-menu';
+import { useIsMobileShell } from '/@/renderer/hooks/use-breakpoint';
+import { AppRoute } from '/@/renderer/router/routes';
 import { useCommandPalette } from '/@/renderer/store';
 import { Button } from '/@/shared/components/button/button';
 import { DropdownMenu } from '/@/shared/components/dropdown-menu/dropdown-menu';
@@ -16,6 +18,11 @@ import { TextInput } from '/@/shared/components/text-input/text-input';
 export const ActionBar = () => {
     const { t } = useTranslation();
     const { open } = useCommandPalette();
+    const isMobileShell = useIsMobileShell();
+    const navigate = useNavigate();
+    // Desktop opens the Mod+K overlay; the mobile shell has no overlay palette —
+    // it navigates to the in-shell command palette page at /command.
+    const openSearch = isMobileShell ? () => navigate(AppRoute.COMMAND) : open;
 
     return (
         <div className={styles.container}>
@@ -36,7 +43,7 @@ export const ActionBar = () => {
                     <TextInput
                         aria-label={t('common.search')}
                         leftSection={<Icon icon="search" />}
-                        onClick={open}
+                        onClick={openSearch}
                         // Open the palette on any printable key OR Enter/Space.
                         // (Previously only Enter/Space worked, so a user
                         // typing into the search box saw their first
@@ -46,7 +53,7 @@ export const ActionBar = () => {
                         // accepts the rest of the typed string.
                         onKeyDown={(e) => {
                             if (e.key === 'Enter' || e.key === ' ' || e.key.length === 1) {
-                                open();
+                                openSearch();
                             }
                         }}
                         placeholder={t('common.search')}

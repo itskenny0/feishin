@@ -14,14 +14,13 @@ import {
     RiSettings3Fill,
     RiSettings3Line,
 } from 'react-icons/ri';
-import { generatePath, useLocation, useNavigate } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 
 import styles from './bottom-tab-bar.module.css';
 import { MyLibraryPopover } from './my-library-popover';
 
 import { useHaptic } from '/@/renderer/hooks/use-haptic';
 import { AppRoute } from '/@/renderer/router/routes';
-import { LibraryItem } from '/@/shared/types/domain-types';
 
 interface BottomTabBarProps {
     /** Whether the side drawer (the More tab's destination) is currently open. */
@@ -68,10 +67,6 @@ export const BottomTabBar = ({ drawerOpen, onMoreTab, onScrollToTop }: BottomTab
     const haptic = useHaptic();
     const reduceMotion = useReducedMotion();
 
-    // Pre-computed for the active-state check so we don't pay the generatePath
-    // cost on every render or for every tab comparison.
-    const searchPath = generatePath(AppRoute.SEARCH, { itemType: LibraryItem.SONG });
-
     /*
      * The "Library" tab opens a bottom-sheet popover listing the library
      * entity types (Albums / Songs / Favourites / Artists / Genres /
@@ -98,16 +93,16 @@ export const BottomTabBar = ({ drawerOpen, onMoreTab, onScrollToTop }: BottomTab
             {
                 icon: (active) =>
                     active ? <RiSearchFill size="1.5rem" /> : <RiSearchLine size="1.5rem" />,
-                // Search tab is "active" whenever the dedicated search route
-                // is displayed.
-                isActive: (p) => p.startsWith('/search'),
+                // Active for the command palette page AND the search results
+                // pages (the palette's "see all" drills into /search).
+                isActive: (p) => p.startsWith('/command') || p.startsWith('/search'),
                 key: 'search',
                 label: t('page.sidebar.search', { defaultValue: 'Search' }),
-                // Navigate to the real in-layout search PAGE (with the bottom
-                // tab bar + mini-player visible), NOT the command-palette
-                // overlay. The palette stays mounted globally and is reachable
-                // from the search page header's "commands" affordance.
-                onClick: () => navigate(searchPath),
+                // Open the command palette as a true in-shell PAGE (/command):
+                // bottom tab bar + mini-player stay visible, native back works.
+                // The palette's quick search drills into the unified results
+                // page (/search) via "see all".
+                onClick: () => navigate(AppRoute.COMMAND),
             },
             {
                 icon: (active) =>
@@ -146,7 +141,7 @@ export const BottomTabBar = ({ drawerOpen, onMoreTab, onScrollToTop }: BottomTab
                 onClick: onMoreTab,
             },
         ],
-        [drawerOpen, libraryPopoverOpen, navigate, onMoreTab, openLibraryPopover, searchPath, t],
+        [drawerOpen, libraryPopoverOpen, navigate, onMoreTab, openLibraryPopover, t],
     );
 
     /*

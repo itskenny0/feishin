@@ -116,7 +116,11 @@ export function MobileGoToPage({ handleClose, setPages, setQuery }: MobileSubPag
         onSelect: () => void;
     }[] = [
         { icon: 'home', label: t('page.sidebar.home'), onSelect: () => goTo(AppRoute.HOME) },
-        { icon: 'search', label: t('page.sidebar.search'), onSelect: () => goTo(AppRoute.SEARCH) },
+        {
+            icon: 'search',
+            label: t('page.sidebar.search'),
+            onSelect: () => goTo(AppRoute.SEARCH_INDEX),
+        },
         {
             icon: 'settings',
             label: t('page.sidebar.settings'),
@@ -202,7 +206,7 @@ export function MobileSearchPalette({
     const handleSearchPage = useCallback(() => {
         navigate(
             {
-                pathname: generatePath(AppRoute.SEARCH, { itemType: LibraryItem.SONG }),
+                pathname: AppRoute.SEARCH_INDEX,
                 search: createSearchParams({ query }).toString(),
             },
             { state: { navigationId: nanoid() } },

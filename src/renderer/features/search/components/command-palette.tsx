@@ -4,11 +4,6 @@ import { useCallback, useDeferredValue, useRef, useState } from 'react';
 import { Command, CommandPalettePages } from '/@/renderer/features/search/components/command';
 import { GoToCommands } from '/@/renderer/features/search/components/go-to-commands';
 import { HomeCommands } from '/@/renderer/features/search/components/home-commands';
-import {
-    MobileGoToPage,
-    MobileSearchPalette,
-    MobileServerPage,
-} from '/@/renderer/features/search/components/mobile-search-palette';
 import { SearchAlbumArtistsSection } from '/@/renderer/features/search/components/search-album-artists-section';
 import { SearchAlbumsSection } from '/@/renderer/features/search/components/search-albums-section';
 import { SearchSongsSection } from '/@/renderer/features/search/components/search-songs-section';
@@ -169,77 +164,11 @@ export const CommandPalette = ({ modalProps }: CommandPaletteProps) => {
         setQuery('');
     }, [modalProps.handlers]);
 
-    // Mobile shell renders a dedicated, native search PAGE instead of the
-    // desktop cmdk dialog. The component owns its own sticky search header +
-    // back/close affordances, so the Mantine modal here is reduced to a
-    // chromeless full-screen host (no header, no close button, no padding,
-    // no fade — the page itself slides up via Motion). The desktop branch
-    // below is left untouched so pointer/keyboard users see zero change.
-    if (isMobileShell) {
-        const handleCloseAll = () => {
-            modalProps.handlers.close();
-            setPages([CommandPalettePages.HOME]);
-            setQuery('');
-        };
-
-        return (
-            <Modal
-                {...modalProps}
-                centered={false}
-                fullScreen
-                handlers={{
-                    ...modalProps.handlers,
-                    close: () => {
-                        if (isHome) {
-                            handleCloseAll();
-                        } else {
-                            popPage();
-                        }
-                    },
-                    toggle: () => {
-                        if (isHome) {
-                            handleCloseAll();
-                        } else {
-                            popPage();
-                        }
-                    },
-                }}
-                styles={{
-                    body: { height: '100dvh', padding: 0 },
-                    content: { height: '100dvh' },
-                    header: { display: 'none' },
-                    root: { zIndex: 1000 },
-                }}
-                transitionProps={{ duration: 0 }}
-                withCloseButton={false}
-                zIndex={1000}
-            >
-                {activePage === CommandPalettePages.GO_TO ? (
-                    <MobileGoToPage
-                        handleClose={handleCloseAll}
-                        setPages={setPages}
-                        setQuery={setQuery}
-                    />
-                ) : activePage === CommandPalettePages.MANAGE_SERVERS ? (
-                    <MobileServerPage
-                        handleClose={handleCloseAll}
-                        setPages={setPages}
-                        setQuery={setQuery}
-                    />
-                ) : (
-                    <MobileSearchPalette
-                        handleClose={handleCloseAll}
-                        onSelectResult={handleSelectResult}
-                        pages={pages}
-                        query={query}
-                        searchInputRef={searchInputRef}
-                        setPages={setPages}
-                        setQuery={setQuery}
-                    />
-                )}
-            </Modal>
-        );
-    }
+    // On the mobile shell the command palette is a real in-shell PAGE at
+    // /command (see command-palette-route.tsx) instead of a fullscreen overlay,
+    // so the global overlay renders nothing there. Desktop keeps the Mod+K
+    // overlay below.
+    if (isMobileShell) return null;
 
     return (
         <Modal
