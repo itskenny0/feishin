@@ -25,6 +25,7 @@ import {
     getOrComputeSorted,
     loadEntityRows,
     markRowCacheDirty,
+    markRowsChangedFromPage,
     resetRowCache,
 } from '/@/renderer/cache/local-cache';
 
@@ -314,6 +315,89 @@ describe('favourite-albums fromCache contract (sidebar regression)', () => {
         const after = await getOrComputeSorted('albums', sig, compute);
         expect(after).toEqual(['alb-1']);
         expect(compute).toHaveBeenCalledTimes(2);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Change-aware row-cache invalidation (perf fix #1).
+//
+// A background revalidate that re-applies the SAME rows must NOT blow away
+// the row cache + sorted LRU — that is what forced a full-table re-toArray()
+// + re-sort on the next scroll tick. `markRowsChangedFromPage` compares the
+// incoming page against the cached rows by id + change-stamp and only drops
+// the row cache when something genuinely changed. Adds, edits, and deletes
+// (well — adds/edits; deletes go through markRowCacheDirty) still invalidate.
+// ---------------------------------------------------------------------------
+describe('markRowsChangedFromPage (change-aware invalidation)', () => {
+    const stampedRow = (id: string, stamp: string): CachedAlbum =>
+        ({
+            __cachedAt: 0,
+            AlbumArtistId: 'a',
+            DateLastSaved: stamp,
+            GenreIds: [],
+            Id: id,
+            Payload: { id, name: id, updatedAt: stamp } as never,
+            ProductionYear: undefined,
+            SortName: id,
+        }) satisfies CachedAlbum;
+
+    it('keeps the row cache when the page re-applies identical rows', async () => {
+        const rows = [stampedRow('a', 't1'), stampedRow('b', 't1')];
+        const loader = vi.fn(async () => rows);
+
+        await loadEntityRows<CachedAlbum>('albums', FAKE_DB, loader);
+        await getOrComputeSorted('albums', 'sig-1', async () => ['x']);
+
+        // Background revalidate re-applies the same two rows, unchanged.
+        const changed = markRowsChangedFromPage('albums', [
+            { id: 'a', stamp: 't1' },
+            { id: 'b', stamp: 't1' },
+        ]);
+
+        expect(changed).toBe(false);
+        // Row cache intact — loader NOT re-invoked.
+        await loadEntityRows<CachedAlbum>('albums', FAKE_DB, loader);
+        expect(loader).toHaveBeenCalledTimes(1);
+        // Sorted LRU intact — the memo is still a hit.
+        expect(debugLocalCache().sorted.albums.signatures).toContain('sig-1');
+    });
+
+    it('drops the row cache when a row is genuinely edited (newer stamp)', async () => {
+        const rows = [stampedRow('a', 't1'), stampedRow('b', 't1')];
+        const loader = vi.fn(async () => rows);
+
+        await loadEntityRows<CachedAlbum>('albums', FAKE_DB, loader);
+        await getOrComputeSorted('albums', 'sig-1', async () => ['x']);
+
+        const changed = markRowsChangedFromPage('albums', [{ id: 'a', stamp: 't2' }]);
+
+        expect(changed).toBe(true);
+        await loadEntityRows<CachedAlbum>('albums', FAKE_DB, loader);
+        expect(loader).toHaveBeenCalledTimes(2);
+        expect(debugLocalCache().sorted.albums.signatures).not.toContain('sig-1');
+    });
+
+    it('drops the row cache when the page introduces a new id', async () => {
+        const rows = [stampedRow('a', 't1')];
+        const loader = vi.fn(async () => rows);
+
+        await loadEntityRows<CachedAlbum>('albums', FAKE_DB, loader);
+
+        const changed = markRowsChangedFromPage('albums', [
+            { id: 'a', stamp: 't1' },
+            { id: 'new', stamp: 't1' },
+        ]);
+
+        expect(changed).toBe(true);
+        await loadEntityRows<CachedAlbum>('albums', FAKE_DB, loader);
+        expect(loader).toHaveBeenCalledTimes(2);
+    });
+
+    it('drops the row cache (cold) when nothing is cached yet so the first read still pulls', () => {
+        // No row cache primed → we can't prove the page is a no-op, so we
+        // must conservatively treat it as changed (the rows are new to us).
+        const changed = markRowsChangedFromPage('albums', [{ id: 'a', stamp: 't1' }]);
+        expect(changed).toBe(true);
     });
 });
 

@@ -21,7 +21,9 @@ import {
     filterSongsLocal,
     getOrComputeSorted,
     loadSongsRows,
+    markRowsChangedFromPage,
     markSearchDirty,
+    pageRefsFromItems,
     useCachedQuery,
 } from '/@/renderer/cache';
 import {
@@ -96,6 +98,7 @@ export const useSongListQuery = (args: SongListHookArgs) => {
             if (items.length === 0) return;
             await db.songs.bulkPut(items.map(songToRow));
             markSearchDirty('songs');
+            markRowsChangedFromPage('songs', pageRefsFromItems(items));
         },
         enabled: options?.enabled ?? Boolean(serverId),
         fromCache: async (db) => {
@@ -187,6 +190,7 @@ export const useSongDetailQuery = (args: SongsQueryArgs<SongDetailQuery>) => {
             if (!fresh) return;
             await db.songs.put(songToRow(fresh));
             markSearchDirty('songs');
+            markRowsChangedFromPage('songs', pageRefsFromItems([fresh]));
         },
         enabled: options?.enabled ?? Boolean(serverId && query?.id),
         fromCache: async (db) => {

@@ -13,7 +13,9 @@ import {
     filterAlbumArtistsLocal,
     filterArtistsLocal,
     LibraryCacheDb,
+    markRowsChangedFromPage,
     markSearchDirty,
+    pageRefsFromItems,
     useCachedInfiniteQuery,
     useCachedQuery,
 } from '/@/renderer/cache';
@@ -123,6 +125,7 @@ export const useAlbumArtistListQuery = (args: ArtistsQueryArgs<AlbumArtistListQu
             if (items.length === 0) return;
             await db.artists.bulkPut(items.map((a) => toCachedArtistRow(a, 'AlbumArtist')));
             markSearchDirty('artists');
+            markRowsChangedFromPage('artists', pageRefsFromItems(items));
         },
         enabled: options?.enabled ?? Boolean(serverId),
         fromCache: async (db) => {
@@ -169,6 +172,7 @@ export const useAlbumArtistInfiniteListQuery = (args: AlbumArtistInfiniteListArg
             if (items.length === 0) return;
             await db.artists.bulkPut(items.map((a) => toCachedArtistRow(a, 'AlbumArtist')));
             markSearchDirty('artists');
+            markRowsChangedFromPage('artists', pageRefsFromItems(items));
         },
         enabled: options?.enabled ?? Boolean(serverId),
         fromCache: async (db, pageParam) => {
@@ -224,6 +228,7 @@ export const useAlbumArtistDetailQuery = (args: ArtistsQueryArgs<AlbumArtistDeta
             if (!fresh) return;
             await db.artists.put(toCachedArtistRow(fresh, 'AlbumArtist'));
             markSearchDirty('artists');
+            markRowsChangedFromPage('artists', pageRefsFromItems([fresh]));
         },
         enabled: options?.enabled ?? Boolean(serverId && query?.id),
         fromCache: async (db) => {
@@ -277,6 +282,7 @@ export const useArtistTopSongsQuery = (args: ArtistsQueryArgs<TopSongListQuery>)
             if (items.length === 0) return;
             await db.songs.bulkPut(items.map(toCachedSongRow));
             markSearchDirty('songs');
+            markRowsChangedFromPage('songs', pageRefsFromItems(items));
         },
         enabled: options?.enabled ?? Boolean(serverId && query?.artistId),
         // Server ranks by popularity which we can't reproduce — but on
@@ -331,6 +337,7 @@ export const useArtistFavoriteSongsQuery = (args: FavoriteSongsArgs) => {
             if (items.length === 0) return;
             await db.songs.bulkPut(items.map(toCachedSongRow));
             markSearchDirty('songs');
+            markRowsChangedFromPage('songs', pageRefsFromItems(items));
         },
         enabled: options?.enabled ?? Boolean(serverId && query?.artistId),
         // Intersect cached songs by this artist with the favorites
@@ -382,6 +389,7 @@ export const useArtistListQuery = (args: ArtistsQueryArgs<ArtistListQuery>) => {
             if (items.length === 0) return;
             await db.artists.bulkPut(items.map((a) => toCachedArtistRow(a, 'Artist')));
             markSearchDirty('artists');
+            markRowsChangedFromPage('artists', pageRefsFromItems(items));
         },
         enabled: options?.enabled ?? Boolean(serverId),
         fromCache: async (db) => {
@@ -428,6 +436,7 @@ export const useArtistInfiniteListQuery = (args: ArtistInfiniteListArgs) => {
             if (items.length === 0) return;
             await db.artists.bulkPut(items.map((a) => toCachedArtistRow(a, 'Artist')));
             markSearchDirty('artists');
+            markRowsChangedFromPage('artists', pageRefsFromItems(items));
         },
         enabled: options?.enabled ?? Boolean(serverId),
         fromCache: async (db, pageParam) => {

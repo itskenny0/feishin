@@ -27,7 +27,7 @@ import Fuse, { type IFuseOptions } from 'fuse.js';
 
 import { isCacheAvailableSync } from './capability';
 import { getActiveCacheDb } from './db';
-import { markRowCacheDirty } from './local-cache';
+import { markRowsChanged } from './local-cache';
 import { useCacheStore } from './store';
 
 export interface SearchLocalResult {
@@ -239,6 +239,16 @@ const ensureSongsIndex = async (): Promise<Fuse<SongSearchEntry> | undefined> =>
  * Dexie contents. Coarse-grained on purpose: write-through paths call this
  * once at the end of an `apply` rather than per-row, and a sweep completion
  * marks every affected entity at once.
+ *
+ * IMPORTANT (perf fix #1): this is now FUSE-ONLY. It deliberately does NOT
+ * touch the grid row cache / sorted LRU (`local-cache.ts`). A background
+ * revalidate that re-applies the same rows used to nuke those memos here,
+ * forcing the next scroll to re-`toArray()` + re-sort the whole table. The
+ * fuse index can rebuild lazily on the next search at far lower cost, and the
+ * grid row cache is now invalidated separately — and only when rows actually
+ * changed — via `markRowsChangedFromPage` (or `markRowCacheDirty` for
+ * deletes / wipes). Callers that mutate rows must invalidate the row cache
+ * explicitly; `markSearchDirty` alone no longer refreshes the grid.
  */
 export const markSearchDirty = (entity: 'all' | Entity): void => {
     if (entity === 'all') {
@@ -246,29 +256,12 @@ export const markSearchDirty = (entity: 'all' | Entity): void => {
         artistsDirty = true;
         playlistsDirty = true;
         songsDirty = true;
-        // Drop the in-memory row + sorted-result cache so the next list
-        // read pulls fresh rows from Dexie. Without this, write-through
-        // applies land in IndexedDB but the grids keep serving the
-        // pre-write JS array.
-        markRowCacheDirty('all');
         return;
     }
-    if (entity === 'albums') {
-        albumsDirty = true;
-        markRowCacheDirty('albums');
-    }
-    if (entity === 'artists') {
-        artistsDirty = true;
-        // The artist Dexie row holds both Kinds; bump both row-cache
-        // slots so AlbumArtist and Artist grids both see the new data.
-        markRowCacheDirty('albumArtists');
-        markRowCacheDirty('artists');
-    }
+    if (entity === 'albums') albumsDirty = true;
+    if (entity === 'artists') artistsDirty = true;
     if (entity === 'playlists') playlistsDirty = true;
-    if (entity === 'songs') {
-        songsDirty = true;
-        markRowCacheDirty('songs');
-    }
+    if (entity === 'songs') songsDirty = true;
 };
 
 /**
@@ -409,14 +402,20 @@ if (typeof window !== 'undefined') {
             // build happens during browser idle time.
             const entity = prevSweep.entity;
             let buildFn: (() => Promise<unknown>) | undefined;
+            // A completed sweep wrote a fresh batch of rows into Dexie, so
+            // the grid row cache + sorted LRU are genuinely stale: drop them
+            // via markRowsChanged (markSearchDirty alone is now fuse-only).
             if (entity === 'albums') {
                 markSearchDirty('albums');
+                markRowsChanged('albums');
                 buildFn = ensureAlbumsIndex;
             } else if (entity === 'artists') {
                 markSearchDirty('artists');
+                markRowsChanged('artists');
                 buildFn = ensureArtistsIndex;
             } else if (entity === 'songs') {
                 markSearchDirty('songs');
+                markRowsChanged('songs');
                 buildFn = ensureSongsIndex;
             } else if (entity === 'playlists') {
                 markSearchDirty('playlists');

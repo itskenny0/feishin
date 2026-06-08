@@ -89,6 +89,146 @@ export const resetRowCache = (): void => {
     markRowCacheDirty('all');
 };
 
+// Change-aware invalidation (perf fix #1)
+// ---------------------------------------
+// `markSearchDirty` used to unconditionally call `markRowCacheDirty`, so a
+// background revalidate that re-applied the *same* page nuked the whole-table
+// row array + sorted LRU — forcing the next scroll to re-`toArray()` and
+// re-sort the entire table through the structured-clone boundary. The grid
+// row cache must only be dropped when the underlying rows ACTUALLY changed.
+//
+// `markRowsChangedFromPage` compares an incoming write-through page against
+// the in-memory row cache by id + change-stamp (Jellyfin `updatedAt` /
+// `DateLastSaved`). When every item in the page is already cached with the
+// same stamp it is a no-op revalidate: we keep the row cache (and log
+// `row-cache: kept`). Otherwise — a new id appeared, a stamp advanced, or we
+// have no cached rows to compare against — we drop the row cache so the next
+// read reflects the change. Genuine deletes don't come through `apply()`
+// pages; callers that delete rows call `markRowCacheDirty` directly.
+
+// Pull the change-stamp + id off a cached row regardless of entity shape.
+// Albums/songs/artists all carry `DateLastSaved`; the Payload carries
+// `updatedAt`. We compare whichever is present, preferring `DateLastSaved`.
+const rowStamp = (row: unknown): string => {
+    const r = row as { DateLastSaved?: string; Payload?: { updatedAt?: string } };
+    return r?.DateLastSaved ?? r?.Payload?.updatedAt ?? '';
+};
+
+const rowId = (row: unknown): string | undefined => {
+    const r = row as { Id?: string; Payload?: { id?: string } };
+    return r?.Id ?? r?.Payload?.id;
+};
+
+export interface PageRowRef {
+    id: string;
+    stamp: string;
+}
+
+// Map a search/index entity ('albums' | 'artists' | 'songs' | 'playlists')
+// onto the row-cache slots it backs. The artist Dexie table holds both
+// AlbumArtist and Artist kinds, so 'artists' fans out to two slots.
+const rowSlotsForEntity = (entity: 'albums' | 'artists' | 'playlists' | 'songs'): RowEntity[] => {
+    switch (entity) {
+        case 'albums':
+            return ['albums'];
+        case 'artists':
+            return ['albumArtists', 'artists'];
+        case 'songs':
+            return ['songs'];
+        // Playlists are not backed by the JS row cache (the grid reads
+        // db.playlists.toArray() directly), so there is nothing to drop.
+        default:
+            return [];
+    }
+};
+
+/**
+ * Unconditionally invalidate the grid row cache for an entity whose rows are
+ * KNOWN to have changed (sweep completion, detail apply, mutation, favorite
+ * toggle, delete). Use this — not bare `markSearchDirty` — whenever a write
+ * path genuinely mutated the underlying rows. Background list revalidates
+ * that may be re-applying identical rows should prefer
+ * `markRowsChangedFromPage`, which keeps the cache on a verified no-op.
+ */
+export const markRowsChanged = (
+    entity: 'albums' | 'all' | 'artists' | 'playlists' | 'songs',
+): void => {
+    if (entity === 'all') {
+        markRowCacheDirty('all');
+        return;
+    }
+    for (const slot of rowSlotsForEntity(entity)) markRowCacheDirty(slot);
+};
+
+// Does `page` introduce any change relative to the cached rows in `slot`?
+// `undefined` cached rows → can't prove a no-op → treat as changed.
+const slotPageChanged = (slot: RowEntity, page: PageRowRef[]): boolean => {
+    const entry = rowCache[slot];
+    if (!entry.rows) return true;
+    const byId = new Map<string, string>();
+    for (const row of entry.rows) {
+        const id = rowId(row);
+        if (id !== undefined) byId.set(id, rowStamp(row));
+    }
+    for (const item of page) {
+        const prev = byId.get(item.id);
+        // New id, or a different change-stamp → the row set actually moved.
+        if (prev === undefined || prev !== (item.stamp ?? '')) return true;
+    }
+    return false;
+};
+
+/**
+ * Report whether an incoming write-through `page` introduces any change
+ * relative to the cached row array(s) for `entity`, and invalidate the row
+ * cache + sorted LRU iff it does. Returns `true` when the cache was dropped
+ * (rows changed / unknown), `false` when the page was a verified no-op and
+ * the row cache was kept.
+ *
+ * Accepts either a raw row-cache slot or the index entity. For 'artists'
+ * (which fans out to the albumArtists + artists slots) a change in EITHER
+ * cached slot drops BOTH, mirroring the old coupled behaviour.
+ */
+export const markRowsChangedFromPage = (
+    entity: 'albums' | 'artists' | 'songs' | RowEntity,
+    page: PageRowRef[],
+): boolean => {
+    const slots = entity === 'artists' ? (['albumArtists', 'artists'] as const) : [entity];
+    let changed = false;
+    for (const slot of slots) {
+        if (slotPageChanged(slot as RowEntity, page)) {
+            changed = true;
+            break;
+        }
+    }
+
+    if (changed) {
+        for (const slot of slots) markRowCacheDirty(slot as RowEntity);
+        return true;
+    }
+    console.info('[cache] row-cache: kept (search-only dirty)', {
+        entity,
+        page: page.length,
+    });
+    return false;
+};
+
+/**
+ * Build the `PageRowRef[]` the change-detector consumes from a list of
+ * freshly-fetched domain items (Album / Song / AlbumArtist). Mirrors the id
+ * + change-stamp extraction used against the cached rows.
+ */
+export const pageRefsFromItems = (
+    items: ReadonlyArray<{ id?: string; updatedAt?: string }>,
+): PageRowRef[] => {
+    const refs: PageRowRef[] = [];
+    for (const it of items) {
+        if (it?.id === undefined) continue;
+        refs.push({ id: it.id, stamp: it.updatedAt ?? '' });
+    }
+    return refs;
+};
+
 /**
  * Load rows for the given entity. The first caller after a dirty mark
  * pulls from Dexie; concurrent callers share the in-flight promise so we

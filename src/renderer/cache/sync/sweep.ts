@@ -29,6 +29,29 @@ export interface SweepContext {
 
 const DEFAULT_PAGE_SIZE = 500;
 
+// Lock-yield granularity (perf fix #2). A 500-row `bulkPut` inside one rw
+// transaction holds the IndexedDB write lock for its whole duration, which
+// can starve interactive cache reads (the grid / list `fromCache` path). We
+// split each page's write into WRITE_CHUNK_SIZE-row sub-transactions and
+// yield the event loop between them so a queued read transaction can
+// interleave. Throughput stays acceptable because `bulkPut` is already the
+// dominant cost; the extra transaction boundaries are cheap relative to the
+// structured-clone of the rows themselves.
+const WRITE_CHUNK_SIZE = 125;
+
+// Yield the event loop so a pending IndexedDB read transaction (an
+// interactive `fromCache`) can acquire the lock between our write chunks.
+// Prefer requestIdleCallback when available (renderer) so we cede during
+// browser idle time; fall back to a macrotask otherwise.
+const yieldLock = (): Promise<void> =>
+    new Promise((resolve) => {
+        if (typeof requestIdleCallback !== 'undefined') {
+            requestIdleCallback(() => resolve(), { timeout: 50 });
+        } else {
+            setTimeout(resolve, 0);
+        }
+    });
+
 // Module-level UTF-8 encoder for byte-length accounting. `.length` on a
 // JS string returns UTF-16 code units, which understates UTF-8 byte size
 // for non-ASCII content. TextEncoder gives the real wire size without
@@ -291,15 +314,47 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
         try {
             // Resolve the entity store by name so the same transaction
             // boundary works for every sweep regardless of which table
-            // its writePage targets. Listed as `db.table(entity)` so
-            // Dexie sees both stores in the rw scope.
+            // its writePage targets.
             const entityTable = db.table(entity);
-            await db.transaction('rw', entityTable, db.syncMeta, async () => {
-                if (pageItems.length > 0) {
-                    await writePage(db, pageItems);
+            if (pageItems.length > WRITE_CHUNK_SIZE) {
+                // Large page: write in WRITE_CHUNK_SIZE-row sub-transactions
+                // and yield the lock between them so interactive reads can
+                // interleave. The syncMeta resume marker is written LAST, in
+                // its own transaction, only after every row chunk committed —
+                // a crash mid-page leaves the marker at the old offset, so the
+                // page is simply re-fetched on resume (bulkPut is idempotent).
+                const chunks = Math.ceil(pageItems.length / WRITE_CHUNK_SIZE);
+                for (let c = 0; c < chunks; c += 1) {
+                    if (signal.aborted) break;
+                    const slice = pageItems.slice(c * WRITE_CHUNK_SIZE, (c + 1) * WRITE_CHUNK_SIZE);
+                    await db.transaction('rw', entityTable, async () => {
+                        await writePage(db, slice);
+                    });
+                    if (c < chunks - 1) {
+                        console.info(`[cache] sweep:${entity} yielding lock`, {
+                            chunk: c + 1,
+                            chunks,
+                            chunkSize: slice.length,
+                            startIndex,
+                        });
+                        await yieldLock();
+                    }
                 }
-                await db.syncMeta.put(metaRow);
-            });
+                if (!signal.aborted) {
+                    await db.transaction('rw', db.syncMeta, async () => {
+                        await db.syncMeta.put(metaRow);
+                    });
+                }
+            } else {
+                // Small page: keep the rows + resume marker in a single
+                // transaction so the checkpoint boundary matches exactly.
+                await db.transaction('rw', entityTable, db.syncMeta, async () => {
+                    if (pageItems.length > 0) {
+                        await writePage(db, pageItems);
+                    }
+                    await db.syncMeta.put(metaRow);
+                });
+            }
         } catch (err) {
             if ((err as Error)?.name === 'AbortError' || signal.aborted) {
                 console.info(`[cache] sweep:${entity} aborted during write`, { startIndex });

@@ -194,34 +194,56 @@ export const cachedSwr = async <TData>(args: {
     const { apply, ctx, fromCache, queryKey, remote } = args;
     const db = fromCache ? await waitForActiveDb() : activeDb();
 
-    // Guard: if a concurrent IndexedDB write transaction (e.g. the songs sweep
-    // bulk-inserting 500 rows) holds the DB lock, `fromCache` can block for
-    // 10–20 seconds. Race against a 2-second wall-clock timeout so the render
-    // path is never stuck waiting on a slow Dexie call. If the timeout fires
-    // first we treat it as a cache miss and fall through to the cold path; the
-    // Dexie call completes in the background but its result is discarded.
+    // Lock-starvation guard (perf fix #2). If a concurrent IndexedDB write
+    // transaction (e.g. the sweep bulk-inserting rows) holds the DB lock,
+    // `fromCache` can block for several seconds. We race it against a
+    // wall-clock timeout so a render is never stuck on a slow Dexie call.
+    //
+    // BUT the old behaviour bailed to the NETWORK on every timeout — so during
+    // a sweep, browsing a list the cache already had fell back to a server
+    // round-trip and the user perceived the cache as "not working". For a
+    // KNOWN-LOCAL key (a snapshot already exists, i.e. we've served it from
+    // cache before) we instead AWAIT the cache read: it's strictly faster than
+    // the network and avoids the spurious fallback. The short timeout +
+    // network fallback is reserved for genuinely-cold keys, where waiting on a
+    // possibly-empty Dexie read would needlessly delay first paint.
+    const isLocallyAvailable = readSnapshot<TData>(queryKey) !== undefined;
     const FROM_CACHE_TIMEOUT_MS = 2_000;
 
     let cached: TData | undefined;
     if (db && fromCache) {
         try {
-            // Use a sentinel to distinguish a genuine timeout (sentinel wins
-            // the race) from a legitimate cache miss (fromCache returns
-            // undefined quickly). Previously both cases logged "timed out",
-            // making it impossible to tell whether the DB query was slow or
-            // just found no matching row.
-            const TIMEOUT_SENTINEL = Symbol();
-            const timeoutTicket = new Promise<typeof TIMEOUT_SENTINEL>((resolve) =>
-                setTimeout(() => resolve(TIMEOUT_SENTINEL), FROM_CACHE_TIMEOUT_MS),
-            );
-            const result = await Promise.race([fromCache(db), timeoutTicket]);
-            if (result === TIMEOUT_SENTINEL) {
-                console.info('[cache] fromCache timed out — falling back to network', queryKey);
-            } else if (result !== undefined) {
-                cached = result as TData;
-                writeSnapshot(queryKey, cached);
+            if (isLocallyAvailable) {
+                // Await the cache read fully — it lost the lock race but the
+                // data IS local, so serving it (slightly late) beats a network
+                // round-trip and keeps the cache authoritative during a sweep.
+                const result = await fromCache(db);
+                if (result !== undefined) {
+                    cached = result as TData;
+                    writeSnapshot(queryKey, cached);
+                }
+                // result === undefined → the row vanished (e.g. delete); fall
+                // through to the network silently.
+            } else {
+                // Cold key: bound the wait. Use a sentinel to distinguish a
+                // genuine timeout (sentinel wins the race) from a legitimate
+                // cache miss (fromCache returns undefined quickly).
+                const TIMEOUT_SENTINEL = Symbol();
+                const timeoutTicket = new Promise<typeof TIMEOUT_SENTINEL>((resolve) =>
+                    setTimeout(() => resolve(TIMEOUT_SENTINEL), FROM_CACHE_TIMEOUT_MS),
+                );
+                const result = await Promise.race([fromCache(db), timeoutTicket]);
+                if (result === TIMEOUT_SENTINEL) {
+                    console.info(
+                        '[cache] fromCache timed out (cold key) — falling back to network',
+                        queryKey,
+                    );
+                } else if (result !== undefined) {
+                    cached = result as TData;
+                    writeSnapshot(queryKey, cached);
+                }
+                // result === undefined → genuine cache miss, fall through silently
             }
-            // result === undefined → genuine cache miss, fall through to network silently
         } catch (err) {
             console.warn('[cache] fromCache failed', queryKey, err);
         }

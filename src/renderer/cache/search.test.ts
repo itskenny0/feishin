@@ -155,6 +155,26 @@ describe('search projection', () => {
         expect(result.songs.some((s) => s.id === 's1')).toBe(true);
     });
 
+    it('does NOT drop the grid row cache (search-dirty is fuse-only)', async () => {
+        const { debugLocalCache, loadEntityRows, resetRowCache } =
+            await import('/@/renderer/cache/local-cache');
+        resetRowCache();
+        const loader = vi.fn(async () => [{ Id: 'a', Payload: { id: 'a' } }]);
+        const fakeDb = {} as never;
+        await loadEntityRows('albums', fakeDb, loader);
+        expect(debugLocalCache().rows.albums.count).toBe(1);
+
+        // A pure background revalidate marks the fuse index stale but must
+        // leave the grid row cache intact — otherwise the next scroll pays a
+        // full-table re-toArray()+re-sort.
+        markSearchDirty('albums');
+
+        await loadEntityRows('albums', fakeDb, loader);
+        expect(loader).toHaveBeenCalledTimes(1);
+        expect(debugLocalCache().rows.albums.count).toBe(1);
+        resetRowCache();
+    });
+
     it('rebuilds the index after markSearchDirty so fresh rows show up', async () => {
         // Prime
         const first = await searchAlbumsLocal('Abbey Road');

@@ -27,8 +27,11 @@ import {
     filterAlbumsLocal,
     getActiveCacheDb,
     isCacheAvailableSync,
+    markRowsChangedFromPage,
     markSearchDirty,
     mergePage,
+    pageRefsFromItems,
+    readEntityCountFallback,
     readSnapshot,
     toCachedAlbumRow as toCachedAlbumRowBase,
     useCachedQuery,
@@ -186,6 +189,9 @@ export const useAlbumListQuery = (args: AlbumListQueryArgs) => {
             if (items.length === 0) return;
             await db.albums.bulkPut(items.map(toCachedAlbumRow));
             markSearchDirty('albums');
+            // Change-aware: a background revalidate that re-applies the same
+            // rows keeps the grid row cache; only a genuine change drops it.
+            markRowsChangedFromPage('albums', pageRefsFromItems(items));
             logApplied(items.length);
         },
         enabled: options?.enabled ?? Boolean(serverId),
@@ -233,6 +239,7 @@ export const useAlbumListSuspenseQuery = (args: AlbumListSuspenseQueryArgs) => {
                     if (items.length > 0) {
                         await db.albums.bulkPut(items.map(toCachedAlbumRow));
                         markSearchDirty('albums');
+                        markRowsChangedFromPage('albums', pageRefsFromItems(items));
                         logApplied(items.length);
                     }
                 },
@@ -265,6 +272,9 @@ const applyAlbumDetail = async (
     if (!db || !fresh) return;
     await db.albums.put(toCachedAlbumRow(fresh));
     markSearchDirty('albums');
+    // Detail apply writes the freshest single-album payload; treat as a
+    // genuine row change so the grid reflects edits (rating, art, etc).
+    markRowsChangedFromPage('albums', pageRefsFromItems([fresh]));
     logApplied(1);
 
     // The detail response usually includes the album's tracklist. Bulk-put
@@ -274,6 +284,7 @@ const applyAlbumDetail = async (
     if (songs.length > 0) {
         await db.songs.bulkPut(songs.map(toCachedSongRow));
         markSearchDirty('songs');
+        markRowsChangedFromPage('songs', pageRefsFromItems(songs));
     }
 };
 
@@ -477,7 +488,17 @@ export const useAlbumListCountQuery = (args: AlbumListCountQueryArgs) => {
     );
 
     return useSuspenseQuery<number>({
-        initialData: () => readSnapshot<number>(queryKey),
+        // Seed the count synchronously so the grid doesn't suspend on a cold
+        // COUNT (which waits up to 3s on waitForActiveDb() + db.count()).
+        // For a fully-unfiltered list the in-memory store count is an exact,
+        // sweep-maintained answer, so prefer snapshot → store. For filtered
+        // lists the store count would be wrong, so only the snapshot seeds
+        // and the queryFn computes the real filtered count. initialDataUpdatedAt:0
+        // keeps the value stale so the background refresh still runs.
+        initialData: () =>
+            isFullyUnfilteredCountQuery(query)
+                ? readEntityCountFallback(queryKey, 'albums')
+                : readSnapshot<number>(queryKey),
         initialDataUpdatedAt: 0,
         queryFn: (ctx) =>
             cachedSwr<number>({
@@ -641,6 +662,7 @@ export const useAlbumInfiniteListSuspenseQuery = (args: AlbumInfiniteListSuspens
                                 if (items.length > 0) {
                                     await db.albums.bulkPut(items.map(toCachedAlbumRow));
                                     markSearchDirty('albums');
+                                    markRowsChangedFromPage('albums', pageRefsFromItems(items));
                                     logApplied(items.length);
                                 }
                             } catch (err) {
@@ -680,6 +702,7 @@ export const useAlbumInfiniteListSuspenseQuery = (args: AlbumInfiniteListSuspens
                     if (items.length > 0) {
                         await db.albums.bulkPut(items.map(toCachedAlbumRow));
                         markSearchDirty('albums');
+                        markRowsChangedFromPage('albums', pageRefsFromItems(items));
                         logApplied(items.length);
                     }
                 } catch (err) {

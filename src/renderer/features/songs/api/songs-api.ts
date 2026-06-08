@@ -7,6 +7,7 @@ import { getOptimizedListCount } from '/@/renderer/api/utils-list-count';
 import {
     cachedSwr,
     filterSongsLocal,
+    readEntityCountFallback,
     readSnapshot,
     snapshotSwr,
     toCachedSongRow,
@@ -189,9 +190,24 @@ export const songsQueries = {
             args.serverId,
             Object.keys(args.query).length === 0 ? undefined : args.query,
         );
+        // A query with no row-narrowing filter can be answered by the exact,
+        // sweep-maintained store count — seed it synchronously so the grid
+        // doesn't suspend on a cold COUNT (perf fix #3). Filtered queries only
+        // seed from the snapshot; the queryFn computes the real count.
+        const q = args.query;
+        const isUnfilteredSongCount =
+            !q.searchTerm &&
+            !q.albumIds &&
+            !q.artistIds &&
+            !q.albumArtistIds &&
+            !q.genreIds?.length &&
+            q.favorite === undefined;
         return queryOptions({
             gcTime: 1000 * 60 * 60,
-            initialData: (() => readSnapshot(key)) as never,
+            initialData: (() =>
+                isUnfilteredSongCount
+                    ? readEntityCountFallback(key, 'songs')
+                    : readSnapshot(key)) as never,
             initialDataUpdatedAt: 0,
             queryFn: (ctx) =>
                 cachedSwr<number>({

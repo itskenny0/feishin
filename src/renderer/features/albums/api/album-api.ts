@@ -10,6 +10,7 @@ import {
     filterAlbumsLocal,
     getOrComputeSorted,
     loadAlbumsRows,
+    readEntityCountFallback,
     readSnapshot,
     toCachedAlbumRow,
     toCachedSongRow,
@@ -227,9 +228,18 @@ export const albumQueries = {
             args.query,
             args.query?.artistIds?.length === 1 ? args.query?.artistIds[0] : undefined,
         );
+        // An unfiltered album count equals the exact, sweep-maintained store
+        // count, so seed it synchronously and skip the cold COUNT suspend
+        // (perf fix #3). Filtered counts seed from the snapshot only.
+        const q = args.query;
+        const isUnfilteredAlbumCount =
+            !q.searchTerm && !q.genreIds?.length && q.favorite === undefined && !q.artistIds;
         return queryOptions({
             gcTime: 1000 * 60 * 60,
-            initialData: (() => readSnapshot(key)) as never,
+            initialData: (() =>
+                isUnfilteredAlbumCount
+                    ? readEntityCountFallback(key, 'albums')
+                    : readSnapshot(key)) as never,
             initialDataUpdatedAt: 0,
             queryFn: (ctx) =>
                 cachedSwr<number>({
