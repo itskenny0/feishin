@@ -16,6 +16,15 @@ export interface PeerCommand {
     a?: PeerCommandArgs;
     /** Command verb. */
     k: PeerCommandKind;
+    /**
+     * Sender peerId. Commands are addressed to the TARGET's topic (so only the
+     * intended recipient acts on them), so the topic identifies the target, not
+     * the source. `src` carries the real sender so the receiver's authorisation
+     * gate can identify who sent the command instead of mistaking its own topic
+     * for a self-frame. Optional for backward-compat with producers that predate
+     * the field (those fall back to the topic peerId).
+     */
+    src?: string;
     /** Frame type discriminator. */
     t: 'cmd';
     /** Publisher timestamp (epoch ms). Receivers MAY ignore drift > 5s. */

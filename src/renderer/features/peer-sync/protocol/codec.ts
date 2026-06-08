@@ -73,6 +73,9 @@ const isValidCommand = (
     if (raw.t !== 'cmd') return false;
     if (typeof raw.k !== 'string') return false;
     if (!isValidTimestamp(raw.ts)) return false;
+    // `src` (sender peerId) is optional for backward-compat; when present it
+    // must be a string so the receiver can trust it as the command's origin.
+    if (raw.src !== undefined && typeof raw.src !== 'string') return false;
     return true;
 };
 

@@ -14,8 +14,8 @@
  */
 import isElectron from 'is-electron';
 import { useEffect } from 'react';
-import { shallow } from 'zustand/shallow';
 
+import { resolveEmbeddedBrokerUrl } from '/@/renderer/features/peer-sync/controller/embedded-broker-url';
 import {
     isPeerClientConnected,
     publishPing,
@@ -51,6 +51,7 @@ import { usePeerSyncSettings } from '/@/renderer/store/settings.store';
 import { ServerType } from '/@/shared/types/domain-types';
 
 const log = (...args: unknown[]) => console.info('[peer-sync]', ...args);
+const warn = (...args: unknown[]) => console.warn('[peer-sync]', ...args);
 
 const PRESENCE_SWEEP_MS = 3_000;
 const PING_INTERVAL_MS = 8_000;
@@ -61,7 +62,17 @@ const PRESENCE_HEARTBEAT_MS = 6_000;
 
 export const usePeerSync = () => {
     const peerSync = usePeerSyncSettings();
-    const currentServer = useAuthStore((s) => s.currentServer, shallow);
+    // Subscribe to the PRIMITIVE server fields the boot effect actually depends
+    // on (id / type / userId / username) rather than the whole `currentServer`
+    // object. `updateServer` mints a NEW object on every (re-)auth + server-info
+    // refresh (isAdmin/features/version), so depending on the object reference
+    // re-ran the effect and tore the live MQTT client down on every refresh —
+    // the "connected, then disconnected" symptom. Primitive deps stay stable
+    // across those refreshes so the client is built once and kept.
+    const serverId = useAuthStore((s) => s.currentServer?.id);
+    const serverType = useAuthStore((s) => s.currentServer?.type);
+    const serverUserId = useAuthStore((s) => s.currentServer?.userId);
+    const serverUsername = useAuthStore((s) => s.currentServer?.username);
     // The local Jellyfin Sessions deviceId — same id our server reports in
     // its /Sessions response under DeviceId. We publish it in our presence
     // frame so remote pickers can bridge "this Jellyfin device row" to
@@ -87,31 +98,55 @@ export const usePeerSync = () => {
             stopPeerClient();
             return;
         }
-        if (!peerSync.brokerUrl || !peerSync.peerId) {
-            // The user has flipped the toggle on but the wizard hasn't yet
-            // generated a peerId, or no broker URL was provided and we have
-            // no embedded broker URL to fall back to. Stay silent — the
-            // settings UI will surface the missing values. (We no longer
-            // require a stored roomKey: it is derived from the Jellyfin
-            // username below so a user's own devices auto-authenticate to
-            // each other's broker.)
+        // The embedded broker tier persists `brokerUrl: ''` (the broker is
+        // auto-started locally with no user-typed URL — see connect-wizard's
+        // handleFinish). Reconstruct the loopback ws(s):// URL from the same
+        // broker config it was started with so the client actually connects
+        // instead of treating an empty brokerUrl as "not configured".
+        const embeddedBrokerUrl = peerSync.broker.enabled
+            ? resolveEmbeddedBrokerUrl({
+                  host: peerSync.broker.host,
+                  port: peerSync.broker.port,
+                  tlsCertPath: peerSync.broker.tlsCertPath,
+                  tlsKeyPath: peerSync.broker.tlsKeyPath,
+              })
+            : null;
+        const effectiveBrokerUrl = peerSync.brokerUrl || embeddedBrokerUrl;
+        if (!effectiveBrokerUrl || !peerSync.peerId) {
+            // The user flipped the toggle on but we have nothing to dial:
+            // either the wizard hasn't generated a peerId yet, or there is no
+            // configured broker URL AND the embedded broker isn't enabled. Log
+            // why we're idle so "MQTT never connects" is diagnosable from the
+            // console instead of failing silently. (We no longer require a
+            // stored roomKey: it is derived from the Jellyfin username below so
+            // a user's own devices auto-authenticate to each other's broker.)
+            warn('not connecting:', {
+                reason: !peerSync.peerId
+                    ? 'no peerId (re-run the Connect wizard)'
+                    : 'no broker URL and embedded broker is not enabled',
+            });
             return;
         }
-        if (!currentServer || currentServer.type !== ServerType.JELLYFIN) {
+        if (!serverId || serverType !== ServerType.JELLYFIN) {
             // Peer-sync namespace is keyed on Jellyfin user id; without a
             // signed-in Jellyfin user we have nothing meaningful to do.
+            warn('not connecting:', { reason: 'no signed-in Jellyfin server' });
             return;
         }
-        if (!currentServer.userId || !currentServer.username) return;
+        if (!serverUserId || !serverUsername) {
+            warn('not connecting:', { reason: 'Jellyfin server has no userId/username' });
+            return;
+        }
         // Warm the lazily-loaded MQTT publish seam so peerDispatcher's
         // command path is synchronous by the time a peer is live. Cheap: it
         // shares the vendor-mqtt chunk this hook already pulled in.
         void warmMqttPublish().catch(() => {});
-        const tls = peerSync.brokerUrl.startsWith('wss://');
+        const tls = effectiveBrokerUrl.startsWith('wss://');
         log('booting client', {
-            brokerUrl: peerSync.brokerUrl,
+            brokerUrl: effectiveBrokerUrl,
+            embedded: !peerSync.brokerUrl && Boolean(embeddedBrokerUrl),
             peerId: peerSync.peerId,
-            userId: currentServer.userId,
+            userId: serverUserId,
         });
         // Pending pings keyed by id: timestamp captured at publish so the
         // matching pong can compute round-trip in ms. Cleared on stop.
@@ -133,12 +168,12 @@ export const usePeerSync = () => {
             prevTransport.set(peerId, kind);
             if (prev !== undefined) recordTransportFlip(peerId, prev, kind);
         });
-        const userIdForPings = currentServer.userId;
+        const userIdForPings = serverUserId;
 
         startPeerClient(
             {
                 brokerPassword: peerSync.brokerPassword,
-                brokerUrl: peerSync.brokerUrl,
+                brokerUrl: effectiveBrokerUrl,
                 brokerUsername: peerSync.brokerUsername,
                 jellyfinDeviceId,
                 peerId: peerSync.peerId,
@@ -148,10 +183,10 @@ export const usePeerSync = () => {
                 // authenticating to each other's broker; deriving it from the
                 // username means every device the same account signs into
                 // shares the room automatically.
-                roomKey: currentServer.username,
+                roomKey: serverUsername,
                 tls,
                 transport: peerSync.transport,
-                userId: currentServer.userId,
+                userId: serverUserId,
             },
             {
                 onCommand: (from, cmd) => {
@@ -248,8 +283,16 @@ export const usePeerSync = () => {
             stopPeerClient();
         };
     }, [
-        currentServer,
+        serverId,
+        serverType,
+        serverUserId,
+        serverUsername,
         jellyfinDeviceId,
+        peerSync.broker.enabled,
+        peerSync.broker.host,
+        peerSync.broker.port,
+        peerSync.broker.tlsCertPath,
+        peerSync.broker.tlsKeyPath,
         peerSync.brokerPassword,
         peerSync.brokerUrl,
         peerSync.brokerUsername,

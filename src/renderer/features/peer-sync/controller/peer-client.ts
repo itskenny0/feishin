@@ -366,8 +366,6 @@ const buildLwt = (selfAddress: PeerAddress, jellyfinDeviceId: string | undefined
 const handleMessage = (s: ActiveSession, topic: string, payload: Uint8Array): void => {
     const parsed = parseTopic(topic);
     if (!parsed) return; // not ours / wrong shape — drop silently
-    // Ignore our own retained frames coming back to us on (re)subscribe.
-    if (parsed.addr.peerId === s.selfAddress.peerId) return;
 
     const frame: null | PeerFrame = codec.decode(payload);
     if (!frame) {
@@ -375,7 +373,17 @@ const handleMessage = (s: ActiveSession, topic: string, payload: Uint8Array): vo
         return;
     }
 
+    // Two addressing models share the wildcard subscription:
+    //  - presence/state are published on the SENDER's own topic, so a frame on
+    //    OUR topic is our own retained echo coming back on (re)subscribe — drop.
+    //  - cmd/ping are ADDRESSED to a peer (published on the RECIPIENT's topic),
+    //    so we act ONLY on frames addressed to us; the real sender of a command
+    //    rides in `src` (the topic names the target, not the source). Filtering
+    //    these as "self" here is what previously dropped every inbound command.
+    const isSelfTopic = parsed.addr.peerId === s.selfAddress.peerId;
+
     if (parsed.leaf === 'presence' && frame.t === 'presence') {
+        if (isSelfTopic) return; // our own retained presence echo
         // Always tell the selector — that's how the dispatcher knows which
         // lane is alive for this peer. The events hook is for UI only.
         // `dev` (publisher's Jellyfin Sessions deviceId, optional) populates
@@ -387,15 +395,21 @@ const handleMessage = (s: ActiveSession, topic: string, payload: Uint8Array): vo
         return;
     }
     if (parsed.leaf === 'state' && frame.t === 'state') {
+        if (isSelfTopic) return; // our own retained state echo
         s.events.onState?.(parsed.addr, frame);
         return;
     }
     if (parsed.leaf === 'cmd' && frame.t === 'cmd') {
-        log('command', { from: parsed.addr.peerId, k: frame.k });
-        s.events.onCommand?.(parsed.addr, frame);
+        if (!isSelfTopic) return; // command addressed to a different peer
+        const fromPeerId =
+            typeof frame.src === 'string' && frame.src.length > 0 ? frame.src : parsed.addr.peerId;
+        const from = { peerId: fromPeerId, userId: parsed.addr.userId };
+        log('command', { from: fromPeerId, k: frame.k });
+        s.events.onCommand?.(from, frame);
         return;
     }
     if (parsed.leaf === 'ping' && frame.t === 'ping') {
+        if (!isSelfTopic) return; // ping addressed to a different peer
         // Echo it back as a pong on our own topic so the sender can measure
         // RTT. The pong carries the original id so out-of-order probes are
         // resolved by the sender's pending map.
@@ -415,6 +429,7 @@ const handleMessage = (s: ActiveSession, topic: string, payload: Uint8Array): vo
         return;
     }
     if (parsed.leaf === 'pong' && frame.t === 'pong') {
+        if (isSelfTopic) return; // our own pong echo
         s.events.onPong?.(parsed.addr, frame);
         return;
     }
@@ -791,15 +806,20 @@ const perfMark = (label: string, payload: Record<string, unknown>): void => {
 export const publishCommand = (target: PeerAddress, command: PeerCommand): void => {
     if (!session) return;
     const topic = topicFor(target, 'cmd');
+    // Stamp the real sender. The command is published on the TARGET's topic for
+    // addressing, so the recipient can't infer the source from the topic — `src`
+    // is how its authorisation gate identifies who sent the command (and avoids
+    // mistaking its own topic for a self-frame).
+    const wire: PeerCommand = { ...command, src: session.selfAddress.peerId };
     const t0 = performance.now();
-    log('publish cmd', { k: command.k, topic });
+    log('publish cmd', { k: command.k, src: wire.src, topic });
     // Command frames are intentionally QoS 0: idempotent on the receiver
     // and the state echo is the source of truth, so the PUBACK round-trip
     // was added latency without correctness. We still log broker-side
     // failures and emit the perf mark so the diagnostic story stays clean.
     session.client.publish(
         topic,
-        Buffer.from(codec.encode(command)),
+        Buffer.from(codec.encode(wire)),
         { qos: 0, retain: false },
         (err) => {
             if (err) warn('cmd publish failed', { err: err.message, topic });
