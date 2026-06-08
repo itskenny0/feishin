@@ -80,11 +80,16 @@ const spawnPool = (): boolean => {
             ) => {
                 const msg = event.data;
                 const job = pending.get(msg.id);
+                // Guard BEFORE freeing the slot: if this job was already settled
+                // (e.g. onerror rejected + recycled the worker, then a late/dupe
+                // message arrives), returning here avoids pushing the same worker
+                // into `idle` twice — a double-push hands one worker to two queued
+                // jobs and orphans one promise forever, wedging the sweep.
+                if (!job) return;
                 pending.delete(msg.id);
                 pw.busyId = null;
                 idle.push(pw);
                 pumpQueue();
-                if (!job) return;
                 if (msg.ok) {
                     const out = new Map<string, DownscaledBlob>();
                     for (const entry of msg.out) {

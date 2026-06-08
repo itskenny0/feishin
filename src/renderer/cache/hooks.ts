@@ -337,11 +337,24 @@ export const cachedSwr = async <TData>(args: {
         writeSnapshot(queryKey, fresh);
         return fresh;
     } catch (err) {
+        // Resilience: if we have a cached snapshot for this key, serve it on ANY
+        // fetch error (network OR a transient server/controller throw) rather
+        // than surfacing the error boundary — a previously-loaded album/playlist
+        // stays visible through a flaky moment. Only when there's no cached
+        // value do we distinguish: network errors degrade to an empty state,
+        // genuine (non-network) errors rethrow so real bugs aren't swallowed.
+        const snap = readSnapshot<TData>(queryKey);
+        if (snap !== undefined) {
+            console.info('[cache] cold fetch errored; serving cached snapshot', queryKey, {
+                error: (err as Error)?.message,
+            });
+            return snap;
+        }
         if (isLikelyNetworkError(err)) {
             console.info('[cache] cold network failed', queryKey, {
                 error: (err as Error)?.message,
             });
-            return fallbackOnFailure();
+            return null as unknown as TData;
         }
         throw err;
     }

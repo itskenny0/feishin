@@ -519,48 +519,53 @@ export const JellyfinController: InternalControllerEndpoint = {
             throw new Error('No userId found');
         }
 
-        const res = await jfApiClient(apiClientProps).getAlbumDetail({
-            params: {
-                id: query.id,
-                userId: apiClientProps.server.userId,
-            },
-            query: {
-                Fields: JF_FIELDS.ALBUM_DETAIL,
-            },
-        });
+        // Fire the album document + its track listing CONCURRENTLY. They were
+        // previously two serial round-trips (album, then songs), which on a
+        // flaky mobile link doubled the cold detail latency. Use ParentId to
+        // enumerate the album's direct audio children — upstream's
+        // AlbumIds+Recursive combination returned only a subset on some
+        // libraries (a 368-track album came back as one song twice); ParentId
+        // restores correct "children of this album" semantics, and the explicit
+        // EnableUserData + UserId keep the upstream play-count fix.
+        const [res, songsRes] = await Promise.all([
+            jfApiClient(apiClientProps).getAlbumDetail({
+                params: {
+                    id: query.id,
+                    userId: apiClientProps.server.userId,
+                },
+                query: {
+                    Fields: JF_FIELDS.ALBUM_DETAIL,
+                },
+            }),
+            jfApiClient(apiClientProps).getSongList({
+                params: {
+                    userId: apiClientProps.server.userId,
+                },
+                query: {
+                    EnableUserData: true,
+                    Fields: JF_FIELDS.SONG,
+                    IncludeItemTypes: 'Audio',
+                    // Pin a large explicit Limit so albums with > the server's
+                    // default page size still come back in full.
+                    Limit: 5000,
+                    ParentId: query.id,
+                    SortBy: 'ParentIndexNumber,IndexNumber,SortName',
+                    SortOrder: JFSortOrder.ASC,
+                    StartIndex: 0,
+                    UserId: apiClientProps.server.userId,
+                },
+            }),
+        ]);
 
-        // Use ParentId to enumerate the album's direct audio children.
-        //
-        // Upstream commit f190626c switched this to AlbumIds + Recursive to
-        // make play counts come through, but on certain Jellyfin libraries
-        // that combination returns only a tiny subset of the album (we saw
-        // a 368-track album come back as one song repeated twice). Going
-        // back to ParentId restores the original "give me the children of
-        // this album" semantics, and we add EnableUserData + UserId
-        // explicitly so the play-count fix from the upstream commit still
-        // applies.
-        const songsRes = await jfApiClient(apiClientProps).getSongList({
-            params: {
-                userId: apiClientProps.server.userId,
-            },
-            query: {
-                EnableUserData: true,
-                Fields: JF_FIELDS.SONG,
-                IncludeItemTypes: 'Audio',
-                // Pin a large explicit Limit so albums with > the server's
-                // default page size still come back in full.
-                Limit: 5000,
-                ParentId: query.id,
-                SortBy: 'ParentIndexNumber,IndexNumber,SortName',
-                SortOrder: JFSortOrder.ASC,
-                StartIndex: 0,
-                UserId: apiClientProps.server.userId,
-            },
-        });
-
-        if (res.status !== 200 || songsRes.status !== 200) {
+        // Only the album document is load-bearing — if it failed, the page has
+        // nothing to show, so throw. But if just the track-listing sub-call
+        // hiccuped (transient 5xx/timeout), degrade gracefully to an empty
+        // tracklist instead of hard-erroring the whole detail page: the cached
+        // metadata + a background revalidate will fill the songs in.
+        if (res.status !== 200) {
             throw new Error('Failed to get album detail');
         }
+        const songItems = songsRes.status === 200 ? songsRes.body.Items : [];
 
         // Two filters in one pass:
         //  1. Workaround for a Jellyfin bug that returns items from a different
@@ -570,7 +575,7 @@ export const JellyfinController: InternalControllerEndpoint = {
         //     surfaces twice in the same listing.
         const albumIdSet = new Set([query.id]);
         const seenSongIds = new Set<string>();
-        const songs = songsRes.body.Items.filter((item) => {
+        const songs = songItems.filter((item) => {
             if (!albumIdSet.has(item.AlbumId!)) return false;
             if (seenSongIds.has(item.Id)) return false;
             seenSongIds.add(item.Id);
