@@ -7,7 +7,7 @@ import { useLocation } from 'react-router';
 
 import styles from './sidebar.module.css';
 
-import { CachedImage } from '/@/renderer/cache';
+import { CachedImage, useOfflineSongCount } from '/@/renderer/cache';
 import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { ContextMenuController } from '/@/renderer/features/context-menu/context-menu-controller';
 import {
@@ -28,6 +28,7 @@ import {
     SidebarSharedPlaylistList,
     useSidebarPlaylistAddDragMonitor,
 } from '/@/renderer/features/sidebar/components/sidebar-playlist-list';
+import { AppRoute } from '/@/renderer/router/routes';
 import {
     useAppStore,
     useAppStoreActions,
@@ -121,6 +122,9 @@ export const Sidebar = () => {
     );
 
     const sidebarItems = useSidebarItems();
+    // Reactive count of downloaded tracks — drives the hidden-when-empty
+    // "Available offline" entry below.
+    const offlineSongCount = useOfflineSongCount();
     const { windowBarStyle } = useWindowSettings();
     const sidebarImageEnabled = useAppStore((state) => state.sidebar.image);
     const sidebarExpandedFromStore = useAppStore((state) => state.sidebar.expanded);
@@ -162,11 +166,25 @@ export const Sidebar = () => {
         return items;
     }, [sidebarItems, translatedSidebarItemMap]);
 
-    /* Library accordion: only items with a route (exclude Collections section) */
-    const libraryItemsWithRoute = useMemo(
-        () => sidebarItemsWithRoute.filter((item) => item.id !== 'Collections' && item.route),
-        [sidebarItemsWithRoute],
-    );
+    /* Library accordion: only items with a route (exclude Collections section).
+     * Append the "Available offline" entry only when something is downloaded
+     * (hidden-when-empty); it is injected here rather than persisted to the
+     * configurable sidebarItems list so it stays reactive and can't be removed
+     * while offline media exists. */
+    const libraryItemsWithRoute = useMemo(() => {
+        const items = sidebarItemsWithRoute.filter(
+            (item) => item.id !== 'Collections' && item.route,
+        );
+        if (offlineSongCount > 0) {
+            items.push({
+                disabled: false,
+                id: 'Offline',
+                label: t('page.sidebar.offline', { defaultValue: 'Available offline' }),
+                route: AppRoute.LIBRARY_OFFLINE,
+            });
+        }
+        return items;
+    }, [sidebarItemsWithRoute, offlineSongCount, t]);
 
     const isCustomWindowBar =
         windowBarStyle === Platform.WINDOWS || windowBarStyle === Platform.MACOS;

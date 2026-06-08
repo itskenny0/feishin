@@ -6,6 +6,7 @@ import { Link, NavLink, useNavigate } from 'react-router';
 
 import styles from './collapsed-sidebar.module.css';
 
+import { useOfflineSongCount } from '/@/renderer/cache';
 import { CollapsedSidebarButton } from '/@/renderer/features/sidebar/components/collapsed-sidebar-button';
 import { CollapsedSidebarItem } from '/@/renderer/features/sidebar/components/collapsed-sidebar-item';
 import { getCollectionTo } from '/@/renderer/features/sidebar/components/sidebar-collection-list';
@@ -35,6 +36,9 @@ export const CollapsedSidebar = () => {
     const { windowBarStyle } = useWindowSettings();
     const sidebarCollapsedNavigation = useSidebarCollapsedNavigation();
     const sidebarItems = useSidebarItems();
+    // Reactive count of downloaded tracks — drives the hidden-when-empty
+    // "Available offline" entry below.
+    const offlineSongCount = useOfflineSongCount();
     const translatedSidebarItemMap = useMemo(
         () => ({
             Albums: t('page.sidebar.albums'),
@@ -67,8 +71,20 @@ export const CollapsedSidebar = () => {
                     item.label,
             }));
 
+        // Append the "Available offline" entry only when something is
+        // downloaded (hidden-when-empty); injected here so it stays reactive
+        // and isn't part of the configurable sidebarItems list.
+        if (offlineSongCount > 0) {
+            items.push({
+                disabled: false,
+                id: 'Offline',
+                label: t('page.sidebar.offline', { defaultValue: 'Available offline' }),
+                route: AppRoute.LIBRARY_OFFLINE,
+            });
+        }
+
         return items;
-    }, [sidebarItems, translatedSidebarItemMap]);
+    }, [sidebarItems, translatedSidebarItemMap, offlineSongCount, t]);
 
     return (
         <motion.div

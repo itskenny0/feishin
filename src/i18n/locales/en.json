@@ -1140,6 +1140,10 @@
                 "regenerateStarted": "Artwork variants cleared - regenerating in the background."
             }
         },
+        "offlineList": {
+            "empty": "Nothing available offline",
+            "emptyDescription": "Download albums, playlists, or tracks to make them available offline."
+        },
         "sidebar": {
             "albumArtists": "$t(entity.albumArtist, {\"count\": 2})",
             "albums": "$t(entity.album, {\"count\": 2})",
@@ -1153,6 +1157,7 @@
             "radio": "$t(entity.radioStation, {\"count\": 2})",
             "myLibrary": "My Library",
             "nowPlaying": "Now Playing",
+            "offline": "Available offline",
             "playlists": "$t(entity.playlist, {\"count\": 2})",
             "search": "$t(common.search)",
             "settings": "$t(common.setting, {\"count\": 2})",

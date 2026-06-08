@@ -5,9 +5,11 @@ import { useNavigate } from 'react-router';
 
 import styles from './my-library-popover.module.css';
 
+import { useOfflineSongCount } from '/@/renderer/cache';
 import { BottomSheet } from '/@/renderer/features/jellyfin-remote-target/components/bottom-sheet/bottom-sheet';
 import { SidebarIcon } from '/@/renderer/features/sidebar/components/sidebar-icon';
 import { useHaptic } from '/@/renderer/hooks/use-haptic';
+import { AppRoute } from '/@/renderer/router/routes';
 import { SidebarItemType, useSidebarItems } from '/@/renderer/store/settings.store';
 import { Portal } from '/@/shared/components/portal/portal';
 
@@ -37,6 +39,9 @@ export const MyLibraryPopover = ({ onClose, opened }: MyLibraryPopoverProps) => 
     const navigate = useNavigate();
     const haptic = useHaptic();
     const sidebarItems = useSidebarItems();
+    // Reactive count of downloaded tracks — drives the hidden-when-empty
+    // "Available offline" entry below.
+    const offlineSongCount = useOfflineSongCount();
 
     // Same id → label map the sidebar uses, kept in sync with the
     // `page.sidebar.*` keys. Memoised so the entries array below stays
@@ -74,7 +79,7 @@ export const MyLibraryPopover = ({ onClose, opened }: MyLibraryPopoverProps) => 
 
     const entries: SidebarItemType[] = useMemo(() => {
         if (!sidebarItems) return [];
-        return sidebarItems
+        const items = sidebarItems
             .filter(
                 (item) =>
                     (!item.disabled || alwaysIncludeIds.has(item.id)) &&
@@ -87,7 +92,21 @@ export const MyLibraryPopover = ({ onClose, opened }: MyLibraryPopoverProps) => 
                     translatedSidebarItemMap[item.id as keyof typeof translatedSidebarItemMap] ??
                     item.label,
             }));
-    }, [sidebarItems, translatedSidebarItemMap, alwaysIncludeIds]);
+
+        // Append the "Available offline" entry only when something is
+        // downloaded (hidden-when-empty); injected here, not persisted to the
+        // configurable sidebarItems list, so it stays reactive.
+        if (offlineSongCount > 0) {
+            items.push({
+                disabled: false,
+                id: 'Offline',
+                label: t('page.sidebar.offline', { defaultValue: 'Available offline' }),
+                route: AppRoute.LIBRARY_OFFLINE,
+            });
+        }
+
+        return items;
+    }, [sidebarItems, translatedSidebarItemMap, alwaysIncludeIds, offlineSongCount, t]);
 
     const handleSelect = useCallback(
         (route: string) => {

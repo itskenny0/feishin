@@ -23,6 +23,10 @@ const AlbumListRoute = lazy(() => import('/@/renderer/features/albums/routes/alb
 
 const SongListRoute = lazy(() => import('/@/renderer/features/songs/routes/song-list-route'));
 
+const OfflineSongListRoute = lazy(
+    () => import('/@/renderer/features/songs/routes/offline-song-list-route'),
+);
+
 const PlaylistDetailSongListRoute = lazy(
     () => import('/@/renderer/features/playlists/routes/playlist-detail-song-list-route'),
 );
@@ -292,6 +296,10 @@ export const AppRouter = () => {
                                         <Route
                                             element={<SongListRoute />}
                                             path={AppRoute.LIBRARY_SONGS}
+                                        />
+                                        <Route
+                                            element={<OfflineSongListRoute />}
+                                            path={AppRoute.LIBRARY_OFFLINE}
                                         />
                                         <Route
                                             element={<FolderListRoute />}

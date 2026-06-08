@@ -121,6 +121,7 @@ export {
 export { SyncChip } from './sync-chip';
 export type * from './types';
 export { useIsEntityOfflineAvailable, useIsSongOfflineAvailable } from './use-offline-availability';
+export { loadOfflineSongs, useOfflineSongCount, useOfflineSongs } from './use-offline-songs';
 export { useSmoothOfflineSync } from './use-smooth-offline-sync';
 export { useSmoothSweep } from './use-smooth-sweep';
 export type { SmoothSweepView } from './use-smooth-sweep';
