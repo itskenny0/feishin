@@ -1,13 +1,20 @@
+/*
+ * Shared detail-page hero (album / album-artist / artist / playlist / genre).
+ *
+ * ONE component, two layout MODES selected by `data-layout` (set from
+ * useIsMobileShell) — no competing media/container breakpoints:
+ *   - mobile  : centered, stacked. Cover centered over a colour-from-art
+ *               gradient, bold title + one metadata line + a single action row
+ *               (secondary actions left, shuffle + filled Play right). Spotify
+ *               mobile detail.
+ *   - desktop : editorial. Large cover left, eyebrow + big title + metadata +
+ *               action row right, bottom-aligned.
+ * The per-entity headers only feed content (cover/title/metadata/actions); all
+ * layout lives here so changes cascade to every detail view at once.
+ */
+
 .top-right {
     position: absolute;
-
-    /*
-     * Push below the device status-bar / clock on Capacitor Android by
-     * adding the max(env, --android-safe-top) to the offset. env() is 0
-     * in environments without a system-bar overlap, and --android-safe-
-     * top is 0 outside Capacitor — so desktop is unchanged. On
-     * Capacitor it lifts by 28px to clear the clock.
-     */
     top: calc(
         var(--theme-spacing-lg) +
             max(env(safe-area-inset-top, 0px), var(--android-safe-top, 0px))
@@ -17,253 +24,112 @@
 }
 
 /*
- * Hero gradient backdrop.
- *
- * Sits absolutely behind the header content and fades the dominant colour of
- * the album/artist/playlist cover (set via --hero-color on the host) from
- * fully-opaque-ish at the top into the page background below. Picks up the
- * theme background-noise SVG so the gradient doesn't look like a flat fill on
- * large hero blocks — gives it that Spotify-like grain.
- *
- * Sized 110% tall + negative top so the gradient bleeds slightly above the
- * header bounds (looks better against page-header chrome) and extends a
- * touch below it so the colour transition into the list/grid that follows
- * is gentle rather than a sharp cutoff.
+ * Hero gradient backdrop: fades the cover's dominant colour (--hero-color on
+ * the host) into the page background, over the theme grain so it isn't a flat
+ * fill. Bleeds slightly above/below the header bounds for a soft transition.
  */
 .hero-gradient {
     position: absolute;
-    inset: -8% 0 -2%;
+    inset: -12% 0 -2%;
     z-index: 0;
     pointer-events: none;
     background-image:
         linear-gradient(
             180deg,
-            color-mix(in srgb, var(--hero-color, transparent) 70%, transparent) 0%,
-            color-mix(in srgb, var(--hero-color, transparent) 38%, transparent) 35%,
-            color-mix(in srgb, var(--hero-color, transparent) 14%, transparent) 70%,
+            color-mix(in srgb, var(--hero-color, transparent) 72%, transparent) 0%,
+            color-mix(in srgb, var(--hero-color, transparent) 40%, transparent) 38%,
+            color-mix(in srgb, var(--hero-color, transparent) 14%, transparent) 72%,
             transparent 100%
         ),
         var(--theme-background-noise);
     background-repeat: no-repeat, repeat;
     background-size: cover, auto;
-    opacity: 0.85;
+    opacity: 0.9;
     transition: opacity 320ms ease;
 }
 
 .library-header {
     position: relative;
-    display: grid;
-    grid-template-areas: 'image' 'info';
-    grid-template-rows: auto 1fr;
-    grid-template-columns: 1fr;
-    gap: var(--theme-spacing-md);
-    align-items: center;
-    justify-items: center;
     width: 100%;
     max-width: 100%;
-    height: auto;
-    padding: 2rem 1rem;
-
-    /*
-     * Hard cap the cover to its grid cell at EVERY breakpoint. The per-tier
-     * rules below set an explicit pixel width that is meant to match the
-     * `image` grid column, but if the two ever disagree (a tier mismatch, an
-     * orientation/container-query edge) the fixed-width cover overflows its
-     * cell and spills across the metadata column, overlapping the action
-     * buttons — the bug users hit on the artist/playlist headers. `max-width`
-     * is a no-op when the cover already fits, and clamps it to the column
-     * when it doesn't, so it can never break the layout regardless of width.
-     * (The underlying <img> keeps aspect-ratio 1/1 + object-fit from the
-     * shared image styles, so a clamp crops rather than distorts.)
-     */
-    :global(.item-image-placeholder) {
-        width: 175px !important;
-        min-width: 0;
-        max-width: 100%;
-        height: 175px;
-    }
-
-    .image {
-        width: 250px !important;
-        min-width: 0;
-        max-width: 100%;
-        height: 250px;
-    }
-
-    /*
-     * Portrait phones (≤767px wide AND portrait orientation): on a 360–
-     * 430px phone in portrait the old hero header stacked a 220–250px
-     * cover above the metadata column, eating 35–45% of vertical
-     * viewport before the user saw any list rows. Drop to a tight 120px
-     * cover + a single-row layout so the playlist title, play button,
-     * and the first three or four rows of the song list are visible
-     * above the fold. Landscape phones and tablets keep the editorial
-     * hero — that's where it actually fits.
-     */
-    @media (width <= 767px) and (orientation: portrait) {
-        grid-template-areas: 'image info';
-        grid-template-rows: auto;
-        grid-template-columns: 120px minmax(0, 1fr);
-        gap: var(--theme-spacing-sm);
-        align-items: center;
-        justify-items: flex-start;
-        padding: var(--theme-spacing-md) var(--theme-spacing-md) var(--theme-spacing-sm);
-        text-align: left;
-
-        .image {
-            width: 120px !important;
-            height: 120px;
-        }
-
-        :global(.item-image-placeholder) {
-            width: 120px !important;
-            height: 120px;
-        }
-    }
-
-    /*
-     * Small-phone tier (≤360): inherits the side-by-side portrait layout
-     * above (grid-template-columns: 120px minmax(0, 1fr)). The cover must
-     * therefore fit the narrow image column — drop it to 100px. The old
-     * 220px value here predated the side-by-side redesign and, left in a
-     * 120px column, overflowed the cell and overlapped the action buttons.
-     */
-    @media (width <= 360px) {
-        gap: var(--theme-spacing-sm);
-        padding: 1.25rem 0.75rem;
-
-        .image {
-            width: 100px !important;
-            height: 100px;
-        }
-
-        :global(.item-image-placeholder) {
-            width: 100px !important;
-            height: 100px;
-        }
-    }
-
-    /*
-     * Tablet-tier side-by-side hero: triggers at 600px instead of the
-     * Mantine `sm` (768px) breakpoint so portrait tablets and large
-     * phones in landscape get the editorial cover-art-left layout
-     * instead of the stacked centred phone layout. Cover shrinks to
-     * 180px so the metadata column still has comfortable room.
-     */
-    @container (min-width: 600px) {
-        grid-template-areas: 'image info';
-        grid-template-rows: auto;
-        grid-template-columns: 180px minmax(0, 1fr);
-        align-items: flex-end;
-        justify-items: start;
-        height: auto;
-        min-height: 280px;
-        padding: 3.5rem 1.5rem 1.5rem;
-
-        .image {
-            width: 180px !important;
-            height: 180px;
-        }
-
-        :global(.item-image-placeholder) {
-            width: 180px !important;
-            height: 180px;
-        }
-    }
-
-    @container (min-width: $mantine-breakpoint-sm) {
-        grid-template-columns: 225px minmax(0, 1fr);
-        min-height: 340px;
-        padding: 5rem 2rem 2rem;
-
-        .image {
-            width: 225px !important;
-            height: 225px;
-        }
-
-        :global(.item-image-placeholder) {
-            width: 225px !important;
-            height: 225px;
-        }
-    }
-
-    @container (min-width: $mantine-breakpoint-lg) {
-        grid-template-columns: 250px minmax(0, 1fr);
-
-        .image {
-            width: 250px !important;
-            height: 250px;
-        }
-
-        :global(.item-image-placeholder) {
-            width: 250px !important;
-            height: 250px;
-        }
-    }
-
-    &.compact {
-        min-height: unset;
-        padding: var(--theme-spacing-md) var(--theme-spacing-xs);
-
-        :global(.item-image-placeholder) {
-            width: 250px !important;
-            height: 250px;
-        }
-
-        .image {
-            width: 250px !important;
-            height: 250px;
-        }
-
-        /* Tablet tier kicks in at the same 600px threshold as the
-           full-height variant — keeps the two header sizes in sync. */
-        @container (min-width: 600px) {
-            grid-template-columns: 160px minmax(0, 1fr);
-            min-height: unset;
-            padding: var(--theme-spacing-md) var(--theme-spacing-sm);
-
-            .image {
-                width: 160px !important;
-                height: 160px;
-            }
-
-            :global(.item-image-placeholder) {
-                width: 160px !important;
-                height: 160px;
-            }
-        }
-
-        @container (min-width: $mantine-breakpoint-sm) {
-            grid-template-columns: 200px minmax(0, 1fr);
-
-            .image {
-                width: 200px !important;
-                height: 200px;
-            }
-
-            :global(.item-image-placeholder) {
-                width: 200px !important;
-                height: 200px;
-            }
-        }
-
-        @container (min-width: $mantine-breakpoint-lg) {
-            grid-template-columns: 200px minmax(0, 1fr);
-            padding: var(--theme-spacing-md) var(--theme-spacing-md);
-
-            .image {
-                width: 200px !important;
-                height: 200px;
-            }
-
-            :global(.item-image-placeholder) {
-                width: 200px !important;
-                height: 200px;
-            }
-        }
-    }
 }
 
+/* ── Mobile mode: centered stacked hero ─────────────────────────────────── */
+.library-header[data-layout='mobile'] {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--theme-spacing-md);
+    padding: calc(
+            var(--theme-spacing-lg) +
+                max(env(safe-area-inset-top, 0px), var(--android-safe-top, 0px))
+        )
+        var(--theme-spacing-md) var(--theme-spacing-md);
+    text-align: center;
+}
+
+.library-header[data-layout='mobile'] .image-section {
+    justify-content: center;
+}
+
+.library-header[data-layout='mobile'] .image,
+.library-header[data-layout='mobile'] :global(.item-image-placeholder) {
+    width: min(56vw, 244px);
+    height: min(56vw, 244px);
+}
+
+.library-header[data-layout='mobile'] .metadata-section {
+    align-items: center;
+    text-align: center;
+}
+
+.library-header[data-layout='mobile'] .title {
+    justify-content: center;
+    /* Fixed mobile scale (centered) — the desktop per-title clamp would read
+       far too large stacked on a phone. */
+    font-size: clamp(1.65rem, 7.5vw, 2.4rem);
+}
+
+.library-header[data-layout='mobile'].compact .image,
+.library-header[data-layout='mobile'].compact :global(.item-image-placeholder) {
+    width: min(48vw, 208px);
+    height: min(48vw, 208px);
+}
+
+/* ── Desktop mode: editorial horizontal hero ────────────────────────────── */
+.library-header[data-layout='desktop'] {
+    display: grid;
+    grid-template-areas: 'image info';
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: var(--theme-spacing-lg);
+    align-items: flex-end;
+    min-height: 300px;
+    padding: 4rem 2rem 1.5rem;
+}
+
+.library-header[data-layout='desktop'] .image-section {
+    align-items: flex-end;
+    justify-content: flex-start;
+}
+
+.library-header[data-layout='desktop'] .image,
+.library-header[data-layout='desktop'] :global(.item-image-placeholder) {
+    width: clamp(176px, 17vw, 228px);
+    height: clamp(176px, 17vw, 228px);
+}
+
+.library-header[data-layout='desktop'].compact {
+    min-height: unset;
+    padding: var(--theme-spacing-lg) var(--theme-spacing-md);
+}
+
+.library-header[data-layout='desktop'].compact .image,
+.library-header[data-layout='desktop'].compact :global(.item-image-placeholder) {
+    width: clamp(148px, 13vw, 188px);
+    height: clamp(148px, 13vw, 188px);
+}
+
+/* ── Shared pieces ──────────────────────────────────────────────────────── */
 .image-section {
     position: relative;
     z-index: 15;
@@ -271,27 +137,15 @@
     grid-area: image;
     align-items: center;
     justify-content: center;
-
-    /*
-     * Critical: this is the grid item in the fixed-width `image` column.
-     * Grid items default to min-width:auto, so without this the section
-     * refuses to shrink below the cover's intrinsic width and EXPANDS past
-     * its track — spilling the cover across the metadata column and over the
-     * Play/Next/Last buttons (the recurring oversized-cover bug). min-width:0
-     * lets it honor the track; overflow:hidden clips any residual. With the
-     * section clamped, the cover's own max-width:100% finally resolves to the
-     * track width instead of to an already-overgrown section.
-     */
     min-width: 0;
     max-width: 100%;
-    overflow: hidden;
-    filter: drop-shadow(0 0 8px rgb(0 0 0 / 50%));
+    filter: drop-shadow(0 10px 26px rgb(0 0 0 / 45%));
+}
 
-    /* 600px tablet threshold — must match the .library-header rule above
-       so the cover snaps to the side-aligned layout in lockstep. */
-    @container (min-width: 600px) {
-        align-items: flex-end;
-    }
+.image {
+    aspect-ratio: 1 / 1;
+    object-fit: var(--theme-image-fit);
+    border-radius: var(--theme-radius-md);
 }
 
 .image-overlay {
@@ -315,132 +169,76 @@
     flex-direction: column;
     grid-area: info;
     gap: var(--theme-spacing-sm);
-
-    /*
-     * Always left-align the title / artist / stats metadata, even on
-     * phones where the cover sits stacked above. Spotify, Apple Music
-     * and YouTube Music all put the cover full-width-centered and the
-     * heading flush-left below — centred text looks like a marketing
-     * splash rather than an editorial heading. The 600px container-
-     * query rule that used to swap from center→left now collapses to
-     * a no-op; left-aligned is the default everywhere.
-     */
-    align-items: flex-start;
-    justify-content: flex-end;
     width: 100%;
-    height: 100%;
-    text-align: left;
+    justify-content: flex-end;
 }
 
-.image {
-    object-fit: var(--theme-image-fit);
-    border-radius: var(--theme-radius-md);
+.item-type {
+    opacity: 0.92;
 }
 
 .title {
     display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35em;
     width: 100%;
     margin: 0;
-
-    /* Spotify-style display title: large, dense, tight tracking.
-       6rem ceiling lets wide desktop hero pages read ~86–96px like
-       Spotify's encore-headline-large rather than UI chrome; 1.75rem
-       floor keeps phone titles readable without crushing into the
-       album-art on portrait. The per-title sizes from calculateTitleSize()
-       in library-header.tsx override this baseline (they ramp both the
-       dvw multiplier and the ceiling down for long names).
-       overflow-wrap: anywhere + text-wrap: pretty lets the browser break
-       long words and balance lines on bigger widths, so titles never
-       spill off the page edge on narrow viewports. */
     font-size: clamp(1.75rem, 6dvw, 6rem);
     font-weight: 800;
-    line-height: 1.1;
+    line-height: 1.08;
     letter-spacing: -0.035em;
     text-wrap: pretty;
     overflow-wrap: anywhere;
 }
 
 /*
- * Play / favourite / menu strip below the title. Spotify pattern: the
- * action buttons sit on a single horizontal row beneath the metadata,
- * flush-left like the title. Used to be a stacked column on phones; that
- * meant Play / Next / Last each took a whole row and the strip pushed
- * the track list down past the fold. Switch to a horizontal row on
- * every viewport so the action set reads as a single editorial control
- * bar.
+ * Single action row. Mobile: secondary actions on the left, shuffle + the
+ * filled Play on the right (Spotify mobile). Desktop: a left-aligned control
+ * bar. Never wraps to a second row — the contents are a compact icon set + the
+ * primary play affordance.
  */
 .library-header-menu {
     display: flex;
     flex-direction: row;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: var(--theme-spacing-sm);
     align-items: center;
-    justify-content: flex-start;
     width: 100%;
-
-    @container (min-width: 600px) {
-        flex-wrap: nowrap;
-        justify-content: space-between;
-    }
 }
 
-/*
- * Big-phone tier (361–430px). At these comfortable portrait widths the
- * default stacked phone hero (250px cover, 2rem vertical padding) reads
- * as cramped against the album art's surrounding hero gradient — the
- * cover should feel like a vinyl record sleeve, the title should pick
- * up the editorial scale that lives in .title above, and the metadata
- * should sit confidently beneath both.
- *
- * Bumps:
- *   - Cover art grows to 280px (within the 360–430 column it still
- *     leaves comfortable side margin).
- *   - The vertical padding tightens slightly so the cover lands
- *     visually closer to the top — the hero feels like a deliberate
- *     editorial spread rather than a centred photo.
- *   - The drop-shadow under the image is deepened to give the cover
- *     real "floating" presence against the hero gradient.
- *
- * Sub-360 phones keep the 250px default; ≥431 we let the container-
- * query rules take over (which already widen to 225px+ in the
- * landscape/horizontal layout).
- */
-@media (361px <= width <= 430px) {
-    .library-header {
-        padding: 1.25rem 1rem 1.5rem;
-
-        :global(.item-image-placeholder) {
-            width: 280px !important;
-            height: 280px;
-        }
-
-        .image {
-            width: 280px !important;
-            height: 280px;
-        }
-    }
-
-    .image-section {
-        filter: drop-shadow(0 8px 16px rgb(0 0 0 / 55%));
-    }
+.library-header[data-layout='mobile'] .library-header-menu {
+    justify-content: space-between;
+    margin-top: var(--theme-spacing-xs);
 }
 
-/*
- * Portrait phones in the 361–430px range hit BOTH the portrait rule
- * (grid-template-columns: 120px | 1fr, .image 120px) and the big-phone
- * rule above (.image 280px). The portrait rule runs first in source order
- * so the layout switches to side-by-side with a 120px column — but then
- * the big-phone rule overrides the image to 280px, putting a 280px image
- * in a 120px column and making the cover appear as a narrow tall strip.
- *
- * Reset back to the stacked layout so the 280px cover actually fits.
- */
-@media (361px <= width <= 430px) and (orientation: portrait) {
-    .library-header {
-        grid-template-areas: 'image' 'info';
-        grid-template-rows: auto 1fr;
-        grid-template-columns: 1fr;
-        justify-items: center;
-        text-align: center;
-    }
+.library-header[data-layout='desktop'] .library-header-menu {
+    justify-content: flex-start;
+    gap: var(--theme-spacing-md);
+    margin-top: var(--theme-spacing-sm);
+}
+
+/* Secondary-action cluster (favorite / radio / rating / more / offline). */
+.menu-secondary {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    gap: var(--theme-spacing-xs);
+    align-items: center;
+}
+
+/* Primary cluster (shuffle + filled Play). */
+.menu-primary {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    gap: var(--theme-spacing-sm);
+    align-items: center;
+}
+
+/* Desktop reads as a control bar: filled Play first, then shuffle, then the
+   secondary cluster. (DOM order is shuffle→play for the mobile right-cluster.) */
+.library-header[data-layout='desktop'] .menu-primary {
+    flex-direction: row-reverse;
+    order: -1;
 }

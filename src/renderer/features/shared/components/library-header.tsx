@@ -15,27 +15,20 @@ import {
     LibraryHeaderBar,
     type OfflineSource,
 } from '/@/renderer/features/shared/components/library-header-bar';
-import {
-    PlayLastTextButton,
-    PlayNextTextButton,
-    PlayTextButton,
-} from '/@/renderer/features/shared/components/play-button';
+import { DefaultPlayButton } from '/@/renderer/features/shared/components/play-button';
 import { LONG_PRESS_PLAY_BEHAVIOR } from '/@/renderer/features/shared/components/play-button-group';
 import { usePlayButtonClick } from '/@/renderer/features/shared/hooks/use-play-button-click';
 import { useIsMutatingCreateFavorite } from '/@/renderer/features/shared/mutations/create-favorite-mutation';
 import { useIsMutatingDeleteFavorite } from '/@/renderer/features/shared/mutations/delete-favorite-mutation';
 import { useIsMutatingRating } from '/@/renderer/features/shared/mutations/set-rating-mutation';
+import { useIsMobileShell } from '/@/renderer/hooks/use-breakpoint';
 import { useBlurExplicitImages } from '/@/renderer/store';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
-import { Button } from '/@/shared/components/button/button';
 import { Center } from '/@/shared/components/center/center';
 import { DragDropZone } from '/@/shared/components/drag-drop-zone/drag-drop-zone';
-import { Group } from '/@/shared/components/group/group';
-import { Icon } from '/@/shared/components/icon/icon';
 import { BaseImage } from '/@/shared/components/image/image';
 import { OfflineIndicator } from '/@/shared/components/offline-indicator/offline-indicator';
 import { Rating } from '/@/shared/components/rating/rating';
-import { Spinner } from '/@/shared/components/spinner/spinner';
 import { Text } from '/@/shared/components/text/text';
 import { ExplicitStatus, LibraryItem } from '/@/shared/types/domain-types';
 import { Play } from '/@/shared/types/types';
@@ -83,6 +76,7 @@ export const LibraryHeader = forwardRef(
     ) => {
         const { t } = useTranslation();
         const blurExplicitImages = useBlurExplicitImages();
+        const isMobileShell = useIsMobileShell();
 
         // Hero gradient: extract the dominant colour from the cover so the
         // header backdrop fades from the album's signature hue at the top
@@ -200,6 +194,7 @@ export const LibraryHeader = forwardRef(
                     containerClassName,
                     compact && styles.compact,
                 )}
+                data-layout={isMobileShell ? 'mobile' : 'desktop'}
                 ref={ref}
                 style={
                     heroColor ? ({ '--hero-color': heroColor } as React.CSSProperties) : undefined
@@ -284,9 +279,12 @@ export const LibraryHeader = forwardRef(
 
                         <h1
                             className={styles.title}
-                            style={{
-                                fontSize: calculateTitleSize(title),
-                            }}
+                            // Desktop uses the per-title clamp (scales 2rem→6rem
+                            // by length); mobile uses a fixed centered scale from
+                            // CSS, so leave the inline size off there.
+                            style={
+                                isMobileShell ? undefined : { fontSize: calculateTitleSize(title) }
+                            }
                         >
                             <OfflineIndicator size="lg" visible={Boolean(offlineAvailable)} />
                             {title}
@@ -411,6 +409,7 @@ export const LibraryHeaderMenu = ({
     onMore,
     onPlay,
     onRating,
+    onShuffle,
     rating,
 }: LibraryHeaderMenuProps) => {
     const { t } = useTranslation();
@@ -420,96 +419,28 @@ export const LibraryHeaderMenu = ({
     const isMutatingFavorite = isMutatingCreateFavorite || isMutatingDeleteFavorite;
     const isPlayerFetching = useIsPlayerFetching();
 
+    // Filled Play is the primary affordance; a long-press still triggers the
+    // user's configured alt behavior (Play Next/Last live in the … menu).
     const handlePlayNow = usePlayButtonClick({
-        onClick: () => {
-            onPlay?.(Play.NOW);
-        },
-        onLongPress: () => {
-            onPlay?.(LONG_PRESS_PLAY_BEHAVIOR[Play.NOW]);
-        },
+        onClick: () => onPlay?.(Play.NOW),
+        onLongPress: () => onPlay?.(LONG_PRESS_PLAY_BEHAVIOR[Play.NOW]),
     });
 
-    const handlePlayNext = usePlayButtonClick({
-        onClick: () => {
-            onPlay?.(Play.NEXT);
-        },
-        onLongPress: () => {
-            onPlay?.(LONG_PRESS_PLAY_BEHAVIOR[Play.NEXT]);
-        },
-    });
-
-    const handlePlayLast = usePlayButtonClick({
-        onClick: () => {
-            onPlay?.(Play.LAST);
-        },
-        onLongPress: () => {
-            onPlay?.(LONG_PRESS_PLAY_BEHAVIOR[Play.LAST]);
-        },
-    });
+    const radioLabel = onAlbumRadio
+        ? t('player.albumRadio')
+        : t('player.artistRadio', { defaultValue: 'Artist radio' });
+    const onRadio = onAlbumRadio ?? onArtistRadio;
 
     return (
         <div className={styles.libraryHeaderMenu}>
-            <Group wrap="wrap">
-                {onPlay && <PlayTextButton {...handlePlayNow.handlers} {...handlePlayNow.props} />}
-                {onPlay && (
-                    <PlayNextTextButton {...handlePlayNext.handlers} {...handlePlayNext.props} />
-                )}
-                {onPlay && (
-                    <PlayLastTextButton {...handlePlayLast.handlers} {...handlePlayLast.props} />
-                )}
-                {onAlbumRadio && (
-                    <Button
-                        disabled={isPlayerFetching}
-                        leftSection={
-                            isPlayerFetching ? (
-                                <Spinner color="white" />
-                            ) : (
-                                <Icon icon="radio" size="lg" />
-                            )
-                        }
-                        onClick={onAlbumRadio}
-                        size="md"
-                        variant="transparent"
-                    >
-                        {t('player.albumRadio')}
-                    </Button>
-                )}
-                {onArtistRadio && (
-                    <Button
-                        disabled={isPlayerFetching}
-                        leftSection={
-                            isPlayerFetching ? (
-                                <Spinner color="white" />
-                            ) : (
-                                <Icon icon="radio" size="lg" />
-                            )
-                        }
-                        onClick={onArtistRadio}
-                        size="md"
-                        variant="transparent"
-                    >
-                        {t('player.artistRadio')}
-                    </Button>
-                )}
-            </Group>
-            <Group gap="sm" wrap="nowrap">
-                {onRating && (
-                    <Rating
-                        onChange={onRating}
-                        readOnly={isMutatingRating}
-                        size="lg"
-                        value={rating || 0}
-                    />
-                )}
+            <div className={styles.menuSecondary}>
                 {onFavorite && (
                     <ActionIcon
                         aria-label={t('common.favorite', { defaultValue: 'Favorite' })}
                         aria-pressed={Boolean(favorite)}
                         disabled={isMutatingFavorite}
                         icon="favorite"
-                        iconProps={{
-                            fill: favorite ? 'primary' : undefined,
-                        }}
+                        iconProps={{ fill: favorite ? 'primary' : undefined }}
                         onClick={onFavorite}
                         size="lg"
                         tooltip={{
@@ -517,6 +448,25 @@ export const LibraryHeaderMenu = ({
                             openDelay: 400,
                         }}
                         variant="transparent"
+                    />
+                )}
+                {onRadio && (
+                    <ActionIcon
+                        aria-label={radioLabel}
+                        disabled={isPlayerFetching}
+                        icon="radio"
+                        onClick={onRadio}
+                        size="lg"
+                        tooltip={{ label: radioLabel, openDelay: 400 }}
+                        variant="transparent"
+                    />
+                )}
+                {onRating && (
+                    <Rating
+                        onChange={onRating}
+                        readOnly={isMutatingRating}
+                        size="lg"
+                        value={rating || 0}
                     />
                 )}
                 {offlineSource && <LibraryHeaderBar.OfflineButton source={offlineSource} />}
@@ -530,7 +480,30 @@ export const LibraryHeaderMenu = ({
                         variant="transparent"
                     />
                 )}
-            </Group>
+            </div>
+            <div className={styles.menuPrimary}>
+                {onShuffle && (
+                    <ActionIcon
+                        aria-label={t('player.shuffle', { defaultValue: 'Shuffle' })}
+                        icon="mediaShuffle"
+                        onClick={onShuffle}
+                        size="xl"
+                        tooltip={{
+                            label: t('player.shuffle', { defaultValue: 'Shuffle' }),
+                            openDelay: 400,
+                        }}
+                        variant="transparent"
+                    />
+                )}
+                {onPlay && (
+                    <DefaultPlayButton
+                        {...handlePlayNow.handlers}
+                        {...handlePlayNow.props}
+                        disabled={isPlayerFetching}
+                        size={52}
+                    />
+                )}
+            </div>
         </div>
     );
 };
