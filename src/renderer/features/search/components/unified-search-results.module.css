@@ -25,20 +25,22 @@
     gap: var(--theme-spacing-2xl);
     width: 100%;
     max-width: 1600px;
-    margin: 0 auto;
     padding: var(--theme-spacing-xl) var(--theme-spacing-lg)
         calc(var(--theme-spacing-4xl) + env(safe-area-inset-bottom, 0px));
+    margin: 0 auto;
 }
 
 /* ------------------------------------------------------------------ */
+
 /* Section header                                                      */
+
 /* ------------------------------------------------------------------ */
 
 .section-header {
     display: flex;
+    gap: var(--theme-spacing-md);
     align-items: flex-end;
     justify-content: space-between;
-    gap: var(--theme-spacing-md);
     margin-bottom: var(--theme-spacing-md);
 }
 
@@ -48,8 +50,8 @@
     font-size: clamp(1.15rem, 1rem + 0.8vw, 1.6rem);
     font-weight: 700;
     line-height: 1.1;
-    letter-spacing: -0.02em;
     color: var(--theme-colors-foreground-default);
+    letter-spacing: -0.02em;
 }
 
 .see-all {
@@ -60,9 +62,9 @@
     padding: 6px 4px 6px 10px;
     font-size: var(--theme-font-size-sm);
     font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
     color: var(--theme-colors-foreground-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
     text-decoration: none;
     border-radius: var(--theme-radius-pill);
     transition:
@@ -83,7 +85,9 @@
 }
 
 /* ------------------------------------------------------------------ */
+
 /* Spotlight (Top result + Songs)                                      */
+
 /* ------------------------------------------------------------------ */
 
 .spotlight {
@@ -97,7 +101,7 @@
     min-width: 0;
 }
 
-@media (min-width: 900px) {
+@media (width >= 900px) {
     .spotlight {
         /* Top result takes a fixed-ish column, songs take the rest. */
         grid-template-columns: minmax(320px, 0.9fr) 1.4fr;
@@ -107,7 +111,9 @@
 }
 
 /* ------------------------------------------------------------------ */
+
 /* Top result card                                                     */
+
 /* ------------------------------------------------------------------ */
 
 .top-card {
@@ -138,8 +144,8 @@
 }
 
 .top-card-button {
-    appearance: none;
     font: inherit;
+    appearance: none;
 }
 
 .top-card:hover {
@@ -180,12 +186,12 @@
 
 .top-name {
     overflow: hidden;
+    text-overflow: ellipsis;
     font-size: clamp(1.4rem, 1.1rem + 1.4vw, 2rem);
     font-weight: 800;
     line-height: 1.1;
-    letter-spacing: -0.02em;
     color: var(--theme-colors-foreground-default);
-    text-overflow: ellipsis;
+    letter-spacing: -0.02em;
     white-space: nowrap;
 }
 
@@ -235,7 +241,9 @@
 }
 
 /* ------------------------------------------------------------------ */
+
 /* Song list                                                           */
+
 /* ------------------------------------------------------------------ */
 
 .song-list {
@@ -312,9 +320,9 @@
 
 .song-title {
     overflow: hidden;
+    text-overflow: ellipsis;
     font-weight: 500;
     color: var(--theme-colors-foreground-default);
-    text-overflow: ellipsis;
     white-space: nowrap;
 }
 
@@ -335,7 +343,9 @@
 }
 
 /* ------------------------------------------------------------------ */
+
 /* Card grids (albums / artists)                                       */
+
 /* ------------------------------------------------------------------ */
 
 .grid-section {
@@ -348,13 +358,13 @@
     gap: var(--theme-spacing-lg) var(--theme-spacing-md);
 }
 
-@media (min-width: 560px) {
+@media (width >= 560px) {
     .card-grid {
         grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
     }
 }
 
-@media (min-width: 1100px) {
+@media (width >= 1100px) {
     .card-grid {
         grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
     }
@@ -382,8 +392,8 @@
 
 .card-art-wrap {
     position: relative;
-    margin-bottom: var(--theme-spacing-sm);
     aspect-ratio: 1 / 1;
+    margin-bottom: var(--theme-spacing-sm);
 }
 
 .card-art-wrap-round {
@@ -433,9 +443,9 @@
 
 .card-title {
     overflow: hidden;
+    text-overflow: ellipsis;
     font-weight: 600;
     color: var(--theme-colors-foreground-default);
-    text-overflow: ellipsis;
     white-space: nowrap;
 }
 
@@ -450,7 +460,9 @@
 }
 
 /* ------------------------------------------------------------------ */
+
 /* Accessibility                                                       */
+
 /* ------------------------------------------------------------------ */
 
 .sr-only {
@@ -460,13 +472,15 @@
     padding: 0;
     margin: -1px;
     overflow: hidden;
-    clip: rect(0, 0, 0, 0);
     white-space: nowrap;
     border: 0;
+    clip-path: inset(50%);
 }
 
 /* ------------------------------------------------------------------ */
+
 /* Skeleton / loading                                                  */
+
 /* ------------------------------------------------------------------ */
 
 .skel {
@@ -551,7 +565,7 @@
 
 .skel-card-art {
     width: 100%;
-    margin-bottom: var(--theme-spacing-sm);
     aspect-ratio: 1 / 1;
+    margin-bottom: var(--theme-spacing-sm);
     border-radius: var(--theme-radius-md);
 }
