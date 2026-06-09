@@ -1,3 +1,4 @@
+export { applyListPageToCache } from './apply-list-page';
 export { CachedImage } from './cached-image';
 export type { CachedImageProps } from './cached-image';
 export { isCacheAvailable, isCacheAvailableSync } from './capability';
@@ -107,7 +108,12 @@ export {
     searchSongsLocal,
 } from './search';
 export type { SearchLocalResult } from './search';
-export { dropSnapshotsForServer, readSnapshot, writeSnapshot } from './snapshot';
+export {
+    dropSnapshotsForEntity,
+    dropSnapshotsForServer,
+    readSnapshot,
+    writeSnapshot,
+} from './snapshot';
 export { useCacheActions, useCacheStore } from './store';
 export {
     cancelHydration,
@@ -120,6 +126,14 @@ export {
     runSongsSweep,
 } from './sync';
 export { SyncChip } from './sync-chip';
+export type { ExplicitRefreshEntity } from './sync-first';
+export {
+    entityForLibraryItem,
+    entityForListKey,
+    isSyncFirstActive,
+    prepareExplicitRefresh,
+    shouldRevalidateFromNetwork,
+} from './sync-first';
 export type * from './types';
 export { useIsEntityOfflineAvailable, useIsSongOfflineAvailable } from './use-offline-availability';
 export { loadOfflineSongs, useOfflineSongCount, useOfflineSongs } from './use-offline-songs';

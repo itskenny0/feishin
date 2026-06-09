@@ -8,10 +8,21 @@ import {
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 
 import { queryKeys } from '/@/renderer/api/query-keys';
-import { readSnapshot, writeSnapshot } from '/@/renderer/cache';
+import {
+    applyListPageToCache,
+    entityForLibraryItem,
+    prepareExplicitRefresh,
+    readSnapshot,
+    shouldRevalidateFromNetwork,
+    writeSnapshot,
+} from '/@/renderer/cache';
 import { useListContext } from '/@/renderer/context/list-context';
 import { eventEmitter } from '/@/renderer/events/event-emitter';
-import { UserFavoriteEventPayload, UserRatingEventPayload } from '/@/renderer/events/events';
+import {
+    ITEM_LIST_REFRESH_ALL,
+    UserFavoriteEventPayload,
+    UserRatingEventPayload,
+} from '/@/renderer/events/events';
 import { getListRefreshMutationKey } from '/@/renderer/features/shared/components/list-refresh-button';
 import { LibraryItem, SortKeyRandom } from '/@/shared/types/domain-types';
 
@@ -131,24 +142,32 @@ export const useItemListPaginatedLoader = ({
                         if (isRandomSort) {
                             return cached;
                         }
-                        void (async () => {
-                            try {
-                                const fresh = await listQueryFn({
-                                    apiClientProps: { serverId, signal },
-                                    query: queryParams,
-                                });
-                                writeSnapshot(queryKey, fresh);
-                                queryClient.setQueryData(queryKey, fresh);
-                            } catch (err) {
-                                if ((err as Error)?.name !== 'AbortError') {
-                                    console.info(
-                                        '[cache] paginated background revalidate failed',
-                                        itemType,
-                                        (err as Error)?.message,
-                                    );
+                        // Sync-first: skip the automatic background
+                        // revalidate when the local cache is authoritative
+                        // (the shared predicate logs the decision, sampled).
+                        // An explicit refresh re-opens the network window so
+                        // the revalidate below fires again.
+                        if (shouldRevalidateFromNetwork()) {
+                            void (async () => {
+                                try {
+                                    const fresh = await listQueryFn({
+                                        apiClientProps: { serverId, signal },
+                                        query: queryParams,
+                                    });
+                                    writeSnapshot(queryKey, fresh);
+                                    queryClient.setQueryData(queryKey, fresh);
+                                    void applyListPageToCache(itemType, fresh.items);
+                                } catch (err) {
+                                    if ((err as Error)?.name !== 'AbortError') {
+                                        console.info(
+                                            '[cache] paginated background revalidate failed',
+                                            itemType,
+                                            (err as Error)?.message,
+                                        );
+                                    }
                                 }
-                            }
-                        })();
+                            })();
+                        }
                         return cached;
                     }
                 } catch (err) {
@@ -162,6 +181,9 @@ export const useItemListPaginatedLoader = ({
             });
 
             writeSnapshot(queryKey, result);
+            // Write-through so sync-first reads and the next cold start see
+            // the freshly fetched page.
+            void applyListPageToCache(itemType, result.items);
             return result;
         },
         queryKey,
@@ -170,6 +192,11 @@ export const useItemListPaginatedLoader = ({
 
     const refreshMutation = useMutation({
         mutationFn: async (force?: boolean) => {
+            // Explicit refresh: open the sync-first network window (so the
+            // refetch below actually revalidates against the server) and
+            // drop the entity's row cache + snapshots.
+            prepareExplicitRefresh(entityForLibraryItem(itemType));
+
             const queryKey = queryKeys[getQueryKeyName(itemType)].list(serverId, queryParams);
 
             if (force) {
@@ -226,7 +253,9 @@ export const useItemListPaginatedLoader = ({
 
     useEffect(() => {
         const handleRefresh = (payload: { key: string }) => {
-            if (!eventKey || eventKey !== payload.key) {
+            // The broadcast key (mobile pull-to-refresh) refreshes whichever
+            // list loader is currently mounted.
+            if (payload.key !== ITEM_LIST_REFRESH_ALL && (!eventKey || eventKey !== payload.key)) {
                 return;
             }
 

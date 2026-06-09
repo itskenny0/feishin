@@ -23,6 +23,12 @@ export type EventMap = {
     USER_RATING: UserRatingEventPayload;
 };
 
+// Broadcast key for ITEM_LIST_REFRESH: every mounted list loader treats it
+// as "refresh yourself" regardless of its own eventKey. Used by the mobile
+// pull-to-refresh gesture, which doesn't know which list surface the
+// current route renders.
+export const ITEM_LIST_REFRESH_ALL = '*';
+
 export type ItemListRefreshEventPayload = {
     key: string;
 };
