@@ -33,6 +33,7 @@ import {
     isPeerClientConnected,
     publishOwnState,
 } from '/@/renderer/features/peer-sync/controller/peer-client';
+import { INBOUND_APPLY_WINDOW_MS } from '/@/renderer/features/peer-sync/controller/peer-loop-guard';
 import { isSyncEnabled } from '/@/renderer/features/peer-sync/controller/transport-selector';
 import { buildState, jellyfinToPeerRepeat } from '/@/renderer/features/peer-sync/protocol/builders';
 import { PeerRepeatMode, PeerTrack } from '/@/renderer/features/peer-sync/types';
@@ -147,6 +148,7 @@ const buildCurrentState = () => {
 let unsubPlayer: (() => void) | null = null;
 let unsubTimestamp: (() => void) | null = null;
 let throttleTimer: null | ReturnType<typeof setTimeout> = null;
+let inboundRetryTimer: null | ReturnType<typeof setTimeout> = null;
 let lastPublishAt = 0;
 let lastEdge: EdgeSnapshot | null = null;
 
@@ -157,11 +159,28 @@ const publishNow = (): void => {
         clearTimeout(throttleTimer);
         throttleTimer = null;
     }
-    lastPublishAt = Date.now();
-    lastEdge = snapshotEdge();
-    // publishOwnState consults the loop guard at the single publish chokepoint,
-    // so an inbound-apply window suppresses this automatically.
-    publishOwnState(buildCurrentState());
+    // publishOwnState consults the loop guard at the single publish chokepoint
+    // and returns false when the inbound-apply window suppressed the frame.
+    const published = publishOwnState(buildCurrentState());
+    if (published) {
+        lastPublishAt = Date.now();
+        lastEdge = snapshotEdge();
+        return;
+    }
+    // Suppressed by the loop guard (we're mid-applying an inbound command).
+    // Do NOT advance lastEdge/lastPublishAt — otherwise the settled
+    // post-command state (e.g. the pause we just applied for a controller) is
+    // recorded as already-published and never re-sent, so the controller's
+    // mirror snaps back to our stale retained frame when its optimistic hold
+    // expires. Re-arm a single trailing publish just past the window so the
+    // confirmed state lands; if the window was extended by a burst, that
+    // publish is suppressed again and re-arms until the burst ends.
+    if (!inboundRetryTimer) {
+        inboundRetryTimer = setTimeout(() => {
+            inboundRetryTimer = null;
+            schedulePublish();
+        }, INBOUND_APPLY_WINDOW_MS + 20);
+    }
 };
 
 /**
@@ -202,6 +221,10 @@ export const startStatePublisher = (): void => {
     log('state publisher started');
     lastEdge = null;
     lastPublishAt = 0;
+    if (inboundRetryTimer) {
+        clearTimeout(inboundRetryTimer);
+        inboundRetryTimer = null;
+    }
     // Player mutations: track change, pause/resume, queue edits, shuffle/repeat,
     // volume/mute, rate. zustand fires the listener on every set().
     unsubPlayer = usePlayerStoreBase.subscribe(() => schedulePublish());
@@ -217,7 +240,7 @@ export const startStatePublisher = (): void => {
 
 /** Stop mirroring. Idempotent. */
 export const stopStatePublisher = (): void => {
-    if (!unsubPlayer && !unsubTimestamp && !throttleTimer) return;
+    if (!unsubPlayer && !unsubTimestamp && !throttleTimer && !inboundRetryTimer) return;
     log('state publisher stopped');
     unsubPlayer?.();
     unsubTimestamp?.();
@@ -226,6 +249,10 @@ export const stopStatePublisher = (): void => {
     if (throttleTimer) {
         clearTimeout(throttleTimer);
         throttleTimer = null;
+    }
+    if (inboundRetryTimer) {
+        clearTimeout(inboundRetryTimer);
+        inboundRetryTimer = null;
     }
     lastEdge = null;
     lastPublishAt = 0;

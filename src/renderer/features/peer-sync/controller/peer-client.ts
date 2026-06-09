@@ -836,18 +836,21 @@ export const publishCommand = (target: PeerAddress, command: PeerCommand): void 
  * Publish our own retained state snapshot. Late subscribers get the latest
  * via MQTT's retained-message replay.
  */
-export const publishOwnState = (state: PeerState): void => {
-    if (!session) return;
+export const publishOwnState = (state: PeerState): boolean => {
+    if (!session) return false;
     // Consult the loop guard at the single publish chokepoint. The receiver
     // opens the inbound-apply window (markInboundApply) whenever it applies a
     // peer command; suppressing our own-state publish during that window stops
-    // the echo loop the guard was built to prevent (peer-loop-guard.ts). No
-    // live publisher subscribes the player store to this path yet, so this is
-    // currently latent — but it makes the guard correct the moment one is
-    // wired. See D1.
+    // the echo loop the guard was built to prevent (peer-loop-guard.ts).
+    //
+    // Returns whether the frame was actually published. The caller MUST use
+    // this: a suppressed publish must NOT be recorded as "sent" or the settled
+    // post-command state (e.g. a pause we just applied from a controller) is
+    // never re-published, and the controller's mirror snaps back to our stale
+    // retained frame when its optimistic hold expires. See D1.
     if (isInboundApplyActive()) {
         log('skip state publish: inbound-apply window');
-        return;
+        return false;
     }
     const topic = topicFor(session.selfAddress, 'state');
     publishWithErrorLog(
@@ -858,6 +861,7 @@ export const publishOwnState = (state: PeerState): void => {
         'state',
     );
     recordOutboundState(session.selfAddress.peerId, state);
+    return true;
 };
 
 /**

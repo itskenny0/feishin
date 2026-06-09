@@ -25,15 +25,19 @@ vi.mock('/@/renderer/features/peer-sync/controller/peer-client', async () => {
         await import('/@/renderer/features/peer-sync/controller/peer-loop-guard');
     return {
         isPeerClientConnected: () => true,
-        publishOwnState: (state: PeerState) => {
-            if (isInboundApplyActive()) return;
+        publishOwnState: (state: PeerState): boolean => {
+            // Mirror the real client's contract: return false (and publish
+            // nothing) while the inbound-apply window is open.
+            if (isInboundApplyActive()) return false;
             publishedFrames.push(state);
+            return true;
         },
     };
 });
 
 import {
     __resetInboundApply,
+    INBOUND_APPLY_WINDOW_MS,
     markInboundApply,
 } from '/@/renderer/features/peer-sync/controller/peer-loop-guard';
 import {
@@ -190,13 +194,37 @@ describe('state-publisher', () => {
             player: { ...s.player, status: PlayerStatus.PAUSED },
         }));
         expect(publishedFrames.length).toBe(before);
-        // Once the guard window closes, a fresh mutation publishes normally.
+        // Once the guard window closes, a fresh edge mutation publishes
+        // normally. (Use a track change — a distinct edge from the last
+        // PUBLISHED frame. Returning to PLAYING would not be an edge now that
+        // suppression correctly leaves lastEdge at the last sent state.)
         __resetInboundApply();
+        usePlayerStoreBase.setState((s) => ({ ...s, player: { ...s.player, index: 2 } }));
+        expect(publishedFrames.length).toBe(before + 1);
+        expect(publishedFrames[publishedFrames.length - 1].track?.id).toBe('song-2');
+    });
+
+    it('re-publishes the settled state after the inbound-apply window closes (no snap-back)', () => {
+        vi.useFakeTimers();
+        startStatePublisher();
+        const before = publishedFrames.length;
+        // Receiver applies an inbound pause from a controller: open the guard,
+        // then mutate the store the way mediaPause() would.
+        markInboundApply();
         usePlayerStoreBase.setState((s) => ({
             ...s,
-            player: { ...s.player, status: PlayerStatus.PLAYING },
+            player: { ...s.player, status: PlayerStatus.PAUSED },
         }));
+        // Suppressed during the window — nothing on the wire yet.
+        expect(publishedFrames.length).toBe(before);
+        // Regression: the publisher must re-emit the SETTLED paused state once
+        // the window closes WITHOUT any further local mutation. Before the fix,
+        // publishNow advanced lastEdge while suppressed, so the paused frame was
+        // never sent and the controller's mirror snapped back to our stale
+        // (playing) retained frame when its optimistic hold expired.
+        vi.advanceTimersByTime(INBOUND_APPLY_WINDOW_MS + 30);
         expect(publishedFrames.length).toBe(before + 1);
+        expect(publishedFrames[publishedFrames.length - 1].paused).toBe(true);
     });
 
     it('round-trips a published frame through codec → applyPeerStateToStore (e2e)', async () => {
