@@ -108,7 +108,7 @@ const readFavoriteIds = async (
 
 export const resolveAlbumPage = async (
     args: BaseArgs<AlbumListQuery>,
-): Promise<undefined | { items: unknown[] }> => {
+): Promise<undefined | { items: unknown[]; startIndex: number; totalRecordCount: number }> => {
     const db = getDb();
     if (!db) return undefined;
 
@@ -122,7 +122,7 @@ export const resolveAlbumPage = async (
     if (cached) {
         const page = paginateMemo(cached, startIndex, limit);
         logHit('albums', page.items.length, 'memo');
-        return { items: page.items };
+        return page;
     }
 
     // Memo miss — pull the rows (memoized in-JS by `local-cache`) and run
@@ -158,7 +158,7 @@ export const resolveAlbumPage = async (
     storeSorted<Album>('albums', sig, out.items);
     const page = paginateMemo(out.items, startIndex, limit);
     logHit('albums', page.items.length, 'cold');
-    return { items: page.items };
+    return page;
 };
 
 // ---------------------------------------------------------------------------

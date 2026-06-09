@@ -33,6 +33,7 @@ import {
     pageRefsFromItems,
     readEntityCountFallback,
     readSnapshot,
+    resolveAlbumPage,
     toCachedAlbumRow as toCachedAlbumRowBase,
     useCachedQuery,
     useCacheStore,
@@ -629,12 +630,26 @@ export const useAlbumInfiniteListSuspenseQuery = (args: AlbumInfiniteListSuspens
             // background revalidation update the snapshot. This is what
             // turns "warm" into a real <50ms paint instead of a full
             // server round-trip.
+            //
+            // Pages MUST come from resolveAlbumPage (sorted-result memo),
+            // not a fresh filter pass per page: RANDOM sort re-shuffles on
+            // every call, so per-page filtering handed each page a slice of
+            // a DIFFERENT permutation — duplicate and skipped albums across
+            // page boundaries in the "more from artist/genre" carousels.
             let cached: AlbumListResponse | undefined;
             if (db) {
                 try {
-                    const fromCache = await readAlbumsFromCache(db, pageQuery);
+                    const fromCache = await resolveAlbumPage({
+                        limit: itemLimit,
+                        query: pageQuery,
+                        startIndex,
+                    });
                     if (fromCache !== undefined && fromCache.items.length > 0) {
-                        cached = fromCache;
+                        cached = {
+                            items: fromCache.items as AlbumListResponse['items'],
+                            startIndex,
+                            totalRecordCount: fromCache.totalRecordCount,
+                        };
                         logCacheHitSampled('infinite');
                         // Persist the cached page back into the snapshot
                         // so the next mount's initialData includes it.
