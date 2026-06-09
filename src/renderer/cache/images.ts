@@ -158,6 +158,72 @@ interface SharedObjectUrl {
 }
 const sharedObjectUrls = new Map<string, SharedObjectUrl>();
 
+// Zero-ref keep-alive. When the last consumer releases a shared URL we do
+// NOT revoke immediately: scrolling a grid unmounts cells constantly, and an
+// instant revoke meant scrolling BACK re-paid the async Dexie roundtrip (and
+// flashed a skeleton) for art that was just on screen. Released entries
+// linger for a grace period and can be re-adopted synchronously via
+// `peekThumbnailUrl`; a cap bounds how much blob memory the lingering
+// entries can hold (oldest evicted first).
+const ZERO_REF_GRACE_MS = 90_000;
+const ZERO_REF_SWEEP_MS = 30_000;
+const ZERO_REF_CAP = 200;
+// key -> released-at timestamp. Map insertion order doubles as the LRU.
+const zeroRefSince = new Map<string, number>();
+let zeroRefSweepTimer: null | ReturnType<typeof setTimeout> = null;
+
+const revokeSharedEntry = (key: string): void => {
+    const entry = sharedObjectUrls.get(key);
+    sharedObjectUrls.delete(key);
+    zeroRefSince.delete(key);
+    if (!entry) return;
+    try {
+        URL.revokeObjectURL(entry.url);
+    } catch {
+        // Revoke can throw on already-revoked / invalid URLs in some
+        // runtimes; nothing actionable, the entry is already gone.
+    }
+};
+
+const scheduleZeroRefSweep = (): void => {
+    if (zeroRefSweepTimer || zeroRefSince.size === 0) return;
+    zeroRefSweepTimer = setTimeout(() => {
+        zeroRefSweepTimer = null;
+        const now = Date.now();
+        for (const [key, since] of zeroRefSince) {
+            if (now - since < ZERO_REF_GRACE_MS) continue;
+            const entry = sharedObjectUrls.get(key);
+            // Re-adopted entries are pruned from the queue on adoption, but
+            // be defensive: never revoke a URL with live consumers.
+            if (entry && entry.refCount > 0) {
+                zeroRefSince.delete(key);
+                continue;
+            }
+            revokeSharedEntry(key);
+        }
+        scheduleZeroRefSweep();
+    }, ZERO_REF_SWEEP_MS);
+};
+
+// A consumer took a reference again — the entry is no longer eligible for
+// the zero-ref sweep.
+const cancelZeroRefEviction = (key: string): void => {
+    zeroRefSince.delete(key);
+};
+
+// Test-only: drop every shared URL (revoking them) and clear the zero-ref
+// queue + timer, so module-level state can't leak between tests.
+export const __resetSharedThumbnailUrls = (): void => {
+    for (const key of [...sharedObjectUrls.keys()]) {
+        revokeSharedEntry(key);
+    }
+    zeroRefSince.clear();
+    if (zeroRefSweepTimer) {
+        clearTimeout(zeroRefSweepTimer);
+        zeroRefSweepTimer = null;
+    }
+};
+
 // In-flight dedup for `acquireThumbnailUrl`. Concurrent acquires for the
 // same (item, variant) (the common case while a grid mounts a row of
 // cards) share a single resolve + a single `URL.createObjectURL`, then
@@ -217,6 +283,7 @@ export const acquireThumbnailUrl = async (
     const existing = sharedObjectUrls.get(key);
     if (existing) {
         existing.refCount += 1;
+        cancelZeroRefEviction(key);
         return existing.url;
     }
 
@@ -280,14 +347,37 @@ export const releaseThumbnailUrl = (itemId: string, variant?: number | string): 
     if (!entry) return;
     entry.refCount -= 1;
     if (entry.refCount <= 0) {
-        sharedObjectUrls.delete(key);
-        try {
-            URL.revokeObjectURL(entry.url);
-        } catch {
-            // Revoke can throw on already-revoked / invalid URLs in some
-            // runtimes; nothing actionable, the entry is already gone.
+        entry.refCount = 0;
+        // Keep the URL alive for the grace window so a scroll-back / route
+        // return re-adopts it synchronously instead of re-paying the Dexie
+        // roundtrip. The cap bounds lingering blob memory (oldest first).
+        zeroRefSince.delete(key);
+        zeroRefSince.set(key, Date.now());
+        while (zeroRefSince.size > ZERO_REF_CAP) {
+            const oldest = zeroRefSince.keys().next().value;
+            if (oldest === undefined) break;
+            revokeSharedEntry(oldest);
         }
+        scheduleZeroRefSweep();
     }
+};
+
+/**
+ * Synchronous fast path for already-resolved covers: if a live shared URL
+ * exists for this (item, variant) — including one lingering in the zero-ref
+ * grace window — take a reference and return it with NO async hop, so the
+ * consumer can paint without ever entering a loading/skeleton state. Returns
+ * undefined when nothing is held in memory (caller goes through the async
+ * acquire). Every non-undefined return MUST be paired with
+ * `releaseThumbnailUrl(itemId, variant)`.
+ */
+export const peekThumbnailUrl = (itemId: string, variant?: number | string): string | undefined => {
+    const key = variantKey(itemId, normaliseVariant(variant));
+    const entry = sharedObjectUrls.get(key);
+    if (!entry) return undefined;
+    entry.refCount += 1;
+    cancelZeroRefEviction(key);
+    return entry.url;
 };
 
 // Sampled-logging counters. Hits fire on every render; logging each one
@@ -852,4 +942,4 @@ export const clearThumbnailsTable = async (): Promise<void> => {
 // one blob: URL per mount. The hook falls back to the per-call resolver
 // when this isn't registered (e.g. the shared bundle imported outside the
 // renderer), so registration is purely additive.
-registerThumbnailUrlCache(acquireThumbnailUrl, releaseThumbnailUrl);
+registerThumbnailUrlCache(acquireThumbnailUrl, releaseThumbnailUrl, peekThumbnailUrl);

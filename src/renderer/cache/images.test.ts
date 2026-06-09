@@ -1,8 +1,9 @@
 // Unit tests for the shared, refcounted thumbnail object-URL cache added to
 // images.ts. The goal of `acquireThumbnailUrl` / `releaseThumbnailUrl` is to
 // hand every mounted consumer of the SAME item ONE shared blob: URL and to
-// revoke it exactly once, when the last consumer releases it — rather than
-// minting + revoking a fresh URL per mount during scroll.
+// revoke it exactly once — after the last consumer releases it AND the
+// zero-ref grace window expires (the grace window lets a scroll-back
+// re-adopt the URL synchronously instead of re-paying the Dexie roundtrip).
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -31,14 +32,22 @@ vi.mock('/@/shared/components/image/use-native-image', () => ({
     registerThumbnailUrlCache: vi.fn(),
 }));
 
-import { acquireThumbnailUrl, releaseThumbnailUrl } from '/@/renderer/cache/images';
+import {
+    __resetSharedThumbnailUrls,
+    acquireThumbnailUrl,
+    releaseThumbnailUrl,
+} from '/@/renderer/cache/images';
 
 const RAW_URL = 'https://server.example/Items/abc/Images/Primary';
+
+// Long enough to clear the zero-ref grace window + sweep cadence.
+const PAST_GRACE_MS = 10 * 60_000;
 
 let urlCounter = 0;
 const revoked: string[] = [];
 
 beforeEach(() => {
+    vi.useFakeTimers();
     urlCounter = 0;
     revoked.length = 0;
     mocks.thumbnailsTable.get.mockReset();
@@ -48,9 +57,14 @@ beforeEach(() => {
     globalThis.URL.revokeObjectURL = vi.fn((u: string) => {
         revoked.push(u);
     });
+    // Shared-URL state is module-level; entries now outlive their consumers
+    // (grace window), so every test starts from a clean slate.
+    __resetSharedThumbnailUrls();
+    revoked.length = 0;
 });
 
 afterEach(() => {
+    vi.useRealTimers();
     vi.clearAllMocks();
 });
 
@@ -97,12 +111,15 @@ describe('acquireThumbnailUrl / releaseThumbnailUrl', () => {
         releaseThumbnailUrl('abc');
         expect(revoked).toHaveLength(0);
 
-        // Last consumer releases — now it revokes.
+        // Last consumer releases — the grace window keeps it alive so a
+        // scroll-back can re-adopt it; only after expiry does it revoke.
         releaseThumbnailUrl('abc');
+        expect(revoked).toHaveLength(0);
+        vi.advanceTimersByTime(PAST_GRACE_MS);
         expect(revoked).toEqual([first]);
     });
 
-    it('revokes only after the final release (refcount reaches zero)', async () => {
+    it('revokes only after the final release + grace expiry', async () => {
         mocks.thumbnailsTable.get.mockResolvedValue(cachedRow());
 
         const url = await acquireThumbnailUrl('abc', 1024, RAW_URL);
@@ -112,10 +129,20 @@ describe('acquireThumbnailUrl / releaseThumbnailUrl', () => {
         releaseThumbnailUrl('abc');
         releaseThumbnailUrl('abc');
         expect(revoked).toHaveLength(0);
-        releaseThumbnailUrl('abc');
-        expect(revoked).toEqual([url]);
 
-        // After full release, a fresh acquire mints a NEW url.
+        // Final release: still alive inside the grace window — a re-acquire
+        // within it reuses the SAME url with no new objectURL minted.
+        releaseThumbnailUrl('abc');
+        expect(revoked).toHaveLength(0);
+        const readopted = await acquireThumbnailUrl('abc', 1024, RAW_URL);
+        expect(readopted).toBe(url);
+        expect(globalThis.URL.createObjectURL).toHaveBeenCalledTimes(1);
+
+        // Release again and let the grace window lapse — now it revokes,
+        // and a fresh acquire mints a NEW url.
+        releaseThumbnailUrl('abc');
+        vi.advanceTimersByTime(PAST_GRACE_MS);
+        expect(revoked).toEqual([url]);
         const reacquired = await acquireThumbnailUrl('abc', 1024, RAW_URL);
         expect(reacquired).not.toBe(url);
         expect(globalThis.URL.createObjectURL).toHaveBeenCalledTimes(2);
@@ -190,10 +217,13 @@ describe('acquireThumbnailUrl / releaseThumbnailUrl', () => {
         expect(blobForUrl.get(card)).toBe(cardBlob);
         expect(blobForUrl.get(full)).toBe(fullBlob);
 
-        // Releasing one variant must NOT revoke the other variant's URL.
+        // Releasing one variant must NOT affect the other variant's URL;
+        // both revoke independently once the grace window lapses.
         releaseThumbnailUrl('abc', 'itemCard');
-        expect(revoked).toEqual([card]);
         releaseThumbnailUrl('abc', 'fullScreen');
-        expect(revoked).toEqual([card, full]);
+        expect(revoked).toHaveLength(0);
+        vi.advanceTimersByTime(PAST_GRACE_MS);
+        expect(revoked).toEqual(expect.arrayContaining([card, full]));
+        expect(revoked).toHaveLength(2);
     });
 });

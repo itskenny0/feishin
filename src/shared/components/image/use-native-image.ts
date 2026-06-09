@@ -23,6 +23,10 @@ type ThumbnailUrlAcquirer = (
     variant: string,
     request: ImageRequest | string,
 ) => Promise<string>;
+// Synchronous peek: returns a live shared blob: URL (taking a reference the
+// caller must release) when the cover is already held in memory, undefined
+// otherwise. Lets an already-cached cover paint with NO loading state.
+type ThumbnailUrlPeeker = (itemId: string, variant: string) => string | undefined;
 // The releaser MUST be keyed by the SAME (itemId, variant) the URL was
 // acquired with — two surfaces of one item at different variants each own
 // their own shared URL + refcount. Releasing by bare itemId would
@@ -37,6 +41,7 @@ const DEFAULT_VARIANT = 'fullScreen';
 let resolveThumbnailRef: null | ThumbnailResolver = null;
 let acquireThumbnailUrlRef: null | ThumbnailUrlAcquirer = null;
 let releaseThumbnailUrlRef: null | ThumbnailUrlReleaser = null;
+let peekThumbnailUrlRef: null | ThumbnailUrlPeeker = null;
 
 export const registerThumbnailResolver = (fn: null | ThumbnailResolver): void => {
     resolveThumbnailRef = fn;
@@ -45,9 +50,11 @@ export const registerThumbnailResolver = (fn: null | ThumbnailResolver): void =>
 export const registerThumbnailUrlCache = (
     acquire: null | ThumbnailUrlAcquirer,
     release: null | ThumbnailUrlReleaser,
+    peek: null | ThumbnailUrlPeeker = null,
 ): void => {
     acquireThumbnailUrlRef = acquire;
     releaseThumbnailUrlRef = release;
+    peekThumbnailUrlRef = peek;
 };
 
 // Resolve via the shared refcounted cache when available. Returns the
@@ -208,6 +215,23 @@ export function useNativeImage({
 
         abortCurrentRequest();
         revokeObjectUrl();
+
+        // Synchronous fast path: a cover already held in the shared memory
+        // cache (including the zero-ref grace window) paints immediately —
+        // no skeleton state, no async hop, no Dexie roundtrip. The peek
+        // takes a reference that revokeObjectUrl/unmount releases.
+        if (request.cacheItemId && request.cacheSize && peekThumbnailUrlRef) {
+            const cacheVariant = request.variant ?? DEFAULT_VARIANT;
+            const peeked = peekThumbnailUrlRef(request.cacheItemId, cacheVariant);
+            if (peeked) {
+                objectUrlRef.current = peeked;
+                sharedUrlRef.current = { itemId: request.cacheItemId, variant: cacheVariant };
+                loadedRequestSignatureRef.current = requestSignature;
+                setState({ displaySrc: peeked, status: 'loaded' });
+                return;
+            }
+        }
+
         setState({ status: 'loading' });
 
         const abortController = new AbortController();
