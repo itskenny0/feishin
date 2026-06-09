@@ -53,6 +53,7 @@ export const GenreListInfiniteGrid = ({
                 }),
             query,
             serverId,
+            thumbnailVariant: 'itemCard',
         });
 
     const { handleOnScrollEnd, scrollOffset } = useItemListScrollPersist({

@@ -9,6 +9,7 @@ import throttle from 'lodash/throttle';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { queryKeys } from '/@/renderer/api/query-keys';
+import { preloadThumbnailUrls } from '/@/renderer/cache';
 import { useListContext } from '/@/renderer/context/list-context';
 import { eventEmitter } from '/@/renderer/events/event-emitter';
 import { UserFavoriteEventPayload, UserRatingEventPayload } from '/@/renderer/events/events';
@@ -65,6 +66,12 @@ interface UseItemListInfiniteLoaderProps {
     }) => Promise<undefined | { items: unknown[] }>;
     query: Record<string, any>;
     serverId: string;
+    // The artwork surface bucket the consuming list renders ('table' for
+    // table rows, 'itemCard' for grid cards). When set, every page write
+    // bulk-primes the shared thumbnail-URL cache for the page's items in ONE
+    // Dexie bulkGet, so the cells' covers paint synchronously on mount
+    // instead of racing N independent IndexedDB gets.
+    thumbnailVariant?: string;
 }
 
 function getInitialData(): InfiniteLoaderCacheData {
@@ -96,6 +103,7 @@ export const useItemListInfiniteLoader = ({
     localFetchPage,
     query = {},
     serverId,
+    thumbnailVariant,
 }: UseItemListInfiniteLoaderProps) => {
     const queryClient = useQueryClient();
     const lastFetchedPageRef = useRef<number>(-1);
@@ -159,6 +167,19 @@ export const useItemListInfiniteLoader = ({
                 }
             });
 
+            // Fire-and-forget: bulk-prime the page's covers into the shared
+            // thumbnail-URL cache so the cells peek them synchronously.
+            if (thumbnailVariant) {
+                void preloadThumbnailUrls(
+                    items.map((item) =>
+                        item && typeof item === 'object' && 'imageId' in (item as any)
+                            ? ((item as any).imageId as null | string | undefined)
+                            : undefined,
+                    ),
+                    thumbnailVariant,
+                );
+            }
+
             // … then bump the small version/pagesLoaded blob in the query cache
             // to schedule a render.
             queryClient.setQueryData(dataQueryKey, (oldData: InfiniteLoaderCacheData) => {
@@ -171,7 +192,7 @@ export const useItemListInfiniteLoader = ({
                 };
             });
         },
-        [queryClient, dataQueryKey],
+        [queryClient, dataQueryKey, thumbnailVariant],
     );
 
     // Upstream #2097: RANDOM sort must not re-fetch on remount — the server

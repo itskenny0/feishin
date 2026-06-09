@@ -32,7 +32,7 @@ export {
     useCachedQuery,
 } from './hooks';
 export { HydrationBanner } from './hydration-banner';
-export { resolveThumbnail } from './images';
+export { preloadThumbnailUrls, resolveThumbnail } from './images';
 export { useCacheLifecycle } from './lifecycle';
 export {
     buildListSignature,

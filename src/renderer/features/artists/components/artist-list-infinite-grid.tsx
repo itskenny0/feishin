@@ -53,6 +53,7 @@ export const ArtistListInfiniteGrid = ({
                 }),
             query,
             serverId,
+            thumbnailVariant: 'itemCard',
         });
 
     const { handleOnScrollEnd, scrollOffset } = useItemListScrollPersist({

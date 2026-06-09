@@ -58,6 +58,7 @@ export const SongListInfiniteTable = ({
                 }),
             query,
             serverId,
+            thumbnailVariant: 'table',
         });
 
     const { handleOnScrollEnd, scrollOffset } = useItemListScrollPersist({

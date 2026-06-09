@@ -60,6 +60,7 @@ export const GenreListInfiniteTable = ({
                 }),
             query,
             serverId,
+            thumbnailVariant: 'table',
         });
 
     const { handleOnScrollEnd, scrollOffset } = useItemListScrollPersist({

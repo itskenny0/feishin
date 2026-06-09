@@ -56,6 +56,7 @@ export const AlbumListInfiniteGrid = ({
                 }),
             query,
             serverId,
+            thumbnailVariant: 'itemCard',
         });
 
     const { handleOnScrollEnd, scrollOffset } = useItemListScrollPersist({

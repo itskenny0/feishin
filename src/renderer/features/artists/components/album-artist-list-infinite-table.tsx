@@ -60,6 +60,7 @@ export const AlbumArtistListInfiniteTable = ({
                 }),
             query,
             serverId,
+            thumbnailVariant: 'table',
         });
 
     const { handleOnScrollEnd, scrollOffset } = useItemListScrollPersist({

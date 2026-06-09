@@ -211,6 +211,66 @@ const cancelZeroRefEviction = (key: string): void => {
     zeroRefSince.delete(key);
 };
 
+// Enforce the zero-ref cap (oldest lingering entries revoked first) and make
+// sure the sweep timer is armed. Shared by release + bulk preload.
+const settleZeroRefQueue = (): void => {
+    while (zeroRefSince.size > ZERO_REF_CAP) {
+        const oldest = zeroRefSince.keys().next().value;
+        if (oldest === undefined) break;
+        revokeSharedEntry(oldest);
+    }
+    scheduleZeroRefSweep();
+};
+
+/**
+ * Bulk-prime the shared URL cache for a page of items: ONE Dexie bulkGet for
+ * every [itemId, variant] pair instead of N independent gets racing per cell.
+ * Cache hits are minted as zero-ref shared URLs parked in the grace window,
+ * so cells that mount afterwards adopt them SYNCHRONOUSLY via
+ * `peekThumbnailUrl` — no per-cell IndexedDB roundtrip, no skeleton frame.
+ * Misses and stale rows are left to the per-cell resolver (fetch/fallback).
+ * Fire-and-forget; failures are swallowed (rendering never depends on this).
+ */
+export const preloadThumbnailUrls = async (
+    itemIds: (null | string | undefined)[],
+    variant: number | string,
+): Promise<void> => {
+    const db = getActiveCacheDb();
+    if (!db) return;
+
+    const resolvedVariant = normaliseVariant(variant);
+    const wanted = [...new Set(itemIds.filter((id): id is string => Boolean(id)))].filter(
+        (id) => !sharedObjectUrls.has(variantKey(id, resolvedVariant)),
+    );
+    if (wanted.length === 0) return;
+
+    let rows: (CachedThumbnail | undefined)[];
+    try {
+        rows = await db.thumbnails.bulkGet(
+            wanted.map((id) => [id, resolvedVariant] as [string, string]),
+        );
+    } catch {
+        return;
+    }
+
+    const now = Date.now();
+    let minted = 0;
+    for (const row of rows ?? []) {
+        if (!row?.Blob || isStaleRow(row)) continue;
+        const key = variantKey(row.ItemId, resolvedVariant);
+        // A concurrent acquire may have landed while the bulkGet was in
+        // flight — never clobber a live entry.
+        if (sharedObjectUrls.has(key)) continue;
+        const url = URL.createObjectURL(row.Blob);
+        sharedObjectUrls.set(key, { refCount: 0, url });
+        zeroRefSince.set(key, now);
+        minted += 1;
+    }
+    if (minted > 0) {
+        settleZeroRefQueue();
+    }
+};
+
 // Test-only: drop every shared URL (revoking them) and clear the zero-ref
 // queue + timer, so module-level state can't leak between tests.
 export const __resetSharedThumbnailUrls = (): void => {
