@@ -28,10 +28,15 @@ export const UpdateAvailableDialog = () => {
             }
         };
 
-        window.api.utils.rendererUpdateAvailable(handleUpdateAvailable);
+        // rendererUpdateAvailable registers an internal wrapper and returns a
+        // disposer that removes THAT wrapper. The previous cleanup passed
+        // handleUpdateAvailable to removeListener — never the registered
+        // listener — so it no-op'd and a fresh listener stacked on every
+        // versionDismissed change.
+        const dispose = window.api.utils.rendererUpdateAvailable(handleUpdateAvailable);
 
         return () => {
-            window.api.ipc.removeListener?.('update-available', handleUpdateAvailable);
+            dispose?.();
         };
     }, [versionDismissed]);
 

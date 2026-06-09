@@ -114,7 +114,12 @@ const rendererOpenReleaseNotes = (cb: () => void) => {
 };
 
 const rendererUpdateAvailable = (cb: (version: string) => void) => {
-    ipcRenderer.on('update-available', (_, version) => cb(version));
+    const listener = (_event: unknown, version: string) => cb(version);
+    ipcRenderer.on('update-available', listener);
+
+    return () => {
+        ipcRenderer.removeListener('update-available', listener);
+    };
 };
 
 export const utils = {
