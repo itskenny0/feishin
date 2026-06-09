@@ -68,7 +68,12 @@ interface Actions {
     mediaStop: (options?: { reset?: boolean }) => void;
     mediaToggleMute: () => void;
     mediaTogglePlayPause: () => void;
-    moveSelectedTo: (items: QueueSong[], uniqueId: string, edge: 'bottom' | 'top') => void;
+    moveSelectedTo: (
+        items: QueueSong[],
+        uniqueId: string,
+        edge: 'bottom' | 'top',
+        space?: 'default' | 'visible',
+    ) => void;
     moveSelectedToBottom: (items: QueueSong[]) => void;
     moveSelectedToNext: (items: QueueSong[]) => void;
     moveSelectedToTop: (items: QueueSong[]) => void;
@@ -1342,7 +1347,17 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                         }
                     });
                 },
-                moveSelectedTo: (items: QueueSong[], uniqueId: string, edge: 'bottom' | 'top') => {
+                moveSelectedTo: (
+                    items: QueueSong[],
+                    uniqueId: string,
+                    edge: 'bottom' | 'top',
+                    // 'visible' (UI drag): reorder whichever order the queue
+                    // table currently renders. 'default' (peer-sync wire,
+                    // SEV-3): always reorder the default order — remote
+                    // indices are exchanged in default-order space no matter
+                    // how this device displays its queue.
+                    space: 'default' | 'visible' = 'visible',
+                ) => {
                     const itemUniqueIds = items.map((item) => item._uniqueId);
 
                     set((state) => {
@@ -1356,6 +1371,7 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                         });
 
                         const draggingShuffledView =
+                            space === 'visible' &&
                             isShuffleEnabled(state) &&
                             useSettingsStore.getState().general.queueInPlaybackOrder;
 

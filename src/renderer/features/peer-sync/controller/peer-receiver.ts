@@ -579,7 +579,15 @@ const applyQueueReorder = (fromIdx: number, toIdx: number, from: PeerAddress): A
         //     so the filter shifts the anchor left by one. Edge 'bottom'
         //     (insert AFTER the anchor) compensates for that left-shift so the
         //     item lands AT toIdx rather than one slot early.
-        store.moveSelectedTo([moving], anchor._uniqueId, toIdx > fromIdx ? 'bottom' : 'top');
+        // 'default' space: wire indices are default-order (SEV-3); never let
+        // the target's own queueInPlaybackOrder view setting reroute this
+        // into a shuffled-order reorder.
+        store.moveSelectedTo(
+            [moving],
+            anchor._uniqueId,
+            toIdx > fromIdx ? 'bottom' : 'top',
+            'default',
+        );
     }
     log('apply cmd queueReorder', {
         from: from.peerId,

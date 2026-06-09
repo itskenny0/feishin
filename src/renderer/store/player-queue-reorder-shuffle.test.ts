@@ -173,6 +173,21 @@ describe('moveSelectedTo (drag) under shuffle', () => {
     });
 });
 
+describe('moveSelectedTo with explicit default coordinate space (peer-sync wire contract)', () => {
+    it('reorders the default order even when the playback-order view is active', () => {
+        // A remote queueReorder operates on DEFAULT-order indices regardless
+        // of how the target's local queue happens to be displayed.
+        setQueueInPlaybackOrder(true);
+        seedShuffledQueue();
+
+        state().moveSelectedTo([song('s4')], 's1', 'top', 'default');
+
+        expect(state().queue.default).toEqual(['s0', 's4', 's1', 's2', 's3']);
+        expect(playbackOrderIds()).toEqual(['s2', 's0', 's4', 's1', 's3']);
+        expect(state().getCurrentSong()?.id).toBe('s0');
+    });
+});
+
 describe('reorder without shuffle (regression guard)', () => {
     it('moveSelectedToNext inserts after the current song and keeps it current', () => {
         seedDefaultQueue(1);
