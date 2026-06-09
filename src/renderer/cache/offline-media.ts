@@ -40,15 +40,24 @@ export interface AddTargetArgs {
 }
 
 export interface SyncTargetArgs {
+    // Identifies who started this sync. `syncAllTargets` passes ONE token for
+    // its whole run so it can detect when an external sync (a manual
+    // single-target download, or a newer syncAll) has taken over the active
+    // handle and stop advancing — otherwise its next iteration would cancel
+    // that external sync via the abort-any-in-flight below.
+    owner?: symbol;
     // Optional injected store (tests). Defaults to the shared singleton.
     store?: LocalMediaStore;
     target: OfflineTargetRow;
 }
 
 // One sync runs at a time. The active controller is exposed so the UI / a
-// fresh sync can cancel it.
+// fresh sync can cancel it. `activeOwner` tags WHO owns the live sync (see
+// SyncTargetArgs.owner) so syncAllTargets can tell its own item apart from a
+// sync that superseded it.
 let activeAbort: AbortController | undefined;
 let activeKey: string | undefined;
+let activeOwner: symbol | undefined;
 
 export const isSyncing = (): boolean => Boolean(activeAbort);
 
@@ -58,6 +67,7 @@ export const cancelOfflineSync = (): void => {
         activeAbort.abort();
         activeAbort = undefined;
         activeKey = undefined;
+        activeOwner = undefined;
     }
 };
 
@@ -293,6 +303,9 @@ export const syncTarget = async (args: SyncTargetArgs): Promise<OfflineTargetRow
     const abort = new AbortController();
     activeAbort = abort;
     activeKey = key;
+    // A bare single-target sync gets a fresh token; syncAllTargets passes its
+    // own so its successive items share one owner.
+    activeOwner = args.owner ?? Symbol('single-sync');
 
     const setSync = useCacheStore.getState().actions.setOfflineSync;
     const startedAt = Date.now();
@@ -308,6 +321,7 @@ export const syncTarget = async (args: SyncTargetArgs): Promise<OfflineTargetRow
         if (activeAbort === abort) {
             activeAbort = undefined;
             activeKey = undefined;
+            activeOwner = undefined;
             // Only clear the live progress banner when WE owned the active
             // sync. A stale finish that's been superseded must not wipe the
             // progress of the sync that replaced it.
@@ -494,8 +508,21 @@ export const addAndSyncOfflineTarget = async (
 export const syncAllTargets = async (store: LocalMediaStore = localMediaStore): Promise<void> => {
     const targets = await store.listTargets();
     console.info(`${TAG} sync all`, { count: targets.length });
+    const owner = Symbol('sync-all');
+    let started = false;
     for (const target of targets) {
-        await syncTarget({ store, target });
+        // After our first item, if the live sync handle is now owned by
+        // something else — a manual single-target download or a newer syncAll
+        // started while we were downloading the previous item — stop. syncTarget
+        // aborts any in-flight sync on entry, so continuing here would cancel
+        // that external sync. (`activeOwner === undefined` means our last item
+        // finished cleanly and we still own the pipeline, so keep going.)
+        if (started && activeOwner !== undefined && activeOwner !== owner) {
+            console.info(`${TAG} sync all superseded by another sync — stopping`);
+            return;
+        }
+        await syncTarget({ owner, store, target });
+        started = true;
     }
 };
 
