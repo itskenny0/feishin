@@ -1355,6 +1355,58 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                             }
                         });
 
+                        const draggingShuffledView =
+                            isShuffleEnabled(state) &&
+                            useSettingsStore.getState().general.queueInPlaybackOrder;
+
+                        if (draggingShuffledView) {
+                            // The queue renders in playback (shuffled) order, so the
+                            // drag reorders queue.shuffled; the default order stays
+                            // untouched. Brand-new songs are appended to the default
+                            // order first so shuffled[] has an index to point at.
+                            itemUniqueIds.forEach((id) => {
+                                if (!state.queue.default.includes(id)) {
+                                    state.queue.default.push(id);
+                                }
+                            });
+
+                            const defaultIndexById = new Map<string, number>();
+                            state.queue.default.forEach((id, idx) => defaultIndexById.set(id, idx));
+
+                            const movedIndexes = itemUniqueIds
+                                .map((id) => defaultIndexById.get(id))
+                                .filter((idx): idx is number => idx !== undefined);
+                            const movedSet = new Set(movedIndexes);
+
+                            const targetIndex = defaultIndexById.get(uniqueId);
+                            const without = state.queue.shuffled.filter(
+                                (idx) => !movedSet.has(idx),
+                            );
+
+                            const targetPosition =
+                                targetIndex === undefined
+                                    ? -1
+                                    : without.findIndex((idx) => idx === targetIndex);
+                            let insertPosition: number;
+                            if (targetPosition === -1) {
+                                insertPosition = edge === 'top' ? 0 : without.length;
+                            } else {
+                                insertPosition =
+                                    edge === 'top' ? targetPosition : targetPosition + 1;
+                            }
+
+                            state.queue.shuffled = [
+                                ...without.slice(0, insertPosition),
+                                ...movedIndexes,
+                                ...without.slice(insertPosition),
+                            ];
+
+                            recalculatePlayerIndex(state, state.queue.default);
+                            return;
+                        }
+
+                        const oldDefault = [...state.queue.default];
+
                         // Find the index of the drop target
                         const index = state.queue.default.findIndex((id) => id === uniqueId);
 
@@ -1371,8 +1423,9 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
 
                         const newQueue = [...idsBefore, ...itemUniqueIds, ...idsAfter];
 
-                        recalculatePlayerIndex(state, newQueue);
+                        remapShuffledAfterReorder(state, oldDefault, newQueue);
                         state.queue.default = newQueue;
+                        recalculatePlayerIndex(state, newQueue);
                     });
                 },
                 moveSelectedToBottom: (items: QueueSong[]) => {
@@ -1384,15 +1437,14 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                             state.queue.songs[item._uniqueId] = item;
                         });
 
-                        const filtered = state.queue.default.filter(
-                            (id) => !uniqueIds.includes(id),
-                        );
+                        const oldDefault = [...state.queue.default];
+                        const filtered = oldDefault.filter((id) => !uniqueIds.includes(id));
 
                         const newQueue = [...filtered, ...uniqueIds];
 
-                        recalculatePlayerIndex(state, newQueue);
-
+                        remapShuffledAfterReorder(state, oldDefault, newQueue);
                         state.queue.default = newQueue;
+                        recalculatePlayerIndex(state, newQueue);
                     });
                 },
                 moveSelectedToNext: (items: QueueSong[]) => {
@@ -1404,9 +1456,19 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                             state.queue.songs[item._uniqueId] = item;
                         });
 
-                        const currentIndex = state.player.index;
+                        const oldDefault = [...state.queue.default];
+                        const shuffleOn = isShuffleEnabled(state);
+                        const currentTrack = state.getCurrentSong() as QueueSong | undefined;
+
+                        // The insert position is the current song's DEFAULT-order
+                        // index; under shuffle `player.index` is a shuffled position,
+                        // so resolve through the current track instead.
+                        const currentIndex = currentTrack
+                            ? oldDefault.findIndex((id) => id === currentTrack._uniqueId)
+                            : state.player.index;
+
                         let beforeCurrent = 0;
-                        const filtered = state.queue.default.filter((id, idx) => {
+                        const filtered = oldDefault.filter((id, idx) => {
                             const shouldMove = uniqueIds.includes(id);
                             if (shouldMove && idx < currentIndex) {
                                 beforeCurrent++;
@@ -1417,7 +1479,7 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
 
                         // For every item that is before the current item, subtract one as
                         // these items will shift the queue up
-                        const insertIndex = currentIndex + 1 - beforeCurrent;
+                        const insertIndex = Math.max(0, currentIndex + 1 - beforeCurrent);
 
                         const newQueue = [
                             ...filtered.slice(0, insertIndex),
@@ -1425,8 +1487,40 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                             ...filtered.slice(insertIndex),
                         ];
 
-                        recalculatePlayerIndex(state, newQueue);
+                        if (shuffleOn) {
+                            remapShuffledAfterReorder(state, oldDefault, newQueue);
+
+                            // "Play next" must also hold in playback order: pull the
+                            // moved entries out of queue.shuffled and reinsert them
+                            // right after the current track, in selection order.
+                            const newIndexById = new Map<string, number>();
+                            newQueue.forEach((id, idx) => newIndexById.set(id, idx));
+
+                            const movedIndexes = uniqueIds
+                                .map((id) => newIndexById.get(id))
+                                .filter((idx): idx is number => idx !== undefined);
+                            const movedSet = new Set(movedIndexes);
+                            const without = state.queue.shuffled.filter(
+                                (idx) => !movedSet.has(idx),
+                            );
+
+                            const currentNewIndex = currentTrack
+                                ? newIndexById.get(currentTrack._uniqueId)
+                                : undefined;
+                            const currentPosition =
+                                currentNewIndex === undefined
+                                    ? -1
+                                    : without.findIndex((idx) => idx === currentNewIndex);
+
+                            state.queue.shuffled = [
+                                ...without.slice(0, currentPosition + 1),
+                                ...movedIndexes,
+                                ...without.slice(currentPosition + 1),
+                            ];
+                        }
+
                         state.queue.default = newQueue;
+                        recalculatePlayerIndex(state, newQueue);
                     });
                 },
                 moveSelectedToTop: (items: QueueSong[]) => {
@@ -1438,15 +1532,14 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                             state.queue.songs[item._uniqueId] = item;
                         });
 
-                        const filtered = state.queue.default.filter(
-                            (id) => !uniqueIds.includes(id),
-                        );
+                        const oldDefault = [...state.queue.default];
+                        const filtered = oldDefault.filter((id) => !uniqueIds.includes(id));
 
                         const newQueue = [...uniqueIds, ...filtered];
 
-                        recalculatePlayerIndex(state, newQueue);
-
+                        remapShuffledAfterReorder(state, oldDefault, newQueue);
                         state.queue.default = newQueue;
+                        recalculatePlayerIndex(state, newQueue);
                     });
                 },
                 setQueue: (items, index, position) => {
@@ -2441,7 +2534,57 @@ function recalculatePlayerIndex(state: any, queue: string[]) {
     }
 
     const index = queue.findIndex((id) => id === currentTrack._uniqueId);
-    state.player.index = Math.max(0, index);
+
+    // Under shuffle, `player.index` is a position WITHIN queue.shuffled (which
+    // must already be remapped to the new default order before calling this),
+    // not a default-order position.
+    if (isShuffleEnabled(state)) {
+        const shuffledPosition = state.queue.shuffled.findIndex((idx: number) => idx === index);
+        state.player.index = Math.max(0, shuffledPosition);
+    } else {
+        state.player.index = Math.max(0, index);
+    }
+}
+
+// Rebuilds queue.shuffled after queue.default was reordered from `oldDefault`
+// to `newDefault`, keeping every shuffled entry pointing at the same song.
+// Entries whose song was removed are dropped; songs new to the queue are
+// shuffled into the not-yet-played region after the current track.
+function remapShuffledAfterReorder(state: any, oldDefault: string[], newDefault: string[]) {
+    if (!isShuffleEnabled(state)) {
+        return;
+    }
+
+    const newIndexById = new Map<string, number>();
+    newDefault.forEach((id, idx) => newIndexById.set(id, idx));
+
+    const seen = new Set<number>();
+    const remapped: number[] = [];
+    for (const oldIdx of state.queue.shuffled as number[]) {
+        const id = oldDefault[oldIdx];
+        const newIdx = id === undefined ? undefined : newIndexById.get(id);
+        if (newIdx !== undefined && !seen.has(newIdx)) {
+            seen.add(newIdx);
+            remapped.push(newIdx);
+        }
+    }
+
+    const added: number[] = [];
+    for (let idx = 0; idx < newDefault.length; idx += 1) {
+        if (!seen.has(idx)) added.push(idx);
+    }
+
+    if (added.length > 0) {
+        const currentTrack = state.getCurrentSong() as QueueSong | undefined;
+        const currentNewIndex = currentTrack ? newIndexById.get(currentTrack._uniqueId) : undefined;
+        const currentPosition =
+            currentNewIndex === undefined
+                ? -1
+                : remapped.findIndex((idx) => idx === currentNewIndex);
+        state.queue.shuffled = addIndexesToShuffled(remapped, currentPosition, added);
+    } else {
+        state.queue.shuffled = remapped;
+    }
 }
 
 function toQueueSong(item: Song): QueueSong {
