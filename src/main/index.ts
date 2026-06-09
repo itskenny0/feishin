@@ -446,7 +446,7 @@ async function createWindow(first = true): Promise<void> {
 
     ipcMain.handle(
         'app-check-for-updates',
-        async (): Promise<{ updateAvailable: boolean; version?: string }> => {
+        async (): Promise<{ error?: boolean; updateAvailable: boolean; version?: string }> => {
             if (disableAutoUpdates()) {
                 console.log('Auto updates are disabled');
                 return { updateAvailable: false };
@@ -475,9 +475,12 @@ async function createWindow(first = true): Promise<void> {
                     updateAvailable,
                     version: result?.updateInfo?.version,
                 };
-            } catch {
-                console.log('Error checking for updates');
-                return { updateAvailable: false };
+            } catch (err) {
+                // Log the actual error and surface a distinguishable result so
+                // the renderer can tell a failed check apart from "up to date"
+                // (a bare { updateAvailable: false } looked identical to success).
+                console.error('Error checking for updates', err);
+                return { error: true, updateAvailable: false };
             }
         },
     );
