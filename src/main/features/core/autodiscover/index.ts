@@ -46,7 +46,13 @@ function discoverJellyfin(reply: (server: DiscoveredServerItem) => void) {
 }
 
 ipcMain.on('autodiscover-ping', (ev) => {
-    if (ev.ports.length === 0) throw new Error('Expected a port to stream autodiscovery results');
+    // A throw here isn't delivered to the renderer (this is `on`, not `handle`)
+    // — it propagates to the process uncaughtException handler. There's no port
+    // to signal failure on, so just log and return.
+    if (ev.ports.length === 0) {
+        console.error('[autodiscover] ping received with no MessagePort; ignoring');
+        return;
+    }
     const port = ev.ports[0];
 
     discoverAll((result) => port.postMessage(result))

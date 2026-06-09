@@ -569,6 +569,28 @@ async function createWindow(first = true): Promise<void> {
     mainWindow.on('closed', () => {
         ipcMain.removeHandler('window-clear-cache');
         ipcMain.removeHandler('app-check-for-updates');
+        // createWindow() registers these ipcMain.on listeners and the local
+        // shortcut on every invocation (macOS re-activate, tray "open main
+        // window"). Without tearing them down on close they accumulate, so a
+        // single renderer IPC fires its handler N times after a reopen —
+        // download-url downloads N times, app-restart relaunches repeatedly,
+        // window-quit calls app.exit() N times. Each channel is registered ONLY
+        // here, so removeAllListeners targets exactly our listener.
+        for (const channel of [
+            'window-maximize',
+            'window-unmaximize',
+            'window-minimize',
+            'window-close',
+            'window-quit',
+            'app-restart',
+            'global-media-keys-enable',
+            'global-media-keys-disable',
+            'download-url',
+            'window-dev-tools',
+        ]) {
+            ipcMain.removeAllListeners(channel);
+        }
+        if (mainWindow) electronLocalShortcut.unregisterAll(mainWindow);
         mainWindow = null;
     });
 
@@ -651,12 +673,8 @@ async function createWindow(first = true): Promise<void> {
     const theme = store.get('theme') as TitleTheme | undefined;
     nativeTheme.themeSource = theme || 'dark';
 
-    mainWindow.webContents.setWindowOpenHandler((details) => {
-        if (validateUrl(details.url)) {
-            shell.openExternal(details.url);
-        }
-        return { action: 'deny' };
-    });
+    // (setWindowOpenHandler is registered once above — Electron keeps only the
+    // last handler, so a second identical registration here was dead code.)
 
     // HMR for renderer base on electron-vite cli.
     // Load the remote URL for development or the local html file for production.

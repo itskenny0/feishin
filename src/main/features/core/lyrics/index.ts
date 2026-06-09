@@ -123,7 +123,10 @@ const getRemoteLyrics = async (song: Song) => {
 
     const params: LyricSearchQuery = {
         album: song.album || song.name,
-        artist: song.artists[0].name,
+        // Artist-less tracks (radio/streams, malformed items) have an empty
+        // artists array — song.artists[0].name would throw a TypeError and
+        // reject the lyric-by-song IPC invoke.
+        artist: song.artists?.[0]?.name ?? '',
         duration: song.duration / 1000.0,
         name: song.name,
     };
