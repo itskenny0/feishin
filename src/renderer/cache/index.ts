@@ -67,6 +67,7 @@ export type {
     FilterSongArtistsArgs,
     FilterSongsArgs,
 } from './local-filter';
+export { resolveSongsByItemTypeLocal } from './local-songs-by-item';
 export {
     blobKey,
     LocalMediaStore,

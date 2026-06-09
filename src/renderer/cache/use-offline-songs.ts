@@ -45,8 +45,16 @@ export const loadOfflineSongs = async (): Promise<Song[]> => {
 
     // The blob key is `${serverId}:${songId}`. serverId itself can't contain a
     // colon (it's a generated id), so the songId is everything after the first
-    // colon.
-    const songIds = blobKeys.map((key) => key.slice(key.indexOf(':') + 1)).filter(Boolean);
+    // colon. Keep only the ACTIVE server's blobs: the songs table we resolve
+    // against is server-scoped, so a blob downloaded under another server
+    // would either be skipped or — worse, on coincidentally equal song ids —
+    // resolve a different server's song.
+    const activeServerId = useCacheStore.getState().activeServer?.serverId;
+    const songIds = blobKeys
+        .filter((key) => !activeServerId || key.startsWith(`${activeServerId}:`))
+        .map((key) => key.slice(key.indexOf(':') + 1))
+        .filter(Boolean);
+    if (songIds.length === 0) return [];
 
     const rows = await db.songs.bulkGet(songIds);
     const songs: Song[] = [];

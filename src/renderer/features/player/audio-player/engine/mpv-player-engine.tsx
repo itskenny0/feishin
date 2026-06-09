@@ -123,17 +123,33 @@ export const MpvPlayerEngine = (props: MpvPlayerEngineProps) => {
             const radioState = useRadioStore.getState();
 
             if (!radioState.currentStreamUrl) {
-                const playerData = usePlayerStore.getState().getPlayerData();
-                const currentSongUrl = playerData.currentSong
-                    ? await getSongUrl(playerData.currentSong, transcode, true)
-                    : undefined;
-                const nextSongUrl = playerData.nextSong
-                    ? await getSongUrl(playerData.nextSong, transcode, true)
-                    : undefined;
+                // Stream-URL resolution needs the server; offline (or a dead
+                // server) used to reject out of this async effect as an
+                // UNHANDLED rejection and take the player down. Degrade to an
+                // empty mpv queue instead — playback resumes on the next
+                // user action once the server is reachable.
+                try {
+                    const playerData = usePlayerStore.getState().getPlayerData();
+                    const currentSongUrl = playerData.currentSong
+                        ? await getSongUrl(playerData.currentSong, transcode, true)
+                        : undefined;
+                    const nextSongUrl = playerData.nextSong
+                        ? await getSongUrl(playerData.nextSong, transcode, true)
+                        : undefined;
 
-                if (currentSongUrl && nextSongUrl && !hasPopulatedQueueRef.current && mpvPlayer) {
-                    mpvPlayer.setQueue(currentSongUrl, nextSongUrl, true);
-                    hasPopulatedQueueRef.current = true;
+                    if (
+                        currentSongUrl &&
+                        nextSongUrl &&
+                        !hasPopulatedQueueRef.current &&
+                        mpvPlayer
+                    ) {
+                        mpvPlayer.setQueue(currentSongUrl, nextSongUrl, true);
+                        hasPopulatedQueueRef.current = true;
+                    }
+                } catch (err) {
+                    console.warn('[mpv-player] failed to resolve song URLs during init', {
+                        error: (err as Error)?.message,
+                    });
                 }
             }
 
@@ -296,7 +312,17 @@ export const MpvPlayerEngine = (props: MpvPlayerEngineProps) => {
                     return;
                 }
 
-                const nextSongUrl = song ? await getSongUrl(song, transcode, true) : undefined;
+                let nextSongUrl: string | undefined;
+                try {
+                    nextSongUrl = song ? await getSongUrl(song, transcode, true) : undefined;
+                } catch (err) {
+                    // Offline / unreachable server: don't blow up the event
+                    // handler (unhandled rejection) — just skip pre-queueing.
+                    console.warn('[mpv-player] failed to resolve next song URL', {
+                        error: (err as Error)?.message,
+                    });
+                    return;
+                }
                 mpvPlayer?.setQueueNext(nextSongUrl);
             },
             onPlayerPlay: () => {
@@ -378,12 +404,22 @@ async function replaceMpvQueue(transcode: {
         return;
     }
 
-    const playerData = usePlayerStore.getState().getPlayerData();
-    const currentSongUrl = playerData.currentSong
-        ? await getSongUrl(playerData.currentSong, transcode, true)
-        : undefined;
-    const nextSongUrl = playerData.nextSong
-        ? await getSongUrl(playerData.nextSong, transcode, true)
-        : undefined;
-    mpvPlayer?.setQueue(currentSongUrl, nextSongUrl, false);
+    // Callers invoke this from player-event handlers without awaiting, so a
+    // rejection here (offline / unreachable server) used to surface as an
+    // UNHANDLED rejection and crash playback. Degrade to leaving the mpv
+    // queue as-is instead.
+    try {
+        const playerData = usePlayerStore.getState().getPlayerData();
+        const currentSongUrl = playerData.currentSong
+            ? await getSongUrl(playerData.currentSong, transcode, true)
+            : undefined;
+        const nextSongUrl = playerData.nextSong
+            ? await getSongUrl(playerData.nextSong, transcode, true)
+            : undefined;
+        mpvPlayer?.setQueue(currentSongUrl, nextSongUrl, false);
+    } catch (err) {
+        console.warn('[mpv-player] failed to resolve song URLs for queue replacement', {
+            error: (err as Error)?.message,
+        });
+    }
 }

@@ -5,6 +5,7 @@ import { createContext, useCallback, useContext, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { queryKeys } from '/@/renderer/api/query-keys';
+import { resolveSongsByItemTypeLocal } from '/@/renderer/cache';
 import { albumQueries } from '/@/renderer/features/albums/api/album-api';
 import { artistsQueries } from '/@/renderer/features/artists/api/artists-api';
 import {
@@ -1209,6 +1210,34 @@ export const usePlayer = () => {
  * @returns The songs to add to the queue
  */
 export async function fetchSongsByItemType(
+    queryClient: QueryClient,
+    serverId: string,
+    args: {
+        id: string[];
+        itemType: LibraryItem;
+        params?: Record<string, any>;
+    },
+) {
+    try {
+        return await fetchSongsByItemTypeRemote(queryClient, serverId, args);
+    } catch (err) {
+        // Server unreachable (the headline case: playing an "available
+        // offline" item while actually offline). Answer from the local cache
+        // when it can satisfy the same contract; otherwise keep the original
+        // error so the caller's toast explains what happened.
+        const local = await resolveSongsByItemTypeLocal({ id: args.id, itemType: args.itemType });
+        if (local && local.length > 0) {
+            console.info('[offline-media] play-by-fetch served from cache after network failure', {
+                count: local.length,
+                itemType: args.itemType,
+            });
+            return local;
+        }
+        throw err;
+    }
+}
+
+async function fetchSongsByItemTypeRemote(
     queryClient: QueryClient,
     serverId: string,
     args: {
