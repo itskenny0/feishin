@@ -597,15 +597,28 @@ export const MobileFullscreenPlayer = () => {
     const swipeY = useMotionValue(typeof window !== 'undefined' ? window.innerHeight : 0);
     const isPlayerStateRef = useRef(true);
     const onDismissRef = useRef<() => void>(() => {});
+    // Single owner for the imperative swipeY animation (entrance, snap-back,
+    // button/swipe dismiss). Tracked so (a) a manual drag can STOP a running
+    // animation before it starts writing swipeY directly — otherwise grabbing
+    // the face mid-entrance has the tween and swipeY.set() fight each other —
+    // and (b) the unmount cleanup can cancel an in-flight tween, so an orphaned
+    // animation doesn't keep ticking the motion value and fire its onComplete
+    // (which writes the fullscreen store) after the component is gone.
+    const swipeAnimRef = useRef<null | ReturnType<typeof animate>>(null);
+    const stopSwipeAnim = useCallback(() => {
+        swipeAnimRef.current?.stop();
+        swipeAnimRef.current = null;
+    }, []);
 
     const handleToggleFullScreenPlayer = useCallback(() => {
         // Animate the player off-screen before unmounting so the close
         // button has the same dismissal feel as a swipe.
         const target = typeof window !== 'undefined' ? window.innerHeight : 0;
-        animate(swipeY, target, {
+        swipeAnimRef.current = animate(swipeY, target, {
             duration: 0.25,
             ease: 'easeInOut',
             onComplete: () => {
+                swipeAnimRef.current = null;
                 setFullScreenPlayerStore({ expanded: false });
                 swipeY.set(target);
             },
@@ -618,8 +631,8 @@ export const MobileFullscreenPlayer = () => {
 
     // Entrance animation — slide up from the bottom of the viewport.
     useEffect(() => {
-        const controls = animate(swipeY, 0, { duration: 0.45, ease: 'easeOut' });
-        return () => controls.stop();
+        swipeAnimRef.current = animate(swipeY, 0, { duration: 0.45, ease: 'easeOut' });
+        return () => stopSwipeAnim();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
@@ -715,6 +728,10 @@ export const MobileFullscreenPlayer = () => {
                     return;
                 }
                 claimed = true;
+                // Cancel any in-flight swipeY tween (entrance slide-up, a prior
+                // snap-back) so the finger drives swipeY directly instead of
+                // fighting a running animation.
+                stopSwipeAnim();
             }
 
             // We own the gesture from here on; block native scroll.
@@ -738,7 +755,11 @@ export const MobileFullscreenPlayer = () => {
 
             if (settle === 'spring') {
                 // touchcancel — never dismiss, just snap back.
-                animate(swipeY, 0, { damping: 30, stiffness: 380, type: 'spring' });
+                swipeAnimRef.current = animate(swipeY, 0, {
+                    damping: 30,
+                    stiffness: 380,
+                    type: 'spring',
+                });
                 return;
             }
 
@@ -752,16 +773,21 @@ export const MobileFullscreenPlayer = () => {
 
             const height = typeof window !== 'undefined' ? window.innerHeight : 800;
             if (offset > 140 || velocity > 500) {
-                animate(swipeY, height, {
+                swipeAnimRef.current = animate(swipeY, height, {
                     duration: 0.25,
                     ease: 'easeOut',
                     onComplete: () => {
+                        swipeAnimRef.current = null;
                         onDismissRef.current();
                         swipeY.set(height);
                     },
                 });
             } else {
-                animate(swipeY, 0, { damping: 30, stiffness: 380, type: 'spring' });
+                swipeAnimRef.current = animate(swipeY, 0, {
+                    damping: 30,
+                    stiffness: 380,
+                    type: 'spring',
+                });
             }
         };
 
@@ -790,7 +816,7 @@ export const MobileFullscreenPlayer = () => {
             // hand it back so the cover isn't permanently suspended.
             if (coverGestureArbiter.owner() === 'dismiss') coverGestureArbiter.release();
         };
-    }, [swipeY]);
+    }, [swipeY, stopSwipeAnim]);
 
     const handleToggleContextMenu = useCallback(
         (e: MouseEvent<HTMLButtonElement | HTMLDivElement>) => {
