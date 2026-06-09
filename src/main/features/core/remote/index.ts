@@ -273,9 +273,13 @@ function setOk(
 const enableServer = (config: RemoteConfig): Promise<void> => {
     return new Promise<void>((resolve, reject) => {
         try {
-            if (server) {
-                server.close();
-            }
+            // Tear down BOTH the old http server AND the old WebSocketServer.
+            // Closing only `server` orphaned the previous `wsServer`, so its
+            // 'close'-bound clearInterval(heartBeat) never fired — the 10s
+            // heartbeat kept running and (referencing the module-level wsServer)
+            // started double-pinging the new server's clients. Repeated toggles
+            // stacked more intervals.
+            shutdownServer();
 
             server = createServer({}, async (req, res) => {
                 if (!authorize(req)) {
@@ -332,6 +336,15 @@ const enableServer = (config: RemoteConfig): Promise<void> => {
                 }
             });
 
+            // A bind failure (EADDRINUSE / EACCES) is emitted asynchronously on
+            // the server AFTER this synchronous try block returns, so it bypasses
+            // the catch and lands in the global uncaughtException handler while
+            // enableServer hangs until the 5s up-timeout. Reject with the real
+            // error instead.
+            server.on('error', (err) => {
+                shutdownServer();
+                reject(err);
+            });
             server.listen(config.port, resolve);
             wsServer = new WebSocketServer<typeof StatefulWebSocket>({ server });
 
