@@ -22,11 +22,12 @@ import { toast } from '/@/shared/components/toast/toast';
  *   - package.json after CI rewrite: "1.11.0-itskenny0-2026-05-21bb"
  *   - git tag for the same release:  "v1.11.0-itskenny0-2026.05.21bb"
  *
- * The CI's `sanitizedSuffix` step converts every fork-suffix dot to a dash.
- * `normalizeVersion` mirrors that conversion (only on the part after
- * `-itskenny0`) so the two forms line up under plain lexicographic
- * comparison. The ISO date inside the suffix means alphabetical sort and
- * chronological sort agree.
+ * Comparison splits the version at the first `-`: the `MAJOR.MINOR.PATCH`
+ * head is compared NUMERICALLY per segment (a plain string compare gets
+ * `1.13.0` vs `1.9.0` wrong — `'1' < '9'` — so a genuinely newer release
+ * looks older and the update is never offered), and the fork-suffix tail
+ * (`itskenny0-YYYY.MM.DD-HHMM`, a zero-padded ISO date) is compared
+ * lexicographically, where alphabetical and chronological order agree.
  */
 
 const REPO = 'itskenny0/feishin';
@@ -59,22 +60,36 @@ const fetchLatestRelease = async (): Promise<GithubRelease | null> => {
     }
 };
 
-const normalizeVersion = (raw: string): string => {
-    let s = raw.replace(/^v/, '');
-    const suffixIdx = s.indexOf('-itskenny0');
-    if (suffixIdx >= 0) {
-        const head = s.slice(0, suffixIdx);
-        const tail = s.slice(suffixIdx).replace(/\./g, '-');
-        s = head + tail;
-    }
-    return s;
+interface ParsedVersion {
+    // MAJOR.MINOR.PATCH as integers.
+    head: number[];
+    // Everything after the first '-' (the fork suffix + ISO date), dots
+    // normalised to dashes so the git-tag and package.json forms line up.
+    tail: string;
+}
+
+const parseVersion = (raw: string): ParsedVersion => {
+    const s = raw.replace(/^v/, '');
+    const dash = s.indexOf('-');
+    const headStr = dash >= 0 ? s.slice(0, dash) : s;
+    const tail = dash >= 0 ? s.slice(dash + 1).replace(/\./g, '-') : '';
+    const head = headStr.split('.').map((n) => Number.parseInt(n, 10) || 0);
+    return { head, tail };
 };
 
-const isNewerVersion = (latestTag: string, current: string): boolean => {
-    const a = normalizeVersion(latestTag);
-    const b = normalizeVersion(current);
-    if (a === b) return false;
-    return a > b;
+export const isNewerVersion = (latestTag: string, current: string): boolean => {
+    const a = parseVersion(latestTag);
+    const b = parseVersion(current);
+    // MAJOR.MINOR.PATCH compared numerically per segment.
+    const len = Math.max(a.head.length, b.head.length);
+    for (let i = 0; i < len; i += 1) {
+        const av = a.head[i] ?? 0;
+        const bv = b.head[i] ?? 0;
+        if (av !== bv) return av > bv;
+    }
+    // Equal head — fall back to the dated fork suffix (lexicographic == chrono).
+    if (a.tail === b.tail) return false;
+    return a.tail > b.tail;
 };
 
 const isAndroidWebView = (): boolean => {
