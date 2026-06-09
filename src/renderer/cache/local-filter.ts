@@ -86,6 +86,17 @@ const applyDirection = <T>(rows: T[], order: SortOrder | undefined): T[] => {
     return rows;
 };
 
+// Case- AND diacritic-insensitive fold for substring matching, so a cache-served
+// list matches accented names the way the server search does ("beyonce" matches
+// "Beyoncé"). NFKD decomposes accented letters into base + combining marks, which
+// \p{Diacritic} strips. Without this the cache returns a SMALLER result set than
+// the network for accented queries (a visible cache/network divergence).
+const foldText = (s: string): string =>
+    s
+        .normalize('NFKD')
+        .replace(/\p{Diacritic}/gu, '')
+        .toLowerCase();
+
 // FAVORITED sort, matching the server's convention: DESC (the dropdown default
 // for "Favorited") puts favourites FIRST, ASC puts them last. This must NOT be
 // followed by applyDirection — that generic reverse() would flip the
@@ -246,11 +257,11 @@ export const filterAlbumsLocal = (args: FilterAlbumsArgs): AlbumListResponse | u
     }
 
     if (query.searchTerm) {
-        const needle = query.searchTerm.toLowerCase();
+        const needle = foldText(query.searchTerm);
         out = out.filter(
             (r) =>
-                (r.Payload.name ?? '').toLowerCase().includes(needle) ||
-                (r.Payload.albumArtistName ?? '').toLowerCase().includes(needle),
+                foldText(r.Payload.name ?? '').includes(needle) ||
+                foldText(r.Payload.albumArtistName ?? '').includes(needle),
         );
     }
 
@@ -327,8 +338,8 @@ const applyArtistFilters = (
         out = out.filter((r) => !favoriteArtistIds.has(r.Id));
     }
     if (query.searchTerm) {
-        const needle = query.searchTerm.toLowerCase();
-        out = out.filter((r) => (r.Payload.name ?? '').toLowerCase().includes(needle));
+        const needle = foldText(query.searchTerm);
+        out = out.filter((r) => foldText(r.Payload.name ?? '').includes(needle));
     }
     return out;
 };
@@ -566,12 +577,12 @@ export const filterSongsLocal = (args: FilterSongsArgs): SongListResponse | unde
     }
 
     if (query.searchTerm) {
-        const needle = query.searchTerm.toLowerCase();
+        const needle = foldText(query.searchTerm);
         out = out.filter(
             (r) =>
-                (r.Payload.name ?? '').toLowerCase().includes(needle) ||
-                (r.Payload.albumArtistName ?? '').toLowerCase().includes(needle) ||
-                (r.Payload.album ?? '').toLowerCase().includes(needle),
+                foldText(r.Payload.name ?? '').includes(needle) ||
+                foldText(r.Payload.albumArtistName ?? '').includes(needle) ||
+                foldText(r.Payload.album ?? '').includes(needle),
         );
     }
 
@@ -624,8 +635,8 @@ export const filterPlaylistsLocal = (
     let out = rows.slice();
 
     if (query.searchTerm) {
-        const needle = query.searchTerm.toLowerCase();
-        out = out.filter((r) => (r.Payload?.name ?? '').toLowerCase().includes(needle));
+        const needle = foldText(query.searchTerm);
+        out = out.filter((r) => foldText(r.Payload?.name ?? '').includes(needle));
     }
 
     switch (query.sortBy) {
@@ -686,8 +697,8 @@ export const filterGenresLocal = (args: FilterGenresArgs): GenreListResponse | u
     let out = rows.slice();
 
     if (query.searchTerm) {
-        const needle = query.searchTerm.toLowerCase();
-        out = out.filter((r) => (r.SortName ?? '').toLowerCase().includes(needle));
+        const needle = foldText(query.searchTerm);
+        out = out.filter((r) => foldText(r.SortName ?? '').includes(needle));
     }
 
     out.sort((a, b) => cmpStr(a.SortName ?? '', b.SortName ?? ''));

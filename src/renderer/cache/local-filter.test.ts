@@ -74,6 +74,22 @@ describe('filterAlbumsLocal favourite branch', () => {
     });
 });
 
+describe('filterAlbumsLocal searchTerm is diacritic-insensitive', () => {
+    it('matches an accented name with an unaccented query (like the server)', () => {
+        const rows = [album('1', 'Beyoncé'), album('2', 'Adele')];
+        const out = filterAlbumsLocal({
+            query: {
+                searchTerm: 'beyonce',
+                sortBy: AlbumListSort.NAME,
+                sortOrder: SortOrder.ASC,
+                startIndex: 0,
+            },
+            rows,
+        });
+        expect(out?.items.map((i) => i.id)).toEqual(['1']);
+    });
+});
+
 describe('filterAlbumsLocal FAVORITED sort direction', () => {
     // 'b' is the favourite; 'a' and 'c' are not.
     const rows = [album('a'), album('b'), album('c')];
