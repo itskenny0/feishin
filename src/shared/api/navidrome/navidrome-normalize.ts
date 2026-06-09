@@ -265,7 +265,11 @@ const normalizeSong = (
         imageUrl: null,
         lastPlayedAt: normalizePlayDate(item),
         lyrics: item.lyrics ? item.lyrics : null,
-        mbzRecordingId: item.mbzReleaseTrackId || null,
+        // Navidrome only exposes the release-track MBID (→ mbzTrackId). It has
+        // no recording MBID, so don't alias the release-track id into
+        // mbzRecordingId — that pointed MusicBrainz "recording" links/lookups at
+        // the wrong entity. Leave it null until the API surfaces a real one.
+        mbzRecordingId: null,
         mbzTrackId: item.mbzReleaseTrackId || null,
         name: item.title,
         // Thankfully, Windows is merciful and allows a mix of separators. So, we can use the

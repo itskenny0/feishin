@@ -24,7 +24,14 @@ const getArtistList = (
     artistName?: string,
     participants?: null | Record<string, RelatedArtist[]>,
 ) => {
-    if (!artists && !participants) {
+    // Treat an EMPTY `artists`/`albumArtists` array the same as a missing one:
+    // OpenSubsonic servers declare these arrays as required and frequently send
+    // `[]` for tracks without multi-artist tags while still populating the
+    // legacy `artist`/`artistId`. The previous `!artists` guard (false for `[]`)
+    // skipped the fallback, blanking the artist on those rows.
+    const hasArtists = Boolean(artists && artists.length > 0);
+    const hasRemixers = Boolean(participants?.['remixer']?.length);
+    if (!hasArtists && !hasRemixers) {
         return [
             {
                 id: artistId?.toString() || '',
@@ -323,7 +330,7 @@ const normalizeAlbum = (
         _serverType: ServerType.SUBSONIC,
         albumArtistName: item.artist,
         albumArtists: getArtistList(item.artists, item.artistId, item.artist),
-        artists: [],
+        artists: getArtistList(item.artists, item.artistId, item.artist),
         comment: null,
         createdAt: item.created,
         duration: item.duration * 1000,

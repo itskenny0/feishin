@@ -223,7 +223,7 @@ const normalizeSong = (
         compilation: null,
         container,
         createdAt: item.DateCreated,
-        discNumber: (item.ParentIndexNumber && item.ParentIndexNumber) || 1,
+        discNumber: item.ParentIndexNumber ?? 1,
         discSubtitle: null,
         duration: item.RunTimeTicks / TICKS_PER_MS,
         explicitStatus: null,
