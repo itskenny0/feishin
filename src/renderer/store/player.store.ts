@@ -1301,12 +1301,15 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                         useSettingsStore.getState().general.skipButtons.skipForwardSeconds;
                     const timeToSkip = offset ?? offsetFromSettings ?? 5;
 
-                    if (!duration) {
-                        return;
-                    }
-
                     const currentTimestamp = useTimestampStoreBase.getState().timestamp;
-                    const newTimestamp = Math.min(duration - 1, currentTimestamp + timeToSkip);
+                    // When the duration is known, clamp just shy of the end.
+                    // Otherwise (radio / streams / metadata not loaded yet)
+                    // advance without an upper bound instead of no-op'ing — the
+                    // engine clamps an over-seek itself, and a silent dead button
+                    // is worse. mediaSkipBackward already ignores duration.
+                    const newTimestamp = duration
+                        ? Math.min(duration - 1, currentTimestamp + timeToSkip)
+                        : currentTimestamp + timeToSkip;
 
                     // See mediaSkipBackward: update the timestamp store right away to
                     // avoid the stale-read left by the ~500ms engine poll.
