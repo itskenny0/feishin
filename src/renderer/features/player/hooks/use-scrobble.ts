@@ -681,10 +681,24 @@ export const useScrobble = () => {
         [flushScrobbleDebug, handleScrobbleFromProgress],
     );
 
+    // Keep the latest mutation reachable from the mount-once handlers below.
+    // The mutation object's identity changes across renders, so depending on
+    // it directly would tear down and re-install the global singleton (and any
+    // force-submit/reset fired between cleanup and re-registration would
+    // silently no-op).
+    const sendScrobbleRef = useRef(sendScrobble);
+
+    useEffect(() => {
+        sendScrobbleRef.current = sendScrobble;
+    }, [sendScrobble]);
+
     useEffect(() => {
         registerScrobbleManualHandlers({
             forceSubmitScrobble: () => {
-                if (!isScrobbleEnabled || isPrivateModeEnabled) {
+                const scrobbleEnabled = useSettingsStore.getState().playback.scrobble?.enabled;
+                const privateMode = useAppStore.getState().privateMode;
+
+                if (!scrobbleEnabled || privateMode) {
                     return;
                 }
 
@@ -696,14 +710,14 @@ export const useScrobble = () => {
                     return;
                 }
 
-                sendScrobble.mutate(
+                sendScrobbleRef.current.mutate(
                     {
                         apiClientProps: { serverId: song._serverId || '' },
                         query: {
                             albumId: song.albumId,
                             id: song.id,
                             mediaType: mediaType,
-                            playbackRate: playbackRate,
+                            playbackRate: usePlayerStore.getState().player.speed,
                             position: getPositionValue(song.duration ?? 0, useTicks),
                             submission: true,
                         },
@@ -725,7 +739,10 @@ export const useScrobble = () => {
                 flushScrobbleDebug();
             },
             resetListenedState: () => {
-                if (!isScrobbleEnabled || isPrivateModeEnabled) {
+                const scrobbleEnabled = useSettingsStore.getState().playback.scrobble?.enabled;
+                const privateMode = useAppStore.getState().privateMode;
+
+                if (!scrobbleEnabled || privateMode) {
                     return;
                 }
 
@@ -743,7 +760,7 @@ export const useScrobble = () => {
         });
 
         return () => registerScrobbleManualHandlers(null);
-    }, [flushScrobbleDebug, isPrivateModeEnabled, isScrobbleEnabled, playbackRate, sendScrobble]);
+    }, [flushScrobbleDebug]);
 
     usePlayerEvents(
         {
