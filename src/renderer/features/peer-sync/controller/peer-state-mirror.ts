@@ -21,7 +21,8 @@ import { peekDiagnostics } from '/@/renderer/features/peer-sync/diagnostics/diag
 import { peerToJellyfinRepeat } from '/@/renderer/features/peer-sync/protocol/builders';
 import { PeerAddress } from '/@/renderer/features/peer-sync/protocol/topics';
 import { PeerState } from '/@/renderer/features/peer-sync/types';
-import { Song } from '/@/shared/types/domain-types';
+import { useAuthStore } from '/@/renderer/store/auth.store';
+import { LibraryItem, ServerType, Song } from '/@/shared/types/domain-types';
 
 const log = (...args: unknown[]) => console.info('[peer-sync]', ...args);
 const warn = (...args: unknown[]) => console.warn('[peer-sync]', ...args);
@@ -54,6 +55,139 @@ const perfMark = (label: string, payload: Record<string, unknown>): void => {
  * broker+network delay. It is computed from RTT on the LOCAL clock (skew-free)
  * by the caller and is only non-zero while playing.
  */
+// ---------------------------------------------------------------------------
+// Controller-side hydration of wire stubs.
+//
+// The wire deliberately stays compact: `track.art` is whatever URL the TARGET
+// uses (its session token / device binding — the controller often can't load
+// it), and the queue is bare `qIds`. The controller is on the same Jellyfin
+// server as the target (the room is keyed by the JF user), so it derives art
+// from `track.id` through its OWN connection, and hydrates `qIds` into full
+// Song objects through its own API — covers + readable upcoming tracks.
+
+// Album art for a track id via the controller's own server/auth. The image
+// helper lives in the item-image component module — statically importing it
+// here would drag the whole API surface into every peer-sync unit test (the
+// receiver lazy-imports remote-target-api for the same reason), so it loads
+// on first use; until then we return null and the caller falls back to the
+// wire-supplied art URL (one frame at most).
+type GetItemImageUrlFn = (args: { id: string; itemType: LibraryItem }) => string | undefined;
+let getItemImageUrlRef: GetItemImageUrlFn | null = null;
+let getItemImageUrlLoading = false;
+
+const ensureImageHelperLoaded = (): void => {
+    if (getItemImageUrlRef || getItemImageUrlLoading) return;
+    getItemImageUrlLoading = true;
+    void import('/@/renderer/components/item-image/item-image')
+        .then((mod) => {
+            getItemImageUrlRef = mod.getItemImageUrl as GetItemImageUrlFn;
+        })
+        .catch(() => {
+            getItemImageUrlLoading = false;
+        });
+};
+
+const deriveControllerArt = (trackId: string | undefined): null | string => {
+    if (!trackId) return null;
+    ensureImageHelperLoaded();
+    if (!getItemImageUrlRef) return null;
+    try {
+        return getItemImageUrlRef({ id: trackId, itemType: LibraryItem.SONG }) ?? null;
+    } catch {
+        return null;
+    }
+};
+
+// Hydrated Song objects keyed by id, shared by the queue builder and the
+// now-playing stub so later state ticks keep full metadata instead of
+// regressing to id stubs. Bounded; oldest entries evicted first.
+const HYDRATED_CACHE_CAP = 500;
+const hydratedSongs = new Map<string, Song>();
+
+const cacheHydratedSong = (song: Song): void => {
+    if (!song?.id) return;
+    hydratedSongs.delete(song.id);
+    hydratedSongs.set(song.id, song);
+    while (hydratedSongs.size > HYDRATED_CACHE_CAP) {
+        const oldest = hydratedSongs.keys().next().value;
+        if (oldest === undefined) break;
+        hydratedSongs.delete(oldest);
+    }
+};
+
+let lastHydrateKey = '';
+let lastHydrateAttemptAt = 0;
+let hydrateInFlight = false;
+const HYDRATE_RETRY_MS = 30_000;
+
+/** Test-only: clear hydration state between tests. */
+export const __resetQueueHydration = (): void => {
+    hydratedSongs.clear();
+    lastHydrateKey = '';
+    lastHydrateAttemptAt = 0;
+    hydrateInFlight = false;
+};
+
+/**
+ * Hydrate the mirrored queue's bare ids into full Song objects through the
+ * controller's own Jellyfin connection, then patch the store — provided the
+ * mirrored queue still shows the same ids (a newer frame may have replaced
+ * it while the request was in flight). Deduped per id-set; failed attempts
+ * retry after a cooldown rather than on every 2Hz state tick.
+ */
+export const ensureQueueHydrated = async (qIds: string[], qIdx: number): Promise<void> => {
+    if (qIds.length === 0) return;
+    const key = qIds.join('|');
+    const missing = qIds.filter((id) => !hydratedSongs.has(id));
+
+    if (hydrateInFlight) return;
+    if (missing.length === 0 && key === lastHydrateKey) return;
+    if (
+        missing.length > 0 &&
+        key === lastHydrateKey &&
+        Date.now() - lastHydrateAttemptAt < HYDRATE_RETRY_MS
+    ) {
+        return;
+    }
+
+    lastHydrateKey = key;
+    lastHydrateAttemptAt = Date.now();
+
+    if (missing.length > 0) {
+        const server = useAuthStore.getState().currentServer;
+        if (!server || server.type !== ServerType.JELLYFIN || !server.userId) return;
+        hydrateInFlight = true;
+        try {
+            // Lazy import (mirrors peer-receiver): keeps the JF API surface
+            // out of unit tests that only exercise the synchronous mapping.
+            const mod =
+                await import('/@/renderer/features/jellyfin-remote-target/api/remote-target-api');
+            const songs = (await mod.remoteTargetApi.hydrateSongs({
+                itemIds: missing,
+                server: server as never,
+            })) as Song[];
+            songs.forEach(cacheHydratedSong);
+            log('queue hydrated', { hydrated: songs.length, requested: missing.length });
+        } catch (err) {
+            warn('queue hydrate failed', { error: (err as Error)?.message });
+            return;
+        } finally {
+            hydrateInFlight = false;
+        }
+    }
+
+    // Patch only when the mirror still shows this exact queue.
+    const { actions, mirrored } = useRemoteTargetStore.getState();
+    const current = mirrored?.queue;
+    if (!Array.isArray(current) || current.length !== qIds.length) return;
+    if (!current.every((s: Song, i: number) => s?.id === qIds[i])) return;
+
+    actions.applyMirrorFromServer({
+        queue: qIds.map((id, i) => hydratedSongs.get(id) ?? current[i]),
+        queueIndex: qIdx >= 0 && qIdx < qIds.length ? qIdx : -1,
+    });
+};
+
 const idStubSong = (id: string): Song =>
     ({
         album: '',
@@ -68,28 +202,35 @@ const idStubSong = (id: string): Song =>
     }) as unknown as Song;
 
 export const peerStateToMirrored = (state: PeerState, oneWayOffsetMs = 0): RemoteMirrorInput => {
-    const stubSong: null | Song = state.track
-        ? ({
-              album: state.track.album ?? '',
-              albumArtists: state.track.artist
-                  ? [{ id: '', imageUrl: null, name: state.track.artist }]
-                  : [],
-              artists: state.track.artist
-                  ? [{ id: '', imageUrl: null, name: state.track.artist }]
-                  : [],
-              container: null,
-              duration: state.dur,
-              id: state.track.id,
-              // The base image URL is the peer-supplied art URL; the local
-              // player will request it through the normal <BaseImage> path.
-              imageUrl: state.track.art ?? null,
-              itemType: 'song',
-              name: state.track.title ?? '',
-              // Unknown server-specific fields default to nullish; the UI
-              // tolerates them. The shape is intentionally minimal — when
-              // we want richer metadata we can add it to the protocol.
-          } as unknown as Song)
-        : null;
+    // Prefer the hydrated full Song (controller-side fetch by id) when we
+    // already have it — full metadata + a cover the controller can load.
+    const hydratedNowPlaying = state.track ? hydratedSongs.get(state.track.id) : undefined;
+    const stubSong: null | Song =
+        hydratedNowPlaying ??
+        (state.track
+            ? ({
+                  album: state.track.album ?? '',
+                  albumArtists: state.track.artist
+                      ? [{ id: '', imageUrl: null, name: state.track.artist }]
+                      : [],
+                  artists: state.track.artist
+                      ? [{ id: '', imageUrl: null, name: state.track.artist }]
+                      : [],
+                  container: null,
+                  duration: state.dur,
+                  id: state.track.id,
+                  // Art the CONTROLLER can actually load: derived from the
+                  // track id via the controller's own server/auth. The wire
+                  // `art` URL carries the TARGET's session token and is only
+                  // kept as a fallback for cross-server edge cases.
+                  imageUrl: deriveControllerArt(state.track.id) ?? state.track.art ?? null,
+                  itemType: 'song',
+                  name: state.track.title ?? '',
+                  // Unknown server-specific fields default to nullish; the UI
+                  // tolerates them. The shape is intentionally minimal — when
+                  // we want richer metadata we can add it to the protocol.
+              } as unknown as Song)
+            : null);
 
     const out: RemoteMirrorInput = {
         nowPlayingItem: stubSong,
@@ -124,7 +265,13 @@ export const peerStateToMirrored = (state: PeerState, oneWayOffsetMs = 0): Remot
     if (Array.isArray(state.qIds) && state.qIds.length > 0) {
         const qIdx =
             typeof state.qIdx === 'number' && Number.isFinite(state.qIdx) ? state.qIdx : -1;
-        out.queue = state.qIds.map((id, i) => (i === qIdx && stubSong ? stubSong : idStubSong(id)));
+        // Hydrated songs (controller-side fetch by id) win over stubs, so a
+        // 2Hz state tick never regresses an already-readable queue row back
+        // to an empty id stub.
+        out.queue = state.qIds.map(
+            (id, i) =>
+                hydratedSongs.get(id) ?? (i === qIdx && stubSong ? stubSong : idStubSong(id)),
+        );
         out.queueIndex = qIdx >= 0 && qIdx < state.qIds.length ? qIdx : -1;
     }
     return out;
@@ -203,4 +350,13 @@ export const applyPeerStateToStore = (from: PeerAddress, state: PeerState): void
         vol: state.vol,
     });
     actions.applyMirrorFromServer(mirrored);
+
+    // Fire-and-forget: hydrate the bare queue ids through the controller's
+    // own server so "upcoming tracks" shows real titles/covers. Deduped per
+    // id-set inside; patches the store only if the queue is still current.
+    if (Array.isArray(state.qIds) && state.qIds.length > 0) {
+        const qIdx =
+            typeof state.qIdx === 'number' && Number.isFinite(state.qIdx) ? state.qIdx : -1;
+        void ensureQueueHydrated(state.qIds, qIdx);
+    }
 };
