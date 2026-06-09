@@ -73,3 +73,30 @@ describe('filterAlbumsLocal favourite branch', () => {
         expect(out?.totalRecordCount).toBe(2);
     });
 });
+
+describe('filterAlbumsLocal FAVORITED sort direction', () => {
+    // 'b' is the favourite; 'a' and 'c' are not.
+    const rows = [album('a'), album('b'), album('c')];
+    const favoriteAlbumIds = new Set(['b']);
+
+    it('puts favourites FIRST on DESC (the dropdown default) — matches the server', () => {
+        // Regression: the cache encoded favourites-first then applyDirection
+        // reversed on DESC, dumping favourites to the bottom while the network
+        // showed them on top.
+        const out = filterAlbumsLocal({
+            favoriteAlbumIds,
+            query: { sortBy: AlbumListSort.FAVORITED, sortOrder: SortOrder.DESC, startIndex: 0 },
+            rows,
+        });
+        expect(out?.items[0]?.id).toBe('b');
+    });
+
+    it('puts favourites LAST on ASC', () => {
+        const out = filterAlbumsLocal({
+            favoriteAlbumIds,
+            query: { sortBy: AlbumListSort.FAVORITED, sortOrder: SortOrder.ASC, startIndex: 0 },
+            rows,
+        });
+        expect(out?.items[out.items.length - 1]?.id).toBe('b');
+    });
+});

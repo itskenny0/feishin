@@ -86,6 +86,21 @@ const applyDirection = <T>(rows: T[], order: SortOrder | undefined): T[] => {
     return rows;
 };
 
+// FAVORITED sort, matching the server's convention: DESC (the dropdown default
+// for "Favorited") puts favourites FIRST, ASC puts them last. This must NOT be
+// followed by applyDirection — that generic reverse() would flip the
+// already-encoded order, which is the bug that showed favourites at the BOTTOM
+// of a cache-served list (default DESC) while the network showed them at the top.
+const sortByFavorite = <T>(
+    rows: T[],
+    isFav: (row: T) => boolean,
+    order: SortOrder | undefined,
+): T[] =>
+    rows.slice().sort((a, b) => {
+        const cmp = (isFav(b) ? 1 : 0) - (isFav(a) ? 1 : 0);
+        return order === SortOrder.ASC ? -cmp : cmp;
+    });
+
 const paginate = <T>(
     items: T[],
     startIndex: number | undefined,
@@ -241,15 +256,11 @@ export const filterAlbumsLocal = (args: FilterAlbumsArgs): AlbumListResponse | u
 
     if (query.sortBy === AlbumListSort.FAVORITED) {
         if (!favoriteAlbumIds) return undefined;
-        out = out.slice().sort((a, b) => {
-            const af = favoriteAlbumIds.has(a.Id) ? 1 : 0;
-            const bf = favoriteAlbumIds.has(b.Id) ? 1 : 0;
-            return bf - af;
-        });
+        out = sortByFavorite(out, (r) => favoriteAlbumIds.has(r.Id), query.sortOrder);
     } else {
         out = sortAlbums(out.slice(), query.sortBy);
+        out = applyDirection(out, query.sortOrder);
     }
-    out = applyDirection(out, query.sortOrder);
 
     const totalRecordCount = out.length;
     const startIndex = query.startIndex ?? 0;
@@ -355,15 +366,11 @@ export const filterAlbumArtistsLocal = (
 
     if (query.sortBy === AlbumArtistListSort.FAVORITED) {
         if (!favoriteArtistIds) return undefined;
-        out = out.slice().sort((a, b) => {
-            const af = favoriteArtistIds.has(a.Id) ? 1 : 0;
-            const bf = favoriteArtistIds.has(b.Id) ? 1 : 0;
-            return bf - af;
-        });
+        out = sortByFavorite(out, (r) => favoriteArtistIds.has(r.Id), query.sortOrder);
     } else {
         out = sortArtists(out.slice(), query.sortBy);
+        out = applyDirection(out, query.sortOrder);
     }
-    out = applyDirection(out, query.sortOrder);
 
     const totalRecordCount = out.length;
     const startIndex = query.startIndex ?? 0;
@@ -408,15 +415,11 @@ export const filterArtistsLocal = (args: FilterSongArtistsArgs): ArtistListRespo
 
     if (query.sortBy === ArtistListSort.FAVORITED) {
         if (!favoriteArtistIds) return undefined;
-        out = out.slice().sort((a, b) => {
-            const af = favoriteArtistIds.has(a.Id) ? 1 : 0;
-            const bf = favoriteArtistIds.has(b.Id) ? 1 : 0;
-            return bf - af;
-        });
+        out = sortByFavorite(out, (r) => favoriteArtistIds.has(r.Id), query.sortOrder);
     } else {
         out = sortArtists(out.slice(), query.sortBy);
+        out = applyDirection(out, query.sortOrder);
     }
-    out = applyDirection(out, query.sortOrder);
 
     const totalRecordCount = out.length;
     const startIndex = query.startIndex ?? 0;
@@ -574,15 +577,11 @@ export const filterSongsLocal = (args: FilterSongsArgs): SongListResponse | unde
 
     if (query.sortBy === SongListSort.FAVORITED) {
         if (!favoriteSongIds) return undefined;
-        out = out.slice().sort((a, b) => {
-            const af = favoriteSongIds.has(a.Id) ? 1 : 0;
-            const bf = favoriteSongIds.has(b.Id) ? 1 : 0;
-            return bf - af;
-        });
+        out = sortByFavorite(out, (r) => favoriteSongIds.has(r.Id), query.sortOrder);
     } else {
         out = sortSongs(out.slice(), query.sortBy);
+        out = applyDirection(out, query.sortOrder);
     }
-    out = applyDirection(out, query.sortOrder);
 
     const totalRecordCount = out.length;
     const startIndex = query.startIndex ?? 0;
