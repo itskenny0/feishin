@@ -18,6 +18,16 @@ vi.mock('/@/renderer/cache/db', () => ({
     getActiveCacheDb: () => FAKE_DB,
 }));
 
+// hooks.ts → sync-first.ts reads the settings store for the sync-first
+// policy. Mock it to "local cache disabled" so the SWR behaviour under test
+// here (background revalidation enabled) matches the pre-sync-first
+// contract; sync-first.test.ts covers the enabled paths.
+vi.mock('/@/renderer/store/settings.store', () => ({
+    useSettingsStore: {
+        getState: () => ({ localCache: { enabled: false } }),
+    },
+}));
+
 afterEach(() => {
     vi.useRealTimers();
     useCacheStore.setState((s) => ({ ...s, cacheAvailable: undefined }) as never);

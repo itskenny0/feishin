@@ -8,6 +8,7 @@ import type { EntityType } from './types';
 import { getActiveCacheDb } from './db';
 import { readSnapshot, writeSnapshot } from './snapshot';
 import { useCacheStore } from './store';
+import { consumeRevalidateThrottle, shouldRevalidateFromNetwork } from './sync-first';
 
 import { queryClient } from '/@/renderer/lib/react-query';
 
@@ -61,30 +62,10 @@ export const readEntityCountFallback = (key: QueryKey, entity: EntityType): numb
     return storeCount && storeCount > 0 ? storeCount : undefined;
 };
 
-// Per-queryKey throttle map for background revalidates. After a
-// successful bg refetch we record the timestamp and skip subsequent
-// bg revalidates from the same queryKey for `REVALIDATE_TTL_MS`. This
-// stops large-album / large-playlist surfaces from refetching the
-// entire payload every time the user navigates to them within a
-// session — the cached value is more than fresh enough.
-const lastRevalidateAt = new Map<string, number>();
-const REVALIDATE_TTL_MS = 60_000;
-
-const shouldRevalidate = (queryKey: QueryKey): boolean => {
-    const now = Date.now();
-    // Lazy TTL prune (mirrors toast.tsx's recentToasts cleanup). Entries
-    // older than the TTL can never gate again — they'd pass the freshness
-    // check below regardless — so dropping them here is semantically free
-    // and bounds the map to "queryKeys revalidated within the last TTL".
-    for (const [k, ts] of lastRevalidateAt) {
-        if (now - ts > REVALIDATE_TTL_MS) lastRevalidateAt.delete(k);
-    }
-    const hash = JSON.stringify(queryKey);
-    const last = lastRevalidateAt.get(hash) ?? 0;
-    if (now - last < REVALIDATE_TTL_MS) return false;
-    lastRevalidateAt.set(hash, now);
-    return true;
-};
+// The per-queryKey revalidate throttle lives in `./sync-first` now (so the
+// explicit-refresh path can clear it without an import cycle). The local
+// alias keeps the call sites below readable.
+const shouldRevalidate = consumeRevalidateThrottle;
 
 // Sentinel returned by remote() when the network call fails and we want
 // the cold path to resolve with a known-empty value (so Suspense doesn't
@@ -117,6 +98,11 @@ export const snapshotSwr = async <TData>(args: {
     const { ctx, queryKey, remote } = args;
     const cached = readSnapshot<TData>(queryKey);
     if (cached !== undefined) {
+        // NOTE: deliberately NOT gated through `shouldRevalidateFromNetwork`.
+        // Snapshot-only surfaces have no Dexie rows behind them, so the sync
+        // sweep never refreshes them — suppressing the revalidate here would
+        // freeze them permanently. Sync-first only applies where the sweep
+        // owns freshness.
         if (shouldRevalidate(queryKey)) {
             void (async () => {
                 try {
@@ -256,7 +242,13 @@ export const cachedSwr = async <TData>(args: {
         // of queryFn. The throttle prevents large-album / large-
         // playlist re-renders every time the user re-enters the page
         // within the TTL window.
-        if (shouldRevalidate(queryKey)) {
+        //
+        // Sync-first: when the local cache is authoritative
+        // (`shouldRevalidateFromNetwork()` returns false) the revalidate is
+        // skipped entirely — the sweep owns freshness and an explicit
+        // refresh re-opens the network window. Checked FIRST so a
+        // suppressed revalidate doesn't consume the throttle slot.
+        if (shouldRevalidateFromNetwork() && shouldRevalidate(queryKey)) {
             void (async () => {
                 try {
                     const fresh = await remote(ctx);
@@ -468,9 +460,12 @@ export const useCachedInfiniteQuery = <TPage, TPageParam = number>(
             if (cachedPage !== undefined) {
                 // Background revalidate — throttled per [queryKey, pageParam]
                 // so repeated navigations to the same page don't spam the
-                // network within the REVALIDATE_TTL_MS window.
+                // network within the REVALIDATE_TTL_MS window. Gated through
+                // the sync-first predicate first: when the local cache is
+                // authoritative the sweep owns freshness and no automatic
+                // network call fires after a cache hit.
                 const pageQueryKey = [...(queryKey as unknown[]), pageParam];
-                if (shouldRevalidate(pageQueryKey)) {
+                if (shouldRevalidateFromNetwork() && shouldRevalidate(pageQueryKey)) {
                     void (async () => {
                         try {
                             const fresh = await remote(ctx);

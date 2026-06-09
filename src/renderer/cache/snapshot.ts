@@ -189,6 +189,29 @@ export const dropSnapshotsForServer = (serverId: string): void => {
     if (dropped > 0) schedulePersist();
 };
 
+/**
+ * Drop every snapshot whose queryKey mentions the given entity token
+ * (`'albums'`, `'songs'`, ...). The entity name is always a standalone
+ * string element in the queryKey arrays produced by `query-keys.ts`
+ * (e.g. `[serverId, 'albums', 'list', ...]`), so matching the JSON-quoted
+ * token can't partially match a longer label. Used by the explicit-refresh
+ * path so a manual refresh repaints from fresh server pages instead of a
+ * pinned placeholder.
+ */
+export const dropSnapshotsForEntity = (entity: string): number => {
+    if (!entity) return 0;
+    const needle = JSON.stringify(entity);
+    let dropped = 0;
+    for (const k of snapshots.keys()) {
+        if (k.includes(needle)) {
+            snapshots.delete(k);
+            dropped += 1;
+        }
+    }
+    if (dropped > 0) schedulePersist();
+    return dropped;
+};
+
 export const readSnapshot = <T>(key: QueryKey): T | undefined =>
     snapshots.get(hash(key)) as T | undefined;
 
