@@ -17,6 +17,7 @@ export const DownloadAction = ({ ids }: DownloadActionProps) => {
     const server = useCurrentServer();
 
     const onSelect = useCallback(async () => {
+        if (!server?.id || ids.length === 0) return;
         try {
             for (const id of ids) {
                 const downloadUrl = api.controller.getDownloadUrl({
