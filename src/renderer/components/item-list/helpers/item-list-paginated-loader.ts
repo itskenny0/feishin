@@ -13,7 +13,7 @@ import { useListContext } from '/@/renderer/context/list-context';
 import { eventEmitter } from '/@/renderer/events/event-emitter';
 import { UserFavoriteEventPayload, UserRatingEventPayload } from '/@/renderer/events/events';
 import { getListRefreshMutationKey } from '/@/renderer/features/shared/components/list-refresh-button';
-import { LibraryItem } from '/@/shared/types/domain-types';
+import { LibraryItem, SortKeyRandom } from '/@/shared/types/domain-types';
 
 const getQueryKeyName = (itemType: LibraryItem): string => {
     switch (itemType) {
@@ -86,6 +86,8 @@ export const useItemListPaginatedLoader = ({
     const fetchRange = getFetchRange(currentPage, itemsPerPage);
     const startIndex = fetchRange.startIndex;
 
+    const isRandomSort = query?.sortBy === SortKeyRandom;
+
     const queryParams = useMemo(
         () => ({
             limit: itemsPerPage,
@@ -98,7 +100,9 @@ export const useItemListPaginatedLoader = ({
     const queryKey = queryKeys[getQueryKeyName(itemType)].list(serverId, queryParams);
 
     const { data } = useQuery({
-        gcTime: 1000 * 15,
+        // Upstream #2097: long stale/gc for RANDOM so a remount reuses the
+        // cached response instead of fetching a fresh server shuffle.
+        gcTime: isRandomSort ? 1000 * 60 * 10 : 1000 * 15,
         // Prefer a cached page from the snapshot map on first paint; fall
         // back to skeleton items only when the cache has nothing for this
         // (entity, query) pair.
@@ -121,6 +125,12 @@ export const useItemListPaginatedLoader = ({
                     });
                     if (cached && cached.items.length > 0) {
                         writeSnapshot(queryKey, cached);
+                        // RANDOM + cache hit: the local permutation is the
+                        // stable one; a server revalidate would replace the
+                        // page with a fresh shuffle (visible reorder).
+                        if (isRandomSort) {
+                            return cached;
+                        }
                         void (async () => {
                             try {
                                 const fresh = await listQueryFn({
@@ -155,7 +165,7 @@ export const useItemListPaginatedLoader = ({
             return result;
         },
         queryKey,
-        staleTime: 1000 * 15,
+        staleTime: isRandomSort ? 1000 * 60 * 10 : 1000 * 15,
     });
 
     const refreshMutation = useMutation({

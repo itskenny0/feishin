@@ -13,7 +13,7 @@ import { useListContext } from '/@/renderer/context/list-context';
 import { eventEmitter } from '/@/renderer/events/event-emitter';
 import { UserFavoriteEventPayload, UserRatingEventPayload } from '/@/renderer/events/events';
 import { getListRefreshMutationKey } from '/@/renderer/features/shared/components/list-refresh-button';
-import { LibraryItem } from '/@/shared/types/domain-types';
+import { LibraryItem, SortKeyRandom } from '/@/shared/types/domain-types';
 
 export const getListQueryKeyName = (itemType: LibraryItem): string => {
     switch (itemType) {
@@ -174,6 +174,15 @@ export const useItemListInfiniteLoader = ({
         [queryClient, dataQueryKey],
     );
 
+    // Upstream #2097: RANDOM sort must not re-fetch on remount — the server
+    // reshuffles per request, so a back-navigation reshuffled the whole list.
+    // The page responses get a long stale/gc window so the post-remount refill
+    // (this loader holds its item maps in refs, which die with the hook
+    // instance) replays the SAME server pages out of the react-query cache.
+    // Upstream's skip-reset / skip-fetch guards are intentionally NOT ported:
+    // here they would leave the freshly-emptied ref maps unfilled (blank rows).
+    const isRandomSort = query?.sortBy === SortKeyRandom;
+
     const fetchPage = useCallback(
         async (pageNumber: number) => {
             const startIndex = pageNumber * itemsPerPage;
@@ -211,8 +220,21 @@ export const useItemListInfiniteLoader = ({
                 }
             }
 
+            // RANDOM + cache hit: do NOT overwrite the locally-served page.
+            // The local permutation is stable across pages (sorted-result
+            // memo); the server reshuffles per request, so the revalidate
+            // would replace each page with a slice of a DIFFERENT
+            // permutation — visible reshuffle + duplicates across pages.
+            if (cachedItems && isRandomSort) {
+                return;
+            }
+
             const networkPromise = queryClient
                 .fetchQuery({
+                    // Upstream #2097: long stale/gc for RANDOM so a remount
+                    // refills from the cached response instead of fetching a
+                    // fresh server shuffle.
+                    gcTime: isRandomSort ? 1000 * 60 * 10 : 1000 * 15,
                     queryFn: async ({ signal }) => {
                         const result = await listQueryFn({
                             apiClientProps: { serverId, signal },
@@ -222,6 +244,7 @@ export const useItemListInfiniteLoader = ({
                         return result;
                     },
                     queryKey: queryKeys[getListQueryKeyName(itemType)].list(serverId, queryParams),
+                    staleTime: isRandomSort ? 1000 * 60 * 10 : 1000 * 15,
                 })
                 .then((result) => {
                     writePageIntoDataMap(pageNumber, startIndex, result.items, true);
@@ -251,12 +274,18 @@ export const useItemListInfiniteLoader = ({
             serverId,
             listQueryFn,
             itemType,
+            isRandomSort,
             localFetchPage,
             writePageIntoDataMap,
         ],
     );
 
-    // Reset the loaded pages and refetch current page when the query changes
+    // Reset the loaded pages and refetch current page when the query changes.
+    // NOTE: upstream #2097 skips this reset for RANDOM when the query cache
+    // still has data — NOT ported: this loader's item maps live in refs that
+    // die with the hook instance, so the reset+refill must always run. The
+    // remount-reshuffle is prevented instead by the long RANDOM stale/gc
+    // window on the page fetches (and the sorted-result memo on cache reads).
     useEffect(() => {
         const currentDataQueryKey = JSON.stringify(dataQueryKey);
 
