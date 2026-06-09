@@ -456,9 +456,14 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                                     state.queue.songs[item._uniqueId] = item;
                                 });
 
+                                // When shuffle is on but nothing is playing yet
+                                // (index -1), shuffled[-1] is undefined → +1 = NaN
+                                // → slice(0, NaN) silently drops the queue prefix.
+                                // Fall back to the front (matches the non-shuffle
+                                // -1 → 0 behaviour).
                                 const insertPosition =
                                     state.player.shuffle === PlayerShuffle.TRACK
-                                        ? state.queue.shuffled[currentShuffledIndex] + 1
+                                        ? (state.queue.shuffled[currentShuffledIndex] ?? -1) + 1
                                         : currentShuffledIndex + 1;
 
                                 state.queue.default = [
@@ -502,8 +507,11 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                                 // Shuffle the new items before inserting
                                 const shuffledIds = shuffleInPlace([...newUniqueIds]);
 
+                                // Guard the nothing-playing-under-shuffle case
+                                // (index -1 → shuffled[-1] undefined → NaN, which
+                                // would drop the queue prefix). Fall back to front.
                                 const insertPosition = isShuffleEnabled(state)
-                                    ? state.queue.shuffled[currentShuffledIndex] + 1
+                                    ? (state.queue.shuffled[currentShuffledIndex] ?? -1) + 1
                                     : currentShuffledIndex + 1;
 
                                 state.queue.default = [

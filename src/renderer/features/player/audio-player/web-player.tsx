@@ -733,6 +733,16 @@ function gaplessHandler(args: {
         return null;
     }
 
+    // Guard an unknown/zero duration (metadata not loaded yet, or a stream that
+    // never reports one). Without this, `currentTime > duration - 2` is true at
+    // t≈0 (`0 > -2`), so the transition arms instantly and the next branch
+    // (`currentTime + padding >= duration`) starts the NEXT track on top of the
+    // current one within the first second. The crossfade handler already guards
+    // `duration > 0`; gapless must too.
+    if (!(duration > 0)) {
+        return null;
+    }
+
     if (!isTransitioning) {
         if (currentTime > duration - 2) {
             return setIsTransitioning(true);
