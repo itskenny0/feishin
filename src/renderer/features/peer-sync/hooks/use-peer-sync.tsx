@@ -23,7 +23,10 @@ import {
     startPeerClient,
     stopPeerClient,
 } from '/@/renderer/features/peer-sync/controller/peer-client';
-import { warmMqttPublish } from '/@/renderer/features/peer-sync/controller/peer-dispatcher';
+import {
+    clearMqttCoalesce,
+    warmMqttPublish,
+} from '/@/renderer/features/peer-sync/controller/peer-dispatcher';
 import { applyPeerCommand } from '/@/renderer/features/peer-sync/controller/peer-receiver';
 import { applyPeerStateToStore } from '/@/renderer/features/peer-sync/controller/peer-state-mirror';
 import {
@@ -272,6 +275,7 @@ export const usePeerSync = () => {
             window.clearInterval(pingTimer);
             window.clearInterval(heartbeatTimer);
             stopStatePublisher();
+            clearMqttCoalesce();
             unsubscribeTransport();
             pendingPings.clear();
             knownPeers.clear();

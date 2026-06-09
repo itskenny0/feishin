@@ -48,6 +48,12 @@ export const usePullToRefresh = (
         let active = false;
         let armed = false;
         let primaryPointerId: null | number = null;
+        // True once this effect has been torn down (unmount / dep change). The
+        // pointer-up handler is async — it awaits onRefresh() — so without this
+        // guard its `finally` setRefreshing(false)/setDistance(0) can run after
+        // the hook unmounted (e.g. the user navigates away while a slow refetch
+        // is still in flight), setting state on an unmounted component.
+        let disposed = false;
         // Track every concurrent touch pointer so a second finger landing
         // mid-pull disarms the gesture cleanly (pinch / two-finger scroll
         // should NEVER be interpreted as refresh, otherwise the indicator
@@ -147,8 +153,10 @@ export const usePullToRefresh = (
                 try {
                     await onRefresh();
                 } finally {
-                    setRefreshing(false);
-                    setDistance(0);
+                    if (!disposed) {
+                        setRefreshing(false);
+                        setDistance(0);
+                    }
                     lastDeltaY = 0;
                 }
             } else {
@@ -174,6 +182,7 @@ export const usePullToRefresh = (
         el.addEventListener('pointercancel', handlePointerCancel, { passive: true });
 
         return () => {
+            disposed = true;
             el.removeEventListener('pointerdown', handlePointerDown);
             el.removeEventListener('pointermove', handlePointerMove);
             el.removeEventListener('pointerup', handlePointerUp);

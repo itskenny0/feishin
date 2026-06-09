@@ -170,13 +170,21 @@ const coalesceMqtt = (key: string, fire: () => void): void => {
     );
 };
 
-/** Test-only: reset the coalesce slots so a fresh test starts clean. */
-export const __resetMqttCoalesce = (): void => {
+/**
+ * Clear every coalesce slot and its pending trailing timer. Call on peer-sync
+ * teardown so a queued trailing publish can't fire against a torn-down (or, on a
+ * fast stop→start, a fresh) session, and the per-peerId slot map doesn't retain
+ * entries for every device ever controlled this session.
+ */
+export const clearMqttCoalesce = (): void => {
     for (const slot of coalesceSlots.values()) {
         if (slot.timer) clearTimeout(slot.timer);
     }
     coalesceSlots.clear();
 };
+
+/** Test-only alias for {@link clearMqttCoalesce}. */
+export const __resetMqttCoalesce = clearMqttCoalesce;
 
 export interface PeerDispatcherCtx {
     /** Address of the remote peer. Required when the MQTT lane is alive. */
