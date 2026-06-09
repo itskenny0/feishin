@@ -176,8 +176,12 @@ export const hydrate = async (server: ServerListItem, kind: 'full' | 'lazy'): Pr
             console.warn('[cache] hydrate: aborted', { serverId: server.id });
             return;
         }
+        // Swallow rather than rethrow: every caller invokes this as
+        // `void hydrate(...)` (lifecycle auto-resync, settings dashboard
+        // buttons), so a rethrow only ever becomes an unhandled promise
+        // rejection — noise that the renderer's boot-error overlay can treat
+        // as a crash. The next scheduled/explicit hydration retries cleanly.
         console.warn('[cache] hydrate: failed', { error: err, serverId: server.id });
-        throw err;
     } finally {
         stopSyncHeartbeat(`full/${server.id}`);
     }

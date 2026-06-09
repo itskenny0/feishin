@@ -218,26 +218,38 @@ export const evict = async (): Promise<void> => {
     let dropped = 0;
     let droppedCount = 0;
 
-    // Phase 1 — evict thumbnails older than 7 days, oldest first.
+    // Phase 1 — evict thumbnails older than 7 days, oldest first. Stream via a
+    // Dexie cursor over the `LastUsed` index (NOT `sortBy`/`toArray`, which
+    // materialises every aged row — Blobs included — into the JS heap, the exact
+    // anti-pattern phase 2 below documents and the file's `sumThumbnailBytes`
+    // warns against). Null each Blob ref as we go and defer deletes to a chunked
+    // `bulkDelete` after traversal (mutating the table mid-cursor is unsafe), so
+    // peak heap stays O(1) row even when thousands of aged covers are pruned.
     const cutoff = Date.now() - SEVEN_DAYS_MS;
     try {
-        const oldRows = await db.thumbnails.where('LastUsed').below(cutoff).sortBy('LastUsed');
-        for (const row of oldRows) {
-            if (used - dropped <= cap) break;
-            try {
-                // Schema v12 keys the table on the compound `[ItemId+Variant]`,
-                // so each variant of an item is its own row and MUST be deleted
-                // by its full key — a bare `ItemId` delete matches nothing and
-                // silently leaves every variant row in place.
-                await db.thumbnails.delete([row.ItemId, row.Variant]);
-                dropped += row.ByteSize;
+        const FLUSH_AT = 256;
+        // Compound `[ItemId, Variant]` keys — the v12 primary key. A bare
+        // `ItemId` would delete nothing (variants are separate rows).
+        const toDelete: [string, string][] = [];
+        await db.thumbnails
+            .where('LastUsed')
+            .below(cutoff)
+            .until(() => used - dropped <= cap)
+            .each((row) => {
+                const itemId = row.ItemId;
+                const variant = row.Variant;
+                const byteSize = row.ByteSize;
+                (row as { Blob?: Blob }).Blob = undefined;
+                toDelete.push([itemId, variant]);
+                dropped += byteSize;
                 droppedCount += 1;
+            });
+        for (let i = 0; i < toDelete.length; i += FLUSH_AT) {
+            const chunk = toDelete.slice(i, i + FLUSH_AT);
+            try {
+                await db.thumbnails.bulkDelete(chunk);
             } catch (err) {
-                console.warn('[cache] eviction: failed to delete row', {
-                    err,
-                    itemId: row.ItemId,
-                    variant: row.Variant,
-                });
+                console.warn('[cache] eviction: phase 1 bulkDelete failed', { err });
             }
         }
     } catch (err) {
