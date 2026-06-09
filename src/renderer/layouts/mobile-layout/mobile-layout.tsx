@@ -7,7 +7,9 @@ import { Outlet, useLocation } from 'react-router';
 
 import styles from './mobile-layout.module.css';
 
-import { OfflineDownloadBanner } from '/@/renderer/cache';
+import { OfflineDownloadBanner, prepareExplicitRefresh } from '/@/renderer/cache';
+import { eventEmitter } from '/@/renderer/events/event-emitter';
+import { ITEM_LIST_REFRESH_ALL } from '/@/renderer/events/events';
 import { ContextMenuController } from '/@/renderer/features/context-menu/context-menu-controller';
 import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
 import { RouteSkeleton } from '/@/renderer/features/shared/components/route-skeleton';
@@ -75,11 +77,18 @@ export const MobileLayout = ({ shell }: MobileLayoutProps) => {
     const remoteTargetActive = useRemoteTargetStore((s) => s.targetDeviceId !== null);
     const hasSong = Boolean(currentSong?.id) || remoteTargetActive;
 
-    // Pull-to-refresh on the main content scroll container: invalidate all
-    // active react-query queries so the current route refetches. The hook
-    // only fires for touch pointers and only when the scroll container is
-    // at the top, so it never fights normal mid-scroll touches.
+    // Pull-to-refresh on the main content scroll container. A top overscroll
+    // is the user's explicit "go to the server now": open the sync-first
+    // explicit-refresh window (drops the row cache + library snapshots so
+    // fresh pages land even when the local cache is authoritative),
+    // broadcast ITEM_LIST_REFRESH so whichever list loader is mounted runs
+    // its forced-network refresh mutation, then invalidate every active
+    // react-query query so detail/count/sidecar surfaces revalidate too.
+    // The hook only fires for touch pointers and only when the scroll
+    // container is at the top, so it never fights normal mid-scroll touches.
     const handleRefresh = useCallback(async () => {
+        prepareExplicitRefresh('all');
+        eventEmitter.emit('ITEM_LIST_REFRESH', { key: ITEM_LIST_REFRESH_ALL });
         await queryClient.invalidateQueries({ refetchType: 'active' });
     }, [queryClient]);
 

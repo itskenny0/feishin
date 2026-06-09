@@ -9,10 +9,20 @@ import throttle from 'lodash/throttle';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { queryKeys } from '/@/renderer/api/query-keys';
-import { preloadThumbnailUrls } from '/@/renderer/cache';
+import {
+    applyListPageToCache,
+    entityForLibraryItem,
+    preloadThumbnailUrls,
+    prepareExplicitRefresh,
+    shouldRevalidateFromNetwork,
+} from '/@/renderer/cache';
 import { useListContext } from '/@/renderer/context/list-context';
 import { eventEmitter } from '/@/renderer/events/event-emitter';
-import { UserFavoriteEventPayload, UserRatingEventPayload } from '/@/renderer/events/events';
+import {
+    ITEM_LIST_REFRESH_ALL,
+    UserFavoriteEventPayload,
+    UserRatingEventPayload,
+} from '/@/renderer/events/events';
 import { getListRefreshMutationKey } from '/@/renderer/features/shared/components/list-refresh-button';
 import { LibraryItem, SortKeyRandom } from '/@/shared/types/domain-types';
 
@@ -205,7 +215,7 @@ export const useItemListInfiniteLoader = ({
     const isRandomSort = query?.sortBy === SortKeyRandom;
 
     const fetchPage = useCallback(
-        async (pageNumber: number) => {
+        async (pageNumber: number, options?: { forceNetwork?: boolean }) => {
             const startIndex = pageNumber * itemsPerPage;
             const queryParams = {
                 limit: itemsPerPage,
@@ -220,8 +230,11 @@ export const useItemListInfiniteLoader = ({
             // spinner when the cache had the data. On a true cache miss
             // we still await the network call so the page eventually
             // populates.
+            //
+            // `forceNetwork` (the explicit-refresh path) skips the local
+            // read entirely so the page repaints from a fresh server fetch.
             let cachedItems: undefined | unknown[];
-            if (localFetchPage) {
+            if (localFetchPage && !options?.forceNetwork) {
                 try {
                     const cached = await localFetchPage({
                         limit: itemsPerPage,
@@ -250,6 +263,14 @@ export const useItemListInfiniteLoader = ({
                 return;
             }
 
+            // Sync-first: the cache answered and the sweep owns freshness —
+            // skip the automatic background revalidate entirely (the shared
+            // predicate logs the decision, sampled). An explicit refresh
+            // re-opens the network window and lands here with forceNetwork.
+            if (cachedItems && !shouldRevalidateFromNetwork()) {
+                return;
+            }
+
             const networkPromise = queryClient
                 .fetchQuery({
                     // Upstream #2097: long stale/gc for RANDOM so a remount
@@ -270,6 +291,10 @@ export const useItemListInfiniteLoader = ({
                 .then((result) => {
                     writePageIntoDataMap(pageNumber, startIndex, result.items, true);
                     lastFetchedPageRef.current = Math.max(lastFetchedPageRef.current, pageNumber);
+                    // Write-through: persist the fresh server page into the
+                    // local cache (bulkPut + search/row-cache invalidation)
+                    // so sync-first reads and the next cold start see it.
+                    void applyListPageToCache(itemType, result.items);
                 });
 
             if (cachedItems) {
@@ -449,6 +474,11 @@ export const useItemListInfiniteLoader = ({
 
     const refreshMutation = useMutation({
         mutationFn: async (force?: boolean) => {
+            // Explicit refresh: open the sync-first network window, clear the
+            // revalidate throttle, and drop the entity's sorted-LRU/row cache
+            // + snapshots so the fresh server pages actually land.
+            prepareExplicitRefresh(entityForLibraryItem(itemType));
+
             // Invalidate ONLY queries for this list's item type on this server.
             // Previously this was an unscoped `invalidateQueries()` which
             // marked every cached query in the app stale (favorites, sidebar
@@ -487,8 +517,10 @@ export const useItemListInfiniteLoader = ({
                 pageToFetch = lastFetchedPageRef.current;
             }
 
-            // Refetch the current page
-            await fetchPage(pageToFetch);
+            // Refetch the current page — forced to the network so an explicit
+            // refresh always reflects the server, even when sync-first would
+            // otherwise serve the page from the local cache.
+            await fetchPage(pageToFetch, { forceNetwork: true });
 
             // Trigger range changed to ensure adjacent pages are prefetched if needed
             const startIndex = pageToFetch * itemsPerPage;
@@ -548,7 +580,9 @@ export const useItemListInfiniteLoader = ({
 
     useEffect(() => {
         const handleRefresh = (payload: { key: string }) => {
-            if (!eventKey || eventKey !== payload.key) {
+            // The broadcast key (mobile pull-to-refresh) refreshes whichever
+            // list loader is currently mounted.
+            if (payload.key !== ITEM_LIST_REFRESH_ALL && (!eventKey || eventKey !== payload.key)) {
                 return;
             }
 

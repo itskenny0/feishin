@@ -34,6 +34,7 @@ import {
     readEntityCountFallback,
     readSnapshot,
     resolveAlbumPage,
+    shouldRevalidateFromNetwork,
     toCachedAlbumRow as toCachedAlbumRowBase,
     useCachedQuery,
     useCacheStore,
@@ -664,7 +665,14 @@ export const useAlbumInfiniteListSuspenseQuery = (args: AlbumInfiniteListSuspens
 
             if (cached !== undefined) {
                 // Background revalidate so an offline session never throws
-                // out of queryFn when the cache has the page.
+                // out of queryFn when the cache has the page. Gated through
+                // the shared sync-first predicate: when the local cache is
+                // authoritative the sweep owns freshness and no automatic
+                // network call fires after a cache hit (an explicit refresh
+                // re-opens the window).
+                if (!shouldRevalidateFromNetwork()) {
+                    return cached;
+                }
                 void (async () => {
                     try {
                         const fresh = (await controller.getAlbumList({
