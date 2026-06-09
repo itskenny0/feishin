@@ -8,6 +8,24 @@ import { useEffect, useRef, useState } from 'react';
 const MAX_DOMINANT_COLOR_ENTRIES = 500;
 const colorMap = new Map<string, null | string>();
 
+// Transient load failures (art server 5xx / network blip) are NOT cached as a
+// permanent null — unlike a CORS taint or an empty cover, the image can become
+// reachable later. We record a short cooldown instead so the gradient retries
+// on the next view past the TTL rather than staying suppressed all session.
+const NEGATIVE_RETRY_MS = 30_000;
+const MAX_TRANSIENT_FAIL_ENTRIES = 200;
+const transientFailAt = new Map<string, number>();
+
+const recordTransientFail = (url: string, now: number): void => {
+    if (transientFailAt.has(url)) {
+        transientFailAt.delete(url);
+    } else if (transientFailAt.size >= MAX_TRANSIENT_FAIL_ENTRIES) {
+        const oldest = transientFailAt.keys().next().value;
+        if (oldest !== undefined) transientFailAt.delete(oldest);
+    }
+    transientFailAt.set(url, now);
+};
+
 const cache = {
     get(url: string): null | string | undefined {
         return colorMap.get(url);
@@ -54,6 +72,15 @@ export const useDominantColor = (url?: null | string): UseDominantColorResult =>
         if (cache.has(url)) {
             setColor(cache.get(url) ?? null);
             return;
+        }
+        // Honour an in-cooldown transient failure; once it ages out, retry.
+        const failedAt = transientFailAt.get(url);
+        if (failedAt !== undefined) {
+            if (Date.now() - failedAt < NEGATIVE_RETRY_MS) {
+                setColor(null);
+                return;
+            }
+            transientFailAt.delete(url);
         }
         if (lastUrlRef.current === url) return;
         lastUrlRef.current = url;
@@ -117,7 +144,11 @@ export const useDominantColor = (url?: null | string): UseDominantColorResult =>
             }
         };
         img.onerror = () => {
-            cache.set(url, null);
+            // Don't poison the permanent cache — the cover may load later.
+            // Record a cooldown and clear lastUrlRef so a re-render past the
+            // TTL can re-attempt extraction.
+            recordTransientFail(url, Date.now());
+            lastUrlRef.current = null;
             if (!cancelled) setColor(null);
         };
         img.src = url;
