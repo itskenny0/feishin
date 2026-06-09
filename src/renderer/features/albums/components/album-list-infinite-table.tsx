@@ -47,7 +47,7 @@ export const AlbumListInfiniteTable = ({
     const listQueryFn = api.controller.getAlbumList;
     const { pageKey } = useListContext();
 
-    const { getItem, getItemIndex, itemCount, loadedItems, onRangeChanged } =
+    const { dataVersion, getItem, getItemIndex, itemCount, loadedItems, onRangeChanged } =
         useItemListInfiniteLoader({
             eventKey: pageKey || ItemListKey.ALBUM,
             itemsPerPage,
@@ -82,6 +82,7 @@ export const AlbumListInfiniteTable = ({
             CellComponent={ItemTableListColumn}
             columns={columns}
             data={loadedItems}
+            dataVersion={dataVersion}
             enableAlternateRowColors={enableAlternateRowColors}
             enableHeader={enableHeader}
             enableHorizontalBorders={enableHorizontalBorders}

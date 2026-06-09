@@ -175,6 +175,7 @@ interface VirtualizedTableGridProps {
     calculatedColumnWidths: number[];
     CellComponent: JSXElementConstructor<CellComponentProps<TableItemProps>>;
     data: unknown[];
+    dataVersion?: number;
     dataWithGroups: (null | unknown)[];
     enableScrollShadow: boolean;
     getItem?: (index: number) => undefined | unknown;
@@ -198,6 +199,7 @@ const VirtualizedTableGrid = ({
     calculatedColumnWidths,
     CellComponent,
     data,
+    dataVersion,
     dataWithGroups,
     enableScrollShadow,
     getItem,
@@ -378,6 +380,7 @@ const VirtualizedTableGrid = ({
         () => ({
             calculatedColumnWidths,
             data: dataWithGroups,
+            dataVersion,
             getAdjustedRowIndex,
             getGroupRenderData,
             getRowItem,
@@ -390,6 +393,7 @@ const VirtualizedTableGrid = ({
         }),
         [
             calculatedColumnWidths,
+            dataVersion,
             dataWithGroups,
             getRowItem,
             getAdjustedRowIndex,
@@ -727,6 +731,7 @@ const MemoizedVirtualizedTableGrid = memo(VirtualizedTableGrid, (prevProps, next
         ) &&
         prevProps.tableConfig === nextProps.tableConfig &&
         prevProps.data === nextProps.data &&
+        prevProps.dataVersion === nextProps.dataVersion &&
         prevProps.dataWithGroups === nextProps.dataWithGroups &&
         prevProps.enableScrollShadow === nextProps.enableScrollShadow &&
         prevProps.getItem === nextProps.getItem &&
@@ -767,6 +772,7 @@ export interface TableItemProps {
     columns: ItemTableListColumnConfig[];
     controls: ItemControls;
     data: ItemTableListProps['data'];
+    dataVersion?: number;
     enableAlternateRowColors?: ItemTableListProps['enableAlternateRowColors'];
     enableColumnReorder?: boolean;
     enableColumnResize?: boolean;
@@ -806,6 +812,7 @@ interface ItemTableListProps {
     cellPadding?: 'lg' | 'md' | 'sm' | 'xl' | 'xs';
     columns: ItemTableListColumnConfig[];
     data: unknown[];
+    dataVersion?: number;
     enableAlternateRowColors?: boolean;
     enableDrag?: boolean;
     enableDragScroll?: boolean;
@@ -1269,6 +1276,7 @@ const BaseItemTableList = ({
     cellPadding = 'sm',
     columns: columnsProp,
     data,
+    dataVersion,
     enableAlternateRowColors = false,
     enableDrag = true,
     enableDragScroll = true,
@@ -1777,6 +1785,7 @@ const BaseItemTableList = ({
                 calculatedColumnWidths={displayColumnWidths}
                 CellComponent={optimizedCellComponent}
                 data={data}
+                dataVersion={dataVersion}
                 dataWithGroups={dataWithGroups}
                 enableScrollShadow={enableScrollShadow}
                 getItem={getItem}

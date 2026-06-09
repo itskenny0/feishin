@@ -32,6 +32,9 @@ export const MemoizedCellRouter = React.memo(MemoizedCellRouterBase, (prevProps,
         prevProps.rowIndex === nextProps.rowIndex &&
         prevProps.columnIndex === nextProps.columnIndex &&
         prevProps.data === nextProps.data &&
+        // See cell-component-factory: accessor-mode item changes are only
+        // visible through the version counter.
+        prevProps.dataVersion === nextProps.dataVersion &&
         isSameCellStyle(prevProps.style, nextProps.style) &&
         prevProps.columns === nextProps.columns &&
         prevProps.columnCellComponents === nextProps.columnCellComponents &&

@@ -22,6 +22,10 @@ export const createColumnCellComponent = (
                 prevProps.rowIndex === nextProps.rowIndex &&
                 prevProps.columnIndex === nextProps.columnIndex &&
                 prevProps.data === nextProps.data &&
+                // In accessor mode `data` is constant and `getRowItem` reads a
+                // mutated-in-place map, so the version counter is the only prop
+                // that reflects an item change at a stable row index.
+                prevProps.dataVersion === nextProps.dataVersion &&
                 isSameCellStyle(prevProps.style, nextProps.style) &&
                 prevProps.columns === nextProps.columns &&
                 prevProps.playlistId === nextProps.playlistId

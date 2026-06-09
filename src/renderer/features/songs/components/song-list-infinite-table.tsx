@@ -43,7 +43,7 @@ export const SongListInfiniteTable = ({
     const listQueryFn = api.controller.getSongList;
     const { pageKey } = useListContext();
 
-    const { getItem, getItemIndex, itemCount, loadedItems, onRangeChanged } =
+    const { dataVersion, getItem, getItemIndex, itemCount, loadedItems, onRangeChanged } =
         useItemListInfiniteLoader({
             eventKey: pageKey || ItemListKey.SONG,
             itemsPerPage,
@@ -81,6 +81,7 @@ export const SongListInfiniteTable = ({
             CellComponent={ItemTableListColumn}
             columns={columns}
             data={loadedItems}
+            dataVersion={dataVersion}
             enableAlternateRowColors={enableAlternateRowColors}
             enableExpansion={false}
             enableHeader={enableHeader}
