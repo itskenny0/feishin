@@ -22,6 +22,7 @@ import type {
 } from './types';
 
 import { getActiveCacheDb } from './db';
+import { markRowCacheDirty } from './local-cache';
 import { useCacheStore } from './store';
 
 import { controller } from '/@/renderer/api/controller';
@@ -344,6 +345,12 @@ const invalidateFavoriteScopes = (args: FavoriteArgs): void => {
                 exact: false,
                 queryKey: queryKeys.albums.root(serverId),
             });
+            // Drop the sorted-LRU so a FAVORITED-sorted or favourite-filtered
+            // list recomputes its ORDER/membership on the next read — the
+            // react-query invalidate alone re-enters the grid resolver, which
+            // would otherwise serve the previously-computed (stale-order) list
+            // since a user-data toggle doesn't advance the row change-stamp.
+            markRowCacheDirty('albums');
             break;
         }
         case LibraryItem.ALBUM_ARTIST:
@@ -356,6 +363,8 @@ const invalidateFavoriteScopes = (args: FavoriteArgs): void => {
                 exact: false,
                 queryKey: queryKeys.artists.root(serverId),
             });
+            markRowCacheDirty('artists');
+            markRowCacheDirty('albumArtists');
             break;
         }
         case LibraryItem.PLAYLIST: {
@@ -376,6 +385,7 @@ const invalidateFavoriteScopes = (args: FavoriteArgs): void => {
                 exact: false,
                 queryKey: queryKeys.albumArtists.favoriteSongs(serverId),
             });
+            markRowCacheDirty('songs');
             break;
         }
         default:
