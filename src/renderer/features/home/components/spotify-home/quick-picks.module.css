@@ -1,18 +1,17 @@
 /*
  * Spotify-style "quick picks" grid — short, wide tiles for the most-recent
- * albums. One column on the narrowest phones, two on phones/portrait, three
+ * albums. Two columns on phones (mirroring Spotify's home top zone), three
  * on tablets, and four on desktop so the zone stays dense (matching the
  * app's dense feel) without the tiles getting cramped.
  */
 .grid {
     display: grid;
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, 1fr);
     gap: 0.5rem;
 }
 
 @media (width >= 480px) {
     .grid {
-        grid-template-columns: repeat(2, 1fr);
         gap: 0.5rem 0.75rem;
     }
 }
@@ -88,10 +87,21 @@
     white-space: nowrap;
 }
 
+/* Two columns on narrow phones leave little width per tile — drop the title
+ * a step so more of it fits before the ellipsis. */
+@media (width < 480px) {
+    .tile-title {
+        font-size: 0.8125rem;
+    }
+}
+
 /*
  * Play button. Hidden-but-present by default (opacity 0, translated down)
- * and revealed on hover only where hover is a real input. On touch it's
- * always visible so the affordance isn't hover-trapped.
+ * and revealed on hover only where hover is a real input. On touch it is
+ * REMOVED entirely — the tap target is the tile itself, and the freed width
+ * goes to the title (two-column phone tiles are tight on space). The
+ * touch override lives BELOW the base rule: same specificity, so source
+ * order decides the cascade.
  */
 .play-button {
     display: flex;
@@ -109,6 +119,12 @@
     transition:
         opacity 150ms ease,
         transform 150ms ease;
+}
+
+@media (hover: none) {
+    .play-button {
+        display: none;
+    }
 }
 
 @media (hover: hover) {

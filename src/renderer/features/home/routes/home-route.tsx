@@ -1,4 +1,4 @@
-import { CSSProperties, ReactNode, Suspense, useMemo, useRef } from 'react';
+import { CSSProperties, ReactNode, Suspense, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import styles from './home-route.module.css';
@@ -52,6 +52,11 @@ import { Platform } from '/@/shared/types/types';
  * the page, and every section self-collapses when it has no data, with a
  * single friendly empty state when nothing is available at all.
  */
+// The home entrance stagger is a first-impression flourish; it plays once
+// per app session so warm revisits paint immediately instead of fading the
+// whole page in from transparent again.
+let hasPlayedHomeEntrance = false;
+
 const HomeRoute = () => {
     const { t } = useTranslation();
     const scrollAreaRef = useRef<HTMLDivElement>(null);
@@ -68,6 +73,12 @@ const HomeRoute = () => {
     const containerQuery = useStableContainerQuery(rawContainerQuery);
 
     const isJellyfin = server?.type === ServerType.JELLYFIN;
+
+    // After the first mount's stagger has played, later visits skip it (see
+    // HomeRow). Flipped in an effect so the first render still animates.
+    useEffect(() => {
+        hasPlayedHomeEntrance = true;
+    }, []);
 
     // Each row knows its slot index so the CSS stagger lines up with painted
     // order. We build the rows once and only rebuild them when the inputs they
@@ -299,11 +310,19 @@ const HomeRoute = () => {
  * Single-row wrapper that applies the staggered fade-in. The CSS keyframe
  * lives in `home-route.module.css`; the per-row `animation-delay` is
  * computed here so we don't need a CSS variable round-trip.
+ *
+ * The stagger plays ONCE per app session (see `hasPlayedHomeEntrance`). The
+ * route remounts on every navigation, and replaying a 320ms from-transparent
+ * fade each time made the whole page visibly "redraw" when the user came
+ * back to Home — warm revisits now paint immediately.
  */
 const HomeRow = ({ children, index }: { children: ReactNode; index: number }) => {
-    const style: CSSProperties = { animationDelay: `${index * 70}ms` };
+    const animate = !hasPlayedHomeEntrance;
+    const style: CSSProperties | undefined = animate
+        ? { animationDelay: `${index * 70}ms` }
+        : undefined;
     return (
-        <div className={styles.row} style={style}>
+        <div className={animate ? styles.row : undefined} style={style}>
             {children}
         </div>
     );

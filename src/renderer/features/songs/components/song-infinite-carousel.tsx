@@ -161,7 +161,9 @@ export const SongInfiniteCarousel = (props: SongCarouselProps) => {
     );
 };
 
-function useSongListInfinite(
+// Exported so QuickPicks can share the recently-played song stream (same
+// query key) instead of issuing its own request.
+export function useSongListInfinite(
     sortBy: SongListSort,
     sortOrder: SortOrder,
     itemLimit: number,
