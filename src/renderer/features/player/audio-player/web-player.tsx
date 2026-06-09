@@ -654,6 +654,13 @@ function crossfadeHandler(args: {
         return;
     }
 
+    // If the duration goes unknown mid-transition (e.g. the source was swapped),
+    // `progress` below would be NaN and we'd push `setVolume(NaN)` to both
+    // players. Skip this tick — the next one re-evaluates once duration is known.
+    if (!(duration > 0)) {
+        return;
+    }
+
     const timeLeft = duration - currentTime;
 
     const progress = (crossfadeDuration - timeLeft) / crossfadeDuration;
