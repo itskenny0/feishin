@@ -154,7 +154,6 @@ export const BottomTabBar = ({ onScrollToTop }: BottomTabBarProps) => {
                 aria-label={t('common.primaryNavigation', { defaultValue: 'Primary navigation' })}
                 className={styles.tabBar}
                 id="mobile-bottom-tab-bar"
-                role="tablist"
             >
                 {tabs.map((tab) => {
                     const active = tab.isActive(location.pathname);
@@ -162,11 +161,20 @@ export const BottomTabBar = ({ onScrollToTop }: BottomTabBarProps) => {
                     // dot (see activeDotKey) so motion never sees a duplicate
                     // layoutId.
                     const showDot = tab.key === activeDotKey;
+                    // Library is a menu toggle (its "active" = popover open), not
+                    // a route. Don't model these as ARIA tabs (role=tab/
+                    // aria-selected implies an associated tabpanel that doesn't
+                    // exist — a screen reader announces "tab, selected, 1 of 4"
+                    // and hunts for a panel). Plain nav buttons: aria-current
+                    // marks the active ROUTE; the toggle advertises its popup +
+                    // open state instead.
+                    const isToggle = tab.key === 'library';
                     return (
                         <button
-                            aria-current={active ? 'page' : undefined}
+                            aria-current={!isToggle && active ? 'page' : undefined}
+                            aria-expanded={isToggle ? active : undefined}
+                            aria-haspopup={isToggle ? 'menu' : undefined}
                             aria-label={tab.label}
-                            aria-selected={active}
                             className={clsx(styles.tab, { [styles.active]: active })}
                             key={tab.key}
                             onClick={() => {
@@ -192,7 +200,6 @@ export const BottomTabBar = ({ onScrollToTop }: BottomTabBarProps) => {
                                 }
                                 tab.onClick();
                             }}
-                            role="tab"
                             type="button"
                         >
                             <span className={styles.iconSlot}>

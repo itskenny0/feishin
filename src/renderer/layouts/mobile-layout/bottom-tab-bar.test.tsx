@@ -24,10 +24,12 @@ const renderBar = (props: Partial<Parameters<typeof BottomTabBar>[0]> = {}, rout
         </MantineProvider>,
     );
 
-// Find a tab button by its accessible label (the translated label, which
-// falls back to the defaultValue we pass at the call site).
+// Find a nav button by its accessible label (the translated label, which
+// falls back to the defaultValue we pass at the call site). The tab bar uses
+// plain nav buttons (not ARIA tabs) since they navigate routes / toggle a menu
+// rather than control tabpanels.
 const tab = (label: RegExp) =>
-    screen.getAllByRole('tab').find((b) => label.test(b.getAttribute('aria-label') ?? ''));
+    screen.getAllByRole('button').find((b) => label.test(b.getAttribute('aria-label') ?? ''));
 
 beforeEach(() => {
     seedSidebarItems();
