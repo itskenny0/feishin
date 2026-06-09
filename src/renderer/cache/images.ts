@@ -124,6 +124,42 @@ export interface ResolverResult {
 }
 const inFlight = new Map<string, Promise<ResolverResult>>();
 
+// ---------------------------------------------------------------------------
+// Bounded concurrency for DISPLAY-path resolves.
+//
+// A grid mounting 50+ cells used to kick 50 concurrent resolver tasks — 50
+// racing IndexedDB gets (serialized against any active sweep's writes) and,
+// on a cold cache, 50 simultaneous network fetches + blob handling. The
+// renderer visibly hung while the burst drained. The gate below caps how many
+// resolver tasks run their heavy section at once; waiters are woken LIFO so
+// the most recently requested covers — the ones currently on screen during a
+// scroll — are served first. Sweep-path resolves (_skipBlobUrl) bypass the
+// gate: the sweep already runs under its own worker pool and must not be
+// throttled by (or starve) the display path.
+const RESOLVE_CONCURRENCY = 8;
+let resolveActive = 0;
+const resolveWaiters: (() => void)[] = [];
+
+const acquireResolveSlot = async (): Promise<void> => {
+    if (resolveActive < RESOLVE_CONCURRENCY) {
+        resolveActive += 1;
+        return;
+    }
+    // The slot is inherited from the releaser — no increment on wake.
+    await new Promise<void>((resolve) => {
+        resolveWaiters.push(resolve);
+    });
+};
+
+const releaseResolveSlot = (): void => {
+    const next = resolveWaiters.pop(); // LIFO: newest request first
+    if (next) {
+        next();
+        return;
+    }
+    resolveActive -= 1;
+};
+
 // Compose the per-variant key used by every dedup / shared-URL map below.
 // Two consumers of the SAME (item, surface bucket) share one fetch + one
 // object URL; a different bucket of the same item resolves independently.
@@ -682,7 +718,11 @@ export const resolveThumbnail = async (
         return url;
     }
 
+    const gated = wantsDisplayBlob;
     const task = (async (): Promise<ResolverResult> => {
+        // Display-path resolves wait for a concurrency slot; the sweep
+        // (_skipBlobUrl) bypasses the gate (it has its own worker pool).
+        if (gated) await acquireResolveSlot();
         try {
             if (signal?.aborted) return { blob: undefined, bytes: 0 };
             const row = await db.thumbnails.get(dbKey);
@@ -910,6 +950,7 @@ export const resolveThumbnail = async (
             recordStat('failed');
             return { blob: undefined, bytes: 0 };
         } finally {
+            if (gated) releaseResolveSlot();
             inFlight.delete(dedupKey);
         }
     })();
