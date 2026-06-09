@@ -25,6 +25,7 @@ import {
     isInboundApplyActive,
 } from '/@/renderer/features/peer-sync/controller/peer-loop-guard';
 import {
+    __setDropVolumeCommandsForTests,
     applyPeerCommand,
     isAuthorisedSender,
 } from '/@/renderer/features/peer-sync/controller/peer-receiver';
@@ -203,6 +204,20 @@ describe('applyPeerCommand verb mapping', () => {
         const r3 = applyPeerCommand(SENDER, buildCommand('volume', { volume: 35 }));
         expect(r3.reason).toBe('applied');
         expect(usePlayerStoreBase.getState().player.volume).toBe(35);
+    });
+
+    it('drops volume commands on Android (OS rocker is the only attenuator)', () => {
+        __setDropVolumeCommandsForTests(true);
+        try {
+            usePlayerStoreBase.setState((s) => ({ ...s, player: { ...s.player, volume: 100 } }));
+
+            const r = applyPeerCommand(SENDER, buildCommand('volume', { volume: 40 }));
+
+            expect(r.reason).toBe('dropped-unsupported');
+            expect(usePlayerStoreBase.getState().player.volume).toBe(100);
+        } finally {
+            __setDropVolumeCommandsForTests(false);
+        }
     });
 
     it('maps mute (true) to a toggle when currently unmuted', () => {

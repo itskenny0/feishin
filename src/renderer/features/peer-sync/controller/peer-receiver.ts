@@ -47,6 +47,27 @@ import { Play, PlayerRepeat, PlayerShuffle } from '/@/shared/types/types';
 const log = (...args: unknown[]) => console.info('[peer-sync]', ...args);
 const warn = (...args: unknown[]) => console.warn('[peer-sync]', ...args);
 
+// Android pins the internal player volume at 100% — the OS volume rocker is
+// the single attenuator and the in-app slider is hidden (see
+// useAndroidForceFullVolume). An inbound remote 'volume' command would
+// silently attenuate playback with no UI to undo it, so it is dropped on
+// Android. Detected once, async (Capacitor is a lazy import); commands that
+// race the detection during the first ms of boot pass through harmlessly.
+let dropVolumeCommands = false;
+void (async () => {
+    try {
+        const { Capacitor } = await import('@capacitor/core');
+        dropVolumeCommands = Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android';
+    } catch {
+        // Not a Capacitor runtime (Electron / plain web) — keep volume control.
+    }
+})();
+
+/** Test-only override for the Android volume guard. */
+export const __setDropVolumeCommandsForTests = (value: boolean): void => {
+    dropVolumeCommands = value;
+};
+
 /**
  * Mute is a bool on the wire (`{ mute: boolean }`) but the store only
  * exposes a toggle action. Convert: if requested != current, flip.
@@ -325,6 +346,12 @@ export const applyPeerCommand = (from: PeerAddress, cmd: PeerCommand): ApplyResu
                 !Number.isFinite(cmd.a.volume)
             ) {
                 return { reason: 'dropped-validation' };
+            }
+            if (dropVolumeCommands) {
+                warn('dropped cmd: volume is OS-controlled on android', {
+                    from: from.peerId,
+                });
+                return { reason: 'dropped-unsupported' };
             }
             // Clamp to the wire's documented 0-100 range so a buggy
             // publisher can't push the engine into a negative/over-max
