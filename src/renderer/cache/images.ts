@@ -108,10 +108,6 @@ export const rewriteUrlToVariantSize = (url: string, px: number): string => {
     }
 };
 
-// Back-compat shim: force the upstream URL to `MAX_CACHE_SIZE`. Kept for any
-// remaining callers that pre-date the per-variant px rewrite.
-const rewriteUrlToCacheSize = (url: string): string => rewriteUrlToVariantSize(url, MAX_CACHE_SIZE);
-
 // Module-level dedup map. Keyed by `itemId` — any concurrent calls for
 // the same item, regardless of caller-supplied display size, share the
 // single upstream fetch. The promise resolves to {blob, bytes} so each
@@ -338,6 +334,11 @@ export interface ResolveThumbnailOptions {
     // When set, the fetch is aborted when the signal fires. The cache
     // pipeline returns `undefined` (caller falls back to the raw URL).
     signal?: AbortSignal;
+    // The pixel size this resolve should fetch and record (`0` = original).
+    // The thumbnail sweep passes the exact per-variant px it baked into the
+    // URL; without it the resolver derives the px from the live config in
+    // download mode and falls back to MAX_CACHE_SIZE otherwise.
+    targetPx?: number;
 }
 
 // Map a response content-type to the stored `Format`. In download mode we
@@ -369,6 +370,21 @@ const currentConfigHash = (): string => variantConfigHash(getImageVariantsConfig
 const isStaleRow = (row: CachedThumbnail | undefined): boolean => {
     if (!row?.__cfgHash) return false;
     return row.__cfgHash !== currentConfigHash();
+};
+
+// The px a resolve should fetch + record for `resolvedVariant`. An explicit
+// `options.targetPx` (the sweep) wins; in download mode the lazy path derives
+// the per-variant px from the live config so an 80px table bucket isn't
+// fetched and stored at 1024px; everything else keeps the historical
+// MAX_CACHE_SIZE behaviour (downscale mode fetches one large source).
+const resolveTargetPx = (resolvedVariant: string, options?: ResolveThumbnailOptions): number => {
+    if (typeof options?.targetPx === 'number') return options.targetPx;
+    const cfg = getImageVariantsConfig();
+    if (cfg.mode === 'download') {
+        const px = cfg.variants[resolvedVariant as keyof typeof cfg.variants]?.px;
+        if (typeof px === 'number') return px;
+    }
+    return MAX_CACHE_SIZE;
 };
 
 // Debounce window for background variant generation kicked off by a
@@ -583,7 +599,8 @@ export const resolveThumbnail = async (
                 // Stale miss: fall through to refetch.
             }
 
-            const fetchUrl = rewriteUrlToCacheSize(url);
+            const targetPx = resolveTargetPx(resolvedVariant, options);
+            const fetchUrl = rewriteUrlToVariantSize(url, targetPx);
             // Manual AbortController + setTimeout for the per-fetch
             // 20s timeout. `AbortSignal.timeout()` and
             // `AbortSignal.any()` are recent (2023) APIs that aren't
@@ -649,7 +666,7 @@ export const resolveThumbnail = async (
                                 ItemId: itemId,
                                 LastUsed: Date.now(),
                                 MissAt: Date.now(),
-                                Size: MAX_CACHE_SIZE,
+                                Size: targetPx,
                                 Variant: resolvedVariant,
                             });
                             recordStat('missWrite');
@@ -690,7 +707,7 @@ export const resolveThumbnail = async (
                     contentLengthHeader,
                     contentType,
                     itemId,
-                    requestedSize: MAX_CACHE_SIZE,
+                    requestedSize: targetPx,
                     urlHost: (() => {
                         try {
                             return new URL(fetchUrl).host;
@@ -719,7 +736,7 @@ export const resolveThumbnail = async (
                 ItemId: itemId,
                 LastUsed: Date.now(),
                 MissAt: undefined,
-                Size: MAX_CACHE_SIZE,
+                Size: targetPx,
                 Variant: resolvedVariant,
             });
             emitWritten();

@@ -28,7 +28,11 @@ import {
     rewriteUrlToVariantSize,
 } from '/@/renderer/cache/images';
 import { useCacheStore } from '/@/renderer/cache/store';
-import { type EnabledVariant, enabledVariants } from '/@/renderer/cache/variant-config';
+import {
+    type EnabledVariant,
+    enabledVariants,
+    variantConfigHash,
+} from '/@/renderer/cache/variant-config';
 import { downscaleVariantsPooled } from '/@/renderer/cache/variant-downscale-pool';
 import { DEFAULT_IMAGE_VARIANTS, useSettingsStore } from '/@/renderer/store';
 import { LibraryItem } from '/@/shared/types/domain-types';
@@ -218,7 +222,13 @@ const fetchDownloadUnit = async (
         url,
     };
 
-    const result = await resolveThumbnailWithBytes(pending.itemId, variant, request, { signal });
+    const result = await resolveThumbnailWithBytes(pending.itemId, variant, request, {
+        signal,
+        // The per-variant px is already baked into `url`; without this the
+        // resolver would rewrite it back to MAX_CACHE_SIZE and store every
+        // variant at 1024px (with a lying `Size`).
+        targetPx: pending.px,
+    });
     return { bytes: result.bytes };
 };
 
@@ -264,7 +274,10 @@ const fetchDownscaleUnit = async (
         });
         if (!res.ok) {
             // Persist a per-variant miss marker so the sweep doesn't re-attempt
-            // a 404 every pass (mirrors the resolver's negative cache).
+            // a 404 every pass (mirrors the resolver's negative cache). Like
+            // the resolver's markers these intentionally omit __cfgHash — a
+            // 404 at one px is a 404 at every px, so a config change need not
+            // retry them before MISS_TTL expiry.
             if (res.status === 404 && db === getActiveCacheDb()) {
                 const now = Date.now();
                 await Promise.all(
@@ -326,6 +339,10 @@ const fetchDownscaleUnit = async (
 
     let bytes = 0;
     const now = Date.now();
+    // Stamp the config fingerprint like the lazy resolver does — without it
+    // these rows are treated as permanently fresh and a px/quality/format
+    // change never regenerates sweep-produced covers.
+    const cfgHash = variantConfigHash(cfg);
     const variantPx = new Map<string, number>(variants.map((v) => [v.variant, v.px]));
     await Promise.all(
         [...produced.entries()].map(async ([variant, { blob, format }]) => {
@@ -333,6 +350,7 @@ const fetchDownscaleUnit = async (
             try {
                 await db.thumbnails.put({
                     __cachedAt: now,
+                    __cfgHash: cfgHash,
                     Blob: blob,
                     ByteSize: blob.size,
                     Etag: undefined,
@@ -354,6 +372,13 @@ const fetchDownscaleUnit = async (
     );
 
     return { bytes };
+};
+
+// Test-only seam (mirrors images.ts's imageVariantsInternals): the sweep units
+// are otherwise unreachable without standing up the whole sweep loop.
+export const __thumbnailsSweepInternals = {
+    fetchDownloadUnit,
+    fetchDownscaleUnit,
 };
 
 /**
