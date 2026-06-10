@@ -171,8 +171,10 @@ export const useItemListInfiniteLoader = ({
     // The heavy per-index item map and id→index map live in a MODULE-LEVEL
     // registry shared by every hook instance of the same list (see
     // `sharedListMaps` above) and are mutated IN PLACE. Reads
-    // (`getItem`/`getItemIndex`) go through stable accessors, so their
-    // identity never changes on a version bump.
+    // (`getItem`/`getItemIndex`) go through ref-backed accessors whose
+    // identity is rotated on each `dataVersion` bump (see their definitions
+    // below) — load-bearing under the React Compiler, which otherwise caches
+    // the impure read.
     const sharedMapsKey = useMemo(
         () => JSON.stringify([serverId, itemType, query]),
         [serverId, itemType, query],
@@ -720,20 +722,41 @@ export const useItemListInfiniteLoader = ({
 
     const dataVersion = data?.version ?? 0;
 
-    // Stable accessors. They read through the refs, so their identity never
-    // changes across version bumps — the grid's `itemData` memo (and every
-    // memoized cell that closes over `getItem`) no longer churns when a
-    // favorite/rating toggle or a page revalidation bumps the version.
-    const getItem = useCallback((index: number) => {
-        // The ref-held map is typed `unknown` for storage; callers (the
-        // entity-typed `*-infinite-grid` components) expect the item union, so
-        // cast on read — matching the pre-refactor `(data as any).dataMap.get`.
-        return dataMapRef.current.get(index) as any;
-    }, []);
+    // Version-keyed accessors. They read through the refs (the backing maps
+    // mutate IN PLACE), but their *function identity* is rotated whenever
+    // `dataVersion` changes. This is load-bearing under the React Compiler:
+    // the compiler auto-memoizes the `item = getRowItem(rowIndex)` derivation
+    // inside every cell/column keyed on the accessor's identity. Because the
+    // Map is mutated in place, an identity-stable accessor is INVISIBLE to the
+    // compiler's dependency tracking — a cell that mounted before its page's
+    // data landed would re-render on the version bump (via useSyncExternalStore)
+    // yet reuse the stale memoized `item` (undefined → frozen skeleton). Tying
+    // identity to `dataVersion` makes the new data a tracked dependency, so the
+    // compiler recomputes `item` on every page write. The first-page playlists
+    // freeze (device, 2026-06-10) was exactly this: the version-store signal
+    // re-rendered the cell but the compiler short-circuited the impure read.
+    // Cheap: the array snapshot below and the table's itemData already
+    // recompute on `dataVersion`, and visible cells are bounded by
+    // virtualization.
+    const getItem = useCallback(
+        (index: number) => {
+            // The ref-held map is typed `unknown` for storage; callers (the
+            // entity-typed `*-infinite-grid` components) expect the item union,
+            // so cast on read — matching the pre-refactor
+            // `(data as any).dataMap.get`.
+            return dataMapRef.current.get(index) as any;
+        },
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [dataVersion],
+    );
 
-    const getItemIndex = useCallback((id: string) => {
-        return idToIndexMapRef.current.get(id);
-    }, []);
+    const getItemIndex = useCallback(
+        (id: string) => {
+            return idToIndexMapRef.current.get(id);
+        },
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [dataVersion],
+    );
 
     // Snapshot the ref-held map into a sorted array. Recomputed only when the
     // version actually changes (a real data mutation), not on unrelated
