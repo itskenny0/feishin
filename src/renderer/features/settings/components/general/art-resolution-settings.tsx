@@ -32,75 +32,98 @@ const options = [
     },
 ];
 
-export const ImageResolutionSettings = memo(() => {
-    const { t } = useTranslation();
-    const { setSettings } = useSettingsStoreActions();
-    const settings = useGeneralSettings();
+interface ImageResolutionSettingsProps {
+    /**
+     * When true the per-surface table is shown directly with no Edit/Close
+     * toggle. The dedicated drill-down subpage passes this; the legacy inline
+     * usage keeps the collapsible toggle so it doesn't bloat the page.
+     */
+    alwaysOpen?: boolean;
+}
 
-    const [open, setOpen] = useState(false);
+export const ImageResolutionSettings = memo(
+    ({ alwaysOpen = false }: ImageResolutionSettingsProps) => {
+        const { t } = useTranslation();
+        const { setSettings } = useSettingsStoreActions();
+        const settings = useGeneralSettings();
 
-    const descriptionText = t('setting.imageResolution', {
-        context: 'description',
-    });
+        const [open, setOpen] = useState(false);
+        const showTable = alwaysOpen || open;
 
-    const titleText = t('setting.imageResolution');
+        const descriptionText = t('setting.imageResolution', {
+            context: 'description',
+        });
 
-    return (
-        <>
-            <SettingsOptions
-                control={
-                    <>
-                        <Button
-                            onClick={() => setOpen(!open)}
-                            size="compact-md"
-                            variant={open ? 'subtle' : 'filled'}
-                        >
-                            {t(open ? 'common.close' : 'common.edit')}
-                        </Button>
-                    </>
-                }
-                description={descriptionText}
-                title={titleText}
-            />
-            {open && (
-                <Table withRowBorders={false}>
-                    <Table.Tbody>
-                        {options.map((option) => (
-                            <Table.Tr key={option.value}>
-                                <Table.Th key={option.value}>
-                                    <Text>{option.label}</Text>
-                                </Table.Th>
-                                <Table.Td align="right" key={option.value}>
-                                    <NumberInput
-                                        max={2000}
-                                        min={0}
-                                        onChange={(e) => {
-                                            if (typeof e !== 'number') return;
+        const titleText = t('setting.imageResolution');
 
-                                            setSettings({
-                                                general: {
-                                                    ...settings,
-                                                    imageRes: {
-                                                        ...settings.imageRes,
-                                                        [option.value]: e,
+        return (
+            <>
+                <SettingsOptions
+                    control={
+                        alwaysOpen ? null : (
+                            <Button
+                                onClick={() => setOpen(!open)}
+                                size="compact-md"
+                                variant={open ? 'subtle' : 'filled'}
+                            >
+                                {t(open ? 'common.close' : 'common.edit')}
+                            </Button>
+                        )
+                    }
+                    description={descriptionText}
+                    title={titleText}
+                />
+                {showTable && (
+                    <Table withRowBorders={false}>
+                        <Table.Tbody>
+                            {options.map((option) => (
+                                <Table.Tr key={option.value}>
+                                    <Table.Th key={option.value}>
+                                        <Text>{option.label}</Text>
+                                    </Table.Th>
+                                    <Table.Td align="right" key={option.value}>
+                                        <NumberInput
+                                            max={2000}
+                                            min={0}
+                                            onChange={(e) => {
+                                                if (typeof e !== 'number') return;
+
+                                                setSettings({
+                                                    general: {
+                                                        ...settings,
+                                                        imageRes: {
+                                                            ...settings.imageRes,
+                                                            [option.value]: e,
+                                                        },
                                                     },
-                                                },
-                                            });
-                                        }}
-                                        rightSection={
-                                            <Text isMuted isNoSelect pr="lg" size="sm">
-                                                px
-                                            </Text>
-                                        }
-                                        value={settings.imageRes[option.value]}
-                                        width={90}
-                                    />
-                                </Table.Td>
-                            </Table.Tr>
-                        ))}
-                    </Table.Tbody>
-                </Table>
-            )}
-        </>
-    );
-});
+                                                });
+                                            }}
+                                            rightSection={
+                                                <Text isMuted isNoSelect pr="lg" size="sm">
+                                                    px
+                                                </Text>
+                                            }
+                                            value={settings.imageRes[option.value]}
+                                            width={90}
+                                        />
+                                    </Table.Td>
+                                </Table.Tr>
+                            ))}
+                        </Table.Tbody>
+                    </Table>
+                )}
+            </>
+        );
+    },
+);
+
+ImageResolutionSettings.displayName = 'ImageResolutionSettings';
+
+/**
+ * Dedicated drill-down subpage variant — renders the per-surface resolution
+ * table directly (no Edit toggle) since the whole subpage is about cover-art
+ * quality.
+ */
+export const ImageResolutionSubpage = memo(() => <ImageResolutionSettings alwaysOpen />);
+
+ImageResolutionSubpage.displayName = 'ImageResolutionSubpage';

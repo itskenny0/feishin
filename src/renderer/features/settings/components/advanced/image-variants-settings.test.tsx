@@ -23,8 +23,19 @@ vi.hoisted(() => {
 vi.mock('react-i18next', () => ({
     initReactI18next: { init: () => {}, type: '3rdParty' },
     useTranslation: () => ({
-        t: (key: string, opts?: { context?: string; defaultValue?: string }) =>
-            opts?.defaultValue ?? key,
+        t: (
+            key: string,
+            opts?: { context?: string; count?: number; defaultValue?: string; mode?: string },
+        ) => {
+            const template = opts?.defaultValue ?? key;
+            // Minimal {{var}} interpolation so summary strings render like the
+            // real i18n runtime (the row builds "{{mode}} · {{count}} ...").
+            return template.replace(/\{\{(\w+)\}\}/g, (_m, name: string) =>
+                opts && name in opts
+                    ? String((opts as Record<string, unknown>)[name])
+                    : `{{${name}}}`,
+            );
+        },
     }),
 }));
 
@@ -40,7 +51,10 @@ vi.mock('/@/shared/components/toast/toast', () => ({
     toast: { error: vi.fn(), success: vi.fn() },
 }));
 
-import { ImageVariantsSettings } from '/@/renderer/features/settings/components/advanced/image-variants-settings';
+import {
+    ImageVariantsRow,
+    ImageVariantsSettings,
+} from '/@/renderer/features/settings/components/advanced/image-variants-settings';
 import { DEFAULT_IMAGE_VARIANTS, useSettingsStore } from '/@/renderer/store';
 
 const seedImageVariants = (mode: 'download' | 'downscale' = 'downscale') => {
@@ -65,9 +79,12 @@ const renderSettings = (props?: { server?: { id: string; userId: string } }) =>
         </MantineProvider>,
     );
 
-const openPanel = () => {
-    fireEvent.click(screen.getByText('Edit'));
-};
+const renderRow = (onOpen = vi.fn()) =>
+    render(
+        <MantineProvider>
+            <ImageVariantsRow onOpen={onOpen} />
+        </MantineProvider>,
+    );
 
 describe('ImageVariantsSettings', () => {
     afterEach(() => {
@@ -80,9 +97,8 @@ describe('ImageVariantsSettings', () => {
         seedImageVariants('downscale');
     });
 
-    it('renders the variant-source segmented control and all five buckets', () => {
+    it('renders the variant-source segmented control and all five buckets directly', () => {
         renderSettings();
-        openPanel();
 
         expect(screen.getByText('Download per size')).toBeInTheDocument();
         expect(screen.getByText('Downscale locally')).toBeInTheDocument();
@@ -97,7 +113,6 @@ describe('ImageVariantsSettings', () => {
 
     it('toggling a variant writes the updated nested object to the store', () => {
         renderSettings();
-        openPanel();
 
         // table starts enabled in the defaults — toggle it off.
         const tableSwitch = screen.getByLabelText('List / table row') as HTMLInputElement;
@@ -115,7 +130,6 @@ describe('ImageVariantsSettings', () => {
     it('disables the format/quality controls in download mode', () => {
         seedImageVariants('download');
         renderSettings();
-        openPanel();
 
         // SegmentedControl renders radio inputs; the WebP/JPEG ones are
         // disabled when mode === download.
@@ -126,7 +140,6 @@ describe('ImageVariantsSettings', () => {
     it('regenerate clears thumbnails and re-triggers the sweep', async () => {
         const server = { id: 'srv-1', userId: 'user-1' };
         renderSettings({ server });
-        openPanel();
 
         fireEvent.click(screen.getByText('Regenerate variants now'));
 
@@ -134,5 +147,51 @@ describe('ImageVariantsSettings', () => {
             expect(clearThumbnails).toHaveBeenCalledTimes(1);
         });
         expect(hydrate).toHaveBeenCalledWith(server, 'full');
+    });
+});
+
+describe('ImageVariantsRow (drill-down nav row)', () => {
+    afterEach(() => cleanup());
+
+    beforeEach(() => {
+        seedImageVariants('downscale');
+    });
+
+    it('shows a summary of the current config and fires onOpen when clicked', () => {
+        const onOpen = vi.fn();
+        renderRow(onOpen);
+
+        // Default config: downscale mode, three buckets enabled (header,
+        // itemCard, table — fullScreen and sidebar are off by default).
+        const trigger = screen.getByText('Downscale locally · 3 sizes enabled');
+        expect(trigger).toBeInTheDocument();
+
+        fireEvent.click(trigger);
+        expect(onOpen).toHaveBeenCalledTimes(1);
+    });
+
+    it('reflects download mode and an increased enabled count in the summary', () => {
+        // Enable all five buckets in download mode → "5 sizes enabled".
+        const prev = useSettingsStore.getState();
+        useSettingsStore.setState({
+            ...prev,
+            localCache: {
+                ...prev.localCache,
+                imageVariants: {
+                    ...DEFAULT_IMAGE_VARIANTS,
+                    mode: 'download',
+                    variants: {
+                        fullScreen: { enabled: true, px: 0 },
+                        header: { enabled: true, px: 300 },
+                        itemCard: { enabled: true, px: 300 },
+                        sidebar: { enabled: true, px: 400 },
+                        table: { enabled: true, px: 80 },
+                    },
+                },
+            },
+        });
+
+        renderRow();
+        expect(screen.getByText('Download per size · 5 sizes enabled')).toBeInTheDocument();
     });
 });

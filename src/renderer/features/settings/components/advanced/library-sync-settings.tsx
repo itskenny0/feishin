@@ -32,7 +32,7 @@ import {
 import { cancelHydration } from '/@/renderer/cache/sync';
 import { CacheStatsWidget } from '/@/renderer/features/settings/components/advanced/cache-stats-widget';
 import { ConsoleLogViewer } from '/@/renderer/features/settings/components/advanced/console-log-viewer';
-import { ImageVariantsSettings } from '/@/renderer/features/settings/components/advanced/image-variants-settings';
+import { ImageVariantsRow } from '/@/renderer/features/settings/components/advanced/image-variants-settings';
 import { useAuthStore, useSettingsStore } from '/@/renderer/store';
 import { toast } from '/@/shared/components/toast/toast';
 
@@ -126,6 +126,7 @@ export const LibrarySyncSettings = () => {
     // inert and we render a muted hint instead of letting the user fire
     // sync / clear actions against nothing.
     const cacheEnabled = useSettingsStore((s) => s.localCache?.enabled === true);
+    const setSettings = useSettingsStore((s) => s.actions.setSettings);
     const localCacheCap = useSettingsStore((s) => s.localCache?.capacityBytes);
     const setLocalCache = useSettingsStore((s) => s.actions.setLocalCache);
     const entities = useSettingsStore((s) => s.localCache?.entities);
@@ -734,11 +735,13 @@ export const LibrarySyncSettings = () => {
                         </Text>
                     </Stack>
 
-                    {/* Multi-resolution artwork variant cache (advanced tree).
-                        Caches several cover sizes per item so dense lists/grids
-                        load without decoding full-res JPEGs. Reuses the
-                        thumbnail concurrency slider above. */}
-                    <ImageVariantsSettings server={currentServer ?? undefined} />
+                    {/* Multi-resolution artwork variant cache. Caches several
+                        cover sizes per item so dense lists/grids load without
+                        decoding full-res JPEGs. The editor lives in its own
+                        drill-down subpage; this row shows a summary + chevron. */}
+                    <ImageVariantsRow
+                        onOpen={() => setSettings({ tabSubpage: 'image-variants' })}
+                    />
                 </Stack>
             )}
 

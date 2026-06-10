@@ -23,6 +23,7 @@ import {
     RiFolderLine,
     RiGamepadLine,
     RiHomeLine,
+    RiImageLine,
     RiKey2Line,
     RiLayoutLeftLine,
     RiMagicLine,
@@ -62,6 +63,14 @@ export interface SubpageDef {
     Icon: (props: { size?: string }) => ReactNode;
     id: string;
     label: (t: TFunction) => string;
+    /**
+     * When set, this subpage is a drill-down *child* of another subpage in
+     * the same category. It is hidden from the category's subpage grid and
+     * from global search (it's reached only via a navigation row on its
+     * parent), and the back button returns to the parent rather than the
+     * category list — matching the "← Parent" platform convention.
+     */
+    parent?: string;
     /**
      * Server-dependent visibility (e.g. smart playlists only on backends
      * that announce the feature). Receives the current server so the
@@ -123,7 +132,7 @@ const ArtistSubpage = lazyDefault(
 );
 const ArtResolutionSubpage = lazyDefault(
     () => import('/@/renderer/features/settings/components/general/art-resolution-settings'),
-    'ImageResolutionSettings',
+    'ImageResolutionSubpage',
 );
 const PathSubpage = lazyDefault(
     () => import('/@/renderer/features/settings/components/general/path-settings'),
@@ -244,6 +253,10 @@ const CacheSubpage = lazyDefault(
 const LibrarySyncSubpage = lazyDefault(
     () => import('/@/renderer/features/settings/components/advanced/library-sync-settings'),
     'LibrarySyncSettings',
+);
+const ImageVariantsSubpage = lazyDefault(
+    () => import('/@/renderer/features/settings/components/advanced/image-variants-settings'),
+    'ImageVariantsSubpage',
 );
 const StylesSubpage = lazyDefault(
     () => import('/@/renderer/features/settings/components/advanced/styles-settings'),
@@ -388,6 +401,20 @@ export const SETTINGS_SUBPAGES: Record<string, SubpageDef[]> = {
             visible: (server) => server?.type === 'jellyfin',
         },
         {
+            Component: ImageVariantsSubpage,
+            description: (t) =>
+                t('page.setting.imageVariants.description', {
+                    defaultValue:
+                        'Cache several cover sizes per item so dense lists and grids load without decoding full-resolution artwork.',
+                }),
+            Icon: RiImageLine,
+            id: 'image-variants',
+            label: (t) =>
+                t('page.setting.imageVariants.title', { defaultValue: 'Artwork variants' }),
+            parent: 'library-sync',
+            visible: (server) => server?.type === 'jellyfin',
+        },
+        {
             Component: OfflineMediaSubpage,
             description: (t) =>
                 t('page.setting.offlineMediaDescription', {
@@ -440,17 +467,7 @@ export const SETTINGS_SUBPAGES: Record<string, SubpageDef[]> = {
                 }),
             Icon: RiPaletteLine,
             id: 'theme',
-            label: (t) => t('page.setting.theme', { defaultValue: 'Appearance' }),
-        },
-        {
-            Component: HomeSubpage,
-            description: (t) =>
-                t('page.setting.homeDescription', {
-                    defaultValue: 'What sections appear on the home page.',
-                }),
-            Icon: RiHomeLine,
-            id: 'home',
-            label: (t) => t('page.setting.home', { defaultValue: 'Home' }),
+            label: (t) => t('page.setting.theme', { defaultValue: 'Theme & fonts' }),
         },
         {
             Component: SidebarSubpage,
@@ -493,36 +510,6 @@ export const SETTINGS_SUBPAGES: Record<string, SubpageDef[]> = {
             label: (t) => t('page.setting.trackmap', { defaultValue: 'Trackmap' }),
         },
         {
-            Component: LyricsSubpage,
-            description: (t) =>
-                t('page.setting.lyricsDescription', {
-                    defaultValue: 'Lyric providers, fonts, offsets.',
-                }),
-            Icon: RiMicLine,
-            id: 'lyrics',
-            label: (t) => t('page.setting.lyrics', { defaultValue: 'Lyrics' }),
-        },
-        {
-            Component: ScrobbleSubpage,
-            description: (t) =>
-                t('page.setting.scrobbleDescription', {
-                    defaultValue: 'Last.fm / Listenbrainz reporting + notifications.',
-                }),
-            Icon: RiThumbUpLine,
-            id: 'scrobble',
-            label: (t) => t('page.setting.scrobble', { defaultValue: 'Scrobbling' }),
-        },
-        {
-            Component: ArtistSubpage,
-            description: (t) =>
-                t('page.setting.artistDescription', {
-                    defaultValue: 'Layout and metadata shown on artist pages.',
-                }),
-            Icon: RiAccountBoxLine,
-            id: 'artist',
-            label: (t) => t('page.setting.artist', { defaultValue: 'Artist page' }),
-        },
-        {
             Component: ArtResolutionSubpage,
             description: (t) =>
                 t('page.setting.artResolutionDescription', {
@@ -542,27 +529,17 @@ export const SETTINGS_SUBPAGES: Record<string, SubpageDef[]> = {
             id: 'external-links',
             label: (t) => t('page.setting.externalLinks', { defaultValue: 'External links' }),
         },
+    ],
+    home: [
         {
-            Component: PathSubpage,
+            Component: HomeSubpage,
             description: (t) =>
-                t('page.setting.pathDescription', {
-                    defaultValue: 'Local download / cache directories.',
+                t('page.setting.homeDescription', {
+                    defaultValue: 'What sections appear on the home page.',
                 }),
-            Icon: RiFolderLine,
-            id: 'paths',
-            label: (t) => t('page.setting.paths', { defaultValue: 'Paths' }),
-            visible: () => isElectron(),
-        },
-        {
-            Component: QueryBuilderSubpage,
-            description: (t) =>
-                t('page.setting.queryBuilderDescription', {
-                    defaultValue: 'Smart-playlist query builder defaults.',
-                }),
-            Icon: RiBracesLine,
-            id: 'query-builder',
-            label: (t) => t('page.setting.queryBuilder', { defaultValue: 'Smart playlists' }),
-            visible: (server) => hasFeature(server ?? null, ServerFeature.PLAYLISTS_SMART),
+            Icon: RiHomeLine,
+            id: 'home',
+            label: (t) => t('page.setting.home', { defaultValue: 'Home sections' }),
         },
     ],
     hotkeys: [
@@ -596,6 +573,60 @@ export const SETTINGS_SUBPAGES: Record<string, SubpageDef[]> = {
             Icon: RiCommandLine,
             id: 'hotkey-manager',
             label: (t) => t('page.setting.hotkeyManager', { defaultValue: 'Bindings' }),
+        },
+    ],
+    library: [
+        {
+            Component: ScrobbleSubpage,
+            description: (t) =>
+                t('page.setting.scrobbleDescription', {
+                    defaultValue: 'Last.fm / Listenbrainz reporting + notifications.',
+                }),
+            Icon: RiThumbUpLine,
+            id: 'scrobble',
+            label: (t) => t('page.setting.scrobble', { defaultValue: 'Scrobbling' }),
+        },
+        {
+            Component: LyricsSubpage,
+            description: (t) =>
+                t('page.setting.lyricsDescription', {
+                    defaultValue: 'Lyric providers, fonts, offsets.',
+                }),
+            Icon: RiMicLine,
+            id: 'lyrics',
+            label: (t) => t('page.setting.lyrics', { defaultValue: 'Lyrics' }),
+        },
+        {
+            Component: ArtistSubpage,
+            description: (t) =>
+                t('page.setting.artistDescription', {
+                    defaultValue: 'Layout and metadata shown on artist pages.',
+                }),
+            Icon: RiAccountBoxLine,
+            id: 'artist',
+            label: (t) => t('page.setting.artist', { defaultValue: 'Artist page' }),
+        },
+        {
+            Component: PathSubpage,
+            description: (t) =>
+                t('page.setting.pathDescription', {
+                    defaultValue: 'Local download / cache directories.',
+                }),
+            Icon: RiFolderLine,
+            id: 'paths',
+            label: (t) => t('page.setting.paths', { defaultValue: 'Paths' }),
+            visible: () => isElectron(),
+        },
+        {
+            Component: QueryBuilderSubpage,
+            description: (t) =>
+                t('page.setting.queryBuilderDescription', {
+                    defaultValue: 'Smart-playlist query builder defaults.',
+                }),
+            Icon: RiBracesLine,
+            id: 'query-builder',
+            label: (t) => t('page.setting.queryBuilder', { defaultValue: 'Smart playlists' }),
+            visible: (server) => hasFeature(server ?? null, ServerFeature.PLAYLISTS_SMART),
         },
     ],
     playback: [

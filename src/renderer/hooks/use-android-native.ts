@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 
 import { useBottomSheetStore } from '/@/renderer/features/jellyfin-remote-target/components/bottom-sheet/bottom-sheet-store';
+import { SETTINGS_SUBPAGES } from '/@/renderer/features/settings/subpages';
 import { MOBILE_SHELL_QUERY } from '/@/renderer/hooks/use-breakpoint';
 import {
     useAppStore,
@@ -345,7 +346,12 @@ export const useAndroidBackButton = () => {
                     if (hashPath === '/settings' || hashPath.startsWith('/settings/')) {
                         const settings = useSettingsStore.getState();
                         if (settings.tabSubpage) {
-                            settings.actions.setSettings({ tabSubpage: '' });
+                            // A drill-down child subpage returns to its parent
+                            // (one level up), mirroring the on-screen back
+                            // chevron; a top-level subpage returns to the list.
+                            const subpages = SETTINGS_SUBPAGES[settings.tab] ?? [];
+                            const current = subpages.find((s) => s.id === settings.tabSubpage);
+                            settings.actions.setSettings({ tabSubpage: current?.parent ?? '' });
                             return;
                         }
                         if (settings.tab) {

@@ -12,7 +12,6 @@ import { Text } from '/@/shared/components/text/text';
 import { Textarea } from '/@/shared/components/textarea/textarea';
 
 export const StylesSettings = memo(() => {
-    const [open, setOpen] = useState(false);
     const { t } = useTranslation();
 
     const utils = isElectron() ? window.api.utils : null;
@@ -93,22 +92,8 @@ export const StylesSettings = memo(() => {
                                         {t('common.openFolder', { postProcess: 'titleCase' })}
                                     </Button>
                                 )}
-                                {open && (
-                                    <Button
-                                        onClick={handleSave}
-                                        size="compact-md"
-                                        // disabled={isSaveButtonDisabled}
-                                        variant="filled"
-                                    >
-                                        {t('common.save')}
-                                    </Button>
-                                )}
-                                <Button
-                                    onClick={() => setOpen(!open)}
-                                    size="compact-md"
-                                    variant="filled"
-                                >
-                                    {t(open ? 'common.close' : 'common.edit', {})}
+                                <Button onClick={handleSave} size="compact-md" variant="filled">
+                                    {t('common.save')}
                                 </Button>
                             </>
                         }
@@ -117,20 +102,14 @@ export const StylesSettings = memo(() => {
                         })}
                         title={t('setting.customCss')}
                     />
-                    {open && (
-                        <>
-                            <Textarea
-                                autosize
-                                defaultValue={css}
-                                minRows={8}
-                                onBlur={(e) =>
-                                    setCss(sanitizeCss(`<style>${e.currentTarget.value}`))
-                                }
-                            />
-                            <Text>{t('common.preview')}: </Text>
-                            <Code block>{css}</Code>
-                        </>
-                    )}
+                    <Textarea
+                        autosize
+                        defaultValue={css}
+                        minRows={8}
+                        onBlur={(e) => setCss(sanitizeCss(`<style>${e.currentTarget.value}`))}
+                    />
+                    <Text>{t('common.preview')}: </Text>
+                    <Code block>{css}</Code>
                 </>
             )}
         </>

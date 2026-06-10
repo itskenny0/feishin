@@ -10,9 +10,11 @@ import {
     RiArrowRightSLine,
     RiBroadcastLine,
     RiEqualizerLine,
+    RiHomeLine,
     RiKeyboardLine,
+    RiMusic2Line,
+    RiPaletteLine,
     RiSearchLine,
-    RiSettings4Line,
     RiTerminalBoxLine,
     RiWindowLine,
 } from 'react-icons/ri';
@@ -47,7 +49,7 @@ interface CategoryDef {
     description: (t: TFunction) => string;
     /** Icon component imported from react-icons. */
     Icon: (props: { size?: string }) => ReactNode;
-    id: 'advanced' | 'connect' | 'general' | 'hotkeys' | 'playback' | 'window';
+    id: 'advanced' | 'connect' | 'general' | 'home' | 'hotkeys' | 'library' | 'playback' | 'window';
     label: (t: TFunction) => string;
     /**
      * Whether this category should be available in the current host
@@ -59,12 +61,32 @@ interface CategoryDef {
 const CATEGORIES: CategoryDef[] = [
     {
         description: (t) =>
-            t('page.setting.generalDescription', {
-                defaultValue: 'Theme, sidebar, home page, scrobbling, paths.',
+            t('page.setting.appearanceDescription', {
+                defaultValue: 'Theme, fonts, sidebar, player bar, fullscreen player.',
             }),
-        Icon: RiSettings4Line,
+        Icon: RiPaletteLine,
         id: 'general',
-        label: (t) => t('page.setting.generalTab'),
+        label: (t) => t('page.setting.appearanceTab', { defaultValue: 'Appearance' }),
+        visible: () => true,
+    },
+    {
+        description: (t) =>
+            t('page.setting.homeDescription', {
+                defaultValue: 'Which sections appear on the home page.',
+            }),
+        Icon: RiHomeLine,
+        id: 'home',
+        label: (t) => t('page.setting.homeTab', { defaultValue: 'Home page' }),
+        visible: () => true,
+    },
+    {
+        description: (t) =>
+            t('page.setting.libraryDescription', {
+                defaultValue: 'Scrobbling, lyrics, artist pages, smart playlists, paths.',
+            }),
+        Icon: RiMusic2Line,
+        id: 'library',
+        label: (t) => t('page.setting.libraryTab', { defaultValue: 'Library' }),
         visible: () => true,
     },
     {
@@ -152,10 +174,19 @@ export const SettingsLayout = () => {
     const [query, setQuery] = useState('');
 
     const visibleCategories = CATEGORIES.filter((c) => c.visible());
-    const subpagesForTab = (SETTINGS_SUBPAGES[currentTab] ?? []).filter(
-        (s) => !s.visible || s.visible(server),
+    // All visible subpages in the current category, including drill-down
+    // children (used for resolving the selected subpage + its parent).
+    // Memoized so callbacks that close over it satisfy the React Compiler's
+    // preserve-manual-memoization check (a per-render array reads as a
+    // possibly-mutated dependency).
+    const allSubpagesForTab = useMemo(
+        () => (SETTINGS_SUBPAGES[currentTab] ?? []).filter((s) => !s.visible || s.visible(server)),
+        [currentTab, server],
     );
-    const selectedSubpage: SubpageDef | undefined = subpagesForTab.find(
+    // Top-level subpages only — children (those with a `parent`) are reached
+    // via a navigation row on their parent, so they're hidden from the grid.
+    const subpagesForTab = allSubpagesForTab.filter((s) => !s.parent);
+    const selectedSubpage: SubpageDef | undefined = allSubpagesForTab.find(
         (s) => s.id === currentSubpage,
     );
 
@@ -186,13 +217,16 @@ export const SettingsLayout = () => {
     );
 
     const handleBack = useCallback(() => {
-        // Drill back one level: subpage → subpages-list → category list (mobile only)
+        // Drill back one level: child subpage → parent subpage → subpages-list
+        // → category list (mobile only). A child subpage (one with `parent`)
+        // returns to its parent so the header reads "← Parent".
         if (currentSubpage) {
-            setSettings({ tabSubpage: '' });
+            const current = allSubpagesForTab.find((s) => s.id === currentSubpage);
+            setSettings({ tabSubpage: current?.parent ?? '' });
         } else if (isMobile) {
             setSettings({ tab: '' });
         }
-    }, [currentSubpage, isMobile, setSettings]);
+    }, [allSubpagesForTab, currentSubpage, isMobile, setSettings]);
 
     // Global subpage search: matches label + description across every visible
     // category, so "replay" lands on Playback → ReplayGain without knowing
@@ -203,7 +237,7 @@ export const SettingsLayout = () => {
         const hits: SearchHit[] = [];
         for (const category of visibleCategories) {
             const subpages = (SETTINGS_SUBPAGES[category.id] ?? []).filter(
-                (s) => !s.visible || s.visible(server),
+                (s) => (!s.visible || s.visible(server)) && !s.parent,
             );
             for (const subpage of subpages) {
                 const haystack = `${subpage.label(t)} ${subpage.description?.(t) ?? ''} ${category.label(t)}`;
@@ -235,6 +269,18 @@ export const SettingsLayout = () => {
     const searching = trimmedQuery.length > 0;
 
     const activeCategory = visibleCategories.find((c) => c.id === currentTab);
+
+    // Back-button caption. The chevron names where you ARE so the gesture's
+    // destination is implied — except on a child subpage, where it names the
+    // PARENT it returns to ("← Library sync"), matching the platform pattern.
+    const parentSubpage = selectedSubpage?.parent
+        ? allSubpagesForTab.find((s) => s.id === selectedSubpage.parent)
+        : undefined;
+    const backLabel = parentSubpage
+        ? parentSubpage.label(t)
+        : selectedSubpage
+          ? selectedSubpage.label(t)
+          : (activeCategory?.label(t) ?? t('page.setting.title', { defaultValue: 'Settings' }));
 
     return (
         <div
@@ -364,14 +410,7 @@ export const SettingsLayout = () => {
                             type="button"
                         >
                             <RiArrowLeftLine size="1.25rem" />
-                            <span>
-                                {selectedSubpage
-                                    ? selectedSubpage.label(t)
-                                    : (visibleCategories
-                                          .find((c) => c.id === currentTab)
-                                          ?.label(t) ??
-                                      t('page.setting.title', { defaultValue: 'Settings' }))}
-                            </span>
+                            <span>{backLabel}</span>
                         </button>
                     )}
                     <div className={styles.contentInner}>
