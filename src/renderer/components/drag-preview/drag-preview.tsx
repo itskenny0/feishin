@@ -54,6 +54,7 @@ export const DragPreview = memo(({ data }: DragPreviewProps) => {
                                     itemId={data.id[0]}
                                     size={96}
                                     src={itemImage}
+                                    variant="itemCard"
                                 />
                             ) : (
                                 <img alt={itemName} className={styles.image} src={itemImage} />

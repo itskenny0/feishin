@@ -76,6 +76,7 @@ export const MobileFullscreenAlbumCard = memo(
                                 loading="lazy"
                                 size={96}
                                 src={imageUrl}
+                                variant="itemCard"
                             />
                         ) : imageUrl ? (
                             <img

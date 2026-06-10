@@ -101,6 +101,7 @@ export const MobileFullscreenArtistCard = memo(
                                 onError={() => setImageFailedFor(artistId)}
                                 size={96}
                                 src={imageUrl}
+                                variant="itemCard"
                             />
                         )}
                         <div className={styles.artistCardMeta}>

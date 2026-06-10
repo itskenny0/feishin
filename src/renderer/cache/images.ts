@@ -8,10 +8,11 @@ import type { ImageRequest } from '/@/shared/types/domain-types';
 
 import type { CachedThumbnail } from './types';
 
-import { getActiveCacheDb } from './db';
+import { awaitActiveCacheDb, getActiveCacheDb } from './db';
 import { recordStat } from './stats';
 import { nearestLargerVariant, variantConfigHash, type VariantName } from './variant-config';
 
+import { getIsOnline, markServerUnreachable } from '/@/renderer/lib/network-status';
 import {
     DEFAULT_IMAGE_VARIANTS,
     type LocalCacheImageVariants,
@@ -271,7 +272,10 @@ export const preloadThumbnailUrls = async (
     itemIds: (null | string | undefined)[],
     variant: number | string,
 ): Promise<void> => {
-    const db = getActiveCacheDb();
+    // Wait out the cold-start boot race (lifecycle opens the DB post-mount)
+    // so the very first page write still gets its bulk prime. The loader
+    // bounds how long it waits for us, so this can't delay row rendering.
+    const db = isLocalCacheEnabled() ? await awaitActiveCacheDb() : getActiveCacheDb();
     if (!db) return;
 
     const resolvedVariant = normaliseVariant(variant);
@@ -534,6 +538,17 @@ export interface ResolveThumbnailOptions {
 const formatFromContentType = (contentType: string): 'jpeg' | 'webp' =>
     contentType.toLowerCase().includes('webp') ? 'webp' : 'jpeg';
 
+// Whether the local-cache subsystem is opted in. Gates the boot-race wait in
+// `resolveThumbnail` — when disabled the DB never opens, so waiting for it
+// would just delay the network fallback.
+const isLocalCacheEnabled = (): boolean => {
+    try {
+        return useSettingsStore.getState().localCache?.enabled === true;
+    } catch {
+        return false;
+    }
+};
+
 // Read the live variant config, falling back to the canonical defaults when
 // the settings slice hasn't been seeded yet (fresh install / pre-migrate).
 const getImageVariantsConfig = (): LocalCacheImageVariants => {
@@ -613,29 +628,50 @@ export const imageVariantsInternals = {
     scheduleVariantGenerate,
 };
 
+// `px === 0` rows are originals — treat as infinitely large for the
+// sufficiency comparison (mirrors variant-config's ordering rule).
+const effectivePx = (px: number): number => (px === 0 ? Number.POSITIVE_INFINITY : px);
+
+interface FallbackPick {
+    blob: Blob;
+    // True when the picked row was produced under an older variant config.
+    // The cache-first paint path refuses stale picks while ONLINE (the
+    // staleness mechanic exists so config changes regenerate covers); when
+    // offline a stale cover still beats a broken image.
+    stale: boolean;
+    // True when the served substitute is at least as large as the requested
+    // variant (no upscaling) — the cache-first paint path serves these even
+    // while online. Under-sized substitutes (`false`) are only served when
+    // the network can't be trusted to do better.
+    sufficient: boolean;
+}
+
 /**
- * On an exact-variant miss (offline, 404, or fetch failure), look up the
- * other variants already cached for this item and return the nearest-larger
- * one's blob so the surface renders immediately instead of blocking on the
- * raw URL. When a substitute is served, schedule a debounced background
- * generate of the exact requested variant. Returns `undefined` when nothing
- * usable is cached (caller falls back to the raw URL).
+ * On an exact-variant miss, look up the other variants already cached for
+ * this item and return the nearest-larger one's blob so the surface renders
+ * immediately instead of blocking on the raw URL. When a substitute is
+ * served while online, schedule a debounced background generate of the exact
+ * requested variant (offline it would just burn a doomed fetch). Returns
+ * `undefined` when nothing usable is cached (caller falls back to the
+ * network / raw URL).
  */
-const resolveFallbackBlob = async (
+const resolveFallbackPick = async (
     itemId: string,
     requestedVariant: string,
     request: ImageRequest | string,
-): Promise<Blob | undefined> => {
+): Promise<FallbackPick | undefined> => {
     const db = getActiveCacheDb();
     if (!db) return undefined;
     try {
         const rows = await db.thumbnails.where('ItemId').equals(itemId).toArray();
         const cached: Record<string, number> = {};
         const blobByVariant = new Map<string, Blob>();
+        const staleByVariant = new Map<string, boolean>();
         for (const row of rows) {
             if (row?.Blob && row.Variant) {
                 cached[row.Variant] = typeof row.Size === 'number' ? row.Size : 0;
                 blobByVariant.set(row.Variant, row.Blob);
+                staleByVariant.set(row.Variant, isStaleRow(row));
             }
         }
         if (blobByVariant.size === 0) return undefined;
@@ -646,14 +682,25 @@ const resolveFallbackBlob = async (
         const blob = blobByVariant.get(pick);
         if (!blob) return undefined;
 
+        const requestedPx = effectivePx(
+            cfg.variants[requestedVariant as VariantName]?.px ?? MAX_CACHE_SIZE,
+        );
+        const sufficient = effectivePx(cached[pick] ?? 0) >= requestedPx;
+        const stale = staleByVariant.get(pick) ?? false;
+
         console.info('[image-variants] fallback served nearest-larger variant', {
             itemId,
             requested: requestedVariant,
             served: pick,
+            stale,
+            sufficient,
         });
-        // Kick off the exact-size variant in the background (debounced).
-        imageVariantsInternals.scheduleVariantGenerate(itemId, requestedVariant, request);
-        return blob;
+        // Kick off the exact-size variant in the background (debounced) so
+        // the substitute is replaced by the real bucket on the next render.
+        if (getIsOnline()) {
+            imageVariantsInternals.scheduleVariantGenerate(itemId, requestedVariant, request);
+        }
+        return { blob, stale, sufficient };
     } catch (err) {
         console.warn('[image-variants] fallback lookup failed', {
             error: (err as Error)?.message ?? String(err),
@@ -662,6 +709,17 @@ const resolveFallbackBlob = async (
         });
         return undefined;
     }
+};
+
+// Blob-only view of `resolveFallbackPick` for the post-failure paths that
+// serve ANY cached substitute (the network already had its chance).
+const resolveFallbackBlob = async (
+    itemId: string,
+    requestedVariant: string,
+    request: ImageRequest | string,
+): Promise<Blob | undefined> => {
+    const pick = await resolveFallbackPick(itemId, requestedVariant, request);
+    return pick?.blob;
 };
 
 /**
@@ -687,7 +745,17 @@ export const resolveThumbnail = async (
     options?: ResolveThumbnailOptions,
 ): Promise<string> => {
     const { credentials, headers, url } = normaliseRequest(request);
-    const db = getActiveCacheDb();
+    // Display resolves briefly wait out the boot race: on a cold start the
+    // lifecycle opens the DB in a post-mount effect, so the first wave of
+    // covers used to see "no active DB" and fall straight to the network
+    // even with everything cached. Only wait when the subsystem is actually
+    // enabled (otherwise the DB never opens and every cover would stall the
+    // full timeout). Sweep callers (`_skipBlobUrl`) only run once the
+    // lifecycle is up, so they keep the synchronous check.
+    const db =
+        options?._skipBlobUrl || !isLocalCacheEnabled()
+            ? getActiveCacheDb()
+            : await awaitActiveCacheDb();
     if (!db) return url;
 
     const resolvedVariant = normaliseVariant(variant);
@@ -702,7 +770,20 @@ export const resolveThumbnail = async (
     const existing = inFlight.get(dedupKey);
     if (existing) {
         const result = await existing;
-        if (result.blob) return URL.createObjectURL(result.blob);
+        if (result.blob) {
+            // Honor the caller's blob-delivery mode here too. Previously a
+            // `_wantBlob` acquire (or a `_skipBlobUrl` sweep/generate call)
+            // that collided with an in-flight task for the same (item,
+            // variant) minted an object URL that nobody adopted — the
+            // acquire path then fell back to the RAW network URL while the
+            // orphan URL pinned the Blob in the registry forever.
+            if (options?._wantBlob) {
+                lastResolvedBlob.set(dedupKey, result.blob);
+                return url;
+            }
+            if (options?._skipBlobUrl) return url;
+            return URL.createObjectURL(result.blob);
+        }
         // Exact miss for a render path — try the nearest-larger cached variant
         // before giving up to the raw URL.
         if (wantsDisplayBlob) {
@@ -789,6 +870,34 @@ export const resolveThumbnail = async (
                 // Stale miss: fall through to refetch.
             }
 
+            // Cache-first paint path. The exact bucket missed, but a cover
+            // that is already in Dexie beats a network round-trip:
+            //  - a larger-or-equal cached variant is served unconditionally
+            //    (no quality loss, zero network in the paint path);
+            //  - while offline/unreachable, ANY cached variant is served
+            //    (an upscaled cover beats a hung fetch or a broken image).
+            // Sweep / background-generate resolves (`_skipBlobUrl`) are
+            // excluded — their entire job is to persist the exact bucket.
+            if (wantsDisplayBlob) {
+                const fallback = await resolveFallbackPick(itemId, resolvedVariant, request);
+                // Online, a pick must be both large enough AND produced under
+                // the live config; offline anything beats a doomed fetch.
+                if (fallback && ((fallback.sufficient && !fallback.stale) || !getIsOnline())) {
+                    recordStat('blobHit');
+                    return { blob: fallback.blob, bytes: 0 };
+                }
+                // Nothing cached and the server is known-unreachable: don't
+                // start a doomed fetch (on a hung LAN host each attempt
+                // burns the full 20s timeout). The caller falls back to the
+                // raw URL and the <img> errors out to the unloader quickly.
+                // (When `fallback` exists here it was insufficient AND we're
+                // online — the first branch handled every offline+fallback
+                // combination.)
+                if (!getIsOnline()) {
+                    return { blob: undefined, bytes: 0 };
+                }
+            }
+
             const targetPx = resolveTargetPx(resolvedVariant, options);
             const fetchUrl = rewriteUrlToVariantSize(url, targetPx);
             // Manual AbortController + setTimeout for the per-fetch
@@ -824,6 +933,12 @@ export const resolveThumbnail = async (
                         itemId,
                         variant: resolvedVariant,
                     });
+                    // A 20s stall is a transport-level hang (LAN host gone,
+                    // VPN dropped), not an HTTP error. Flip the combined
+                    // connectivity signal so every subsequent display
+                    // resolve serves straight from Dexie instead of each
+                    // burning its own 20s against the same dead host.
+                    markServerUnreachable();
                     recordStat('failed');
                     return { blob: undefined, bytes: 0 };
                 }
@@ -1043,4 +1158,14 @@ export const clearThumbnailsTable = async (): Promise<void> => {
 // one blob: URL per mount. The hook falls back to the per-call resolver
 // when this isn't registered (e.g. the shared bundle imported outside the
 // renderer), so registration is purely additive.
-registerThumbnailUrlCache(acquireThumbnailUrl, releaseThumbnailUrl, peekThumbnailUrl);
+// The probe is the non-acquiring membership check used by `<BaseImage>` to
+// skip its debounce/viewport gating when the cover would paint synchronously.
+const hasThumbnailUrl = (itemId: string, variant?: number | string): boolean =>
+    sharedObjectUrls.has(variantKey(itemId, normaliseVariant(variant)));
+
+registerThumbnailUrlCache(
+    acquireThumbnailUrl,
+    releaseThumbnailUrl,
+    peekThumbnailUrl,
+    hasThumbnailUrl,
+);

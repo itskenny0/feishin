@@ -11,7 +11,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 
 import styles from './mobile-fullscreen-player.module.css';
 
-import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
+import { useCachedItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { useActiveNowPlayingItem } from '/@/renderer/features/jellyfin-remote-target/hooks/use-active-player-source';
 import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
@@ -122,7 +122,7 @@ export const MobileFullscreenPlayerAlbumArt = () => {
     // swipe/crossfade carousel untouched to avoid any local-playback regression.
     const isRemote = useRemoteTargetStore((s) => s.targetDeviceId !== null);
     const remoteSong = useActiveNowPlayingItem();
-    const remoteImageUrl = useItemImageUrl({
+    const remoteImageUrl = useCachedItemImageUrl({
         id: remoteSong?.imageId || undefined,
         // The MQTT-lane mirror builds a stub Song that carries `imageUrl` (from
         // the wire `track.art`) but no `imageId`, so resolving by id alone
@@ -136,21 +136,21 @@ export const MobileFullscreenPlayerAlbumArt = () => {
 
     const isPlayingRadio = isRadioActive && isRadioPlaying;
 
-    const currentImageUrl = useItemImageUrl({
+    const currentImageUrl = useCachedItemImageUrl({
         id: currentSong?.imageId || undefined,
         itemType: LibraryItem.SONG,
         size: mainImageDimensions.idealSize,
         type: 'fullScreenPlayer',
     });
 
-    const nextImageUrl = useItemImageUrl({
+    const nextImageUrl = useCachedItemImageUrl({
         id: nextSong?.imageId || undefined,
         itemType: LibraryItem.SONG,
         size: mainImageDimensions.idealSize,
         type: 'fullScreenPlayer',
     });
 
-    const previousImageUrl = useItemImageUrl({
+    const previousImageUrl = useCachedItemImageUrl({
         id: previousSong?.imageId || undefined,
         itemType: LibraryItem.SONG,
         size: mainImageDimensions.idealSize,

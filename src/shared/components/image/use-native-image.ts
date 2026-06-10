@@ -27,6 +27,11 @@ type ThumbnailUrlAcquirer = (
 // caller must release) when the cover is already held in memory, undefined
 // otherwise. Lets an already-cached cover paint with NO loading state.
 type ThumbnailUrlPeeker = (itemId: string, variant: string) => string | undefined;
+// Non-acquiring membership probe: true when a live shared URL exists for the
+// (item, variant). Takes NO reference — purely a hint for consumers (e.g.
+// `<BaseImage>` skipping its load debounce / viewport wait when the cover
+// would paint synchronously anyway).
+type ThumbnailUrlProber = (itemId: string, variant: string) => boolean;
 // The releaser MUST be keyed by the SAME (itemId, variant) the URL was
 // acquired with — two surfaces of one item at different variants each own
 // their own shared URL + refcount. Releasing by bare itemId would
@@ -42,6 +47,7 @@ let resolveThumbnailRef: null | ThumbnailResolver = null;
 let acquireThumbnailUrlRef: null | ThumbnailUrlAcquirer = null;
 let releaseThumbnailUrlRef: null | ThumbnailUrlReleaser = null;
 let peekThumbnailUrlRef: null | ThumbnailUrlPeeker = null;
+let probeThumbnailUrlRef: null | ThumbnailUrlProber = null;
 
 export const registerThumbnailResolver = (fn: null | ThumbnailResolver): void => {
     resolveThumbnailRef = fn;
@@ -51,11 +57,23 @@ export const registerThumbnailUrlCache = (
     acquire: null | ThumbnailUrlAcquirer,
     release: null | ThumbnailUrlReleaser,
     peek: null | ThumbnailUrlPeeker = null,
+    probe: null | ThumbnailUrlProber = null,
 ): void => {
     acquireThumbnailUrlRef = acquire;
     releaseThumbnailUrlRef = release;
     peekThumbnailUrlRef = peek;
+    probeThumbnailUrlRef = probe;
 };
+
+/**
+ * True when a live shared blob: URL is already held in memory for this
+ * (item, variant) — i.e. `useNativeImage` would paint it synchronously via
+ * the peek fast path with no async hop. Never takes a reference. Consumers
+ * use it to skip first-load niceties (debounce, viewport gating) that only
+ * make sense when the image would otherwise hit Dexie or the network.
+ */
+export const hasSharedThumbnailUrl = (itemId: string, variant?: string): boolean =>
+    probeThumbnailUrlRef?.(itemId, variant ?? DEFAULT_VARIANT) ?? false;
 
 // Resolve via the shared refcounted cache when available. Returns the
 // shared (already-refcounted) URL on a hit, or undefined on a miss so the

@@ -7,8 +7,8 @@ import { useLocation } from 'react-router';
 
 import styles from './sidebar.module.css';
 
-import { CachedImage, useOfflineSongCount } from '/@/renderer/cache';
-import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
+import { useOfflineSongCount } from '/@/renderer/cache';
+import { ItemImage, useItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { ContextMenuController } from '/@/renderer/features/context-menu/context-menu-controller';
 import {
     useIsRadioActive,
@@ -362,17 +362,26 @@ const SidebarImage = () => {
                         <Icon color="muted" icon="radio" size="40%" />
                     </Center>
                 ) : imageUrl && currentSong?.id ? (
-                    <CachedImage
+                    // Keyed by `imageId` (the album for album-art songs) so
+                    // the lookup lands on the SAME Dexie rows the sweep
+                    // writes — the previous `CachedImage itemId={song.id}`
+                    // keyed by song id, which is never pre-cached, so every
+                    // track change re-fetched the cover from the network
+                    // (and offline showed nothing despite cached art).
+                    <ItemImage
                         alt={currentSong?.name ?? ''}
                         className={clsx(styles.sidebarImage, {
                             [styles.censored]:
                                 currentSong?.explicitStatus === ExplicitStatus.EXPLICIT &&
                                 blurExplicitImages,
                         })}
-                        itemId={currentSong.id}
-                        loading="eager"
-                        size={360}
-                        src={imageUrl}
+                        enableDebounce={false}
+                        enableViewport={false}
+                        fetchPriority="high"
+                        id={currentSong.imageId}
+                        itemType={LibraryItem.SONG}
+                        serverId={currentSong._serverId}
+                        type="sidebar"
                     />
                 ) : (
                     <ImageUnloader icon="emptySongImage" />

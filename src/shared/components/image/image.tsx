@@ -12,7 +12,7 @@ import {
 } from 'react';
 
 import styles from './image.module.css';
-import { useNativeImage } from './use-native-image';
+import { hasSharedThumbnailUrl, useNativeImage } from './use-native-image';
 
 import { AppIcon, Icon } from '/@/shared/components/icon/icon';
 import { Skeleton } from '/@/shared/components/skeleton/skeleton';
@@ -106,11 +106,19 @@ export function BaseImage({
     const isInSessionCache = Boolean(
         rawImageRequest?.cacheKey && loadedImageCacheKeys.has(rawImageRequest.cacheKey),
     );
+    // A cover whose shared blob: URL is ALREADY in memory (bulk-preloaded
+    // page, zero-ref grace window) paints synchronously via the peek fast
+    // path — the 100ms debounce and the viewport wait would only delay a
+    // free paint. Probe without taking a reference.
+    const isPeekable = Boolean(
+        rawImageRequest?.cacheItemId &&
+        hasSharedThumbnailUrl(rawImageRequest.cacheItemId, rawImageRequest.variant),
+    );
     const [debouncedImageRequest] = useDebouncedValue(rawImageRequest, 100, {
         waitForInitial: true,
     });
     const effectiveImageRequest =
-        isInSessionCache || !enableDebounce ? rawImageRequest : debouncedImageRequest;
+        isInSessionCache || isPeekable || !enableDebounce ? rawImageRequest : debouncedImageRequest;
 
     const [hasLoadedInInstance, setHasLoadedInInstance] = useState(false);
     // Local error fallback. Distinct from `nativeImage.isError`, which is
@@ -128,7 +136,7 @@ export function BaseImage({
 
     const shouldLoadImage = Boolean(
         effectiveImageRequest &&
-        (!enableViewport || isInSessionCache || inViewport || hasLoadedInInstance),
+        (!enableViewport || isInSessionCache || isPeekable || inViewport || hasLoadedInInstance),
     );
 
     const nativeImage = useNativeImage({

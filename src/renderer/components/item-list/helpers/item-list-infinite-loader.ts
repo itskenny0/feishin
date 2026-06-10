@@ -163,7 +163,7 @@ export const useItemListInfiniteLoader = ({
     // page-loaded flag unset so the network revalidation still runs and the
     // freshly-fetched items overwrite the cached ones.
     const writePageIntoDataMap = useCallback(
-        (pageNumber: number, startIndex: number, items: unknown[], markLoaded: boolean) => {
+        async (pageNumber: number, startIndex: number, items: unknown[], markLoaded: boolean) => {
             // Mutate the ref-held maps in place (no clone) …
             const dataMap = dataMapRef.current;
             const idToIndexMap = idToIndexMapRef.current;
@@ -177,10 +177,16 @@ export const useItemListInfiniteLoader = ({
                 }
             });
 
-            // Fire-and-forget: bulk-prime the page's covers into the shared
-            // thumbnail-URL cache so the cells peek them synchronously.
+            // Bulk-prime the page's covers into the shared thumbnail-URL
+            // cache BEFORE the version bump schedules the render, so the
+            // cells mount with their covers peekable (synchronous paint, no
+            // skeleton). Previously this was fire-and-forget and the cells
+            // consistently mounted ahead of the bulkGet, dropping every cell
+            // onto the per-item Dexie path. The 250ms race keeps a slow
+            // IndexedDB from delaying the row data itself — late covers just
+            // resolve per-cell like before.
             if (thumbnailVariant) {
-                void preloadThumbnailUrls(
+                const preload = preloadThumbnailUrls(
                     items.map((item) =>
                         item && typeof item === 'object' && 'imageId' in (item as any)
                             ? ((item as any).imageId as null | string | undefined)
@@ -188,6 +194,10 @@ export const useItemListInfiniteLoader = ({
                     ),
                     thumbnailVariant,
                 );
+                await Promise.race([
+                    preload,
+                    new Promise<void>((resolve) => setTimeout(resolve, 250)),
+                ]);
             }
 
             // … then bump the small version/pagesLoaded blob in the query cache
@@ -243,7 +253,7 @@ export const useItemListInfiniteLoader = ({
                     });
                     if (cached && cached.items.length > 0) {
                         cachedItems = cached.items;
-                        writePageIntoDataMap(pageNumber, startIndex, cached.items, true);
+                        await writePageIntoDataMap(pageNumber, startIndex, cached.items, true);
                         lastFetchedPageRef.current = Math.max(
                             lastFetchedPageRef.current,
                             pageNumber,
@@ -288,8 +298,8 @@ export const useItemListInfiniteLoader = ({
                     queryKey: queryKeys[getListQueryKeyName(itemType)].list(serverId, queryParams),
                     staleTime: isRandomSort ? 1000 * 60 * 10 : 1000 * 15,
                 })
-                .then((result) => {
-                    writePageIntoDataMap(pageNumber, startIndex, result.items, true);
+                .then(async (result) => {
+                    await writePageIntoDataMap(pageNumber, startIndex, result.items, true);
                     lastFetchedPageRef.current = Math.max(lastFetchedPageRef.current, pageNumber);
                     // Write-through: persist the fresh server page into the
                     // local cache (bulkPut + search/row-cache invalidation)

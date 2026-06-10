@@ -16,6 +16,13 @@ export interface CachedImageProps extends ImgHTMLAttributes<HTMLImageElement> {
     size: number;
     src: string;
     style?: CSSProperties;
+    // Surface bucket to resolve against (`table` / `itemCard` / `header` /
+    // `sidebar` / `fullScreen`). Without it the numeric `size` collapses to
+    // the `fullScreen` bucket — which is NOT pre-cached by default, so every
+    // render paid a network fetch for the original even when a pre-sized
+    // cover sat in Dexie. Small-thumbnail callers should pass the bucket
+    // that matches what the sweep actually caches.
+    variant?: string;
 }
 
 export const CachedImage = ({
@@ -26,6 +33,7 @@ export const CachedImage = ({
     size,
     src,
     style,
+    variant,
     ...rest
 }: CachedImageProps) => {
     const [resolved, setResolved] = useState<string | undefined>(undefined);
@@ -34,7 +42,7 @@ export const CachedImage = ({
         let cancelled = false;
         let createdBlobUrl: string | undefined;
 
-        resolveThumbnail(itemId, size, src)
+        resolveThumbnail(itemId, variant ?? size, src)
             .then((url) => {
                 if (cancelled) {
                     if (url.startsWith('blob:')) URL.revokeObjectURL(url);
@@ -53,7 +61,7 @@ export const CachedImage = ({
             cancelled = true;
             if (createdBlobUrl) URL.revokeObjectURL(createdBlobUrl);
         };
-    }, [itemId, size, src]);
+    }, [itemId, size, src, variant]);
 
     return (
         <img
