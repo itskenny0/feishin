@@ -1,5 +1,31 @@
+/*
+ * Settings item rows — "console card" treatment.
+ *
+ * Every option renders as a quiet card: a faint surface wash, hairline
+ * border and soft radius give each setting a tangible footprint (the old
+ * bare rows left phone pages looking like an empty void with a floating
+ * switch). Desktop keeps label-left / control-right inside the card;
+ * the phone shell stacks label → description → a separated control zone,
+ * Android-Settings style.
+ */
 .row {
     align-items: center;
+    padding: var(--theme-spacing-md);
+    background: color-mix(in srgb, var(--theme-colors-foreground) 3%, transparent);
+    border: 1px solid color-mix(in srgb, var(--theme-colors-foreground) 8%, transparent);
+    border-radius: 10px;
+    transition:
+        border-color 0.15s ease,
+        background-color 0.15s ease;
+}
+
+/* Pointer devices get a whisper of feedback so the page feels alive
+   without shouting. */
+@media (hover: hover) and (pointer: fine) {
+    .row:hover {
+        background: color-mix(in srgb, var(--theme-colors-foreground) 5%, transparent);
+        border-color: color-mix(in srgb, var(--theme-colors-primary-filled) 30%, transparent);
+    }
 }
 
 /*
@@ -35,37 +61,38 @@
 
 /*
  * Conditional / dependent option rows (e.g. the accent colour picker that's
- * only meaningful while "use theme accent" is on). The bare 2px border read
- * as a generic divider; a compound treatment — a primary-tinted accent rail
- * plus a faint background wash and rounded right edge — makes the master →
- * detail relationship explicit without adding visual clutter.
+ * only meaningful while "use theme accent" is on). Keeps the card surface
+ * but adds a primary-tinted accent rail and indent so the master → detail
+ * relationship stays explicit.
  */
 .row-indented {
-    padding-top: var(--theme-spacing-xs);
-    padding-right: var(--theme-spacing-sm);
-    padding-bottom: var(--theme-spacing-xs);
-    padding-left: var(--theme-spacing-lg);
+    padding: var(--theme-spacing-sm) var(--theme-spacing-md) var(--theme-spacing-sm)
+        var(--theme-spacing-lg);
     margin-left: var(--theme-spacing-md);
-    background: color-mix(in srgb, var(--theme-colors-primary-filled) 4%, transparent);
+    background: color-mix(in srgb, var(--theme-colors-primary-filled) 5%, transparent);
+    border: 1px solid color-mix(in srgb, var(--theme-colors-primary-filled) 12%, transparent);
     border-left: 3px solid color-mix(in srgb, var(--theme-colors-primary-filled) 45%, transparent);
-    border-radius: 0 8px 8px 0;
+    border-radius: 0 10px 10px 0;
 }
 
 /*
- * Mobile control wrapper. The stacked phone layout puts the control on its
- * own full-width row, but most controls carry a fixed pixel width from the
- * settings definitions (e.g. `width={300}` on theme/lyric Selects, `w={120}`
- * on sliders). At 320–360px content widths a 300px Select overflows the
- * pane horizontally; narrower controls just float in a sea of dead space and
- * are needlessly fiddly to tap.
+ * Mobile control zone. The stacked phone layout puts the control on its own
+ * full-width row INSIDE the card, visually separated by an inset hairline so
+ * the tap target reads as the card's "action deck" rather than a floating
+ * widget.
  *
  * Cap every direct child to the row width so nothing overflows, then let the
  * input-bearing controls (Mantine wires its inline `width`/`w` onto the
  * component *root*, so we override with `!important`) grow to fill the row —
- * Android-Settings style full-bleed dropdowns/sliders with comfortable touch
- * targets. Switches, color swatches, button groups and small number steppers
- * keep their intrinsic size (they read wrong stretched edge-to-edge).
+ * full-bleed dropdowns/sliders with comfortable touch targets. Switches,
+ * color swatches, button groups and small number steppers keep their
+ * intrinsic size (they read wrong stretched edge-to-edge).
  */
+.mobile-control {
+    padding-top: var(--theme-spacing-sm);
+    border-top: 1px solid color-mix(in srgb, var(--theme-colors-foreground) 7%, transparent);
+}
+
 .mobile-control > * {
     max-width: 100%;
 }
@@ -82,24 +109,30 @@
 }
 
 /*
- * Sub-section headers within a settings list — used by trackmap's
- * advanced panel to chunk ~15 sliders into "Colors", "Envelope", etc.
- * The 1px hairline under the label visually separates each group from
- * its preceding rows. Letter-spacing makes the uppercase title read as
- * a label rather than a row title.
+ * Sub-section headers within a settings list — used to chunk dense option
+ * lists into groups. Styled as an overline: a short primary tick, spaced
+ * uppercase, no full-width rule (the cards below already chunk the page).
  */
 .subheader,
 .subheader-indented {
     align-items: center;
-    padding-top: var(--theme-spacing-xs);
+    padding-top: var(--theme-spacing-sm);
     padding-bottom: var(--theme-spacing-xs);
-    letter-spacing: 0.06em;
-    border-bottom: 1px solid color-mix(in srgb, var(--theme-colors-foreground) 22%, transparent);
-    opacity: 0.9;
+    letter-spacing: 0.08em;
+    opacity: 0.95;
+}
+
+.subheader::before,
+.subheader-indented::before {
+    display: inline-block;
+    width: 16px;
+    height: 2px;
+    content: '';
+    background: var(--theme-colors-primary-filled);
+    border-radius: 1px;
 }
 
 .subheader-indented {
     padding-left: var(--theme-spacing-lg);
     margin-left: var(--theme-spacing-md);
-    border-left: 2px solid var(--theme-colors-border);
 }
