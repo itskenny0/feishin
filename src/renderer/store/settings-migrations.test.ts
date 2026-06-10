@@ -59,6 +59,31 @@ describe('settings migrations', () => {
         expect(store.getState().peerSync.onboarded).toBe(false);
     });
 
+    it('rewrites persisted home sections through the resolver', async () => {
+        seed(
+            {
+                general: {
+                    homeItems: [
+                        { disabled: true, id: 'recentlyPlayed' },
+                        { disabled: false, id: 'libraryStats' }, // dead id
+                        { disabled: false, id: 'random' },
+                    ],
+                },
+            },
+            61,
+        );
+
+        const store = await loadStore();
+        const items = store.getState().general.homeItems;
+        const ids = items.map((i) => i.id);
+        expect(ids).not.toContain('libraryStats');
+        // Saved order + flags preserved, new live sections appended enabled.
+        expect(ids[0]).toBe('recentlyPlayed');
+        expect(items[0].disabled).toBe(true);
+        expect(ids).toContain('quickPicks');
+        expect(ids).toContain('pinned');
+    });
+
     it('survives a sparse blob without the peerSync slice', async () => {
         seed({}, 61);
 

@@ -80,15 +80,23 @@ const deepMergeIntoState = <T extends Record<string, any>>(
 };
 
 const HomeItemSchema = z.enum([
+    // Live sections rendered by the redesigned Spotify-flavoured home route.
+    'artists',
     'genres',
-    'libraryStats',
     'mostPlayed',
-    'newSinceLastVisit',
-    'quickFilters',
+    'pinned',
+    'playlists',
+    'quickPicks',
     'random',
     'recentlyAdded',
     'recentlyPlayed',
     'recentlyReleased',
+    // Legacy ids kept only so persisted/imported configs from the previous
+    // home layout still validate. They map to no live section and are filtered
+    // out by the home route's section resolver and the settings panel.
+    'libraryStats',
+    'newSinceLastVisit',
+    'quickFilters',
 ]);
 
 const PlayerItemSchema = z.enum([
@@ -1236,16 +1244,81 @@ export enum GenreTarget {
 }
 
 export enum HomeItem {
+    ARTISTS = 'artists',
     GENRES = 'genres',
+    // Legacy ids from the previous home layout. No longer rendered; retained
+    // only so old persisted configs validate. Excluded from the default order,
+    // the settings panel, and the home route's section resolver.
     LIBRARY_STATS = 'libraryStats',
     MOST_PLAYED = 'mostPlayed',
     NEW_SINCE_LAST_VISIT = 'newSinceLastVisit',
+    PINNED = 'pinned',
+    PLAYLISTS = 'playlists',
     QUICK_FILTERS = 'quickFilters',
+    QUICK_PICKS = 'quickPicks',
     RANDOM = 'random',
+
     RECENTLY_ADDED = 'recentlyAdded',
     RECENTLY_PLAYED = 'recentlyPlayed',
     RECENTLY_RELEASED = 'recentlyReleased',
 }
+
+/**
+ * Canonical render order of the redesigned home route's toggleable sections,
+ * top → bottom. The hero/greeting row is intentionally NOT in this list — it
+ * stays always-on and is governed by its own dedicated toggles
+ * (`homeGreetingVisible`, `homeFeelingLucky`). New default configs and the
+ * settings panel are derived from this single source of truth.
+ */
+export const DEFAULT_HOME_ITEM_ORDER: HomeItem[] = [
+    HomeItem.PINNED,
+    HomeItem.QUICK_PICKS,
+    HomeItem.RECENTLY_PLAYED,
+    HomeItem.MOST_PLAYED,
+    HomeItem.RECENTLY_ADDED,
+    HomeItem.ARTISTS,
+    HomeItem.RANDOM,
+    HomeItem.PLAYLISTS,
+    HomeItem.RECENTLY_RELEASED,
+    HomeItem.GENRES,
+];
+
+/**
+ * Resolve a persisted `homeItems` array (which may be empty, contain legacy
+ * ids from the old home layout, be missing newer sections, or be in a custom
+ * user order) into the final ordered list of *live* home sections to render.
+ *
+ * Rules, applied without needing a settings migration:
+ *  - Drop any id that isn't a live section (legacy/unknown ids).
+ *  - Preserve the user's saved order and enabled/disabled flags for ids they
+ *    have a saved entry for.
+ *  - Append any live section the user has no saved entry for, in canonical
+ *    order, enabled by default (so a redesign that adds a section shows it by
+ *    default rather than hiding it).
+ */
+export const resolveHomeSections = (
+    persisted: null | ReadonlyArray<{ disabled?: boolean; id: string }> | undefined,
+): SortableItem<HomeItem>[] => {
+    const live = new Set<string>(DEFAULT_HOME_ITEM_ORDER);
+    const seen = new Set<string>();
+    const resolved: SortableItem<HomeItem>[] = [];
+
+    for (const entry of persisted ?? []) {
+        if (!entry || !live.has(entry.id) || seen.has(entry.id)) {
+            continue;
+        }
+        seen.add(entry.id);
+        resolved.push({ disabled: Boolean(entry.disabled), id: entry.id as HomeItem });
+    }
+
+    for (const id of DEFAULT_HOME_ITEM_ORDER) {
+        if (!seen.has(id)) {
+            resolved.push({ disabled: false, id });
+        }
+    }
+
+    return resolved;
+};
 
 export enum PlayerbarSliderType {
     SLIDER = 'slider',
@@ -1487,9 +1560,12 @@ export const sidebarItems: SidebarItemType[] = [
     },
 ];
 
-const homeItems = Object.values(HomeItem).map((item) => ({
+// Default home configuration: every live section, in canonical order, enabled.
+// Built from DEFAULT_HOME_ITEM_ORDER (not Object.values(HomeItem)) so the dead
+// legacy enum members never leak into a fresh config.
+const homeItems: SortableItem<HomeItem>[] = DEFAULT_HOME_ITEM_ORDER.map((id) => ({
     disabled: false,
-    id: item,
+    id,
 }));
 
 /*
@@ -3517,6 +3593,16 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     // opt-in; grandfather it.
                     if (state.peerSync?.enabled && !state.peerSync.onboarded) {
                         state.peerSync.onboarded = true;
+                    }
+
+                    // Home redesign: rewrite the persisted section list through
+                    // the same resolver the home route uses — drops the dead
+                    // ids (libraryStats / newSinceLastVisit / quickFilters)
+                    // and appends the new sections enabled. Cosmetic: the
+                    // route already resolves at runtime; this keeps the blob
+                    // in sync with what the user actually sees.
+                    if (state.general && Array.isArray(state.general.homeItems)) {
+                        state.general.homeItems = resolveHomeSections(state.general.homeItems);
                     }
                 }
 

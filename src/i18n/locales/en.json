@@ -861,6 +861,7 @@
             "quickFilter_shuffleAll": "Shuffle all",
             "quickFilter_tracks": "All tracks",
             "quickFilters_title": "Quick filters",
+            "quickPicks_title": "Quick picks",
             "genres": "$t(entity.genre, {\"count\": 2})",
             "greeting": {
                 "afternoon": "Good afternoon",
