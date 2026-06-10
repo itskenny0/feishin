@@ -13,6 +13,26 @@
     transition: background 0.5s;
 }
 
+/*
+ * Mobile soft-keyboard hide. When the on-screen keyboard opens (e.g. typing
+ * in search) the mini-player would otherwise float above the keyboard,
+ * wasting space and looking broken. Slide it down out of view + collapse its
+ * pointer surface while the keyboard is up. Translate (rather than unmount)
+ * so playback state / motion refs in <Playerbar> survive. The 200ms slide
+ * matches the snappy feel of the neighbouring mini-player transitions.
+ *
+ * Only ever applied in the mobile shell + touch/native context (the
+ * <PlayerBar> component gates the class), so desktop is unaffected.
+ */
+.keyboard-hidden {
+    transform: translateY(120%);
+    pointer-events: none;
+    opacity: 0;
+    transition:
+        transform 200ms ease-out,
+        opacity 200ms ease-out;
+}
+
 .open-drawer {
     &:hover {
         background: darken(var(--theme-colors-background), 20%);
