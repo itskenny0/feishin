@@ -28,12 +28,14 @@ import {
     rewriteUrlToVariantSize,
 } from '/@/renderer/cache/images';
 import { useCacheStore } from '/@/renderer/cache/store';
+import { createBackoffController } from '/@/renderer/cache/sync/backoff';
 import {
     type EnabledVariant,
     enabledVariants,
     variantConfigHash,
 } from '/@/renderer/cache/variant-config';
 import { downscaleVariantsPooled } from '/@/renderer/cache/variant-downscale-pool';
+import { getIsOnline, subscribeIsOnline } from '/@/renderer/lib/network-status';
 import { DEFAULT_IMAGE_VARIANTS, useSettingsStore } from '/@/renderer/store';
 import { LibraryItem } from '/@/shared/types/domain-types';
 
@@ -199,6 +201,27 @@ const buildTemplates = (serverId: string): TemplateMap => {
 };
 
 /**
+ * Outcome of a single sweep work unit. The distinction between `missing` and
+ * `transient` is load-bearing for correctness on a flaky network:
+ *
+ *  - `fetched`:   a blob landed in Dexie. Mark the unit cached.
+ *  - `missing`:   the server AUTHORITATIVELY said no artwork (HTTP 404 / a
+ *                 fresh negative-cache marker). A negative marker was written;
+ *                 mark the unit cached so we don't re-ask every pass.
+ *  - `transient`: the fetch failed for a NON-authoritative reason (timeout,
+ *                 connection reset, server unreachable, decode error). NOTHING
+ *                 authoritative was written — leave the unit UNCACHED so it is
+ *                 retried later in the sweep / on the next launch. A transient
+ *                 failure must NEVER look like "no artwork".
+ */
+type UnitOutcome = 'fetched' | 'missing' | 'transient';
+
+interface UnitResult {
+    bytes: number;
+    outcome: UnitOutcome;
+}
+
+/**
  * Fetch + persist one DOWNLOAD-mode work unit: request the cover at the
  * variant's px directly from the server and store it under `[itemId, variant]`
  * via the shared resolver (which handles dedup, miss markers, and the write).
@@ -207,10 +230,10 @@ const fetchDownloadUnit = async (
     pending: PendingThumbnail,
     template: RequestTemplate,
     signal: AbortSignal,
-): Promise<{ bytes: number }> => {
-    if (signal.aborted) return { bytes: 0 };
+): Promise<UnitResult> => {
+    if (signal.aborted) return { bytes: 0, outcome: 'transient' };
     const db = getActiveCacheDb();
-    if (!db) return { bytes: 0 };
+    if (!db) return { bytes: 0, outcome: 'transient' };
 
     const variant = pending.variant ?? 'fullScreen';
     const baseUrl = template.urlBefore + pending.itemId + template.urlAfter;
@@ -229,7 +252,11 @@ const fetchDownloadUnit = async (
         // variant at 1024px (with a lying `Size`).
         targetPx: pending.px,
     });
-    return { bytes: result.bytes };
+    if (result.bytes > 0) return { bytes: result.bytes, outcome: 'fetched' };
+    // `noArtwork` === an authoritative 404 (the resolver wrote the MissAt
+    // marker). Anything else with zero bytes is a transient failure — the
+    // resolver did NOT write a negative marker, so we must retry, not skip.
+    return { bytes: 0, outcome: result.noArtwork ? 'missing' : 'transient' };
 };
 
 /**
@@ -242,13 +269,15 @@ const fetchDownscaleUnit = async (
     template: RequestTemplate,
     cfg: LocalCacheImageVariants,
     signal: AbortSignal,
-): Promise<{ bytes: number }> => {
-    if (signal.aborted) return { bytes: 0 };
+): Promise<UnitResult> => {
+    if (signal.aborted) return { bytes: 0, outcome: 'transient' };
     const db = getActiveCacheDb();
-    if (!db) return { bytes: 0 };
+    if (!db) return { bytes: 0, outcome: 'transient' };
 
     const variants = pending.downscaleVariants ?? [];
-    if (variants.length === 0) return { bytes: 0 };
+    // No variants to produce is a config no-op, not a fetch failure — treat it
+    // as authoritative so we don't spin retrying a unit that can never produce.
+    if (variants.length === 0) return { bytes: 0, outcome: 'missing' };
 
     const baseUrl = template.urlBefore + pending.itemId + template.urlAfter;
     const url = rewriteUrlToVariantSize(baseUrl, pending.px);
@@ -297,8 +326,14 @@ const fetchDownscaleUnit = async (
                             .catch(() => undefined),
                     ),
                 );
+                // Authoritative 404 — a negative marker now exists for every
+                // variant. Safe to mark the unit done.
+                return { bytes: 0, outcome: 'missing' };
             }
-            return { bytes: 0 };
+            // Any other non-OK status (5xx, 429, proxy error) is NOT
+            // authoritative — the artwork may well exist. Do not write a
+            // negative marker; retry later.
+            return { bytes: 0, outcome: 'transient' };
         }
         srcBlob = await res.blob();
     } catch (err) {
@@ -312,13 +347,14 @@ const fetchDownscaleUnit = async (
                 itemId: pending.itemId,
             });
         }
-        return { bytes: 0 };
+        // Timeout / connection error / abort — transient, retry later.
+        return { bytes: 0, outcome: 'transient' };
     } finally {
         clearTimeout(timeoutId);
         signal.removeEventListener('abort', upstreamAbort);
     }
 
-    if (signal.aborted || db !== getActiveCacheDb()) return { bytes: 0 };
+    if (signal.aborted || db !== getActiveCacheDb()) return { bytes: 0, outcome: 'transient' };
 
     let produced: Map<string, { blob: Blob; format: 'jpeg' | 'webp' }>;
     try {
@@ -332,10 +368,13 @@ const fetchDownscaleUnit = async (
             error: (err as Error)?.message ?? String(err),
             itemId: pending.itemId,
         });
-        return { bytes: 0 };
+        // Local decode/encode failure — the source bytes arrived but we
+        // couldn't process them. Transient (could be transient memory
+        // pressure on the worker); retry rather than mark "no artwork".
+        return { bytes: 0, outcome: 'transient' };
     }
 
-    if (signal.aborted || db !== getActiveCacheDb()) return { bytes: 0 };
+    if (signal.aborted || db !== getActiveCacheDb()) return { bytes: 0, outcome: 'transient' };
 
     let bytes = 0;
     const now = Date.now();
@@ -371,7 +410,7 @@ const fetchDownscaleUnit = async (
         }),
     );
 
-    return { bytes };
+    return { bytes, outcome: 'fetched' };
 };
 
 // Test-only seam (mirrors images.ts's imageVariantsInternals): the sweep units
@@ -535,6 +574,15 @@ export const runThumbnailsSweep = async (
         }
     };
 
+    // Connectivity gate. While offline the worker pool parks (no fetches, no
+    // failure recording, no queue burn) and resumes from the SAME cursor once
+    // connectivity returns. `paused` is surfaced in the sweep progress so the
+    // dashboard shows "paused (offline)" rather than a frozen counter.
+    let paused = !getIsOnline();
+    if (paused) {
+        console.info('[sync] thumbnails sweep: starting paused — offline');
+    }
+
     // Throttle setSweep so the dashboard / sync chip don't re-render at
     // worker speed (which was causing the main thread to choke). One
     // update every 50ms is more than the 20fps the UI promises.
@@ -555,6 +603,7 @@ export const runThumbnailsSweep = async (
                 done,
                 estimatedTotalBytes,
                 itemsPerSec: done / elapsed,
+                paused: paused ? 'offline' : undefined,
                 startedAt,
                 total,
             },
@@ -562,6 +611,61 @@ export const runThumbnailsSweep = async (
     };
 
     flushProgress(true);
+
+    // Wake-on-reconnect: a connectivity transition resolves any parked
+    // workers' wait so they re-check `getIsOnline()` immediately rather than
+    // polling. We keep a single subscription for the whole sweep and notify
+    // all parked waiters on every transition; each waiter re-evaluates and
+    // either proceeds (online) or re-parks (still offline).
+    const onlineWaiters = new Set<() => void>();
+    // Abort must also wake every parked waiter so a paused sweep tears down
+    // promptly when the user cancels / the server switches instead of hanging
+    // on the 1s safety poll forever.
+    const onAbortWake = (): void => {
+        for (const wake of [...onlineWaiters]) wake();
+    };
+    signal.addEventListener('abort', onAbortWake);
+    const unsubscribeOnline = subscribeIsOnline(() => {
+        const online = getIsOnline();
+        if (online && paused) {
+            paused = false;
+            console.info('[sync] thumbnails sweep: connectivity returned — resuming', {
+                cursor,
+            });
+            flushProgress(true);
+        } else if (!online && !paused) {
+            paused = true;
+            console.info('[sync] thumbnails sweep: connectivity lost — pausing', { cursor });
+            flushProgress(true);
+        }
+        // Wake every parked waiter so it re-checks the (possibly still-offline)
+        // signal. A 1s safety re-poll in `waitUntilOnline` covers the case
+        // where the transition fired before the waiter parked.
+        for (const wake of [...onlineWaiters]) wake();
+    });
+
+    // Park the caller until connectivity returns. Re-checks `getIsOnline()`
+    // both on every connectivity transition AND on a 1s safety timer (so we
+    // can't miss a transition that landed between the check and the park).
+    const waitUntilOnline = async (): Promise<void> => {
+        while (!signal.aborted && !getIsOnline()) {
+            paused = true;
+            flushProgress(true);
+            await new Promise<void>((resolve) => {
+                const wake = (): void => {
+                    onlineWaiters.delete(wake);
+                    clearTimeout(timer);
+                    resolve();
+                };
+                const timer = setTimeout(wake, 1_000);
+                onlineWaiters.add(wake);
+            });
+        }
+        if (getIsOnline() && paused) {
+            paused = false;
+            flushProgress(true);
+        }
+    };
 
     // Hoist the per-itemType request templates once. The sweep iterates
     // ~18k items; rebuilding the ImageRequest per iteration (which
@@ -576,25 +680,25 @@ export const runThumbnailsSweep = async (
     // serialization point.
     let cursor = 0;
 
-    // Adaptive backoff. Rolling latency window over the last
-    // BACKOFF_WINDOW completed fetches. If the average exceeds
-    // BACKOFF_THRESHOLD_MS we pause new dispatches for BACKOFF_PAUSE_MS
-    // and cap effective concurrency in half until latency recovers.
+    // Adaptive backoff (see createBackoffController for the rationale).
+    // Symmetric: halve on overload, double after a streak of fast items, so a
+    // recovered server ramps back to the ceiling in a handful of items rather
+    // than the old +1-per-fast crawl that could floor near 1 forever.
     const BACKOFF_WINDOW = 8;
     const BACKOFF_THRESHOLD_MS = 5_000;
     const BACKOFF_PAUSE_MS = 2_000;
-    const latencyWindow: number[] = [];
-    let cappedConcurrency = concurrency;
-    let lastBackoffAt = 0;
-    const recordLatency = (ms: number): void => {
-        latencyWindow.push(ms);
-        if (latencyWindow.length > BACKOFF_WINDOW) latencyWindow.shift();
-    };
-    const shouldBackOff = (): boolean => {
-        if (latencyWindow.length < BACKOFF_WINDOW) return false;
-        const avg = latencyWindow.reduce((a, b) => a + b, 0) / latencyWindow.length;
-        return avg > BACKOFF_THRESHOLD_MS;
-    };
+    const backoff = createBackoffController({
+        ceiling: concurrency,
+        fastItemMs: BACKOFF_THRESHOLD_MS / 2,
+        floor: MIN_CONCURRENCY,
+        pauseMs: BACKOFF_PAUSE_MS,
+        recoverStreak: 3,
+        thresholdMs: BACKOFF_THRESHOLD_MS,
+        window: BACKOFF_WINDOW,
+    });
+    // `cappedConcurrency` mirrors the controller's cap for the diagnostics
+    // snapshot + the over-cap worker park check.
+    let cappedConcurrency = backoff.cap;
 
     // Per-worker state for diagnostics. Tracks what each worker is
     // currently doing so the periodic snapshot can show the entire
@@ -627,10 +731,7 @@ export const runThumbnailsSweep = async (
         const longRunning = summary.filter(
             (s) => s.status === 'fetching' && s.elapsedMs > 10_000,
         ).length;
-        const latencyAvg =
-            latencyWindow.length > 0
-                ? Math.round(latencyWindow.reduce((a, b) => a + b, 0) / latencyWindow.length)
-                : 0;
+        const latencyAvg = backoff.recentAvgMs();
         console.info('[cache] thumbnails sweep: pool snapshot', {
             activeFetches,
             cappedConcurrency,
@@ -649,6 +750,19 @@ export const runThumbnailsSweep = async (
     const work = async (workerId: number): Promise<void> => {
         while (cursor < pending.length) {
             if (signal.aborted) return;
+            // Connectivity gate: while offline, park here WITHOUT advancing the
+            // cursor or recording a failure. The item we would have fetched is
+            // still pending, so we resume from exactly where we stopped.
+            if (!getIsOnline()) {
+                workerStates[workerId] = {
+                    itemId: undefined,
+                    startedAt: Date.now(),
+                    status: 'paused (offline)',
+                };
+                await waitUntilOnline();
+                if (signal.aborted) return;
+                continue;
+            }
             maybeSnapshotPool();
             if (workerId >= cappedConcurrency) {
                 workerStates[workerId] = {
@@ -693,23 +807,41 @@ export const runThumbnailsSweep = async (
                     workerId,
                 });
             }, 5_000);
+            // `transient` outcomes (and thrown errors) must NOT count as a fast
+            // success for backoff recovery, even when they complete quickly.
+            let itemOutcome: UnitOutcome = 'transient';
             try {
-                const { bytes } =
+                const { bytes, outcome } =
                     cfg.mode === 'download'
                         ? await fetchDownloadUnit(next, template, signal)
                         : await fetchDownscaleUnit(next, template, cfg, signal);
+                itemOutcome = outcome;
                 bytesDownloaded += bytes;
-                if (bytes > 0) {
+                if (outcome === 'fetched') {
                     fetched += 1;
                     markUnitCached(next);
-                } else {
-                    // Treat a zero-byte result as a (negative-cached) skip so a
-                    // re-scan doesn't re-attempt it within the miss TTL.
+                } else if (outcome === 'missing') {
+                    // Authoritative 404 — a negative marker was written. Mark
+                    // the unit cached so a re-scan honors the miss TTL.
                     markUnitCached(next);
                     skipped += 1;
+                } else {
+                    // TRANSIENT failure (timeout / unreachable / non-404 HTTP /
+                    // decode error). NOTHING authoritative was written — do NOT
+                    // mark the unit cached. Leaving it pending means it is
+                    // retried later in the sweep and on the next launch, so a
+                    // network blip never strands an item as "no artwork".
+                    failed += 1;
+                    if (!getIsOnline()) {
+                        // The failure coincided with the link dropping. The
+                        // top-of-loop gate will park the next iteration; this
+                        // unit remains UNCACHED and is retried next launch.
+                        console.info('[sync] thumbnails sweep: fetch failed while offline', {
+                            itemId: next.itemId,
+                        });
+                    }
                 }
                 const elapsedMs = Date.now() - itemStart;
-                recordLatency(elapsedMs);
                 if (elapsedMs > 5_000) {
                     console.info('[cache] thumbnails sweep: slow item recovered', {
                         bytes,
@@ -720,7 +852,7 @@ export const runThumbnailsSweep = async (
                 }
             } catch (err) {
                 failed += 1;
-                recordLatency(Date.now() - itemStart);
+                itemOutcome = 'transient';
                 console.warn('[cache] thumbnails sweep: fetch failed', {
                     err: (err as Error).message,
                     item: next.itemId,
@@ -736,27 +868,23 @@ export const runThumbnailsSweep = async (
             done += 1;
             flushProgress();
 
-            // Adaptive concurrency: if rolling latency suggests the
-            // server is overloaded, halve effective concurrency and
-            // pause new dispatches briefly. Recover by ramping cap
-            // back up as latency drops.
+            // Adaptive concurrency. The controller halves the cap on overload
+            // and doubles it after a streak of fast items (symmetric, so a
+            // recovered server ramps back to the ceiling in a handful of items
+            // instead of the old +1-per-fast crawl that floored near 1 forever).
             const nowTs = Date.now();
-            if (shouldBackOff() && nowTs - lastBackoffAt > BACKOFF_PAUSE_MS * 2) {
-                lastBackoffAt = nowTs;
-                cappedConcurrency = Math.max(1, Math.floor(cappedConcurrency / 2));
+            const action = backoff.record(nowTs - itemStart, itemOutcome === 'transient', nowTs);
+            cappedConcurrency = backoff.cap;
+            if (action === 'backoff') {
                 console.warn('[cache] thumbnails sweep: backing off', {
-                    avgLatencyMs: Math.round(
-                        latencyWindow.reduce((a, b) => a + b, 0) / latencyWindow.length,
-                    ),
+                    avgLatencyMs: backoff.recentAvgMs(),
                     newCap: cappedConcurrency,
                 });
-                latencyWindow.length = 0;
                 await new Promise((r) => setTimeout(r, BACKOFF_PAUSE_MS));
-            } else if (cappedConcurrency < concurrency && latencyWindow.length >= BACKOFF_WINDOW) {
-                const avg = latencyWindow.reduce((a, b) => a + b, 0) / latencyWindow.length;
-                if (avg < BACKOFF_THRESHOLD_MS / 2) {
-                    cappedConcurrency = Math.min(concurrency, cappedConcurrency + 1);
-                }
+            } else if (action === 'rampup') {
+                console.info('[cache] thumbnails sweep: ramping up', {
+                    newCap: cappedConcurrency,
+                });
             }
 
             if (done >= 50 && failed / done > 0.25 && nowTs - lastAnomalyWarnAt > 10_000) {
@@ -774,7 +902,14 @@ export const runThumbnailsSweep = async (
         workers.push(work(i));
     }
 
-    await Promise.all(workers);
+    try {
+        await Promise.all(workers);
+    } finally {
+        // Tear down the connectivity subscription + abort wake-up so the
+        // sweep leaves no listeners behind (a leak across re-syncs).
+        unsubscribeOnline();
+        signal.removeEventListener('abort', onAbortWake);
+    }
 
     // Make sure the final tick lands in the store even if it would
     // have been throttled — the user should see the completed total.

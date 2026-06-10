@@ -1391,7 +1391,7 @@ export const resolveThumbnailWithBytes = async (
     variant: number | string,
     request: ImageRequest | string,
     options?: ResolveThumbnailOptions,
-): Promise<{ bytes: number; url: string }> => {
+): Promise<{ bytes: number; noArtwork?: boolean; url: string }> => {
     const { credentials, headers, url } = normaliseRequest(request);
     const db = getActiveCacheDb();
     if (!db) return { bytes: 0, url };
@@ -1423,7 +1423,13 @@ export const resolveThumbnailWithBytes = async (
     const task = inFlight.get(dedupKey);
     if (!task) return { bytes: 0, url };
     const result = await task;
-    return { bytes: result.bytes, url };
+    // Surface `noArtwork` so the sweep can tell an AUTHORITATIVE miss (fresh
+    // 404 / negative-cache marker — safe to mark the unit done) apart from a
+    // TRANSIENT failure (timeout / network drop — `bytes: 0` with no
+    // `noArtwork`), which must be retried rather than recorded as a permanent
+    // skip. Without this both look identical (`bytes: 0`) and a network blip
+    // mid-sweep silently strands items as "no artwork" for the rest of the run.
+    return { bytes: result.bytes, noArtwork: result.noArtwork, url };
 };
 
 /**

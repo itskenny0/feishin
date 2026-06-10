@@ -3,6 +3,8 @@ import type { EntityType } from '../types';
 
 import { useCacheStore } from '../store';
 
+import { getIsOnline, subscribeIsOnline } from '/@/renderer/lib/network-status';
+
 export interface RunSweepArgs<TItem> {
     ctx: SweepContext;
     // Optional delta-sync params. When `deltaCutoffMs` is set, the
@@ -83,6 +85,55 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
 
     const actions = useCacheStore.getState().actions;
 
+    // Connectivity gate. While offline the page loop parks BEFORE issuing the
+    // next fetch — no network request, no failure recording — and resumes from
+    // the same `startIndex` cursor once connectivity returns. The persisted
+    // syncMeta checkpoint is untouched while parked, so an app kill mid-pause
+    // resumes from the last committed page just like any other restart.
+    const onlineWaiters = new Set<() => void>();
+    const onAbortWake = (): void => {
+        for (const wake of [...onlineWaiters]) wake();
+    };
+    signal.addEventListener('abort', onAbortWake);
+    const unsubscribeOnline = subscribeIsOnline(() => {
+        for (const wake of [...onlineWaiters]) wake();
+    });
+    // Idempotent teardown of the connectivity subscription + abort wake-up.
+    // Called on every exit path so a sweep never leaks a listener across
+    // re-syncs / app lifetime.
+    let cleanedUp = false;
+    const cleanup = (): void => {
+        if (cleanedUp) return;
+        cleanedUp = true;
+        unsubscribeOnline();
+        signal.removeEventListener('abort', onAbortWake);
+    };
+    const waitUntilOnline = async (
+        emitPaused: () => void,
+        emitResumed: () => void,
+    ): Promise<void> => {
+        if (getIsOnline() || signal.aborted) return;
+        console.info(`[sync] sweep:${entity} connectivity lost — pausing`, { startIndex });
+        emitPaused();
+        while (!signal.aborted && !getIsOnline()) {
+            await new Promise<void>((resolve) => {
+                const wake = (): void => {
+                    onlineWaiters.delete(wake);
+                    clearTimeout(timer);
+                    resolve();
+                };
+                const timer = setTimeout(wake, 1_000);
+                onlineWaiters.add(wake);
+            });
+        }
+        if (!signal.aborted) {
+            console.info(`[sync] sweep:${entity} connectivity returned — resuming`, {
+                startIndex,
+            });
+            emitResumed();
+        }
+    };
+
     // Resume from where a previous sweep left off. Delta sync ignores
     // the resume marker because it walks the newest-first ordering
     // from page 0 — the previous resume marker was based on a
@@ -130,6 +181,45 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
 
     let pageIndex = 0;
     while (!signal.aborted) {
+        // Park here while offline — BEFORE incrementing pageIndex or touching
+        // the network — and resume from the same `startIndex` once online.
+        const pageTotalForPause = total !== undefined ? Math.ceil(total / pageSize) : undefined;
+        await waitUntilOnline(
+            () =>
+                actions.setSweep({
+                    entity,
+                    progress: {
+                        bytesDownloaded,
+                        bytesPerSec: 0,
+                        done: itemsDone,
+                        estimatedTotalBytes: undefined,
+                        itemsPerSec: 0,
+                        pageIndex: pageIndex + 1,
+                        pageTotal: pageTotalForPause,
+                        paused: 'offline',
+                        phase: 'fetching',
+                        startedAt: sweepStartedAt,
+                        total,
+                    },
+                }),
+            () =>
+                actions.setSweep({
+                    entity,
+                    progress: {
+                        bytesDownloaded,
+                        bytesPerSec: 0,
+                        done: itemsDone,
+                        estimatedTotalBytes: undefined,
+                        itemsPerSec: 0,
+                        pageIndex: pageIndex + 1,
+                        pageTotal: pageTotalForPause,
+                        phase: 'fetching',
+                        startedAt: sweepStartedAt,
+                        total,
+                    },
+                }),
+        );
+        if (signal.aborted) break;
         pageIndex += 1;
         const pageTotal = total !== undefined ? Math.ceil(total / pageSize) : undefined;
         const pageStartedAt = Date.now();
@@ -167,6 +257,7 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
         } catch (err) {
             if ((err as Error)?.name === 'AbortError' || signal.aborted) {
                 console.info(`[cache] sweep:${entity} aborted during fetch`, { startIndex });
+                cleanup();
                 return;
             }
             if (isSweepNetworkError(err)) {
@@ -177,9 +268,11 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
                         startIndex,
                     },
                 );
+                cleanup();
                 return;
             }
             console.warn(`[cache] sweep:${entity} page failed`, { error: err, startIndex });
+            cleanup();
             throw err;
         }
 
@@ -358,12 +451,14 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
         } catch (err) {
             if ((err as Error)?.name === 'AbortError' || signal.aborted) {
                 console.info(`[cache] sweep:${entity} aborted during write`, { startIndex });
+                cleanup();
                 return;
             }
             console.warn(`[cache] sweep:${entity} page transaction failed`, {
                 error: (err as Error)?.message,
                 startIndex,
             });
+            cleanup();
             throw err;
         }
 
@@ -414,6 +509,7 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
 
     if (signal.aborted) {
         console.info(`[cache] sweep:${entity} aborted`, { itemsDone, startIndex });
+        cleanup();
         return;
     }
 
@@ -448,4 +544,5 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
     }
     actions.setHydrationState(entity, 'full');
     actions.setSweep(undefined);
+    cleanup();
 };

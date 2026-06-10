@@ -109,6 +109,13 @@ export interface SweepProgress {
     // slow page fetch doesn't look like a stall. Undefined for sweeps
     // that don't have a discrete fetch phase (e.g. the thumbnail
     // worker pool).
+    // Set to 'offline' while the sweep is parked waiting for connectivity to
+    // return (network-status reported the link/server down). The cursor is
+    // preserved; the sweep resumes from the exact same position once online.
+    // The dashboard surfaces this as "paused (offline)" so a deliberate pause
+    // doesn't look like a stall. Undefined while the sweep is actively making
+    // (or attempting) progress.
+    paused?: 'offline';
     phase?: 'fetching' | 'processing';
     startedAt: number;
     total: number | undefined;
