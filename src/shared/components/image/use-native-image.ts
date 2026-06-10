@@ -27,6 +27,11 @@ type ThumbnailUrlAcquirer = (
 // caller must release) when the cover is already held in memory, undefined
 // otherwise. Lets an already-cached cover paint with NO loading state.
 type ThumbnailUrlPeeker = (itemId: string, variant: string) => string | undefined;
+// Non-acquiring membership probe: true when a live shared URL exists for the
+// (item, variant). Takes NO reference — purely a hint for consumers (e.g.
+// `<BaseImage>` skipping its load debounce / viewport wait when the cover
+// would paint synchronously anyway).
+type ThumbnailUrlProber = (itemId: string, variant: string) => boolean;
 // The releaser MUST be keyed by the SAME (itemId, variant) the URL was
 // acquired with — two surfaces of one item at different variants each own
 // their own shared URL + refcount. Releasing by bare itemId would
@@ -38,10 +43,21 @@ type ThumbnailUrlReleaser = (itemId: string, variant: string) => void;
 // Matches the resolver's own DEFAULT_VARIANT — the full-resolution cover.
 const DEFAULT_VARIANT = 'fullScreen';
 
+/**
+ * Sentinel "URL" the thumbnail resolver returns when the server has
+ * AUTHORITATIVELY said this item has no artwork (a 404, possibly served
+ * from the negative cache). Consumers jump straight to their error /
+ * placeholder state instead of fetching the raw URL — that fetch 404s
+ * again online and hangs for the full timeout against an unreachable
+ * server. Never a routable URL.
+ */
+export const NO_ARTWORK_URL = 'feishin://no-artwork';
+
 let resolveThumbnailRef: null | ThumbnailResolver = null;
 let acquireThumbnailUrlRef: null | ThumbnailUrlAcquirer = null;
 let releaseThumbnailUrlRef: null | ThumbnailUrlReleaser = null;
 let peekThumbnailUrlRef: null | ThumbnailUrlPeeker = null;
+let probeThumbnailUrlRef: null | ThumbnailUrlProber = null;
 
 export const registerThumbnailResolver = (fn: null | ThumbnailResolver): void => {
     resolveThumbnailRef = fn;
@@ -51,11 +67,23 @@ export const registerThumbnailUrlCache = (
     acquire: null | ThumbnailUrlAcquirer,
     release: null | ThumbnailUrlReleaser,
     peek: null | ThumbnailUrlPeeker = null,
+    probe: null | ThumbnailUrlProber = null,
 ): void => {
     acquireThumbnailUrlRef = acquire;
     releaseThumbnailUrlRef = release;
     peekThumbnailUrlRef = peek;
+    probeThumbnailUrlRef = probe;
 };
+
+/**
+ * True when a live shared blob: URL is already held in memory for this
+ * (item, variant) — i.e. `useNativeImage` would paint it synchronously via
+ * the peek fast path with no async hop. Never takes a reference. Consumers
+ * use it to skip first-load niceties (debounce, viewport gating) that only
+ * make sense when the image would otherwise hit Dexie or the network.
+ */
+export const hasSharedThumbnailUrl = (itemId: string, variant?: string): boolean =>
+    probeThumbnailUrlRef?.(itemId, variant ?? DEFAULT_VARIANT) ?? false;
 
 // Resolve via the shared refcounted cache when available. Returns the
 // shared (already-refcounted) URL on a hit, or undefined on a miss so the
@@ -308,6 +336,17 @@ export function useNativeImage({
                                 URL.revokeObjectURL(cached);
                             }
                         }
+                        return;
+                    }
+                    if (cached === NO_ARTWORK_URL) {
+                        // Authoritative "this item has no artwork" (negative
+                        // cache / fresh 404). Surface the unloader NOW —
+                        // fetching the raw URL would 404 again online and
+                        // hang for the full timeout against an unreachable
+                        // server, pinning the cell in a skeleton.
+                        loadedRequestSignatureRef.current = requestSignature;
+                        setState({ status: 'error' });
+                        onFetchErrorRef.current?.();
                         return;
                     }
                     if (cached) {

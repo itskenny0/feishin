@@ -10,12 +10,21 @@ import { useEffect, useState } from 'react';
 
 import { resolveThumbnail } from './images';
 
+import { NO_ARTWORK_URL } from '/@/shared/components/image/use-native-image';
+
 export interface CachedImageProps extends ImgHTMLAttributes<HTMLImageElement> {
     itemId: string;
     placeholder?: string;
     size: number;
     src: string;
     style?: CSSProperties;
+    // Surface bucket to resolve against (`table` / `itemCard` / `header` /
+    // `sidebar` / `fullScreen`). Without it the numeric `size` collapses to
+    // the `fullScreen` bucket — which is NOT pre-cached by default, so every
+    // render paid a network fetch for the original even when a pre-sized
+    // cover sat in Dexie. Small-thumbnail callers should pass the bucket
+    // that matches what the sweep actually caches.
+    variant?: string;
 }
 
 export const CachedImage = ({
@@ -26,6 +35,7 @@ export const CachedImage = ({
     size,
     src,
     style,
+    variant,
     ...rest
 }: CachedImageProps) => {
     const [resolved, setResolved] = useState<string | undefined>(undefined);
@@ -34,10 +44,16 @@ export const CachedImage = ({
         let cancelled = false;
         let createdBlobUrl: string | undefined;
 
-        resolveThumbnail(itemId, size, src)
+        resolveThumbnail(itemId, variant ?? size, src)
             .then((url) => {
                 if (cancelled) {
                     if (url.startsWith('blob:')) URL.revokeObjectURL(url);
+                    return;
+                }
+                if (url === NO_ARTWORK_URL) {
+                    // Authoritative no-artwork: render the placeholder (or
+                    // nothing) instead of re-fetching a URL known to 404.
+                    setResolved(placeholder ?? '');
                     return;
                 }
                 if (url.startsWith('blob:')) createdBlobUrl = url;
@@ -53,7 +69,7 @@ export const CachedImage = ({
             cancelled = true;
             if (createdBlobUrl) URL.revokeObjectURL(createdBlobUrl);
         };
-    }, [itemId, size, src]);
+    }, [itemId, placeholder, size, src, variant]);
 
     return (
         <img

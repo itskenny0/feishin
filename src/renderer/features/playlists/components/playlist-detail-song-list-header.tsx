@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useLocation, useParams } from 'react-router';
 
 import { useIsEntityOfflineAvailable } from '/@/renderer/cache';
-import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
+import { useCachedItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { PageHeader } from '/@/renderer/components/page-header/page-header';
 import { useListContext } from '/@/renderer/context/list-context';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
@@ -167,7 +167,7 @@ export const PlaylistDetailSongListHeader = ({
         [detailQuery?.data, uploadPlaylistImageMutation],
     );
 
-    const imageUrl = useItemImageUrl({
+    const imageUrl = useCachedItemImageUrl({
         id: detailQuery?.data?.imageId || undefined,
         itemType: LibraryItem.PLAYLIST,
         type: 'header',

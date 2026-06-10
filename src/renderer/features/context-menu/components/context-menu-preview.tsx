@@ -118,6 +118,7 @@ export const ContextMenuPreview = ({ items, itemType }: ContextMenuPreviewProps)
                                     itemId={itemId}
                                     size={96}
                                     src={imageUrl}
+                                    variant="itemCard"
                                 />
                             ) : (
                                 <img alt={itemName} className={styles.image} src={imageUrl ?? ''} />

@@ -6,7 +6,7 @@ import { generatePath, Link } from 'react-router';
 
 import styles from './sidebar-playlist-list.module.css';
 
-import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
+import { ItemImage } from '/@/renderer/components/item-image/item-image';
 import { ContextMenuController } from '/@/renderer/features/context-menu/context-menu-controller';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
 import { openCreatePlaylistModal } from '/@/renderer/features/playlists/components/create-playlist-form';
@@ -40,7 +40,6 @@ import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { ButtonProps } from '/@/shared/components/button/button';
 import { Group } from '/@/shared/components/group/group';
 import { Icon } from '/@/shared/components/icon/icon';
-import { Image } from '/@/shared/components/image/image';
 import { LoadingOverlay } from '/@/shared/components/loading-overlay/loading-overlay';
 import { Text } from '/@/shared/components/text/text';
 import { useLocalStorage } from '/@/shared/hooks/use-local-storage';
@@ -265,12 +264,6 @@ export const PlaylistRowButton = memo(
             [player, serverId],
         );
 
-        const imageUrl = useItemImageUrl({
-            id: item.imageId || undefined,
-            itemType: LibraryItem.PLAYLIST,
-            type: 'table',
-        });
-
         const isDimmed = isDragging || (isSmartPlaylist && isAddDragActive);
 
         return (
@@ -312,7 +305,13 @@ export const PlaylistRowButton = memo(
                 ) : (
                     <>
                         <div className={styles.rowGroup}>
-                            <Image containerClassName={styles.imageContainer} src={imageUrl} />
+                            <ItemImage
+                                containerClassName={styles.imageContainer}
+                                enableDebounce={false}
+                                id={item.imageId}
+                                itemType={LibraryItem.PLAYLIST}
+                                type="table"
+                            />
                             <div className={styles.metadata}>
                                 <Text className={styles.name} fw={500} size="md">
                                     {name}

@@ -13,7 +13,7 @@ import { useLocation } from 'react-router';
 
 import styles from './full-screen-player.module.css';
 
-import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
+import { useCachedItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { SONG_TABLE_COLUMNS } from '/@/renderer/components/item-list/item-table-list/default-columns';
 import { FullScreenPlayerImage } from '/@/renderer/features/player/components/full-screen-player-image';
 import { FullScreenPlayerQueue } from '/@/renderer/features/player/components/full-screen-player-queue';
@@ -89,13 +89,13 @@ const BackgroundImage = memo(({ dynamicBackground, dynamicIsImage }: BackgroundI
     const currentSong = usePlayerSong();
     const { nextSong } = usePlayerData();
 
-    const currentImageUrl = useItemImageUrl({
+    const currentImageUrl = useCachedItemImageUrl({
         id: currentSong?.imageId || undefined,
         itemType: LibraryItem.SONG,
         type: 'itemCard',
     });
 
-    const nextImageUrl = useItemImageUrl({
+    const nextImageUrl = useCachedItemImageUrl({
         id: nextSong?.imageId || undefined,
         itemType: LibraryItem.SONG,
         type: 'itemCard',
@@ -592,7 +592,7 @@ interface PlayerContainerProps {
 const PlayerContainer = memo(
     ({ children, dynamicBackground, dynamicIsImage, windowBarStyle }: PlayerContainerProps) => {
         const currentSong = usePlayerSong();
-        const imageUrl = useItemImageUrl({
+        const imageUrl = useCachedItemImageUrl({
             id: currentSong?.imageId || undefined,
             imageUrl: currentSong?.imageUrl,
             itemType: LibraryItem.SONG,

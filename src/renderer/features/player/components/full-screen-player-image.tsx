@@ -6,7 +6,7 @@ import { generatePath, Link } from 'react-router';
 
 import styles from './full-screen-player-image.module.css';
 
-import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
+import { useCachedItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { useActiveNowPlayingItem } from '/@/renderer/features/jellyfin-remote-target/hooks/use-active-player-source';
 import {
     useIsRadioActive,
@@ -118,14 +118,14 @@ export const FullScreenPlayerImage = () => {
 
     const isPlayingRadio = isRadioActive && isRadioPlaying;
 
-    const currentImageUrl = useItemImageUrl({
+    const currentImageUrl = useCachedItemImageUrl({
         id: currentSong?.imageId || undefined,
         itemType: LibraryItem.SONG,
         serverId: currentSong?._serverId,
         type: 'fullScreenPlayer',
     });
 
-    const nextImageUrl = useItemImageUrl({
+    const nextImageUrl = useCachedItemImageUrl({
         id: nextSong?.imageId || undefined,
         itemType: LibraryItem.SONG,
         serverId: nextSong?._serverId,

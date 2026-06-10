@@ -16,7 +16,7 @@ import { useTranslation } from 'react-i18next';
 
 import styles from './mobile-fullscreen-player.module.css';
 
-import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
+import { useCachedItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { ContextMenuController } from '/@/renderer/features/context-menu/context-menu-controller';
 import { useActiveNowPlayingItem } from '/@/renderer/features/jellyfin-remote-target/hooks/use-active-player-source';
 import { useHasLyrics } from '/@/renderer/features/lyrics/api/lyrics-api';
@@ -197,13 +197,13 @@ const BackgroundImage = memo(({ dynamicBackground, dynamicIsImage }: BackgroundI
     const currentSong = usePlayerSong();
     const { nextSong } = usePlayerData();
 
-    const currentImageUrl = useItemImageUrl({
+    const currentImageUrl = useCachedItemImageUrl({
         id: currentSong?.imageId || undefined,
         itemType: LibraryItem.SONG,
         type: 'itemCard',
     });
 
-    const nextImageUrl = useItemImageUrl({
+    const nextImageUrl = useCachedItemImageUrl({
         id: nextSong?.imageId || undefined,
         itemType: LibraryItem.SONG,
         type: 'itemCard',
@@ -441,7 +441,7 @@ const MobilePlayerContainer = memo(
         swipeY,
     }: DismissibleMobilePlayerContainerProps) => {
         const currentSong = usePlayerSong();
-        const imageUrl = useItemImageUrl({
+        const imageUrl = useCachedItemImageUrl({
             id: currentSong?.imageId || undefined,
             imageUrl: currentSong?.imageUrl,
             itemType: LibraryItem.SONG,

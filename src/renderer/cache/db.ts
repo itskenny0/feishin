@@ -432,7 +432,47 @@ export const openCacheDb = async (
     }
     active = { db, key: k };
     lastOpenError = undefined;
+    resolveActiveDbWaiters(db);
     return db;
+};
+
+// Boot-race bridge. The lifecycle opens the active DB in an async effect
+// AFTER first render, so the very first wave of image resolves (home page
+// covers on a cold start) used to see `getActiveCacheDb() === undefined`
+// and fall straight to the network even when every cover was cached.
+// `awaitActiveCacheDb` lets the resolver wait briefly for that first open
+// instead of giving up — waiters resolve the moment openCacheDb succeeds,
+// or with `undefined` after the timeout (cache disabled, open failed).
+let activeDbWaiters: ((db: LibraryCacheDb | undefined) => void)[] = [];
+
+const resolveActiveDbWaiters = (db: LibraryCacheDb): void => {
+    if (activeDbWaiters.length === 0) return;
+    const waiters = activeDbWaiters;
+    activeDbWaiters = [];
+    for (const w of waiters) w(db);
+};
+
+export const awaitActiveCacheDb = async (
+    timeoutMs = 2_000,
+): Promise<LibraryCacheDb | undefined> => {
+    const current = active?.db;
+    if (current) return current;
+    return new Promise<LibraryCacheDb | undefined>((resolve) => {
+        let settled = false;
+        const timer = setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            activeDbWaiters = activeDbWaiters.filter((w) => w !== waiter);
+            resolve(undefined);
+        }, timeoutMs);
+        const waiter = (db: LibraryCacheDb | undefined) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            resolve(db);
+        };
+        activeDbWaiters.push(waiter);
+    });
 };
 
 /**

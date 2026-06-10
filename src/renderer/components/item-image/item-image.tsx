@@ -12,6 +12,7 @@ import {
     useSettingsStore,
 } from '/@/renderer/store';
 import { BaseImage, ImageProps } from '/@/shared/components/image/image';
+import { useNativeImage } from '/@/shared/components/image/use-native-image';
 import { ExplicitStatus, ImageRequest, LibraryItem } from '/@/shared/types/domain-types';
 
 const getUnloaderIcon = (itemType: LibraryItem) => {
@@ -132,6 +133,29 @@ export const useItemImageUrl = (args: UseItemImageUrlProps) => {
             }) || undefined
         );
     }, [args.serverId, id, imageUrl, itemType, serverId, size, sizeByType, useRemoteUrl]);
+};
+
+/**
+ * Cache-backed variant of `useItemImageUrl` for consumers that render a bare
+ * `<img>`/`<motion.img>` instead of `<ItemImage>` (the full-screen player's
+ * crossfade machinery, the mobile cover swiper). Resolves through the SAME
+ * pipeline `<BaseImage>` uses — synchronous shared-URL peek, refcounted
+ * acquire, Dexie thumbnail lookup, nearest-larger fallback — and returns a
+ * displayable URL string (a `blob:` URL on any cache hit, the network URL
+ * as last resort, `undefined` while resolving / on error).
+ *
+ * Before this hook these surfaces fed the RAW server URL into the DOM, so
+ * every track change re-downloaded the cover and offline sessions showed no
+ * artwork at all even with a fully-synced thumbnail cache.
+ */
+export const useCachedItemImageUrl = (args: UseItemImageUrlProps): string | undefined => {
+    const request = useItemImageRequest(args);
+    const { displaySrc } = useNativeImage({
+        enabled: true,
+        fetchPriority: 'high',
+        request,
+    });
+    return displaySrc;
 };
 
 export const useItemImageRequest = (args: UseItemImageUrlProps) => {
