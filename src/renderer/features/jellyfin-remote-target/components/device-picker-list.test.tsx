@@ -45,12 +45,15 @@ const makeDevice = (overrides: Partial<RemoteDevice> = {}): RemoteDevice => {
     };
 };
 
-const setHideNonMqtt = (hide: boolean) => {
+const setHideNonMqtt = (hide: boolean, mqttConfigured = true) => {
     const prev = useSettingsStore.getState();
     useSettingsStore.setState({
         ...prev,
         peerSync: {
             ...prev.peerSync,
+            // The filter is only meaningful when the MQTT transport is
+            // configured; tests default to "configured".
+            enabled: mqttConfigured,
             jellyfinRemoteEnabled: true,
             onboarded: true,
             ui: {
@@ -135,6 +138,19 @@ describe('DevicePickerList', () => {
         expect(screen.queryByText(/No MQTT peers found/i)).toBeNull();
         // "This device" + the one surviving MQTT row.
         expect(screen.getAllByRole('option')).toHaveLength(2);
+    });
+
+    it('(e) filter on but MQTT transport disabled: the filter is inert', () => {
+        const devices = [makeDevice(), makeDevice()];
+        act(() => useRemoteTargetStore.getState().actions.setDeviceList(devices));
+        // hideNonMqttDevices defaults ON now — but with peer-sync OFF there
+        // is no MQTT lane at all, so filtering would hide EVERY device.
+        setHideNonMqtt(true, false);
+
+        renderList();
+
+        expect(screen.getAllByRole('option')).toHaveLength(devices.length + 1);
+        expect(screen.queryByText(/No MQTT peers found/i)).toBeNull();
     });
 
     it('(d) filter on: the selected target stays visible even without MQTT', () => {

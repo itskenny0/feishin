@@ -1034,8 +1034,10 @@ const PeerSyncUiVisibilitySchema = z.object({
      *  received (i.e. another Feishin running peer-sync). Off = the picker
      *  also lists jellyfin-web, jellyfin-android-tv, and other clients
      *  reachable only via the Jellyfin Sessions API. The currently-selected
-     *  target always remains visible so toggling on doesn't drop it. */
-    hideNonMqttDevices: z.boolean().default(false),
+     *  target always remains visible so toggling on doesn't drop it.
+     *  Default ON — only takes effect while the MQTT transport is
+     *  configured (peerSync.enabled), so it is inert until then. */
+    hideNonMqttDevices: z.boolean().default(true),
     /** Lane badge (MQTT / Jellyfin) next to each peer row in the picker. */
     pickerBadges: z.boolean().default(true),
     /** Compact transport pill near the player bar. */
@@ -1088,7 +1090,7 @@ const PeerSyncSettingsSchema = z.object({
      *  particular Connect-related chrome can switch it off here. */
     ui: PeerSyncUiVisibilitySchema.default({
         connectButton: true,
-        hideNonMqttDevices: false,
+        hideNonMqttDevices: true,
         pickerBadges: true,
         statusPill: true,
     }),
@@ -2384,7 +2386,7 @@ const initialState: SettingsState = {
         transport: 'auto',
         ui: {
             connectButton: true,
-            hideNonMqttDevices: false,
+            hideNonMqttDevices: true,
             pickerBadges: true,
             statusPill: true,
         },
@@ -3483,10 +3485,20 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
+                if (version <= 59) {
+                    // 'Hide devices without MQTT' becomes the default. It only
+                    // takes effect while peer-sync is configured (the picker
+                    // gates the filter on peerSync.enabled), so flipping it on
+                    // is inert for Jellyfin-only installs.
+                    if (state.peerSync?.ui) {
+                        state.peerSync.ui.hideNonMqttDevices = true;
+                    }
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 59,
+            version: 60,
         },
     ),
 );

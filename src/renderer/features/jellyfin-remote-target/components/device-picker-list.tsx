@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 
 import styles from './device-picker.module.css';
 
+import { openTransportComparisonModal } from '/@/renderer/features/jellyfin-remote-target/components/transport-comparison';
 import { startConnectLifecycle } from '/@/renderer/features/jellyfin-remote-target/controller/connect-lifecycle';
 import { computeTransfer } from '/@/renderer/features/jellyfin-remote-target/controller/remote-play';
 import { sessionsPoller } from '/@/renderer/features/jellyfin-remote-target/controller/sessions-poller';
@@ -236,25 +237,31 @@ export const DevicePickerList = ({ onClose, variant = 'desktop' }: DevicePickerL
                     icon: deviceTypeIcon(d),
                     lane: pickTransportByJellyfinDeviceId(d.deviceId),
                 }))
-                // "Hide devices without MQTT" — opt-in filter that removes
+                // "Hide devices without MQTT" — filter that removes
                 // Jellyfin-only rows (jellyfin-web, jellyfin-android-tv,
                 // other Feishins that haven't published presence yet) from
-                // the picker. The currently-selected target always stays
-                // visible so the user doesn't lose it mid-toggle.
+                // the picker. Default ON, but only MEANINGFUL when the MQTT
+                // transport is configured — with peer-sync off there is no
+                // MQTT lane at all and the filter would hide every device.
+                // The currently-selected target always stays visible so the
+                // user doesn't lose it mid-toggle.
                 .filter(({ device, lane }) => {
-                    if (!peerSync.ui.hideNonMqttDevices) return true;
+                    if (!peerSync.enabled || !peerSync.ui.hideNonMqttDevices) return true;
                     if (target.deviceId === device.deviceId) return true;
                     return lane === 'mqtt';
                 }),
         // eslint-disable-next-line react-hooks/exhaustive-deps
-        [devices, peerSync.ui.hideNonMqttDevices, target.deviceId, transportRev],
+        [devices, peerSync.enabled, peerSync.ui.hideNonMqttDevices, target.deviceId, transportRev],
     );
 
     // The unfiltered list was non-empty but the MQTT filter zeroed it — drive
     // a distinct empty-state so the picker doesn't silently look broken after
     // the user toggles "Hide devices without MQTT".
     const filteredToZero =
-        devices.length > 0 && visibleRows.length === 0 && peerSync.ui.hideNonMqttDevices;
+        devices.length > 0 &&
+        visibleRows.length === 0 &&
+        peerSync.enabled &&
+        peerSync.ui.hideNonMqttDevices;
 
     return (
         <div
@@ -271,6 +278,28 @@ export const DevicePickerList = ({ onClose, variant = 'desktop' }: DevicePickerL
                             defaultValue: 'Connect to a device',
                         })}
                     </Text>
+                    <ActionIcon
+                        aria-label={t('page.remoteTarget.compare.title', {
+                            defaultValue: 'MQTT vs Jellyfin remote',
+                        })}
+                        icon="info"
+                        iconProps={{ size: 'sm' }}
+                        onClick={() =>
+                            openTransportComparisonModal(
+                                t('page.remoteTarget.compare.title', {
+                                    defaultValue: 'MQTT vs Jellyfin remote',
+                                }),
+                            )
+                        }
+                        size="sm"
+                        tooltip={{
+                            label: t('page.remoteTarget.compare.title', {
+                                defaultValue: 'MQTT vs Jellyfin remote',
+                            }),
+                            openDelay: 400,
+                        }}
+                        variant="subtle"
+                    />
                     <ActionIcon
                         aria-busy={refreshing}
                         aria-label={t('common.refresh')}
@@ -292,6 +321,22 @@ export const DevicePickerList = ({ onClose, variant = 'desktop' }: DevicePickerL
                             })}
                         </Text>
                     )}
+                    <ActionIcon
+                        aria-label={t('page.remoteTarget.compare.title', {
+                            defaultValue: 'MQTT vs Jellyfin remote',
+                        })}
+                        icon="info"
+                        iconProps={{ size: 'sm' }}
+                        onClick={() =>
+                            openTransportComparisonModal(
+                                t('page.remoteTarget.compare.title', {
+                                    defaultValue: 'MQTT vs Jellyfin remote',
+                                }),
+                            )
+                        }
+                        size="sm"
+                        variant="subtle"
+                    />
                     <ActionIcon
                         aria-busy={refreshing}
                         aria-label={t('common.refresh')}

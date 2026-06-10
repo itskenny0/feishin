@@ -630,7 +630,7 @@ export const PeerSyncSettings = memo(() => {
                             description: t('setting.peerSyncHideNonMqttDevices', {
                                 context: 'description',
                                 defaultValue:
-                                    'Filter the device picker to only show Feishin peers reachable over MQTT. The currently-connected device stays visible regardless.',
+                                    'Filter the device picker to only show Feishin peers reachable over MQTT (on by default; only applies while peer-sync is enabled). MQTT peers react instantly and mirror the full queue, while Jellyfin-only clients update via slower server polling with less accurate state. The currently-connected device stays visible regardless.',
                             }),
                             title: t('setting.peerSyncHideNonMqttDevices', {
                                 defaultValue: 'Hide devices without MQTT',
