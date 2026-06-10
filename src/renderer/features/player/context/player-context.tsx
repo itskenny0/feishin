@@ -33,7 +33,7 @@ import {
 import { selectOfflinePlayable } from '/@/renderer/features/player/utils/offline-play-guard';
 import { playlistsQueries } from '/@/renderer/features/playlists/api/playlists-api';
 import { songsQueries } from '/@/renderer/features/songs/api/songs-api';
-import { getIsOnline } from '/@/renderer/lib/network-status';
+import { getNavigatorOnline } from '/@/renderer/lib/network-status';
 import { AddToQueueType, usePlayerActions, useSettingsStore } from '/@/renderer/store';
 import { useAuthStore } from '/@/renderer/store/auth.store';
 import { usePlayerStoreBase } from '/@/renderer/store/player.store';
@@ -299,7 +299,12 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
             const songKeys = useCacheStore.getState().offlineAvailability.songKeys;
             const guard = selectOfflinePlayable({
                 isAvailable: (serverId, songId) => songKeys.has(`${serverId}:${songId}`),
-                online: getIsOnline(),
+                // HARD offline only (OS link down). The combined signal also
+                // flips on a stalled IMAGE fetch (markServerUnreachable), and
+                // an art-host hiccup must never block audio playback — when
+                // the link is up we let the play attempt run and surface its
+                // own error path instead.
+                online: getNavigatorOnline(),
                 playSongId,
                 songs: data,
             });
@@ -763,7 +768,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
     // blocked. No-op while online or when the song is downloaded.
     const blockOfflineJump = useCallback(
         (song: undefined | { _serverId: string; id: string }): boolean => {
-            if (!song || getIsOnline()) return false;
+            if (!song || getNavigatorOnline()) return false;
             const songKeys = useCacheStore.getState().offlineAvailability.songKeys;
             if (songKeys.has(`${song._serverId}:${song.id}`)) return false;
             console.warn('[offline-ux] queue jump blocked — song not available offline');

@@ -124,11 +124,26 @@ interface SharedListMaps {
 }
 const sharedListMaps = new Map<string, SharedListMaps>();
 
+// Each distinct (server, itemType, query) combination gets its own entry —
+// including every incremental search keystroke. Cap the registry LRU-style
+// (Map insertion order; re-acquire moves a key to the back) so a long
+// session of varied searches can't accumulate unbounded populated maps.
+const SHARED_LIST_MAPS_CAP = 8;
+
 const acquireSharedListMaps = (key: string): SharedListMaps => {
     let entry = sharedListMaps.get(key);
-    if (!entry) {
-        entry = { dataMap: new Map(), idToIndexMap: new Map() };
+    if (entry) {
+        // Refresh recency.
+        sharedListMaps.delete(key);
         sharedListMaps.set(key, entry);
+        return entry;
+    }
+    entry = { dataMap: new Map(), idToIndexMap: new Map() };
+    sharedListMaps.set(key, entry);
+    while (sharedListMaps.size > SHARED_LIST_MAPS_CAP) {
+        const oldest = sharedListMaps.keys().next().value;
+        if (oldest === undefined) break;
+        sharedListMaps.delete(oldest);
     }
     return entry;
 };
