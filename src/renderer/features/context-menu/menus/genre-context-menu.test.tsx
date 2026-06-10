@@ -33,6 +33,9 @@ vi.mock('/@/renderer/features/context-menu/actions/add-to-playlist-action', () =
 vi.mock('/@/renderer/features/context-menu/actions/offline-download-action', () => ({
     OfflineDownloadAction: () => null,
 }));
+vi.mock('/@/renderer/features/context-menu/actions/pin-action', () => ({
+    PinAction: () => null,
+}));
 vi.mock('/@/renderer/features/context-menu/components/context-menu-preview', () => ({
     ContextMenuPreview: () => null,
 }));

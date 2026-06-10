@@ -12,6 +12,7 @@ import {
     GenreGridSkeleton,
     HomeSkeleton,
 } from '/@/renderer/features/home/components/home-skeleton';
+import { PinnedShelf } from '/@/renderer/features/home/components/pinned-shelf';
 import { ArtistShelf } from '/@/renderer/features/home/components/spotify-home/artist-shelf';
 import { HomeEmpty } from '/@/renderer/features/home/components/spotify-home/home-empty';
 import { HomeHero } from '/@/renderer/features/home/components/spotify-home/home-hero';
@@ -88,6 +89,14 @@ const HomeRoute = () => {
     // entire shelf tree.
     const rows: ReactNode[] = useMemo(() => {
         const built: ReactNode[] = [];
+
+        // 0. Pinned items — always the very top of the stack. Renders
+        // nothing when the current server has no pins.
+        built.push(
+            <ComponentErrorBoundary key="pinned">
+                <PinnedShelf containerQuery={containerQuery} />
+            </ComponentErrorBoundary>,
+        );
 
         // 1. Hero greeting + atmosphere.
         built.push(

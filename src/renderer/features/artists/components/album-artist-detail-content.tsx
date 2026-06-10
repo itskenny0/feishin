@@ -60,6 +60,7 @@ import {
 } from '/@/renderer/store';
 import {
     useArtistItems,
+    useArtistPageSections,
     useArtistRadioCount,
     useExternalLinks,
     useGenresDisplay,
@@ -104,38 +105,50 @@ interface AlbumArtistActionButtonsProps {
     artistDiscographyLink: string;
     artistSongsLink: string;
     onArtistRadio?: () => void;
+    showArtistRadio?: boolean;
+    showDiscographyButtons?: boolean;
 }
 
 const AlbumArtistActionButtons = ({
     artistDiscographyLink,
     artistSongsLink,
     onArtistRadio,
+    showArtistRadio = true,
+    showDiscographyButtons = true,
 }: AlbumArtistActionButtonsProps) => {
     const { t } = useTranslation();
     const isPlayerFetching = useIsPlayerFetching();
 
+    if (!showDiscographyButtons && !showArtistRadio) {
+        return null;
+    }
+
     return (
         <>
             <Group gap="lg">
-                <Button
-                    component={Link}
-                    p={0}
-                    size="compact-md"
-                    to={artistDiscographyLink}
-                    variant="transparent"
-                >
-                    {String(t('page.albumArtistDetail.viewDiscography')).toUpperCase()}
-                </Button>
-                <Button
-                    component={Link}
-                    p={0}
-                    size="compact-md"
-                    to={artistSongsLink}
-                    variant="transparent"
-                >
-                    {String(t('page.albumArtistDetail.viewAllTracks')).toUpperCase()}
-                </Button>
-                {onArtistRadio && (
+                {showDiscographyButtons && (
+                    <Button
+                        component={Link}
+                        p={0}
+                        size="compact-md"
+                        to={artistDiscographyLink}
+                        variant="transparent"
+                    >
+                        {String(t('page.albumArtistDetail.viewDiscography')).toUpperCase()}
+                    </Button>
+                )}
+                {showDiscographyButtons && (
+                    <Button
+                        component={Link}
+                        p={0}
+                        size="compact-md"
+                        to={artistSongsLink}
+                        variant="transparent"
+                    >
+                        {String(t('page.albumArtistDetail.viewAllTracks')).toUpperCase()}
+                    </Button>
+                )}
+                {showArtistRadio && onArtistRadio && (
                     <Button
                         disabled={isPlayerFetching}
                         leftSection={
@@ -1075,6 +1088,7 @@ export const AlbumArtistDetailContent = ({
     detailQuery,
 }: AlbumArtistDetailContentProps) => {
     const artistItems = useArtistItems();
+    const artistPageSections = useArtistPageSections();
     const artistRadioCount = useArtistRadioCount();
     const { externalLinks, lastFM, listenBrainz, musicBrainz, nativeSpotify, qobuz, spotify } =
         useExternalLinks();
@@ -1157,24 +1171,30 @@ export const AlbumArtistDetailContent = ({
                     artistDiscographyLink={artistDiscographyLink}
                     artistSongsLink={artistSongsLink}
                     onArtistRadio={handleArtistRadio}
+                    showArtistRadio={artistPageSections.artistRadio}
+                    showDiscographyButtons={artistPageSections.discographyButtons}
                 />
                 <Grid gap="2xl">
-                    <AlbumArtistMetadataGenres
-                        genres={detailQuery.data?.genres}
-                        order={genresOrder}
-                    />
-                    <AlbumArtistMetadataExternalLinks
-                        artistName={detailQuery.data?.name}
-                        externalLinks={externalLinks}
-                        lastFM={lastFM}
-                        listenBrainz={listenBrainz}
-                        mbzId={mbzId}
-                        musicBrainz={musicBrainz}
-                        nativeSpotify={nativeSpotify}
-                        order={externalLinksOrder}
-                        qobuz={qobuz}
-                        spotify={spotify}
-                    />
+                    {artistPageSections.genres && (
+                        <AlbumArtistMetadataGenres
+                            genres={detailQuery.data?.genres}
+                            order={genresOrder}
+                        />
+                    )}
+                    {artistPageSections.externalLinks && (
+                        <AlbumArtistMetadataExternalLinks
+                            artistName={detailQuery.data?.name}
+                            externalLinks={externalLinks}
+                            lastFM={lastFM}
+                            listenBrainz={listenBrainz}
+                            mbzId={mbzId}
+                            musicBrainz={musicBrainz}
+                            nativeSpotify={nativeSpotify}
+                            order={externalLinksOrder}
+                            qobuz={qobuz}
+                            spotify={spotify}
+                        />
+                    )}
                     {enabledItem.biography && (
                         <AlbumArtistMetadataBiography
                             artistName={detailQuery.data?.name}

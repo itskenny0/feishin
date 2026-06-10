@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import i18n, { languages } from '/@/i18n/i18n';
 import { ImageResolutionSettings } from '/@/renderer/features/settings/components/general/art-resolution-settings';
 import {
+    ArtistPageSectionsSettings,
     ArtistReleaseTypeSettings,
     ArtistSettings,
 } from '/@/renderer/features/settings/components/general/artist-settings';
@@ -1086,6 +1087,7 @@ export const ApplicationSettings = memo(() => {
                     <ImageResolutionSettings />
                     <HomeSettings />
                     <ArtistSettings />
+                    <ArtistPageSectionsSettings />
                     <ArtistReleaseTypeSettings />
                     <FullscreenPlayerSettings />
                     <PathSettings />

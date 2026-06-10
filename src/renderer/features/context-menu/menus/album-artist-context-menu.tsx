@@ -4,6 +4,7 @@ import { AddToPlaylistAction } from '/@/renderer/features/context-menu/actions/a
 import { DownloadAction } from '/@/renderer/features/context-menu/actions/download-action';
 import { GetInfoAction } from '/@/renderer/features/context-menu/actions/get-info-action';
 import { OfflineDownloadAction } from '/@/renderer/features/context-menu/actions/offline-download-action';
+import { PinAction } from '/@/renderer/features/context-menu/actions/pin-action';
 import { PlayAction } from '/@/renderer/features/context-menu/actions/play-action';
 import { PlayArtistRadioAction } from '/@/renderer/features/context-menu/actions/play-artist-radio-action';
 import { SetFavoriteAction } from '/@/renderer/features/context-menu/actions/set-favorite-action';
@@ -38,6 +39,8 @@ export const AlbumArtistContextMenu = ({ items, type }: AlbumArtistContextMenuPr
             <OfflineDownloadAction items={items} itemType={LibraryItem.ALBUM_ARTIST} />
             <DownloadAction ids={ids} />
             <ShareAction ids={ids} itemType={LibraryItem.ALBUM_ARTIST} />
+            <ContextMenu.Divider />
+            <PinAction items={items} itemType={LibraryItem.ALBUM_ARTIST} />
             <ContextMenu.Divider />
             <GetInfoAction disabled={items.length === 0} items={items} />
         </MenuContent>

@@ -1,0 +1,60 @@
+.card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--theme-spacing-sm);
+    width: 100%;
+}
+
+.image-wrapper {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1 / 1;
+}
+
+.image-button {
+    display: block;
+    width: 100%;
+    height: 100%;
+    cursor: pointer;
+    background: transparent;
+    border: none;
+    border-radius: var(--theme-radius-md);
+}
+
+.image-button:focus-visible {
+    outline: 2px solid var(--theme-colors-primary);
+    outline-offset: 2px;
+}
+
+.image,
+.round-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: var(--theme-radius-md);
+}
+
+.round-image {
+    border-radius: 50%;
+}
+
+.unpin-button {
+    position: absolute;
+    top: var(--theme-spacing-xs);
+    right: var(--theme-spacing-xs);
+    z-index: 2;
+    opacity: 0;
+    transition: opacity 0.15s ease-in-out;
+}
+
+.image-wrapper:hover .unpin-button,
+.image-wrapper:focus-within .unpin-button {
+    opacity: 1;
+}
+
+/* Always show the unpin affordance on touch / coarse-pointer devices */
+@media (hover: none), (pointer: coarse) {
+    .unpin-button {
+        opacity: 1;
+    }
+}

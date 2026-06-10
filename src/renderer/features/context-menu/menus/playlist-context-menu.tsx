@@ -5,6 +5,7 @@ import { DeletePlaylistAction } from '/@/renderer/features/context-menu/actions/
 import { EditPlaylistAction } from '/@/renderer/features/context-menu/actions/edit-playlist-action';
 import { GetInfoAction } from '/@/renderer/features/context-menu/actions/get-info-action';
 import { OfflineDownloadAction } from '/@/renderer/features/context-menu/actions/offline-download-action';
+import { PinAction } from '/@/renderer/features/context-menu/actions/pin-action';
 import { PlayAction } from '/@/renderer/features/context-menu/actions/play-action';
 import { ContextMenuPreview } from '/@/renderer/features/context-menu/components/context-menu-preview';
 import { MenuContent } from '/@/renderer/features/context-menu/components/menu-content';
@@ -42,6 +43,8 @@ export const PlaylistContextMenu = ({ items, type }: PlaylistContextMenuProps) =
             <ContextMenu.Divider />
             <EditPlaylistAction disabled={!canEditPlaylist} items={items} />
             <DeletePlaylistAction disabled={!canDeletePlaylist} items={items} />
+            <ContextMenu.Divider />
+            <PinAction items={items} itemType={LibraryItem.PLAYLIST} />
             <ContextMenu.Divider />
             <GetInfoAction disabled={items.length === 0} items={items} />
         </MenuContent>

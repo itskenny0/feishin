@@ -475,6 +475,12 @@ export const GeneralSettingsSchema = z.object({
     artistBackground: z.boolean(),
     artistBackgroundBlur: z.number(),
     artistItems: z.array(SortableItemSchema(ArtistItemSchema)),
+    artistPageSections: z.object({
+        artistRadio: z.boolean(),
+        discographyButtons: z.boolean(),
+        externalLinks: z.boolean(),
+        genres: z.boolean(),
+    }),
     artistRadioCount: z.number(),
     artistReleaseTypeItems: z.array(SortableItemSchema(ArtistReleaseTypeItemSchema)),
     autoSave: AutoSaveSchema,
@@ -1596,6 +1602,12 @@ const initialState: SettingsState = {
         artistBackground: true,
         artistBackgroundBlur: 3,
         artistItems,
+        artistPageSections: {
+            artistRadio: false,
+            discographyButtons: false,
+            externalLinks: false,
+            genres: false,
+        },
         artistRadioCount: 20,
         artistReleaseTypeItems,
         autoSave: {
@@ -3461,10 +3473,20 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
+                if (version <= 58) {
+                    // Introduce per-section toggles for the artist detail page.
+                    // Default everything to hidden so existing users opt-in explicitly.
+                    if (!state.general.artistPageSections) {
+                        state.general.artistPageSections = {
+                            ...initialState.general.artistPageSections,
+                        };
+                    }
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 58,
+            version: 59,
         },
     ),
 );
@@ -3730,6 +3752,9 @@ export const usePrefetchUpcomingLyricsCount = () =>
 
 export const useArtistRadioCount = () =>
     useSettingsStore((state) => state.general.artistRadioCount, shallow);
+
+export const useArtistPageSections = () =>
+    useSettingsStore((state) => state.general.artistPageSections, shallow);
 
 export const useArtistBackground = () =>
     useSettingsStore(
