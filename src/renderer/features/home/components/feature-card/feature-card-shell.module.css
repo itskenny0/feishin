@@ -199,8 +199,14 @@
 }
 
 .subtitle {
+    /* One line, ellipsized — feature subtitles can carry long joined artist
+       strings and must never wrap into a wall of text. */
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
     font-size: 0.85rem;
     color: rgb(255 255 255 / 80%);
+    white-space: nowrap;
     text-shadow: 0 0 6px rgb(0 0 0 / 50%);
 }
 

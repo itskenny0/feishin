@@ -17,6 +17,12 @@ interface JoinedArtistsProps {
     artistName: string;
     artists: AlbumArtist[] | RelatedAlbumArtist[] | RelatedArtist[];
     linkProps?: Partial<Omit<TextProps, 'children' | 'component' | 'to'>>;
+    /**
+     * Cap the number of rendered artist names; the rest collapse into a
+     * muted "+N" suffix. Card subtitles use this so a 50-artist compilation
+     * can't blow the layout up with a wall of names.
+     */
+    maxArtists?: number;
     readOnly?: boolean;
     rootTextProps?: Partial<Omit<TextProps, 'children' | 'component'>>;
 }
@@ -25,9 +31,49 @@ const JoinedArtistsComponent = ({
     artistName,
     artists,
     linkProps,
+    maxArtists,
     readOnly = false,
     rootTextProps,
 }: JoinedArtistsProps) => {
+    // Over-cap renders never use the substring-matching path below — a giant
+    // compilation's joined artistName is exactly what must not hit the DOM.
+    const namedArtists = artists.filter((artist) => Boolean(artist.name));
+    if (maxArtists !== undefined && namedArtists.length > maxArtists) {
+        const visible = namedArtists.slice(0, maxArtists);
+        const hidden = namedArtists.length - visible.length;
+        return (
+            <Text component="span" {...rootTextProps}>
+                {visible.map((artist, index) => (
+                    <Fragment key={artist.id || `artist-${index}`}>
+                        {index > 0 && ', '}
+                        {artist.id && !readOnly ? (
+                            <Text
+                                component={Link}
+                                fw={500}
+                                isLink
+                                onFocus={preloadAlbumArtistDetail}
+                                onMouseEnter={preloadAlbumArtistDetail}
+                                to={generatePath(AppRoute.LIBRARY_ALBUM_ARTISTS_DETAIL, {
+                                    albumArtistId: artist.id,
+                                })}
+                                {...linkProps}
+                            >
+                                {artist.name}
+                            </Text>
+                        ) : (
+                            <Text component="span" fw={500} {...linkProps}>
+                                {artist.name}
+                            </Text>
+                        )}
+                    </Fragment>
+                ))}
+                <Text component="span" isMuted>
+                    {` +${hidden}`}
+                </Text>
+            </Text>
+        );
+    }
+
     const parts: (
         | string
         | {

@@ -1233,6 +1233,9 @@ export const getDataRows = (type?: 'compact' | 'default' | 'poster'): DataRow[] 
                             artistName={data.albumArtistName}
                             artists={data.albumArtists}
                             linkProps={{ fw: 400, isMuted: true }}
+                            // Card subtitles are one line — a 50-artist
+                            // compilation must not render a wall of names.
+                            maxArtists={4}
                             rootTextProps={{
                                 fw: 400,
                                 isMuted: type === 'compact' ? false : true,
@@ -1249,21 +1252,30 @@ export const getDataRows = (type?: 'compact' | 'default' | 'poster'): DataRow[] 
         {
             format: (data) => {
                 if ('artists' in data && Array.isArray(data.artists)) {
-                    return (data as Album | Song).artists.map((artist, index) => (
-                        <Fragment key={artist.id}>
-                            <Link
-                                onFocus={preloadAlbumArtistDetail}
-                                onMouseEnter={preloadAlbumArtistDetail}
-                                state={{ item: artist }}
-                                to={generatePath(AppRoute.LIBRARY_ALBUM_ARTISTS_DETAIL, {
-                                    albumArtistId: artist.id,
-                                })}
-                            >
-                                {artist.name}
-                            </Link>
-                            {index < (data as Album | Song).artists.length - 1 && <Separator />}
-                        </Fragment>
-                    ));
+                    // Card subtitles are one line — cap big compilations the
+                    // same way the albumArtists row does.
+                    const all = (data as Album | Song).artists;
+                    const visible = all.slice(0, 4);
+                    return (
+                        <>
+                            {visible.map((artist, index) => (
+                                <Fragment key={artist.id}>
+                                    <Link
+                                        onFocus={preloadAlbumArtistDetail}
+                                        onMouseEnter={preloadAlbumArtistDetail}
+                                        state={{ item: artist }}
+                                        to={generatePath(AppRoute.LIBRARY_ALBUM_ARTISTS_DETAIL, {
+                                            albumArtistId: artist.id,
+                                        })}
+                                    >
+                                        {artist.name}
+                                    </Link>
+                                    {index < visible.length - 1 && <Separator />}
+                                </Fragment>
+                            ))}
+                            {all.length > visible.length && ` +${all.length - visible.length}`}
+                        </>
+                    );
                 }
                 return '';
             },
