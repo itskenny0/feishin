@@ -206,6 +206,26 @@ describe('applyPeerCommand verb mapping', () => {
         expect(usePlayerStoreBase.getState().player.volume).toBe(35);
     });
 
+    it('inbound control ends an active controller session (role exclusivity)', async () => {
+        const { useRemoteTargetStore } =
+            await import('/@/renderer/features/jellyfin-remote-target/store/remote-target-store');
+        const { getActiveController } =
+            await import('/@/renderer/features/peer-sync/controller/session-control-store');
+        useRemoteTargetStore.getState().actions.setTarget({
+            capabilities: [],
+            deviceId: 'other-dev',
+            deviceName: 'Other',
+            sessionId: 'sess-x',
+        });
+
+        const r = applyPeerCommand(SENDER, buildCommand('pause'));
+
+        expect(r.reason).toBe('applied');
+        // The picked target is dropped and the inbound controller is recorded.
+        expect(useRemoteTargetStore.getState().targetDeviceId).toBeNull();
+        expect(getActiveController()).toBe(SENDER.peerId);
+    });
+
     it('drops volume commands on Android (OS rocker is the only attenuator)', () => {
         __setDropVolumeCommandsForTests(true);
         try {

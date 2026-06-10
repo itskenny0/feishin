@@ -34,13 +34,17 @@
  * during that interval are NOT swallowed — only the state-tick that the
  * inbound command itself caused.
  */
+import i18n from '/@/i18n/i18n';
+import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
 import { markInboundApply } from '/@/renderer/features/peer-sync/controller/peer-loop-guard';
+import { recordInboundControl } from '/@/renderer/features/peer-sync/controller/session-control-store';
 import { pickTransport } from '/@/renderer/features/peer-sync/controller/transport-selector';
 import { PeerAddress } from '/@/renderer/features/peer-sync/protocol/topics';
 import { PeerCommand, PeerRepeatMode } from '/@/renderer/features/peer-sync/types';
 import { useAuthStore } from '/@/renderer/store/auth.store';
 import { usePlayerStoreBase } from '/@/renderer/store/player.store';
 import { useSettingsStore } from '/@/renderer/store/settings.store';
+import { toast } from '/@/shared/components/toast/toast';
 import { QueueSong, ServerType } from '/@/shared/types/domain-types';
 import { Play, PlayerRepeat, PlayerShuffle } from '/@/shared/types/types';
 
@@ -180,6 +184,26 @@ export const applyPeerCommand = (from: PeerAddress, cmd: PeerCommand): ApplyResu
     // publishOwnState fire-through that reads the guard inside this tick
     // will see "yes, suppress".
     markInboundApply();
+
+    // Exclusivity: a device being remote-controlled cannot stay a remote
+    // CONTROLLER (the roles would echo into each other). Stamp the active
+    // controller — the device picker consults it — and if this device has a
+    // target picked, drop that session with a toast.
+    recordInboundControl(from.peerId);
+    const remoteTarget = useRemoteTargetStore.getState();
+    if (remoteTarget.targetDeviceId) {
+        remoteTarget.actions.clearTarget();
+        useSettingsStore.getState().actions.setSettings({
+            playback: { remoteTargetDeviceId: null, remoteTargetDeviceName: null },
+        });
+        log('cleared remote target: inbound control takeover', { from: from.peerId });
+        toast.warn({
+            message: i18n.t('page.remoteTarget.controlTakeover', {
+                defaultValue:
+                    'Another device took control of this player — remote control of the other device has ended.',
+            }),
+        });
+    }
 
     const actions = usePlayerStoreBase.getState();
     switch (cmd.k) {

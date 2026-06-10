@@ -13,6 +13,7 @@ import { sessionsPoller } from '/@/renderer/features/jellyfin-remote-target/cont
 import { useRemoteDevices } from '/@/renderer/features/jellyfin-remote-target/hooks/use-remote-devices';
 import { useRemoteTarget } from '/@/renderer/features/jellyfin-remote-target/hooks/use-remote-target';
 import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
+import { getActiveController } from '/@/renderer/features/peer-sync/controller/session-control-store';
 import {
     pickTransportByJellyfinDeviceId,
     subscribe as subscribeTransport,
@@ -24,6 +25,7 @@ import { useTimestampStoreBase } from '/@/renderer/store/timestamp.store';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { AppIcon, Icon } from '/@/shared/components/icon/icon';
 import { Text } from '/@/shared/components/text/text';
+import { toast } from '/@/shared/components/toast/toast';
 import { ServerListItemWithCredential, ServerType } from '/@/shared/types/domain-types';
 
 /**
@@ -130,6 +132,20 @@ export const DevicePickerList = ({ onClose, variant = 'desktop' }: DevicePickerL
     };
 
     const selectDevice = (d: RemoteDevice) => {
+        // A device that is currently BEING remote-controlled cannot also act
+        // as a controller — the two roles are mutually exclusive (the session
+        // would echo into itself). Block the pick and tell the user why.
+        const activeController = getActiveController();
+        if (activeController) {
+            toast.warn({
+                message: t('page.remoteTarget.beingControlled', {
+                    defaultValue:
+                        'This device is being remote-controlled right now — it cannot control another player.',
+                }),
+            });
+            return;
+        }
+
         const server = useAuthStore.getState().currentServer;
         const isJellyfin = !!server && server.type === ServerType.JELLYFIN && !!server.credential;
 
