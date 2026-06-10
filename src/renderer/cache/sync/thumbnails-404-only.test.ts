@@ -45,7 +45,7 @@ vi.mock('/@/renderer/cache/db', () => ({
 vi.mock('/@/renderer/cache/images', () => ({
     MAX_CACHE_SIZE: 1024,
     // The sync barrel's import graph also pulls these; inert stubs suffice.
-    resolveThumbnail: vi.fn(async (_i: string, _v: string, r: { url?: string } | string) =>
+    resolveThumbnail: vi.fn(async (_i: string, _v: string, r: string | { url?: string }) =>
         typeof r === 'string' ? r : (r?.url ?? ''),
     ),
     // Whatever the test put in resolverResult — lets us model the download
