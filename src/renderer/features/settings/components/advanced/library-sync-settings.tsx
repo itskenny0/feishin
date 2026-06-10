@@ -19,6 +19,7 @@ import {
     openCacheDb,
     resetCacheDb,
     useCacheStore,
+    usePlatformCacheCapability,
     useSmoothSweep,
 } from '/@/renderer/cache';
 import {
@@ -112,7 +113,11 @@ const confirmAction = (params: {
 export const LibrarySyncSettings = () => {
     const { t } = useTranslation();
     const currentServer = useAuthStore((s) => s.currentServer);
-    const cacheAvailable = useCacheStore((s) => s.cacheAvailable);
+    // PLATFORM capability, not the store's `cacheAvailable` (that flag is
+    // forced false while the cache is disabled — gating on it hid the enable
+    // toggle behind "unavailable on this platform" for every opted-out
+    // install; Windows portable, 2026-06-10).
+    const platformCapable = usePlatformCacheCapability();
     const sweep = useCacheStore((s) => s.sweep);
     const smoothSweep = useSmoothSweep();
     const entityCounts = useCacheStore((s) => s.entityCounts);
@@ -512,7 +517,7 @@ export const LibrarySyncSettings = () => {
         );
     }
 
-    if (cacheAvailable === false) {
+    if (platformCapable === false) {
         return (
             <Stack gap="md">
                 <Title order={3}>{t('page.setting.librarySync')}</Title>
@@ -864,7 +869,7 @@ export const LibrarySyncSettings = () => {
                         })}
                     </Text>
                     <Text c="dimmed" size="sm">
-                        {cacheAvailable === undefined ? '—' : cacheAvailable ? 'yes' : 'no'}
+                        {platformCapable === null ? '—' : platformCapable ? 'yes' : 'no'}
                     </Text>
                 </Group>
                 <Group gap="md" justify="space-between">
