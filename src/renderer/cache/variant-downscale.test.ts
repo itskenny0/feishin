@@ -192,21 +192,37 @@ describe('downscaleToVariants', () => {
         expect(encodeCalls[0].type).toBe('image/jpeg');
     });
 
-    it('auto-falls back to jpeg when webp encoding is unsupported', async () => {
+    it('auto-falls back to jpeg when webp encoding is unsupported, logging once for the whole session', async () => {
         unsupportedMimes = new Set(['image/webp']);
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
         const src = makeBlob('image/jpeg');
 
-        const result = await downscaleToVariants(src, [{ px: 80, variant: 'table' }], {
+        // Multiple variants in one call, plus a second call, all fall back to
+        // jpeg — but the webp-unsupported warning must fire exactly ONCE per
+        // session, not once per variant (regression: 5 lines every launch).
+        const result = await downscaleToVariants(
+            src,
+            [
+                { px: 80, variant: 'table' },
+                { px: 160, variant: 'itemCard' },
+                { px: 320, variant: 'detail' },
+            ],
+            { format: 'webp', quality: 82 },
+        );
+        await downscaleToVariants(src, [{ px: 80, variant: 'table' }], {
             format: 'webp',
             quality: 82,
         });
 
         expect(result.get('table')?.format).toBe('jpeg');
         expect(result.get('table')?.blob.type).toBe('image/jpeg');
-        // Tried webp first, then jpeg.
-        expect(encodeCalls.map((c) => c.type)).toEqual(['image/webp', 'image/jpeg']);
-        expect(warn).toHaveBeenCalledWith(expect.stringContaining('[image-variants]'));
+        expect(result.get('itemCard')?.format).toBe('jpeg');
+        expect(result.get('detail')?.format).toBe('jpeg');
+
+        const fallbackWarns = warn.mock.calls.filter(
+            (c) => typeof c[0] === 'string' && c[0].includes('webp unsupported'),
+        );
+        expect(fallbackWarns).toHaveLength(1);
     });
 
     it('returns an empty map for an empty variant list', async () => {

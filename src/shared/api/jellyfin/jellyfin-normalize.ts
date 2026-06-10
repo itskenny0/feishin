@@ -441,6 +441,48 @@ const normalizePlaylist = (
     };
 };
 
+/**
+ * Whether a Jellyfin playlist is an audio playlist Feishin can present.
+ *
+ * Jellyfin has no first-class "smart playlist" type, but it DOES return
+ * non-audio playlists (video/photo/mixed containers) from the same
+ * `getPlaylistList` endpoint. Feishin is an audio client, so those are dropped
+ * client-side (they used to be excluded via a `MediaTypes:Audio` request param,
+ * but that made the server report a non-zero TotalRecordCount with an empty
+ * Items array — see the getPlaylistList controller comment). A playlist counts
+ * as audio when its `MediaType` is "Audio"; Jellyfin reports the dominant media
+ * type of the container's contents here.
+ */
+export const isAudioPlaylist = (item: z.infer<typeof jfType._response.playlist>): boolean =>
+    item.MediaType === 'Audio';
+
+/**
+ * Normalize a page of the Jellyfin playlist-list response, dropping non-audio
+ * playlists AND keeping `totalRecordCount` consistent with what's actually
+ * returned.
+ *
+ * Residual imperfection: Jellyfin's `TotalRecordCount` counts ALL playlists
+ * across the whole result set, but we can only see (and therefore subtract) the
+ * non-audio ones present in THIS page. So the corrected total is exact for a
+ * single-page (unpaginated) fetch — which is how the playlist list is loaded —
+ * but for a paginated fetch it only removes the dropped count of the current
+ * page, not non-audio playlists living on other pages. This is still strictly
+ * better than the old behavior (header overcount + trailing skeleton rows that
+ * never fill) and avoids a second full-scan request just to count.
+ */
+export const normalizePlaylistList = (
+    body: z.infer<typeof jfType._response.playlistList>,
+    server: null | ServerListItem,
+): { items: Playlist[]; totalRecordCount: number } => {
+    const audioItems = body.Items.filter(isAudioPlaylist);
+    const droppedInPage = body.Items.length - audioItems.length;
+    const totalRecordCount = Math.max(0, (body.TotalRecordCount ?? 0) - droppedInPage);
+    return {
+        items: audioItems.map((item) => normalizePlaylist(item, server)),
+        totalRecordCount,
+    };
+};
+
 const normalizeMusicFolder = (item: z.infer<typeof jfType._response.musicFolder>): MusicFolder => {
     return {
         id: item.Id,
@@ -529,5 +571,6 @@ export const jfNormalize = {
     genre: normalizeGenre,
     musicFolder: normalizeMusicFolder,
     playlist: normalizePlaylist,
+    playlistList: normalizePlaylistList,
     song: normalizeSong,
 };

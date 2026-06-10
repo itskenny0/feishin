@@ -47,8 +47,10 @@ vi.mock('/@/renderer/features/trackmap/api/trackmap-cache', () => ({
 }));
 
 import {
+    __resetUndecodableCacheForTests,
     __setConstrainedMemoryPlatformForTests,
     analyzeSong,
+    TrackmapUndecodableError,
 } from '/@/renderer/features/trackmap/analysis/analyze-song';
 
 const sampleData = (): TrackmapData => ({
@@ -78,6 +80,7 @@ beforeEach(() => {
 afterEach(() => {
     vi.unstubAllGlobals();
     __setConstrainedMemoryPlatformForTests(false);
+    __resetUndecodableCacheForTests();
 });
 
 // A fetch Response stub that exposes its payload via blob() (the size-guard
@@ -233,5 +236,97 @@ describe('analyzeSong — lazy cache behaviour', () => {
             'message',
             expect.any(Function),
         );
+    });
+});
+
+describe('analyzeSong — undecodable-source negative cache', () => {
+    it("throws TrackmapUndecodableError on a codec the WebView can't decode, and does NOT retry the same song", async () => {
+        mocks.cacheGet.mockResolvedValue(null);
+        mocks.decodeAudioData.mockReset();
+        (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(responseOfSize(8));
+        // decodeAudioData rejects with EncodingError for unsupported codecs.
+        mocks.decodeAudioData.mockRejectedValue(
+            new DOMException('Unable to decode audio data', 'EncodingError'),
+        );
+
+        const args = {
+            allowNetwork: true,
+            sensitivity: 3,
+            serverId: 'srv',
+            signal: new AbortController().signal,
+            songId: 'song-bad-codec',
+            streamUrl: 'https://example/stream',
+        };
+
+        // First play: decode fails → typed error + negative-cache write.
+        await expect(
+            analyzeSong({ ...args, signal: new AbortController().signal }),
+        ).rejects.toThrow(TrackmapUndecodableError);
+        expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+        expect(mocks.decodeAudioData).toHaveBeenCalledTimes(1);
+
+        // Second play of the SAME song: short-circuits to null WITHOUT
+        // re-fetching the bytes or re-running the doomed decode.
+        const second = await analyzeSong({ ...args, signal: new AbortController().signal });
+        expect(second).toBeNull();
+        expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+        expect(mocks.decodeAudioData).toHaveBeenCalledTimes(1);
+        // A failed decode must never be persisted to the real (positive) cache.
+        expect(mocks.cacheSet).not.toHaveBeenCalled();
+    });
+
+    it('does NOT negative-cache when the decode was aborted mid-flight', async () => {
+        mocks.cacheGet.mockResolvedValue(null);
+        (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(responseOfSize(8));
+        const ac = new AbortController();
+        // Simulate an abort landing during decode: reject with AbortError AND
+        // flip the signal so the guard re-throws it unchanged.
+        mocks.decodeAudioData.mockImplementation(() => {
+            ac.abort();
+            return Promise.reject(new DOMException('aborted', 'AbortError'));
+        });
+
+        await expect(
+            analyzeSong({
+                allowNetwork: true,
+                sensitivity: 3,
+                serverId: 'srv',
+                signal: ac.signal,
+                songId: 'song-aborted',
+                streamUrl: 'https://example/stream',
+            }),
+        ).rejects.toMatchObject({ name: 'AbortError' });
+
+        // A retry of the same song must run again (not negative-cached) — the
+        // abort wasn't a codec failure.
+        mocks.decodeAudioData.mockReset();
+        mocks.decodeAudioData.mockResolvedValue({
+            getChannelData: () => new Float32Array(8),
+            length: 8,
+            numberOfChannels: 1,
+            sampleRate: 8000,
+        });
+        let onMessage: ((e: MessageEvent<TrackmapWorkerResponse>) => void) | null = null;
+        mocks.workerInstance.addEventListener.mockImplementation(
+            (type: string, handler: (e: MessageEvent<TrackmapWorkerResponse>) => void) => {
+                if (type === 'message') onMessage = handler;
+            },
+        );
+        const produced = sampleData();
+        mocks.workerInstance.postMessage.mockImplementation((req: TrackmapWorkerRequest) => {
+            onMessage?.({
+                data: { data: produced, requestId: req.requestId, type: 'result' },
+            } as MessageEvent<TrackmapWorkerResponse>);
+        });
+
+        const retry = await analyzeSong({
+            allowNetwork: true,
+            sensitivity: 3,
+            serverId: 'srv',
+            signal: new AbortController().signal,
+            songId: 'song-aborted',
+            streamUrl: 'https://example/stream',
+        });
+        expect(retry).toBe(produced);
     });
 });

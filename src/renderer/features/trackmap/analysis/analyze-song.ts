@@ -84,6 +84,34 @@ let currentJob: null | {
 
 let nextRequestId = 1;
 
+// Per-session negative cache for sources the WebView can't decode. Some codecs
+// (or container/codec combos a given platform's decodeAudioData rejects with
+// EncodingError) will fail identically on every play of the same song, so
+// without this every replay re-fetches the bytes and re-runs the doomed decode.
+// Keyed by `${serverId}:${songId}`; in-memory only (a failure isn't worth a
+// persisted row, and a fresh session may run on a platform that CAN decode it).
+const undecodableSongs = new Set<string>();
+const undecodableKey = (serverId: string, songId: string): string => `${serverId}:${songId}`;
+
+/** Test-only reset for the per-session undecodable negative cache. */
+export const __resetUndecodableCacheForTests = (): void => {
+    undecodableSongs.clear();
+};
+
+/**
+ * Thrown when `decodeAudioData` rejects for a source this WebView can't decode.
+ * Carries `expected: true` so the consumer can log it at info level (playback
+ * is unaffected — only the trackmap visual is skipped) and avoid retrying.
+ */
+export class TrackmapUndecodableError extends Error {
+    readonly expected = true;
+    constructor(songId: string, cause?: unknown) {
+        super(`trackmap: source for song ${songId} could not be decoded by this WebView`);
+        this.name = 'TrackmapUndecodableError';
+        this.cause = cause;
+    }
+}
+
 /** Downmix any-channel AudioBuffer to a single mono Float32Array. */
 const downmixToMono = (audioBuffer: AudioBuffer): Float32Array => {
     const channels = audioBuffer.numberOfChannels;
@@ -123,6 +151,10 @@ export const analyzeSong = async (args: AnalyzeArgs): Promise<null | TrackmapDat
     const cached = await trackmapCache.get(serverId, songId, sensitivity);
     if (cached) return cached;
 
+    // A prior decode of this exact source already failed this session — don't
+    // re-fetch the bytes and re-run a decode we know will fail again.
+    if (undecodableSongs.has(undecodableKey(serverId, songId))) return null;
+
     if (!allowNetwork) return null;
     if (!streamUrl) return null;
 
@@ -146,7 +178,22 @@ export const analyzeSong = async (args: AnalyzeArgs): Promise<null | TrackmapDat
 
     // Decode on the main thread (where OfflineAudioContext is available).
     // decodeAudioData detaches `arrayBuffer` so the caller must not reuse it.
-    const audioBuffer = await getDecodeCtx().decodeAudioData(arrayBuffer);
+    let audioBuffer: AudioBuffer;
+    try {
+        audioBuffer = await getDecodeCtx().decodeAudioData(arrayBuffer);
+    } catch (err) {
+        // An abort that landed mid-decode is not a codec failure — re-throw it
+        // unchanged so the consumer treats it as a cancellation, not an error,
+        // and we DON'T poison the negative cache for a song that's fine.
+        if (signal.aborted || (err instanceof DOMException && err.name === 'AbortError')) {
+            throw err;
+        }
+        // decodeAudioData rejects (typically EncodingError) for codecs/containers
+        // this WebView can't decode. Remember the failure for the session so we
+        // don't re-fetch + re-decode on every replay of the same track.
+        undecodableSongs.add(undecodableKey(serverId, songId));
+        throw new TrackmapUndecodableError(songId, err);
+    }
     if (signal.aborted) throw new DOMException('aborted', 'AbortError');
 
     const monoSamples = downmixToMono(audioBuffer);

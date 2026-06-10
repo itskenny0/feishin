@@ -1172,10 +1172,20 @@ export const JellyfinController: InternalControllerEndpoint = {
             throw new Error('Failed to get playlist list');
         }
 
+        // Drop non-audio (e.g. video/mixed "smart") playlists client-side and
+        // keep totalRecordCount consistent with the filtered items, so the list
+        // header count is right and we don't allocate trailing skeleton rows
+        // that never fill. See normalizePlaylistList for the residual paging
+        // imperfection.
+        const { items, totalRecordCount } = jfNormalize.playlistList(
+            res.body,
+            apiClientProps.server,
+        );
+
         return {
-            items: res.body.Items.map((item) => jfNormalize.playlist(item, apiClientProps.server)),
+            items,
             startIndex: 0,
-            totalRecordCount: res.body.TotalRecordCount,
+            totalRecordCount,
         };
     },
     getPlaylistListCount: async ({ apiClientProps, query }) =>

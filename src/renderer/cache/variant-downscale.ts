@@ -42,6 +42,12 @@ export type VariantFormat = 'jpeg' | 'webp';
 const mimeFor = (format: VariantFormat): string =>
     format === 'webp' ? 'image/webp' : 'image/jpeg';
 
+// WebP-unsupported fallback is a per-WebView capability, not a per-variant one:
+// if one variant's webp encode fails, every other variant in the session will
+// fail the same way. Log the fallback ONCE per session instead of once per
+// variant (which spammed N lines on every launch of affected WebViews).
+let loggedWebpFallback = false;
+
 interface CanvasLike {
     convertToBlob?: (opts: { quality?: number; type?: string }) => Promise<Blob>;
     getContext: (id: '2d') => CanvasRenderingContext2D | null;
@@ -188,9 +194,12 @@ export const downscaleToVariants = async (
                 let producedFormat: VariantFormat = format;
 
                 if (!blob && format === 'webp') {
-                    console.warn(
-                        `[image-variants] webp unsupported, fell back to jpeg (variant "${variant}")`,
-                    );
+                    if (!loggedWebpFallback) {
+                        loggedWebpFallback = true;
+                        console.warn(
+                            '[image-variants] webp unsupported in this WebView, falling back to jpeg for all variants this session',
+                        );
+                    }
                     blob = await encodeCanvas(canvas, mimeFor('jpeg'), normalizedQuality);
                     producedFormat = 'jpeg';
                 }

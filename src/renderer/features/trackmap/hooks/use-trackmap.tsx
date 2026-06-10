@@ -4,7 +4,10 @@ import type { QueueSong } from '/@/shared/types/domain-types';
 import { useEffect, useState } from 'react';
 
 import { useSongUrl } from '/@/renderer/features/player/audio-player/hooks/use-stream-url';
-import { analyzeSong } from '/@/renderer/features/trackmap/analysis/analyze-song';
+import {
+    analyzeSong,
+    TrackmapUndecodableError,
+} from '/@/renderer/features/trackmap/analysis/analyze-song';
 import { useCurrentServer } from '/@/renderer/store/auth.store';
 import {
     useTrackmapEnabled,
@@ -66,7 +69,17 @@ export const useTrackmap = (song: null | QueueSong): UseTrackmapResult => {
             .catch((err) => {
                 if (ac.signal.aborted) return;
                 if (err instanceof DOMException && err.name === 'AbortError') return;
-                console.warn('[trackmap] analysis failed', err);
+                // Codecs the WebView can't decode are expected on some platforms
+                // and don't affect playback — only the trackmap visual is skipped
+                // (and the failure is negative-cached so it isn't retried). Log at
+                // info, not warn, so it doesn't read as a fault.
+                if (err instanceof TrackmapUndecodableError || err?.expected === true) {
+                    console.info(
+                        '[trackmap] skipping visual: source codec not decodable by this WebView (playback unaffected)',
+                    );
+                } else {
+                    console.warn('[trackmap] analysis failed', err);
+                }
                 setState({ data: null, status: 'error' });
             });
 

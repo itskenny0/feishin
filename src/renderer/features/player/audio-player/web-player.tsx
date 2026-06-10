@@ -468,8 +468,7 @@ export function WebPlayer() {
         if (rgEnabled && !webAudio && !loggedWebAudioGapRef.current) {
             loggedWebAudioGapRef.current = true;
             console.warn(
-                '[replay-gain] ReplayGain mode is "%s" but WebAudio is disabled; the web engine cannot apply per-song normalization. Enable WebAudio in playback settings for library-wide loudness consistency.',
-                playback.replayGainMode,
+                `[replay-gain] ReplayGain mode is "${playback.replayGainMode}" but WebAudio is disabled; the web engine cannot apply per-song normalization. Enable WebAudio in playback settings for library-wide loudness consistency.`,
             );
         }
         if (webAudio) {
