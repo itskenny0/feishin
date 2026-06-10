@@ -3,6 +3,7 @@ import { debounce } from 'lodash';
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 
 import { getItemImageUrl } from '/@/renderer/components/item-image/item-image';
+import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
 import { usePlayerEvents } from '/@/renderer/features/player/audio-player/hooks/use-player-events';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
 import {
@@ -317,6 +318,11 @@ export const useMediaSession = () => {
             if (isRadioActiveRef.current && isRadioPlayingRef.current) {
                 return;
             }
+            // While remote-controlling, the LOCAL playhead is meaningless —
+            // don't pin it to the lock screen under the remote metadata.
+            if (useRemoteTargetStore.getState().targetDeviceId) {
+                return;
+            }
             const song = usePlayerStore.getState().getCurrentSong();
             const durationMs = song?.duration ?? 0;
             if (!song || durationMs <= 0) {
@@ -357,6 +363,11 @@ export const useMediaSession = () => {
                 return;
             }
 
+            // The remote mirror owns the OS session while a target is active.
+            if (useRemoteTargetStore.getState().targetDeviceId) {
+                return;
+            }
+
             debouncedUpdateMetadata(song);
             // Re-publish position immediately on track change so the OS
             // scrubber jumps to 0 (or wherever the new track starts)
@@ -373,9 +384,53 @@ export const useMediaSession = () => {
                 return;
             }
 
+            // The remote mirror owns the OS session while a target is active.
+            if (useRemoteTargetStore.getState().targetDeviceId) {
+                return;
+            }
+
             mediaSession.playbackState = status === PlayerStatus.PLAYING ? 'playing' : 'paused';
 
             if (status === PlayerStatus.PLAYING) {
+                startPositionTicker();
+            } else {
+                clearPositionState();
+            }
+        });
+
+        // System-player follows the REMOTE session while a target is picked:
+        // the mirrored now-playing (full metadata + controller-loadable cover
+        // after queue hydration) and pause state drive the lock-screen /
+        // media-key UI. The transport handlers above already route to the
+        // remote dispatcher via the player context, so hardware keys control
+        // the target; this closes the loop on what the OS *shows*. When the
+        // target drops, repaint from the local player.
+        const unsubscribeRemote = useRemoteTargetStore.subscribe((s, prev) => {
+            if (!isMediaSessionEnabledRef.current || !mediaSession) {
+                return;
+            }
+            const isRemote = s.targetDeviceId !== null;
+            const wasRemote = prev.targetDeviceId !== null;
+            if (!isRemote && !wasRemote) return;
+
+            if (isRemote) {
+                const song = s.mirrored.nowPlayingItem;
+                if (!wasRemote || song !== prev.mirrored.nowPlayingItem) {
+                    debouncedUpdateMetadata((song ?? undefined) as QueueSong | undefined);
+                    clearPositionState();
+                }
+                const paused = s.mirrored.playState.isPaused;
+                if (!wasRemote || paused !== prev.mirrored.playState.isPaused) {
+                    mediaSession.playbackState = paused ? 'paused' : 'playing';
+                }
+                return;
+            }
+
+            // Target dropped — hand the OS session back to the local player.
+            debouncedUpdateMetadata(usePlayerStore.getState().getCurrentSong());
+            const localPlaying = usePlayerStore.getState().player.status === PlayerStatus.PLAYING;
+            mediaSession.playbackState = localPlaying ? 'playing' : 'paused';
+            if (localPlaying) {
                 startPositionTicker();
             } else {
                 clearPositionState();
@@ -392,6 +447,7 @@ export const useMediaSession = () => {
         return () => {
             unsubscribeCurrentSong();
             unsubscribeStatus();
+            unsubscribeRemote();
             clearPositionState();
         };
     }, [debouncedUpdateMetadata]);
