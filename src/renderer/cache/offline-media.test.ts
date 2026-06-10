@@ -27,6 +27,8 @@ const mocks = vi.hoisted(() => {
         setOfflineAvailability: vi.fn(),
         setOfflineMedia: vi.fn(),
         setOfflineSync: vi.fn(),
+        setOfflineTargetStatus: vi.fn(),
+        setOfflineTargetStatuses: vi.fn(),
     };
     // Mutable mirror of the store's availability slice so refreshOfflineAvailability's
     // "skip when unchanged" equality check has a previous value to compare against.

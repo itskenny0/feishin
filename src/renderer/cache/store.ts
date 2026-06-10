@@ -3,7 +3,7 @@ import { immer } from 'zustand/middleware/immer';
 import { shallow } from 'zustand/shallow';
 import { createWithEqualityFn } from 'zustand/traditional';
 
-import type { EntityType, HydrationState } from './types';
+import type { EntityType, HydrationState, OfflineTargetStatus } from './types';
 
 export interface CacheStoreActions {
     actions: {
@@ -15,6 +15,8 @@ export interface CacheStoreActions {
         setOfflineAvailability: (a: OfflineAvailability) => void;
         setOfflineMedia: (s: Partial<OfflineMediaStats>) => void;
         setOfflineSync: (s: CacheStoreState['offlineSync']) => void;
+        setOfflineTargetStatus: (key: string, status: OfflineTargetStatus) => void;
+        setOfflineTargetStatuses: (statuses: Record<string, OfflineTargetStatus>) => void;
         setPendingMutations: (n: number) => void;
         setSweep: (s: CacheStoreState['sweep']) => void;
     };
@@ -38,6 +40,12 @@ export interface CacheStoreState {
     // Live in-flight offline download (a single target syncs at a time).
     // Undefined when nothing is downloading.
     offlineSync: OfflineSyncProgress | undefined;
+    // Per-target download status (`${serverId}:${entityType}:${entityId}` →
+    // idle/syncing/partial/complete/error) so download buttons render
+    // spinner / checkmark states without each hitting Dexie. Seeded from the
+    // targets table on stats refresh; live transitions mirrored by the
+    // offline-media sync pipeline.
+    offlineTargetStatuses: Record<string, OfflineTargetStatus>;
     pendingMutations: number;
     sweep: undefined | { entity: EntityType; progress: SweepProgress };
 }
@@ -142,6 +150,14 @@ export const useCacheStore = createWithEqualityFn<CacheStoreActions & CacheStore
                     set((st) => {
                         st.offlineSync = s;
                     }),
+                setOfflineTargetStatus: (key, status) =>
+                    set((st) => {
+                        st.offlineTargetStatuses[key] = status;
+                    }),
+                setOfflineTargetStatuses: (statuses) =>
+                    set((st) => {
+                        st.offlineTargetStatuses = statuses;
+                    }),
                 setPendingMutations: (n) =>
                     set((st) => {
                         st.pendingMutations = n;
@@ -159,6 +175,7 @@ export const useCacheStore = createWithEqualityFn<CacheStoreActions & CacheStore
             offlineAvailability: { entityKeys: new Set(), songKeys: new Set() },
             offlineMedia: { bytesUsed: 0, itemsDownloaded: 0, targetCount: 0 },
             offlineSync: undefined,
+            offlineTargetStatuses: {},
             pendingMutations: 0,
             sweep: undefined,
         })),

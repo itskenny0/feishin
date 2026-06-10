@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 
 import styles from './library-header-bar.module.css';
 
+import { useOfflineTargetStatus } from '/@/renderer/cache';
 import {
     OfflineDownloadEntity,
     useOfflineDownload,
@@ -141,8 +142,17 @@ const OFFLINE_LIST_CONFIRM_THRESHOLD = 25;
 const OfflineHeaderButton = ({ source }: OfflineButtonProps) => {
     const { t } = useTranslation();
     const { available, download } = useOfflineDownload();
+    const serverId = useCurrentServerId();
+
+    // Detail pages target one entity — surface its download lifecycle on the
+    // button: spinner + disabled while syncing, checkmark once complete.
+    const entity = source.type === 'entity' ? source.entity : undefined;
+    const targetStatus = useOfflineTargetStatus(serverId, entity?.entityType, entity?.id);
+    const isDownloading = targetStatus === 'syncing';
+    const isComplete = targetStatus === 'complete';
 
     const handleClick = useCallback(async () => {
+        if (isDownloading) return;
         if (source.type === 'entity') {
             await download([source.entity]);
             return;
@@ -178,22 +188,26 @@ const OfflineHeaderButton = ({ source }: OfflineButtonProps) => {
         }
 
         await start();
-    }, [download, source, t]);
+    }, [download, isDownloading, source, t]);
 
     if (!available) return null;
 
+    const label = isComplete
+        ? t('page.contextMenu.downloaded', { defaultValue: 'Downloaded' })
+        : isDownloading
+          ? t('page.contextMenu.downloading', { defaultValue: 'Downloading…' })
+          : t('page.contextMenu.downloadForOffline', {
+                defaultValue: 'Download for offline',
+            });
+
     return (
         <ActionIcon
-            aria-label={t('page.contextMenu.downloadForOffline', {
-                defaultValue: 'Download for offline',
-            })}
-            icon="cache"
+            aria-label={label}
+            disabled={isDownloading}
+            icon={isComplete ? 'success' : 'cache'}
+            loading={isDownloading}
             onClick={() => void handleClick()}
-            tooltip={{
-                label: t('page.contextMenu.downloadForOffline', {
-                    defaultValue: 'Download for offline',
-                }),
-            }}
+            tooltip={{ label }}
             variant="subtle"
         />
     );

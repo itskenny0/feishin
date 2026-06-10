@@ -17,12 +17,14 @@ import styles from './offline-download-banner.module.css';
 import { cancelOfflineSync } from './offline-media';
 import { useSmoothOfflineSync } from './use-smooth-offline-sync';
 
+import { useIsMobileShell } from '/@/renderer/hooks/use-breakpoint';
 import { useSettingsStore } from '/@/renderer/store';
 import { Icon } from '/@/shared/components/icon/icon';
 
 export const OfflineDownloadBanner = () => {
     const { t } = useTranslation();
     const enabled = useSettingsStore((s) => s.localCache?.enabled === true);
+    const isMobileShell = useIsMobileShell();
     const sync = useSmoothOfflineSync();
 
     if (!enabled || !sync) return null;
@@ -56,6 +58,7 @@ export const OfflineDownloadBanner = () => {
                 name: sync.name,
             })}
             className={styles.banner}
+            data-position={isMobileShell ? 'top' : 'bottom'}
             role="status"
         >
             <Group align="center" gap="sm" wrap="nowrap">

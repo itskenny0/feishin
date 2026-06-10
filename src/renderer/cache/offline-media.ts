@@ -230,6 +230,13 @@ export const refreshOfflineStats = async (
             itemsDownloaded,
             targetCount: targets.length,
         });
+        // Seed/refresh the per-target status map so download buttons render
+        // checkmark/spinner states after a restart, not just live syncs.
+        const statuses: Record<string, OfflineTargetStatus> = {};
+        for (const target of targets) {
+            statuses[target.Key] = target.Status;
+        }
+        useCacheStore.getState().actions.setOfflineTargetStatuses(statuses);
     } catch (err) {
         console.warn(`${TAG} refreshOfflineStats failed`, err);
     }
@@ -328,6 +335,7 @@ export const syncTarget = async (args: SyncTargetArgs): Promise<OfflineTargetRow
             setSync(undefined);
         }
         await store.patchTarget(key, { LastError: lastError, Status: status });
+        useCacheStore.getState().actions.setOfflineTargetStatus(key, status);
         await refreshOfflineStats(store);
         const updated = (await store.getTarget(key)) ?? target;
         console.info(`${TAG} sync done`, { bytes: updated.Bytes, key, status });
@@ -336,6 +344,7 @@ export const syncTarget = async (args: SyncTargetArgs): Promise<OfflineTargetRow
 
     console.info(`${TAG} sync start`, { key, name });
     await store.setTargetStatus(key, 'syncing');
+    useCacheStore.getState().actions.setOfflineTargetStatus(key, 'syncing');
 
     let songs: Song[];
     try {

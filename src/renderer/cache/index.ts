@@ -135,7 +135,11 @@ export {
     shouldRevalidateFromNetwork,
 } from './sync-first';
 export type * from './types';
-export { useIsEntityOfflineAvailable, useIsSongOfflineAvailable } from './use-offline-availability';
+export {
+    useIsEntityOfflineAvailable,
+    useIsSongOfflineAvailable,
+    useOfflineTargetStatus,
+} from './use-offline-availability';
 export { loadOfflineSongs, useOfflineSongCount, useOfflineSongs } from './use-offline-songs';
 export { useSmoothOfflineSync } from './use-smooth-offline-sync';
 export { useSmoothSweep } from './use-smooth-sweep';

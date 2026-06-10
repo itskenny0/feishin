@@ -83,17 +83,25 @@ const AppShell = memo(function AppShell() {
     // chrome sits at the bottom of the viewport:
     //  - desktop shell: just the playerbar (90px)
     //  - mobile shell:  playerbar (90px) + tab bar (56px) + safe-area
-    // We also pad an extra safe-area-inset-bottom via env() so the toast
-    // always sits above the device's gesture pill on Capacitor Android.
+    // On the mobile shell, toasts live at the TOP of the viewport (below the
+    // status bar / notch via safe-area-inset-top): the bottom is owned by the
+    // playerbar + tab bar, and bottom toasts overlaid those vital controls.
+    // Desktop keeps bottom-center, padded above the playerbar (plus
+    // safe-area-inset-bottom for the gesture pill on Capacitor).
     const isMobileShell = useIsMobileShell();
     const notificationStyles = useMemo(
-        () => ({
-            root: {
-                marginBottom: isMobileShell
-                    ? 'calc(90px + 56px + env(safe-area-inset-bottom, 0px) + 12px)'
-                    : 'calc(90px + env(safe-area-inset-bottom, 0px))',
-            },
-        }),
+        () =>
+            isMobileShell
+                ? {
+                      root: {
+                          marginTop: 'calc(env(safe-area-inset-top, 0px) + 12px)',
+                      },
+                  }
+                : {
+                      root: {
+                          marginBottom: 'calc(90px + env(safe-area-inset-bottom, 0px))',
+                      },
+                  },
         [isMobileShell],
     );
 
@@ -103,7 +111,7 @@ const AppShell = memo(function AppShell() {
             <EnableCacheModal />
             <Notifications
                 containerWidth="300px"
-                position="bottom-center"
+                position={isMobileShell ? 'top-center' : 'bottom-center'}
                 styles={notificationStyles}
                 zIndex={50000}
             />

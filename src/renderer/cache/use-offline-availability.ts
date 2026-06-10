@@ -6,7 +6,7 @@
 // whenever a download finishes or a target is removed. These hooks are pure
 // store reads — cheap enough to call per-row in a virtualized list.
 
-import type { OfflineEntityType } from '/@/renderer/cache/types';
+import type { OfflineEntityType, OfflineTargetStatus } from '/@/renderer/cache/types';
 
 import { blobKey, targetKey } from './media-store';
 import { useCacheStore } from './store';
@@ -39,4 +39,19 @@ export const useIsEntityOfflineAvailable = (
             return s.offlineAvailability.songKeys.has(blobKey(serverId, entityId));
         }
         return s.offlineAvailability.entityKeys.has(targetKey(serverId, entityType, entityId));
+    });
+
+/**
+ * The download status of an entity's offline target (idle / syncing /
+ * partial / complete / error). Undefined when the entity was never targeted
+ * for download. Drives the download button's spinner / checkmark states.
+ */
+export const useOfflineTargetStatus = (
+    serverId: string | undefined,
+    entityType: OfflineEntityType | undefined,
+    entityId: string | undefined,
+): OfflineTargetStatus | undefined =>
+    useCacheStore((s) => {
+        if (!serverId || !entityType || !entityId) return undefined;
+        return s.offlineTargetStatuses[targetKey(serverId, entityType, entityId)];
     });
