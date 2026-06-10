@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 
 import { getItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { useIsRadioActive } from '/@/renderer/features/radio/hooks/use-radio-player';
+import { getIsOnline, subscribeIsOnline } from '/@/renderer/lib/network-status';
 import {
     subscribeCurrentTrack,
     subscribePlayerStatus,
@@ -85,11 +86,25 @@ const showBootToast = (message: string, kind: 'info' | 'warn' = 'info') => {
 };
 
 const buildMetadata = (song: QueueSong) => {
-    const imageUrl = getItemImageUrl({
-        id: song.imageId || undefined,
-        imageUrl: song.imageUrl,
-        itemType: LibraryItem.SONG,
-        type: 'itemCard',
+    // OFFLINE: hand the native plugin NO artwork. The plugin downloads the
+    // artwork URL natively for the notification; with the server
+    // unreachable that native fetch fails and takes the WHOLE APP down to
+    // the launcher (device telemetry: every offline crash lands within
+    // ~700ms of a song becoming current — playback start or session
+    // restore — while a song playing the same audio source survives
+    // online; no JS error ever precedes death because the crash is on the
+    // native side).
+    const imageUrl = getIsOnline()
+        ? getItemImageUrl({
+              id: song.imageId || undefined,
+              imageUrl: song.imageUrl,
+              itemType: LibraryItem.SONG,
+              type: 'itemCard',
+          })
+        : null;
+    console.info('[media-session] setMetadata', {
+        artwork: imageUrl ? imageUrl.slice(0, 60) : null,
+        songId: song.id,
     });
     return {
         album: song.album ?? '',
@@ -198,6 +213,18 @@ const useCapacitorMediaSession = () => {
             MediaSession.setMetadata(buildMetadata(song)).catch(() => {});
         });
 
+        // Coming back ONLINE: refresh metadata so the notification regains
+        // the artwork that was withheld while offline (buildMetadata strips
+        // it there — the plugin's native artwork download crashes the app
+        // when the server is unreachable).
+        const unsubscribeOnline = subscribeIsOnline(() => {
+            if (!getIsOnline() || isRadioActiveRef.current) return;
+            const song = usePlayerStore.getState().getCurrentSong();
+            if (song) {
+                MediaSession.setMetadata(buildMetadata(song)).catch(() => {});
+            }
+        });
+
         // Android 13+ requires POST_NOTIFICATIONS at runtime. The plugin
         // doesn't request it on its own; we trigger the prompt the first
         // time playback transitions to PLAYING so the OS dialog arrives
@@ -276,6 +303,7 @@ const useCapacitorMediaSession = () => {
         return () => {
             if (positionInterval) clearInterval(positionInterval);
             unsubscribeTrack();
+            unsubscribeOnline();
             unsubscribeStatus();
             // Clear handlers + state so backgrounding the app and a
             // subsequent hot reload doesn't leave dangling references in
