@@ -3506,10 +3506,24 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
+                if (version <= 61) {
+                    // The v48→49 wizard migration set onboarded=false for
+                    // EVERY existing install — including ones that had
+                    // peerSync.enabled=true with a configured broker. Those
+                    // installs keep their broker settings (the UI looks
+                    // configured) but the subsystem mount gates on
+                    // enabled && jellyfinRemoteEnabled && onboarded, so MQTT
+                    // silently never boots again. enabled=true is an explicit
+                    // opt-in; grandfather it.
+                    if (state.peerSync?.enabled && !state.peerSync.onboarded) {
+                        state.peerSync.onboarded = true;
+                    }
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 61,
+            version: 62,
         },
     ),
 );

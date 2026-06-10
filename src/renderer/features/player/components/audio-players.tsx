@@ -74,6 +74,22 @@ const PeerSyncMount = () => {
             state.peerSync.jellyfinRemoteEnabled &&
             state.peerSync.onboarded,
     );
+    // A configured-but-gated install is invisible without this: broker
+    // settings persist (the settings UI looks ready) while the subsystem
+    // never mounts. Log WHICH flag is holding it down — this is how the
+    // iPod-vs-phone "devices don't see each other" hunt (2026-06-10) was
+    // diagnosed, and the log keeps the next regression diagnosable from
+    // device telemetry alone.
+    useEffect(() => {
+        if (peerSyncActive) return;
+        const { peerSync } = useSettingsStore.getState();
+        if (!peerSync.enabled && !peerSync.brokerUrl) return; // never configured
+        console.warn('[peer-sync] configured but inactive — not mounting', {
+            enabled: peerSync.enabled,
+            jellyfinRemoteEnabled: peerSync.jellyfinRemoteEnabled,
+            onboarded: peerSync.onboarded,
+        });
+    }, [peerSyncActive]);
 
     if (!peerSyncActive) return null;
 
