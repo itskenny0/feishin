@@ -46,7 +46,10 @@ vi.mock('/@/renderer/features/trackmap/api/trackmap-cache', () => ({
     },
 }));
 
-import { analyzeSong } from '/@/renderer/features/trackmap/analysis/analyze-song';
+import {
+    __setConstrainedMemoryPlatformForTests,
+    analyzeSong,
+} from '/@/renderer/features/trackmap/analysis/analyze-song';
 
 const sampleData = (): TrackmapData => ({
     bins: new Float32Array(256).fill(0.5),
@@ -74,7 +77,20 @@ beforeEach(() => {
 
 afterEach(() => {
     vi.unstubAllGlobals();
+    __setConstrainedMemoryPlatformForTests(false);
 });
+
+// A fetch Response stub that exposes its payload via blob() (the size-guard
+// path) and arrayBuffer() (legacy path safety).
+const responseOfSize = (bytes: number) => {
+    const blob = { arrayBuffer: () => Promise.resolve(new ArrayBuffer(8)), size: bytes };
+    return {
+        arrayBuffer: () => Promise.resolve(new ArrayBuffer(8)),
+        blob: () => Promise.resolve(blob),
+        ok: true,
+        status: 200,
+    };
+};
 
 describe('analyzeSong — lazy cache behaviour', () => {
     it('returns the cached analysis WITHOUT fetching or spinning up the worker', async () => {
@@ -140,13 +156,35 @@ describe('analyzeSong — lazy cache behaviour', () => {
         expect(mocks.workerCtor).not.toHaveBeenCalled();
     });
 
+    it('on a memory-constrained platform, skips analysis of oversized audio without decoding', async () => {
+        // Android/iOS WebViews get a fraction of desktop memory.
+        // decodeAudioData of a full-quality file (e.g. the local offline blob)
+        // expands to hundreds of MB of transient PCM and the OS kills the app
+        // ~200ms into playback. Oversized sources must be skipped, not decoded.
+        __setConstrainedMemoryPlatformForTests(true);
+        mocks.cacheGet.mockResolvedValue(null);
+        (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(
+            responseOfSize(50 * 1024 * 1024),
+        );
+
+        const ac = new AbortController();
+        const result = await analyzeSong({
+            allowNetwork: true,
+            sensitivity: 3,
+            serverId: 'srv',
+            signal: ac.signal,
+            songId: 'song-big',
+            streamUrl: 'blob:http://localhost/big-local-copy',
+        });
+
+        expect(result).toBeNull();
+        expect(mocks.decodeAudioData).not.toHaveBeenCalled();
+        expect(mocks.workerCtor).not.toHaveBeenCalled();
+    });
+
     it('on a cache miss, runs the worker once and persists the result (generate-then-persist)', async () => {
         mocks.cacheGet.mockResolvedValue(null);
-        (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
-            arrayBuffer: () => Promise.resolve(new ArrayBuffer(8)),
-            ok: true,
-            status: 200,
-        });
+        (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(responseOfSize(8));
         // decodeAudioData yields a 1-channel buffer the downmix can read.
         mocks.decodeAudioData.mockResolvedValue({
             getChannelData: () => new Float32Array(8),

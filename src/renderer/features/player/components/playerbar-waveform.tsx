@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { CustomPlayerbarSlider } from './playerbar-slider';
 import styles from './playerbar-waveform.module.css';
+import { shouldSkipWaveformLoad } from './waveform-load-guard';
 
 import { useSongUrl } from '/@/renderer/features/player/audio-player/hooks/use-stream-url';
 import { PlayerbarSeekSlider } from '/@/renderer/features/player/components/playerbar-seek-slider';
@@ -89,6 +90,13 @@ export const PlayerbarWaveform = () => {
     // Handle waveform ready state
     useEffect(() => {
         if (!wavesurfer || !streamUrl) return;
+
+        // Decoding a full-quality local blob for peaks OOM-kills mobile
+        // WebViews — keep the fallback seek slider instead (isLoading stays
+        // true, which renders it).
+        if (shouldSkipWaveformLoad(streamUrl)) {
+            return;
+        }
 
         const handleReady = () => {
             setIsLoading(false);

@@ -12,6 +12,30 @@ import { trackmapCache } from '/@/renderer/features/trackmap/api/trackmap-cache'
 // path noticeably faster on long songs without changing the output shape.
 const DECODE_SR = 8000;
 
+// Android/iOS WebViews get a fraction of desktop memory. decodeAudioData
+// internally expands the WHOLE compressed file to PCM before resampling —
+// a full-quality local copy (offline playback serves the original file as a
+// blob) can transiently allocate hundreds of MB, and Android's low-memory
+// killer takes the app down ~200ms into playback. On native platforms, skip
+// analysis of sources above this compressed-size cap; cached analyses (and
+// reasonably-sized files) still work everywhere.
+const MAX_ANALYSIS_BYTES_CONSTRAINED = 12 * 1024 * 1024;
+
+let constrainedMemoryPlatform = false;
+void (async () => {
+    try {
+        const { Capacitor } = await import('@capacitor/core');
+        constrainedMemoryPlatform = Capacitor.isNativePlatform();
+    } catch {
+        // Not a Capacitor runtime (Electron / plain web) — desktop memory.
+    }
+})();
+
+/** Test-only override for the constrained-memory platform guard. */
+export const __setConstrainedMemoryPlatformForTests = (value: boolean): void => {
+    constrainedMemoryPlatform = value;
+};
+
 // One shared main-thread OfflineAudioContext for decodeAudioData. The
 // audio decode lives on the main thread because OfflineAudioContext is
 // NOT exposed in DedicatedWorkerGlobalScope in Chromium / Electron —
@@ -106,7 +130,18 @@ export const analyzeSong = async (args: AnalyzeArgs): Promise<null | TrackmapDat
     if (!response.ok) {
         throw new Error(`trackmap fetch failed: HTTP ${response.status}`);
     }
-    const arrayBuffer = await response.arrayBuffer();
+    // Go through blob() so the size is known BEFORE committing to a decode —
+    // for blob: sources this is a cheap reference, not a copy.
+    const audioBlob = await response.blob();
+    if (signal.aborted) throw new DOMException('aborted', 'AbortError');
+    if (constrainedMemoryPlatform && audioBlob.size > MAX_ANALYSIS_BYTES_CONSTRAINED) {
+        console.info('[trackmap] skipping analysis: source too large for this platform', {
+            bytes: audioBlob.size,
+            songId,
+        });
+        return null;
+    }
+    const arrayBuffer = await audioBlob.arrayBuffer();
     if (signal.aborted) throw new DOMException('aborted', 'AbortError');
 
     // Decode on the main thread (where OfflineAudioContext is available).
