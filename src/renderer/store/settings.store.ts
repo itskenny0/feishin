@@ -326,6 +326,9 @@ const SkipButtonsSchema = z.object({
     skipForwardSeconds: z.number(),
 });
 
+// 'waveform' is legacy-tolerated for old exports/imports; the wavesurfer
+// seekbar view was retired in favour of the trackmap (v62 migration
+// normalizes persisted values to 'slider').
 const PlayerbarSliderTypeSchema = z.enum(['slider', 'waveform']);
 
 const BarAlignSchema = z.enum(['top', 'bottom', 'center']);
@@ -1328,7 +1331,6 @@ export const resolveHomeSections = (
 
 export enum PlayerbarSliderType {
     SLIDER = 'slider',
-    WAVEFORM = 'waveform',
 }
 
 export enum PlayerItem {
@@ -3600,6 +3602,13 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     // opt-in; grandfather it.
                     if (state.peerSync?.enabled && !state.peerSync.onboarded) {
                         state.peerSync.onboarded = true;
+                    }
+
+                    // The wavesurfer waveform seekbar view was retired (the
+                    // trackmap replaced it); normalize installs that still
+                    // have it selected back to the plain slider.
+                    if (state.general?.playerbarSlider?.type === 'waveform') {
+                        state.general.playerbarSlider.type = PlayerbarSliderType.SLIDER;
                     }
 
                     // Home redesign: rewrite the persisted section list through

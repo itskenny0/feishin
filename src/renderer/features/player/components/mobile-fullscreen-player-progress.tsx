@@ -1,5 +1,5 @@
 import formatDuration from 'format-duration';
-import { CSSProperties, lazy, memo, Suspense, useMemo } from 'react';
+import { CSSProperties, memo, useMemo } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
 
 import styles from './mobile-fullscreen-player.module.css';
@@ -9,21 +9,10 @@ import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-targe
 import { PlayerbarSeekSlider } from '/@/renderer/features/player/components/playerbar-seek-slider';
 import { TrackmapCanvas } from '/@/renderer/features/trackmap';
 import { usePlayerTimestamp } from '/@/renderer/store';
-import {
-    PlayerbarSliderType,
-    usePlayerbarSlider,
-    useTrackmapEnabled,
-} from '/@/renderer/store/settings.store';
-import { Spinner } from '/@/shared/components/spinner/spinner';
+import { useTrackmapEnabled } from '/@/renderer/store/settings.store';
 import { Text } from '/@/shared/components/text/text';
 import { PlaybackSelectors } from '/@/shared/constants/playback-selectors';
 import { Song } from '/@/shared/types/domain-types';
-
-const PlayerbarWaveform = lazy(() =>
-    import('/@/renderer/features/player/components/playerbar-waveform').then((module) => ({
-        default: module.PlayerbarWaveform,
-    })),
-);
 
 interface MobileFullscreenPlayerProgressProps {
     currentSong?: Song;
@@ -61,7 +50,6 @@ ElapsedTimeText.displayName = 'ElapsedTimeText';
 export const MobileFullscreenPlayerProgress = memo(
     ({ currentSong }: MobileFullscreenPlayerProgressProps) => {
         const isRemote = useRemoteTargetStore((s) => s.targetDeviceId !== null);
-        const playerbarSlider = usePlayerbarSlider();
         const songDuration = currentSong?.duration ? currentSong.duration / 1000 : 0;
         // Invariant per track — recomputing formatDuration on every position
         // tick is wasted work, so memoize on songDuration only.
@@ -70,7 +58,6 @@ export const MobileFullscreenPlayerProgress = memo(
             [songDuration],
         );
 
-        const isWaveform = playerbarSlider?.type === PlayerbarSliderType.WAVEFORM;
         const trackmapEnabled = useTrackmapEnabled();
 
         return (
@@ -79,29 +66,21 @@ export const MobileFullscreenPlayerProgress = memo(
                     <ElapsedTimeText isRemote={isRemote} />
                 </div>
                 <div className={styles.sliderWrapper}>
-                    {isWaveform ? (
-                        <Suspense fallback={<Spinner />}>
-                            <PlayerbarWaveform />
-                        </Suspense>
-                    ) : (
-                        <>
-                            {trackmapEnabled && (
-                                /*
-                                 * Trackmap on the mobile fullscreen player.
-                                 * The canvas paints behind the seek slider —
-                                 * same component the desktop playerbar uses;
-                                 * ErrorBoundary keeps a per-track parse
-                                 * failure from blowing up the whole row.
-                                 */
-                                <ErrorBoundary fallback={null}>
-                                    <TrackmapCanvas />
-                                </ErrorBoundary>
-                            )}
-                            <div style={SLIDER_WRAP_STYLE}>
-                                <PlayerbarSeekSlider max={songDuration} min={0} />
-                            </div>
-                        </>
+                    {trackmapEnabled && (
+                        /*
+                         * Trackmap on the mobile fullscreen player.
+                         * The canvas paints behind the seek slider —
+                         * same component the desktop playerbar uses;
+                         * ErrorBoundary keeps a per-track parse
+                         * failure from blowing up the whole row.
+                         */
+                        <ErrorBoundary fallback={null}>
+                            <TrackmapCanvas />
+                        </ErrorBoundary>
                     )}
+                    <div style={SLIDER_WRAP_STYLE}>
+                        <PlayerbarSeekSlider max={songDuration} min={0} />
+                    </div>
                 </div>
                 <div className={styles.timeContainer}>
                     <Text className={PlaybackSelectors.totalDuration} size="xs" style={TOTAL_STYLE}>

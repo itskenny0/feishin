@@ -84,6 +84,20 @@ describe('settings migrations', () => {
         expect(ids).toContain('pinned');
     });
 
+    it('normalizes the retired waveform seekbar view back to the slider', async () => {
+        seed(
+            {
+                general: {
+                    playerbarSlider: { barAlign: 'center', type: 'waveform' },
+                },
+            },
+            61,
+        );
+
+        const store = await loadStore();
+        expect(store.getState().general.playerbarSlider.type).toBe('slider');
+    });
+
     it('survives a sparse blob without the peerSync slice', async () => {
         seed({}, 61);
 
