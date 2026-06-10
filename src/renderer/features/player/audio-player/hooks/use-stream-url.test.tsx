@@ -62,7 +62,10 @@ vi.mock('/@/renderer/cache/use-offline-availability', () => ({
         ),
 }));
 
-import { useSongUrl } from '/@/renderer/features/player/audio-player/hooks/use-stream-url';
+import {
+    __setSingleBlobSlotOnlyForTests,
+    useSongUrl,
+} from '/@/renderer/features/player/audio-player/hooks/use-stream-url';
 
 const SONG = {
     _serverId: 'srv',
@@ -91,6 +94,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+    __setSingleBlobSlotOnlyForTests(false);
     vi.restoreAllMocks();
 });
 
@@ -165,6 +169,41 @@ describe('useSongUrl playback substitution', () => {
         expect(global.URL.createObjectURL).toHaveBeenCalledTimes(1);
         expect(global.URL.revokeObjectURL).not.toHaveBeenCalled();
         expect(result.current).toBe('blob:fake-object-url');
+    });
+
+    it('on native platforms, HOLDS a downloaded non-current (preload) slot: no blob, no remote', async () => {
+        // Device telemetry: the Android WebView dies natively whenever BOTH
+        // audio elements hold blob sources (current playing + next
+        // preloaded). On native, a downloaded next track must get NO source
+        // at all — neither a second blob nor the (offline-dead) remote URL.
+        __setSingleBlobSlotOnlyForTests(true);
+        mocks.songAvailable.value = true;
+        mocks.mediaGet.mockResolvedValue({ Blob: new Blob(['x']), ByteSize: 1, SongId: 's1' });
+
+        const { result } = renderHook(() => useSongUrl(SONG, false, TRANSCODE), { wrapper });
+        await new Promise((r) => setTimeout(r, 80));
+
+        expect(result.current).toBeUndefined();
+        expect(global.URL.createObjectURL).not.toHaveBeenCalled();
+        expect(mocks.getStreamUrl).not.toHaveBeenCalled();
+    });
+
+    it('on native platforms, the CURRENT slot still gets the blob', async () => {
+        __setSingleBlobSlotOnlyForTests(true);
+        mocks.songAvailable.value = true;
+        mocks.mediaGet.mockResolvedValue({ Blob: new Blob(['x']), ByteSize: 1, SongId: 's1' });
+
+        const { result } = renderHook(() => useSongUrl(SONG, true, TRANSCODE), { wrapper });
+        await waitFor(() => expect(result.current).toBe('blob:fake-object-url'));
+        expect(mocks.getStreamUrl).not.toHaveBeenCalled();
+    });
+
+    it('off native platforms, the preload slot still substitutes (gapless offline)', async () => {
+        mocks.songAvailable.value = true;
+        mocks.mediaGet.mockResolvedValue({ Blob: new Blob(['x']), ByteSize: 1, SongId: 's1' });
+
+        const { result } = renderHook(() => useSongUrl(SONG, false, TRANSCODE), { wrapper });
+        await waitFor(() => expect(result.current).toBe('blob:fake-object-url'));
     });
 
     it('revokes the object URL on unmount', async () => {

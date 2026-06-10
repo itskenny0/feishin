@@ -1,3 +1,4 @@
+import { Capacitor } from '@capacitor/core';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 
@@ -9,6 +10,23 @@ import { QueueSong } from '/@/shared/types/domain-types';
 import { PlayerType } from '/@/shared/types/types';
 
 const TAG = '[offline-media]';
+
+// Android WebView dies natively when TWO <audio> elements hold blob sources
+// at once (device telemetry: every crash frame shows blob|blob — current
+// playing + next preloaded; every survival shows blob|http or a single
+// blob). On native platforms only the CURRENT track may be blob-served.
+const isNativePlatform = (() => {
+    try {
+        return Capacitor.isNativePlatform();
+    } catch {
+        return false;
+    }
+})();
+let singleBlobSlotOnly = isNativePlatform;
+/** Test seam for the native single-blob-slot guard. */
+export const __setSingleBlobSlotOnlyForTests = (value: boolean): void => {
+    singleBlobSlotOnly = value;
+};
 
 export function useSongUrl(
     song: QueueSong | undefined,
@@ -98,7 +116,7 @@ export function useSongUrl(
  */
 function useOfflineSongUrl(
     song: QueueSong | undefined,
-    _current: boolean,
+    current: boolean,
 ): { pending: boolean; url: string | undefined } {
     const playbackType = usePlaybackType();
     // The settled verdict of the LAST COMPLETED lookup, keyed by the song it
@@ -122,13 +140,25 @@ function useOfflineSongUrl(
     const songAvailableOffline = useIsSongOfflineAvailable(song?._serverId, song?.id);
 
     // MPV cannot play blob URLs — only substitute for the web-audio path.
-    // Substitution applies to EVERY player slot, including the next-track
-    // preload (`current` is ignored deliberately): preloading the blob gives
-    // gapless playback offline, and preloading the remote URL while offline
-    // fed the second audio element a dead URL whose error handler paused the
-    // (healthy, blob-served) current track.
+    // On desktop/web, substitution applies to EVERY player slot (the preload
+    // blob gives gapless playback offline). On NATIVE platforms only the
+    // CURRENT slot may hold a blob: device telemetry shows the Android
+    // WebView render process dying natively whenever both audio elements
+    // hold blob sources at once (every crash frame = blob|blob; every
+    // survival = blob|http or a single blob). A downloaded next track is
+    // HELD on native (no src at all) rather than preloaded from the dead
+    // remote URL — its blob lands ~20ms after it becomes current.
+    const heldPreload = Boolean(
+        singleBlobSlotOnly &&
+        !current &&
+        songAvailableOffline &&
+        song?._serverId &&
+        playbackType === PlayerType.WEB,
+    );
     const targetKey =
-        song?._serverId && playbackType === PlayerType.WEB ? `${song._serverId}|${song.id}` : null;
+        song?._serverId && playbackType === PlayerType.WEB && !heldPreload
+            ? `${song._serverId}|${song.id}`
+            : null;
 
     // Deferred one-generation revocation. Recovered device telemetry showed
     // the Android WebView render process dying natively the moment an object
@@ -234,8 +264,11 @@ function useOfflineSongUrl(
     const isSettledForThisSong = targetKey !== null && settled?.key === targetKey;
     return {
         // Pending whenever a lookup is owed for the current song — including
-        // the renders BEFORE the effect commits its verdict.
-        pending: targetKey !== null && !isSettledForThisSong,
+        // the renders BEFORE the effect commits its verdict. A held native
+        // preload reports pending FOREVER so the remote stream-url query
+        // stays disabled too: offline that URL is dead, and its error
+        // handler pauses both players.
+        pending: heldPreload || (targetKey !== null && !isSettledForThisSong),
         url: isSettledForThisSong ? settled.url : undefined,
     };
 }
