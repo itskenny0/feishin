@@ -136,6 +136,34 @@ describe('remote log shipper', () => {
         expect(ringAfter).not.toContain('PRE-CRASH EVIDENCE');
     });
 
+    it('ships a LARGE backlog in multiple sub-64KB chunks (keepalive body cap)', async () => {
+        // fetch keepalive rejects bodies >64KB — a write-through ring easily
+        // exceeds that, which silently dropped every crash backlog. Large
+        // rings must go out as multiple modest POSTs.
+        fetchMock.mockRejectedValue(new Error('offline'));
+        setRemoteDebug(false, '');
+        initRemoteLogShipper();
+        setRemoteDebug(true);
+
+        const bigMsg = 'x'.repeat(1000);
+        for (let i = 0; i < 120; i += 1) console.info(`big ${i} ${bigMsg}`);
+        vi.advanceTimersByTime(600);
+
+        __resetRemoteLogShipperForTests();
+
+        fetchMock.mockClear();
+        fetchMock.mockResolvedValue({ ok: true });
+        initRemoteLogShipper();
+        setRemoteDebug(true, '192.168.1.5');
+        await vi.advanceTimersByTimeAsync(100);
+
+        const backlogPosts = shippedBodies().filter((b) => b.includes('"backlog":true'));
+        expect(backlogPosts.length).toBeGreaterThan(1);
+        for (const b of backlogPosts) {
+            expect(b.length).toBeLessThan(64_000);
+        }
+    });
+
     it('disabling restores console and stops traffic', () => {
         setRemoteDebug(false, '');
         initRemoteLogShipper();

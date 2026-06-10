@@ -126,32 +126,50 @@ const shipBacklog = (): void => {
         }
         return;
     }
-    const body = backlog.map((e) => JSON.stringify({ ...e, backlog: true })).join('\n');
-    try {
-        void fetch(endpointUrl, {
-            body,
-            headers: { 'Content-Type': 'application/x-ndjson' },
-            keepalive: true,
-            method: 'POST',
-        })
-            .then((res) => {
-                if (res.ok) {
-                    // Acked — drop ONLY the previous-session entries; keep the
-                    // current session's mirror intact.
-                    const mine = parseRing(ringStr).filter((e) => e.session === session);
-                    ringStr = mine.map((e) => `${JSON.stringify(e)}\n`).join('');
-                    persistRing();
-                    if (backlogRetryTimer) {
-                        clearInterval(backlogRetryTimer);
-                        backlogRetryTimer = null;
-                    }
-                    console.info('[shipper] backlog delivered', { entries: backlog.length });
-                }
-            })
-            .catch(() => {});
-    } catch {
-        // retry timer will try again
+    // Chunked, NON-keepalive POSTs: fetch keepalive rejects bodies >64KB,
+    // which silently dropped every backlog from the write-through ring
+    // (~400KB) — the crash evidence never left the device. Backlog runs in a
+    // live page, so keepalive isn't needed; chunking keeps each POST modest.
+    const CHUNK_BYTES = 48_000;
+    const chunks: string[] = [];
+    let current = '';
+    for (const e of backlog) {
+        const line = `${JSON.stringify({ ...e, backlog: true })}\n`;
+        if (current.length + line.length > CHUNK_BYTES && current) {
+            chunks.push(current);
+            current = '';
+        }
+        current += line;
     }
+    if (current) chunks.push(current);
+
+    void (async () => {
+        try {
+            for (const chunk of chunks) {
+                const res = await fetch(endpointUrl!, {
+                    body: chunk,
+                    headers: { 'Content-Type': 'application/x-ndjson' },
+                    method: 'POST',
+                });
+                if (!res.ok) return; // retry timer re-attempts from scratch
+            }
+            // All chunks acked — drop ONLY the previous-session entries;
+            // keep the current session's mirror intact.
+            const mine = parseRing(ringStr).filter((e) => e.session === session);
+            ringStr = mine.map((e) => `${JSON.stringify(e)}\n`).join('');
+            persistRing();
+            if (backlogRetryTimer) {
+                clearInterval(backlogRetryTimer);
+                backlogRetryTimer = null;
+            }
+            console.info('[shipper] backlog delivered', {
+                chunks: chunks.length,
+                entries: backlog.length,
+            });
+        } catch {
+            // retry timer will try again
+        }
+    })();
 };
 
 /** `host`, `host:port`, or a full http(s) URL → POST target, or null. */
@@ -191,7 +209,9 @@ const post = (body: string, useBeacon = false): void => {
         void fetch(endpointUrl, {
             body,
             headers: { 'Content-Type': 'application/x-ndjson' },
-            keepalive: true,
+            // keepalive caps the body at 64KB and REJECTS above it — only
+            // safe for small payloads.
+            keepalive: body.length < 60_000,
             method: 'POST',
         }).catch(() => {});
     } catch {
