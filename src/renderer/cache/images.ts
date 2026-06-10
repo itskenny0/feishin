@@ -677,6 +677,51 @@ interface FallbackPick {
  * `undefined` when nothing usable is cached (caller falls back to the
  * network / raw URL).
  */
+
+/**
+ * Cache-ONLY: the best cached thumbnail for an item as a `data:` URL, or
+ * null when nothing is cached. Built for consumers that hand the image to
+ * NATIVE code (the Android media-notification plugin downloads artwork URLs
+ * natively — a remote URL crashes the app offline, and blob:/object URLs are
+ * renderer-only). Never touches the network. Prefers the largest variant
+ * that stays under a transfer-friendly cap (base64 over the plugin bridge),
+ * falling back to the smallest cached one for oversized originals.
+ */
+export const getCachedThumbnailDataUrl = async (itemId: string): Promise<null | string> => {
+    const MAX_PREFERRED_BYTES = 500_000;
+    const db = getActiveCacheDb();
+    if (!db) return null;
+    try {
+        const rows = await db.thumbnails.where('ItemId').equals(itemId).toArray();
+        let bestUnderCap: Blob | undefined;
+        let bestUnderCapSize = -1;
+        let smallest: Blob | undefined;
+        let smallestSize = Number.POSITIVE_INFINITY;
+        for (const row of rows) {
+            if (!row?.Blob) continue;
+            const size = typeof row.Size === 'number' ? row.Size : row.Blob.size;
+            if (size <= MAX_PREFERRED_BYTES && size > bestUnderCapSize) {
+                bestUnderCap = row.Blob;
+                bestUnderCapSize = size;
+            }
+            if (size < smallestSize) {
+                smallest = row.Blob;
+                smallestSize = size;
+            }
+        }
+        const blob = bestUnderCap ?? smallest;
+        if (!blob) return null;
+        return await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = () => reject(reader.error);
+            reader.readAsDataURL(blob);
+        });
+    } catch {
+        return null;
+    }
+};
+
 const resolveFallbackPick = async (
     itemId: string,
     requestedVariant: string,

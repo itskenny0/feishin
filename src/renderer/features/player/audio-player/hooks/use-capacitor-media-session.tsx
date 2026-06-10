@@ -2,6 +2,7 @@ import { Capacitor } from '@capacitor/core';
 import { MediaSession } from '@jofr/capacitor-media-session';
 import { useEffect, useRef } from 'react';
 
+import { getCachedThumbnailDataUrl } from '/@/renderer/cache/images';
 import { getItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { useIsRadioActive } from '/@/renderer/features/radio/hooks/use-radio-player';
 import { getIsOnline, subscribeIsOnline } from '/@/renderer/lib/network-status';
@@ -85,26 +86,39 @@ const showBootToast = (message: string, kind: 'info' | 'warn' = 'info') => {
     }
 };
 
-const buildMetadata = (song: QueueSong) => {
-    // OFFLINE: hand the native plugin NO artwork. The plugin downloads the
-    // artwork URL natively for the notification; with the server
+const buildMetadata = async (song: QueueSong) => {
+    // OFFLINE: never hand the native plugin a REMOTE artwork URL. The plugin
+    // downloads the artwork natively for the notification; with the server
     // unreachable that native fetch fails and takes the WHOLE APP down to
-    // the launcher (device telemetry: every offline crash lands within
-    // ~700ms of a song becoming current — playback start or session
-    // restore — while a song playing the same audio source survives
-    // online; no JS error ever precedes death because the crash is on the
-    // native side).
-    const imageUrl = getIsOnline()
-        ? getItemImageUrl({
-              id: song.imageId || undefined,
-              imageUrl: song.imageUrl,
-              itemType: LibraryItem.SONG,
-              type: 'itemCard',
-          })
-        : null;
+    // the launcher (device telemetry: every offline crash landed within
+    // ~700ms of a song becoming current — playback start or session restore
+    // — while the same audio source survived online; no JS error ever
+    // preceded death because the crash is on the native side).
+    //
+    // Instead, serve the CACHED cover as a data: URL — self-contained, so
+    // the plugin decodes it locally with no fetch at all. blob:/object URLs
+    // won't do: they're renderer-scoped and the native side can't read them.
+    let imageUrl: null | string = null;
+    let source: 'cache' | 'none' | 'remote' = 'none';
+    const coverItemId = song.imageId || song.id;
+    const cached = coverItemId ? await getCachedThumbnailDataUrl(coverItemId) : null;
+    if (cached) {
+        imageUrl = cached;
+        source = 'cache';
+    } else if (getIsOnline()) {
+        imageUrl =
+            getItemImageUrl({
+                id: song.imageId || undefined,
+                imageUrl: song.imageUrl,
+                itemType: LibraryItem.SONG,
+                type: 'itemCard',
+            }) ?? null;
+        source = imageUrl ? 'remote' : 'none';
+    }
     console.info('[media-session] setMetadata', {
-        artwork: imageUrl ? imageUrl.slice(0, 60) : null,
+        artworkBytes: imageUrl ? imageUrl.length : 0,
         songId: song.id,
+        source,
     });
     return {
         album: song.album ?? '',
@@ -112,6 +126,20 @@ const buildMetadata = (song: QueueSong) => {
         artwork: imageUrl ? [{ sizes: '512x512', src: imageUrl, type: 'image/jpeg' }] : [],
         title: song.name ?? '',
     };
+};
+
+// Guards stale async metadata: only the most recent build may commit, so a
+// quick track skip can't paint the previous song's artwork.
+let metadataSeq = 0;
+const setMetadataSafe = (song: QueueSong): void => {
+    metadataSeq += 1;
+    const seq = metadataSeq;
+    void buildMetadata(song)
+        .then((metadata) => {
+            if (seq !== metadataSeq) return;
+            return MediaSession.setMetadata(metadata);
+        })
+        .catch(() => {});
 };
 
 const useCapacitorMediaSession = () => {
@@ -210,7 +238,7 @@ const useCapacitorMediaSession = () => {
                 return;
             }
             currentDurationSec = (song.duration ?? 0) / 1000;
-            MediaSession.setMetadata(buildMetadata(song)).catch(() => {});
+            setMetadataSafe(song);
         });
 
         // Coming back ONLINE: refresh metadata so the notification regains
@@ -221,7 +249,7 @@ const useCapacitorMediaSession = () => {
             if (!getIsOnline() || isRadioActiveRef.current) return;
             const song = usePlayerStore.getState().getCurrentSong();
             if (song) {
-                MediaSession.setMetadata(buildMetadata(song)).catch(() => {});
+                setMetadataSafe(song);
             }
         });
 
@@ -293,7 +321,7 @@ const useCapacitorMediaSession = () => {
             const currentSongNow = usePlayerStore.getState().getCurrentSong();
             if (currentSongNow && !isRadioActiveRef.current) {
                 currentDurationSec = (currentSongNow.duration ?? 0) / 1000;
-                MediaSession.setMetadata(buildMetadata(currentSongNow)).catch(() => {});
+                setMetadataSafe(currentSongNow);
             }
             const status = usePlayerStore.getState().player.status;
             applyStatus(status);
