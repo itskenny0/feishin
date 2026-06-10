@@ -3,12 +3,12 @@
 
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { usePinsStore } from '/@/renderer/store/pins.store';
+import { type PinItemType, usePinsStore } from '/@/renderer/store/pins.store';
 import { LibraryItem } from '/@/shared/types/domain-types';
 
 const actions = () => usePinsStore.getState().actions;
 
-const pin = (id: string, serverId = 'srv1', itemType = LibraryItem.ALBUM as const) => ({
+const pin = (id: string, serverId = 'srv1', itemType: PinItemType = LibraryItem.ALBUM) => ({
     id,
     imageId: null,
     itemType,

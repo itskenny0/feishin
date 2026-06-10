@@ -33,6 +33,7 @@ describe('MobileSearchPalette mount focus', () => {
                 <MobileSearchPalette
                     handleClose={vi.fn()}
                     onSelectResult={vi.fn()}
+                    pages={[]}
                     query=""
                     searchInputRef={searchInputRef}
                     setPages={vi.fn()}
