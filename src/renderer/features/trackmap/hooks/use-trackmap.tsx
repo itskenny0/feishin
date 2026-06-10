@@ -11,6 +11,7 @@ import {
 import { useCurrentServer } from '/@/renderer/store/auth.store';
 import {
     useTrackmapEnabled,
+    useTrackmapMaxFileSizeMb,
     useTrackmapOnlyOverLan,
     useTrackmapSensitivity,
 } from '/@/renderer/store/settings.store';
@@ -29,11 +30,17 @@ export const useTrackmap = (song: null | QueueSong): UseTrackmapResult => {
     const enabled = useTrackmapEnabled();
     const onlyOverLan = useTrackmapOnlyOverLan();
     const sensitivity = useTrackmapSensitivity();
+    const maxFileSizeMb = useTrackmapMaxFileSizeMb();
     const currentServer = useCurrentServer();
     const isUsingRemoteUrl = Boolean(currentServer?.preferRemoteUrl);
 
     const serverId = song?._serverId;
     const songId = song?.id;
+    // Declared source size (bytes), if the server reports it. Lets analyzeSong
+    // skip the download for sources over the user cap.
+    const songSizeBytes = song?.size ?? null;
+    // User cap is stored in MB; 0 = unlimited.
+    const maxFileSizeBytes = maxFileSizeMb > 0 ? maxFileSizeMb * 1024 * 1024 : 0;
     const streamUrl = useSongUrl(song ?? undefined, true, TRACKMAP_TRANSCODE);
 
     const [state, setState] = useState<UseTrackmapResult>({
@@ -52,10 +59,12 @@ export const useTrackmap = (song: null | QueueSong): UseTrackmapResult => {
 
         analyzeSong({
             allowNetwork: !(onlyOverLan && isUsingRemoteUrl),
+            maxFileSizeBytes,
             sensitivity,
             serverId,
             signal: ac.signal,
             songId,
+            songSizeBytes,
             streamUrl: streamUrl ?? undefined,
         })
             .then((data) => {
@@ -84,7 +93,17 @@ export const useTrackmap = (song: null | QueueSong): UseTrackmapResult => {
             });
 
         return () => ac.abort();
-    }, [enabled, isUsingRemoteUrl, onlyOverLan, sensitivity, serverId, songId, streamUrl]);
+    }, [
+        enabled,
+        isUsingRemoteUrl,
+        maxFileSizeBytes,
+        onlyOverLan,
+        sensitivity,
+        serverId,
+        songId,
+        songSizeBytes,
+        streamUrl,
+    ]);
 
     return state;
 };

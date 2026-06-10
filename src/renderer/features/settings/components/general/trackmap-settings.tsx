@@ -15,10 +15,12 @@ import { Button } from '/@/shared/components/button/button';
 import { ColorInput } from '/@/shared/components/color-input/color-input';
 import { Group } from '/@/shared/components/group/group';
 import { JsonInput } from '/@/shared/components/json-input/json-input';
+import { NumberInput } from '/@/shared/components/number-input/number-input';
 import { Select } from '/@/shared/components/select/select';
 import { Slider } from '/@/shared/components/slider/slider';
 import { Stack } from '/@/shared/components/stack/stack';
 import { Switch } from '/@/shared/components/switch/switch';
+import { Text } from '/@/shared/components/text/text';
 import { toast } from '/@/shared/components/toast/toast';
 
 /**
@@ -31,6 +33,7 @@ import { toast } from '/@/shared/components/toast/toast';
 const TRACKMAP_KEYS = [
     'trackmapEnabled',
     'trackmapOnlyOverLan',
+    'trackmapMaxFileSizeMb',
     'trackmapStyle',
     'trackmapHeight',
     'trackmapGlow',
@@ -313,6 +316,31 @@ export const TrackmapSettings = memo(() => {
             indent: true,
             isHidden: !settings.trackmapEnabled,
             title: t('setting.trackmapOnlyOverLan'),
+        },
+        {
+            control: (
+                <NumberInput
+                    aria-label={t('setting.trackmapMaxFileSize')}
+                    defaultValue={settings.trackmapMaxFileSizeMb}
+                    max={10000}
+                    min={0}
+                    onBlur={(e) => {
+                        const next = Number(e.currentTarget.value);
+                        setSettings({
+                            general: {
+                                trackmapMaxFileSizeMb: Number.isFinite(next) ? next : 0,
+                            },
+                        });
+                    }}
+                    placeholder="0"
+                    rightSection={<Text size="sm">MB</Text>}
+                    width={90}
+                />
+            ),
+            description: t('setting.trackmapMaxFileSize', { context: 'description' }),
+            indent: true,
+            isHidden: !settings.trackmapEnabled,
+            title: t('setting.trackmapMaxFileSize'),
         },
         {
             control: (

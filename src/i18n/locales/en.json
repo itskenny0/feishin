@@ -1836,7 +1836,9 @@
         "peerSyncShowStatusPill": "Show transport pill",
         "peerSyncShowPickerBadges_description": "Show the MQTT badge next to peers in the device picker when MQTT is the live lane.",
         "peerSyncShowPickerBadges": "Show MQTT lane badges",
-        "peerSyncAdvanced": "Advanced"
+        "peerSyncAdvanced": "Advanced",
+        "trackmapMaxFileSize": "Max file size",
+        "trackmapMaxFileSize_description": "Skip generating a trackmap for songs larger than this many megabytes — large files (long mixes, lossless rips) waste bandwidth and memory to analyze. The plain seek bar is shown instead. 0 = no limit."
     },
     "table": {
         "column": {

@@ -701,6 +701,12 @@ export const GeneralSettingsSchema = z.object({
     trackmapHeight: z.number().min(0).max(100),
     trackmapHelixCycles: z.number().min(1).max(12),
     trackmapHelixRotationSec: z.number().min(0).max(120),
+    // Maximum source file size (in MB) for which a trackmap is generated.
+    // Huge files (long DJ mixes, lossless rips) waste bandwidth/CPU/memory to
+    // download and PCM-decode for an amplitude curve. 0 = no limit. `.default`
+    // lets settings files written before this field existed load without a
+    // version bump.
+    trackmapMaxFileSizeMb: z.number().min(0).max(10000).default(100),
     trackmapOnlyOverLan: z.boolean(),
     trackmapPlayheadGlowAlpha: z.number().min(0).max(100),
     trackmapPlayheadShadowBlurPx: z.number().min(0).max(50),
@@ -1794,6 +1800,7 @@ const initialState: SettingsState = {
         trackmapEnabled: true,
         trackmapGlow: 70,
         trackmapHeight: 60,
+        trackmapMaxFileSizeMb: 100,
         trackmapOnlyOverLan: false,
         trackmapSensitivity: 50,
         trackmapStyle: 'glow',
@@ -4032,6 +4039,9 @@ export const useTrackmapGlow = () =>
 
 export const useTrackmapHeight = () =>
     useSettingsStore((state) => state.general.trackmapHeight, shallow);
+
+export const useTrackmapMaxFileSizeMb = () =>
+    useSettingsStore((state) => state.general.trackmapMaxFileSizeMb, shallow);
 
 export const useTrackmapOnlyOverLan = () =>
     useSettingsStore((state) => state.general.trackmapOnlyOverLan, shallow);

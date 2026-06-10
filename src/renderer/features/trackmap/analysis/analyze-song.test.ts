@@ -185,6 +185,63 @@ describe('analyzeSong — lazy cache behaviour', () => {
         expect(mocks.workerCtor).not.toHaveBeenCalled();
     });
 
+    it('skips analysis when the fetched blob exceeds the user file-size cap', async () => {
+        // The user-configurable cap (Settings → Trackmap → max file size) is
+        // enforced against the actual fetched bytes as a backstop for sources
+        // whose declared Song.size was unknown ahead of the fetch.
+        mocks.cacheGet.mockResolvedValue(null);
+        (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(
+            responseOfSize(150 * 1024 * 1024),
+        );
+
+        const ac = new AbortController();
+        const result = await analyzeSong({
+            allowNetwork: true,
+            maxFileSizeBytes: 100 * 1024 * 1024,
+            sensitivity: 3,
+            serverId: 'srv',
+            signal: ac.signal,
+            songId: 'song-over-cap',
+            streamUrl: 'https://example/stream',
+        });
+
+        expect(result).toBeNull();
+        expect(mocks.decodeAudioData).not.toHaveBeenCalled();
+        expect(mocks.workerCtor).not.toHaveBeenCalled();
+    });
+
+    it('treats maxFileSizeBytes = 0 as unlimited (does not skip on size)', async () => {
+        // A huge source with the cap disabled must NOT be size-gated — it
+        // proceeds to decode. We abort in the decode stub so the analysis
+        // unwinds before spinning up the singleton worker (which would skew
+        // the workerCtor call-count assertions in sibling tests).
+        mocks.cacheGet.mockResolvedValue(null);
+        (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(
+            responseOfSize(500 * 1024 * 1024),
+        );
+        const ac = new AbortController();
+        mocks.decodeAudioData.mockImplementation(() => {
+            ac.abort();
+            return Promise.reject(new DOMException('aborted', 'AbortError'));
+        });
+
+        await expect(
+            analyzeSong({
+                allowNetwork: true,
+                maxFileSizeBytes: 0,
+                sensitivity: 3,
+                serverId: 'srv',
+                signal: ac.signal,
+                songId: 'song-huge-unlimited',
+                streamUrl: 'https://example/stream',
+            }),
+        ).rejects.toThrow();
+
+        // The decode WAS reached — proving the cap of 0 did not skip the source.
+        expect(mocks.decodeAudioData).toHaveBeenCalled();
+        expect(mocks.workerCtor).not.toHaveBeenCalled();
+    });
+
     it('on a cache miss, runs the worker once and persists the result (generate-then-persist)', async () => {
         mocks.cacheGet.mockResolvedValue(null);
         (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(responseOfSize(8));

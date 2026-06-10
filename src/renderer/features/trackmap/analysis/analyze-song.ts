@@ -128,10 +128,22 @@ const downmixToMono = (audioBuffer: AudioBuffer): Float32Array => {
 
 interface AnalyzeArgs {
     allowNetwork: boolean;
+    /**
+     * User-configured maximum source size, in bytes, for which a trackmap is
+     * generated (Settings → Trackmap → "Max file size"). Checked first against
+     * the declared `songSizeBytes` (so an oversized file's bytes are never even
+     * downloaded), then against the actual fetched blob as a backstop for
+     * sources whose declared size was unknown ahead of the fetch.
+     * `0` (or undefined) means unlimited. Already-cached analyses still load
+     * regardless of the cap — the gate sits AFTER the cache lookup.
+     */
+    maxFileSizeBytes?: number;
     sensitivity: number;
     serverId: string;
     signal: AbortSignal;
     songId: string;
+    /** Declared source size in bytes (`Song.size`), if known. */
+    songSizeBytes?: null | number;
     streamUrl: string | undefined;
 }
 
@@ -146,7 +158,16 @@ interface AnalyzeArgs {
  * decode failure, abort).
  */
 export const analyzeSong = async (args: AnalyzeArgs): Promise<null | TrackmapData> => {
-    const { allowNetwork, sensitivity, serverId, signal, songId, streamUrl } = args;
+    const {
+        allowNetwork,
+        maxFileSizeBytes,
+        sensitivity,
+        serverId,
+        signal,
+        songId,
+        songSizeBytes,
+        streamUrl,
+    } = args;
 
     const cached = await trackmapCache.get(serverId, songId, sensitivity);
     if (cached) return cached;
@@ -154,6 +175,20 @@ export const analyzeSong = async (args: AnalyzeArgs): Promise<null | TrackmapDat
     // A prior decode of this exact source already failed this session — don't
     // re-fetch the bytes and re-run a decode we know will fail again.
     if (undecodableSongs.has(undecodableKey(serverId, songId))) return null;
+
+    // User cap, declared-size fast path: when the server reports a file size we
+    // can skip the download entirely for oversized sources (long DJ mixes,
+    // lossless rips). 0 = unlimited. The fetched-blob backstop below still
+    // catches sources whose declared size was unknown here.
+    if (maxFileSizeBytes && songSizeBytes && songSizeBytes > maxFileSizeBytes) {
+        console.info('[trackmap] skipped: file exceeds size cap', {
+            bytes: songSizeBytes,
+            capBytes: maxFileSizeBytes,
+            songId,
+            source: 'declared',
+        });
+        return null;
+    }
 
     if (!allowNetwork) return null;
     if (!streamUrl) return null;
@@ -170,6 +205,19 @@ export const analyzeSong = async (args: AnalyzeArgs): Promise<null | TrackmapDat
         console.info('[trackmap] skipping analysis: source too large for this platform', {
             bytes: audioBlob.size,
             songId,
+        });
+        return null;
+    }
+    // User-configured cap (0 = unlimited). The hook normally pre-skips on the
+    // declared Song.size so we never reach here, but a source with an unknown
+    // size still gets gated against its actual bytes before we commit to a
+    // multi-hundred-MB PCM decode.
+    if (maxFileSizeBytes && audioBlob.size > maxFileSizeBytes) {
+        console.info('[trackmap] skipped: file exceeds size cap', {
+            bytes: audioBlob.size,
+            capBytes: maxFileSizeBytes,
+            songId,
+            source: 'fetched',
         });
         return null;
     }
