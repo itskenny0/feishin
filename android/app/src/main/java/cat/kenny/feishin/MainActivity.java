@@ -11,6 +11,7 @@ public class MainActivity extends BridgeActivity {
         // consumes when it builds the Capacitor bridge, so the plugin MUST be
         // registered before the super call or it won't be loaded.
         registerPlugin(TcpSocketPlugin.class);
+        registerPlugin(WakeLockPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

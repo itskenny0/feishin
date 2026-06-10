@@ -2,6 +2,9 @@ import { Capacitor } from '@capacitor/core';
 import { MediaSession } from '@jofr/capacitor-media-session';
 import { useEffect, useRef } from 'react';
 
+import { acquireWakeLock, releaseWakeLock } from './native-wake-lock';
+import { WAKE_LOCK_RELEASE_GRACE_MS, wakeLockIntentForStatus } from './wake-lock-intent';
+
 import { getCachedThumbnailDataUrl } from '/@/renderer/cache/images';
 import { getItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { useIsRadioActive } from '/@/renderer/features/radio/hooks/use-radio-player';
@@ -183,6 +186,39 @@ const useCapacitorMediaSession = () => {
         let positionInterval: null | ReturnType<typeof setInterval> = null;
         let currentDurationSec = 0;
 
+        // Native partial wake lock keeps the CPU running with the screen off
+        // so the WebView's HTML5 <audio> doesn't stall when backgrounded —
+        // the foreground media-session service alone doesn't prevent the SoC
+        // from suspending on aggressive OEM builds (MIUI/HyperOS, Mi 9T).
+        let wakeLockReleaseTimer: null | ReturnType<typeof setTimeout> = null;
+        const clearWakeLockReleaseTimer = () => {
+            if (wakeLockReleaseTimer) {
+                clearTimeout(wakeLockReleaseTimer);
+                wakeLockReleaseTimer = null;
+            }
+        };
+        // Translate a status into an acquire / immediate-release / delayed-
+        // release of the native wake lock. Pure decision lives in
+        // wakeLockIntentForStatus(); the timer + native side effects live here.
+        const applyWakeLockForStatus = (status: PlayerStatus) => {
+            const intent = wakeLockIntentForStatus(status);
+            if (intent === 'acquire') {
+                clearWakeLockReleaseTimer();
+                acquireWakeLock();
+            } else if (intent === 'release') {
+                clearWakeLockReleaseTimer();
+                releaseWakeLock();
+            } else {
+                // 'release-grace' — paused: hold the lock briefly so a quick
+                // resume or track-boundary gap doesn't thrash acquire/release.
+                clearWakeLockReleaseTimer();
+                wakeLockReleaseTimer = setTimeout(() => {
+                    wakeLockReleaseTimer = null;
+                    releaseWakeLock();
+                }, WAKE_LOCK_RELEASE_GRACE_MS);
+            }
+        };
+
         showBootToast('Wiring Android media notification…');
 
         const init = async () => {
@@ -235,6 +271,11 @@ const useCapacitorMediaSession = () => {
                     title: '',
                 }).catch(() => {});
                 MediaSession.setPlaybackState({ playbackState: 'none' }).catch(() => {});
+                // Hard stop: no track is current, so nothing needs the CPU
+                // pinned awake. Release immediately (cancels any pending
+                // grace-period release too).
+                clearWakeLockReleaseTimer();
+                releaseWakeLock();
                 return;
             }
             currentDurationSec = (song.duration ?? 0) / 1000;
@@ -272,6 +313,9 @@ const useCapacitorMediaSession = () => {
             if (status === PlayerStatus.PLAYING) {
                 ensureNotificationPermission();
             }
+            // Hold/release the native partial wake lock around play/pause so
+            // background audio doesn't stall when the screen turns off.
+            applyWakeLockForStatus(status);
             const playbackState =
                 status === PlayerStatus.PLAYING
                     ? 'playing'
@@ -330,6 +374,9 @@ const useCapacitorMediaSession = () => {
 
         return () => {
             if (positionInterval) clearInterval(positionInterval);
+            // Never leak a held CPU wake lock across an unmount / hot reload.
+            clearWakeLockReleaseTimer();
+            releaseWakeLock();
             unsubscribeTrack();
             unsubscribeOnline();
             unsubscribeStatus();
