@@ -28,7 +28,10 @@ const STORAGE_KEY = 'feishin:cache:snapshots:v1';
 // 300 entries of ~10KB average = 3MB — covers the most-recently-visited
 // list pages and detail surfaces without hoarding stale history.
 const MAX_ENTRIES = 300;
-const MAX_BYTES = 3 * 1024 * 1024;
+// 1.5MB: localStorage quota on Android WebView is ~5MB and SHARED with the
+// settings/auth/pins stores and the crash-surviving debug ring — a 3MB
+// mirror busted the quota on-device (QuotaExceededError, 2026-06-10).
+const MAX_BYTES = 1.5 * 1024 * 1024;
 const PERSIST_DEBOUNCE_MS = 500;
 
 // LRU-ish: we track insertion order via Map iteration. Map preserves
@@ -51,49 +54,64 @@ const schedulePersist = (): void => {
     }, PERSIST_DEBOUNCE_MS);
 };
 
+const buildPayload = (budget: number): string => {
+    // Walk newest-to-oldest, dropping entries once we hit either cap.
+    // Store raw objects (not pre-serialized strings) so the final
+    // JSON.stringify(kept) encodes each value once; double-encoding
+    // would escape quotes/backslashes and make the stored blob 1.5-2×
+    // larger than the byte budget suggests.
+    const reversed = Array.from(snapshots.entries()).reverse();
+    const kept: [string, unknown][] = [];
+    let bytes = 0;
+    for (const [k, v] of reversed) {
+        if (kept.length >= MAX_ENTRIES) break;
+        let serialized: string;
+        try {
+            serialized = JSON.stringify(v);
+        } catch {
+            // Non-serializable payload (e.g. holds a Blob). Skip it —
+            // it can still live in memory for the current session.
+            continue;
+        }
+        // +10 accounts for key quoting, array brackets, and comma overhead
+        // in the outer JSON.stringify — keep the estimate tight so we never
+        // cut too many entries when objects are small.
+        const entryBytes = k.length + serialized.length + 10;
+        if (bytes + entryBytes > budget) continue;
+        bytes += entryBytes;
+        kept.push([k, v]);
+    }
+    // Reverse again so we end up writing oldest-first and the most-
+    // recent entries are the last ones in the stored object.
+    kept.reverse();
+    return JSON.stringify(kept);
+};
+
 const persistNow = (): void => {
     if (!isBrowser) return;
-    try {
-        // Walk newest-to-oldest, dropping entries once we hit either cap.
-        // Store raw objects (not pre-serialized strings) so the final
-        // JSON.stringify(kept) encodes each value once; double-encoding
-        // would escape quotes/backslashes and make the stored blob 1.5-2×
-        // larger than the byte budget suggests.
-        const reversed = Array.from(snapshots.entries()).reverse();
-        const kept: [string, unknown][] = [];
-        let bytes = 0;
-        for (const [k, v] of reversed) {
-            if (kept.length >= MAX_ENTRIES) break;
-            let serialized: string;
-            try {
-                serialized = JSON.stringify(v);
-            } catch {
-                // Non-serializable payload (e.g. holds a Blob). Skip it —
-                // it can still live in memory for the current session.
-                continue;
-            }
-            // +10 accounts for key quoting, array brackets, and comma overhead
-            // in the outer JSON.stringify — keep the estimate tight so we never
-            // cut too many entries when objects are small.
-            const entryBytes = k.length + serialized.length + 10;
-            if (bytes + entryBytes > MAX_BYTES) continue;
-            bytes += entryBytes;
-            kept.push([k, v]);
-        }
-        // Reverse again so we end up writing oldest-first and the most-
-        // recent entries are the last ones in the stored object.
-        kept.reverse();
-        const payload = JSON.stringify(kept);
-        localStorage.setItem(STORAGE_KEY, payload);
-    } catch (err) {
-        // Quota exceeded or storage disabled (private mode). Drop the
-        // mirror entirely so the next persist tries fresh.
-        console.warn('[cache] snapshot persist failed', err);
+    // Tiered budgets: when the quota is tight (Android WebView shares ~5MB
+    // with the settings/auth stores and the debug ring), persist a SMALLER
+    // mirror instead of dropping it entirely — losing every snapshot cost a
+    // cold (placeholder-less) next launch and the very next persist failed
+    // identically anyway.
+    let lastErr: unknown;
+    for (const budget of [MAX_BYTES, 512 * 1024, 128 * 1024, 32 * 1024]) {
         try {
-            localStorage.removeItem(STORAGE_KEY);
-        } catch {
-            // ignore
+            localStorage.setItem(STORAGE_KEY, buildPayload(budget));
+            if (budget !== MAX_BYTES) {
+                console.warn('[cache] snapshot persisted at reduced budget', { budget });
+            }
+            return;
+        } catch (err) {
+            lastErr = err;
         }
+    }
+    // Even the tiny payload failed — storage is disabled or truly full.
+    console.warn('[cache] snapshot persist failed', lastErr);
+    try {
+        localStorage.removeItem(STORAGE_KEY);
+    } catch {
+        // ignore
     }
 };
 

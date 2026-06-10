@@ -507,6 +507,11 @@
 }
 
 .mobile .watermark {
+    /* Desktop crops the headline above the pane edge (-0.45em); on the
+       phone the pane slides UNDER the translucent app header, so the
+       cropped sliver bled through it a few px above the back row. Anchor
+       flush so the back-button's blur band owns the crop instead. */
+    top: 0;
     font-size: clamp(3rem, 18vw, 5.5rem);
 }
 

@@ -1597,7 +1597,7 @@ const initialState: SettingsState = {
         type: FontType.BUILT_IN,
     },
     general: {
-        accent: 'rgb(53, 116, 252)',
+        accent: 'rgb(252, 72, 0)',
         albumBackground: false,
         albumBackgroundBlur: 3,
         albumFavoriteFilter: null,
@@ -3498,10 +3498,18 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
+                if (version <= 60) {
+                    // New default accent. Only rewrite installs still on the
+                    // OLD default — explicit customizations are kept.
+                    if (state.general && state.general.accent === 'rgb(53, 116, 252)') {
+                        state.general.accent = 'rgb(252, 72, 0)';
+                    }
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 60,
+            version: 61,
         },
     ),
 );
