@@ -21,10 +21,6 @@ win:
           arch:
               - x64
               - arm64
-        - target: portable
-          arch:
-              - x64
-              - arm64
     icon: assets/icons/icon.ico
 
 nsis:
@@ -33,9 +29,6 @@ nsis:
     shortcutName: ${productName}
     uninstallDisplayName: ${productName}
     createDesktopShortcut: always
-
-portable:
-    artifactName: ${productName}-${version}-${os}-${arch}-portable.${ext}
 
 mac:
     target:
@@ -67,16 +60,15 @@ linux:
         - tar.xz
     category: AudioVideo;Audio;Player
     icon: assets/icons/icon.png
-    artifactName: ${productName}-${version}-${os}-${arch}.${ext}
+    artifactName: ${productName}-${os}-${arch}.${ext}
 
 toolsets:
     appimage: '1.0.3'
 
 npmRebuild: false
-afterAllArtifactBuild: scripts/after-all-artifact-build.mjs
+
 publish:
-    provider: github
-    owner: itskenny0
-    repo: feishin
-    channel: latest
-    releaseType: draft
+    provider: s3
+    bucket: feishin-nightly
+    channel: alpha
+    endpoint: https://065f090c64de2dc707dd70ac72db9669.r2.cloudflarestorage.com

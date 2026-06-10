@@ -59,7 +59,7 @@ describe('openSettingsModal', () => {
         expect(props.fullScreen).toBe(false);
         expect(props.size).toBe('60rem');
         expect(props.transitionProps).toEqual({ transition: 'pop' });
-        expect(props.styles?.content).toMatchObject({
+        expect((props.styles as Record<string, object>)?.content).toMatchObject({
             height: '100%',
             maxWidth: '90%',
             width: '100%',
@@ -75,7 +75,7 @@ describe('openSettingsModal', () => {
         expect(props.fullScreen).toBe(true);
         expect(props.size).toBe('100%');
         expect(props.transitionProps).toEqual({ transition: 'slide-up' });
-        expect(props.styles?.content).toMatchObject({
+        expect((props.styles as Record<string, object>)?.content).toMatchObject({
             height: '100dvh',
             maxWidth: '100%',
             width: '100%',
