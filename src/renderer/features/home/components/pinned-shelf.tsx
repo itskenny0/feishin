@@ -3,13 +3,11 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router';
 
 import styles from './pinned-shelf.module.css';
+import qpStyles from './spotify-home/quick-picks.module.css';
 
-import {
-    GridCarousel,
-    useGridCarouselContainerQuery,
-} from '/@/renderer/components/grid-carousel/grid-carousel-v2';
 import { ItemImage } from '/@/renderer/components/item-image/item-image';
 import { getTitlePath } from '/@/renderer/components/item-list/helpers/get-title-path';
+import { ShelfTitle } from '/@/renderer/features/home/components/spotify-home/shelf-title';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
 import { useCurrentServerId, usePlayButtonBehavior } from '/@/renderer/store';
 import { Pin, PinItemType, usePins, usePinsActions } from '/@/renderer/store/pins.store';
@@ -17,15 +15,17 @@ import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Text } from '/@/shared/components/text/text';
 import { LibraryItem } from '/@/shared/types/domain-types';
 
-interface PinnedCardProps {
-    containerQuery?: ReturnType<typeof useGridCarouselContainerQuery>;
-    pin: Pin;
-}
-
 const isRoundType = (itemType: PinItemType) =>
     itemType === LibraryItem.ALBUM_ARTIST || itemType === LibraryItem.ARTIST;
 
-const PinnedCard = memo(({ pin }: PinnedCardProps) => {
+/**
+ * One pinned entry, rendered EXACTLY like the quick-picks tiles right below
+ * it (cover flush-left, name filling the width) so the pinned zone reads as
+ * part of the home top zone instead of a separate carousel of big cards.
+ * The unpin affordance replaces quick-picks' hover play button and is
+ * always visible — pins are explicitly managed chrome.
+ */
+const PinnedTile = memo(({ pin }: { pin: Pin }) => {
     const { t } = useTranslation();
     const navigate = useNavigate();
     const player = usePlayer();
@@ -38,14 +38,13 @@ const PinnedCard = memo(({ pin }: PinnedCardProps) => {
         [pin.id, pin.itemType],
     );
 
-    const handleNavigate = useCallback(() => {
-        // Songs have no detail route - play them instead.
+    const handleOpen = useCallback(() => {
+        // Songs have no detail route — play them instead.
         if (pin.itemType === LibraryItem.SONG) {
             if (!serverId) return;
             player.addToQueueByFetch(serverId, [pin.id], LibraryItem.SONG, playButtonBehavior);
             return;
         }
-
         if (navigationPath) {
             navigate(navigationPath, { state: { item: pin } });
         }
@@ -64,85 +63,76 @@ const PinnedCard = memo(({ pin }: PinnedCardProps) => {
         (e: React.KeyboardEvent) => {
             if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
-                handleNavigate();
+                handleOpen();
             }
         },
-        [handleNavigate],
+        [handleOpen],
     );
 
     return (
-        <div className={styles.card}>
-            <div className={styles.imageWrapper}>
-                <div
-                    aria-label={pin.name}
-                    className={styles.imageButton}
-                    onClick={handleNavigate}
-                    onKeyDown={handleKeyDown}
-                    role="button"
-                    tabIndex={0}
-                >
-                    <ItemImage
-                        className={isRoundType(pin.itemType) ? styles.roundImage : styles.image}
-                        id={pin.imageId}
-                        itemType={pin.itemType}
-                        src={pin.imageUrl}
-                        type="itemCard"
-                    />
-                </div>
-                <div className={styles.unpinButton}>
-                    <ActionIcon
-                        aria-label={t('action.unpinFromHome', { postProcess: 'sentenceCase' })}
-                        icon="unpin"
-                        iconProps={{ size: 'sm' }}
-                        onClick={handleUnpin}
-                        size="sm"
-                        tooltip={{
-                            label: t('action.unpinFromHome', { postProcess: 'sentenceCase' }),
-                        }}
-                        variant="default"
-                    />
-                </div>
+        <div
+            aria-label={pin.name}
+            className={qpStyles.tile}
+            onClick={handleOpen}
+            onKeyDown={handleKeyDown}
+            role="button"
+            tabIndex={0}
+        >
+            <div
+                className={`${qpStyles.tileImage} ${isRoundType(pin.itemType) ? styles.roundImage : ''}`}
+            >
+                <ItemImage
+                    id={pin.imageId}
+                    itemType={pin.itemType}
+                    src={pin.imageUrl ?? undefined}
+                    type="itemCard"
+                />
             </div>
-            <Text isNoSelect lineClamp={2} size="sm" weight={500}>
+            <Text className={qpStyles.tileTitle} isNoSelect overflow="hidden">
                 {pin.name}
             </Text>
+            <div className={styles.unpinButton}>
+                <ActionIcon
+                    aria-label={t('action.unpinFromHome', { postProcess: 'sentenceCase' })}
+                    icon="unpin"
+                    iconProps={{ size: 'sm' }}
+                    onClick={handleUnpin}
+                    size="sm"
+                    tooltip={{
+                        label: t('action.unpinFromHome', { postProcess: 'sentenceCase' }),
+                    }}
+                    variant="subtle"
+                />
+            </div>
         </div>
     );
 });
 
-PinnedCard.displayName = 'PinnedCard';
+PinnedTile.displayName = 'PinnedTile';
 
-interface PinnedShelfProps {
-    containerQuery?: ReturnType<typeof useGridCarouselContainerQuery>;
-}
-
-export const PinnedShelf = memo(({ containerQuery }: PinnedShelfProps) => {
+/**
+ * Pinned items zone — sits directly under the hero (greeting + lucky
+ * button) and above quick picks, using the same wide-tile grid so the two
+ * zones read as one. Renders nothing when the current server has no pins.
+ */
+export const PinnedShelf = memo(() => {
     const { t } = useTranslation();
     const serverId = useCurrentServerId();
     const pins = usePins(serverId);
-
-    const cards = useMemo(
-        () =>
-            pins.map((pin) => ({
-                content: <PinnedCard containerQuery={containerQuery} pin={pin} />,
-                id: `${pin.itemType}-${pin.id}`,
-            })),
-        [containerQuery, pins],
-    );
 
     if (pins.length === 0) {
         return null;
     }
 
     return (
-        <GridCarousel
-            cards={cards}
-            containerQuery={containerQuery}
-            onNextPage={() => {}}
-            onPrevPage={() => {}}
-            rowCount={1}
-            title={t('page.home.pinned', { postProcess: 'sentenceCase' })}
-        />
+        <div>
+            <ShelfTitle title={t('page.home.pinned', { postProcess: 'sentenceCase' })} />
+            <div className={qpStyles.grid}>
+                {pins.map((pin) => (
+                    <PinnedTile key={`${pin.itemType}-${pin.id}`} pin={pin} />
+                ))}
+            </div>
+        </div>
     );
 });
 

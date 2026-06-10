@@ -90,22 +90,23 @@ const HomeRoute = () => {
     const rows: ReactNode[] = useMemo(() => {
         const built: ReactNode[] = [];
 
-        // 0. Pinned items — always the very top of the stack. Renders
-        // nothing when the current server has no pins.
-        built.push(
-            <ComponentErrorBoundary key="pinned">
-                <PinnedShelf containerQuery={containerQuery} />
-            </ComponentErrorBoundary>,
-        );
-
-        // 1. Hero greeting + atmosphere.
+        // 1. Hero greeting + atmosphere (incl. the lucky button).
         built.push(
             <ComponentErrorBoundary key="hero">
                 <HomeHero />
             </ComponentErrorBoundary>,
         );
 
-        // 2. Quick picks (recently-played albums as wide tiles).
+        // 2a. Pinned items — directly under the greeting, styled like the
+        // quick-pick tiles below so the top zone reads as one block.
+        // Renders nothing when the current server has no pins.
+        built.push(
+            <ComponentErrorBoundary key="pinned">
+                <PinnedShelf />
+            </ComponentErrorBoundary>,
+        );
+
+        // 2b. Quick picks (recently-played albums as wide tiles).
         built.push(
             <ComponentErrorBoundary key="quick-picks">
                 <QuickPicks />
