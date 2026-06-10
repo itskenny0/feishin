@@ -106,6 +106,18 @@ const readFavoriteIds = async (
     return new Set(rows.filter((r) => r.IsFavorite).map((r) => r.ItemId));
 };
 
+// Ids of items with a user rating, for the `hasRating` filter. Ratings live
+// on the same favorites-table rows (Rating column) as the favorite flags.
+const readRatedIds = async (
+    db: NonNullable<ReturnType<typeof getActiveCacheDb>>,
+    itemType: CachedFavoriteKind,
+): Promise<Set<string>> => {
+    const rows = await db.favorites.where('ItemType').equals(itemType).toArray();
+    return new Set(
+        rows.filter((r) => typeof r.Rating === 'number' && r.Rating > 0).map((r) => r.ItemId),
+    );
+};
+
 export const resolveAlbumPage = async (
     args: BaseArgs<AlbumListQuery>,
 ): Promise<undefined | { items: unknown[]; startIndex: number; totalRecordCount: number }> => {
@@ -139,6 +151,8 @@ export const resolveAlbumPage = async (
 
     const needsFavorites = query.favorite !== undefined || query.sortBy === AlbumListSort.FAVORITED;
     const favoriteAlbumIds = needsFavorites ? await readFavoriteIds(db, 'Album') : undefined;
+    const ratedAlbumIds =
+        query.hasRating !== undefined ? await readRatedIds(db, 'Album') : undefined;
 
     // Filter+sort over the full row set ONCE (limit undefined skips
     // pagination so we get the complete sorted list), then store the
@@ -152,6 +166,7 @@ export const resolveAlbumPage = async (
     const out = filterAlbumsLocal({
         favoriteAlbumIds,
         query: fullQuery,
+        ratedAlbumIds,
         rows,
     });
     if (out === undefined) return undefined;
@@ -277,10 +292,12 @@ export const resolveSongPage = async (
     const needsSongFavorites =
         query.favorite !== undefined || query.sortBy === SongListSort.FAVORITED;
     const favoriteSongIds = needsSongFavorites ? await readFavoriteIds(db, 'Song') : undefined;
+    const ratedSongIds = query.hasRating !== undefined ? await readRatedIds(db, 'Song') : undefined;
 
     const out = filterSongsLocal({
         favoriteSongIds,
         query: { ...query, limit: undefined, startIndex: 0 },
+        ratedSongIds,
         rows,
     });
     if (out === undefined) return undefined;

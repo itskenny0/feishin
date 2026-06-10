@@ -116,3 +116,38 @@ describe('filterAlbumsLocal FAVORITED sort direction', () => {
         expect(out?.items[out.items.length - 1]?.id).toBe('b');
     });
 });
+
+describe('filterAlbumsLocal hasRating branch', () => {
+    const rows = [album('a'), album('b'), album('c')];
+    const ratingQuery = {
+        hasRating: true as const,
+        sortBy: AlbumListSort.NAME,
+        sortOrder: SortOrder.ASC,
+        startIndex: 0,
+    };
+
+    it('returns undefined when ratings are required but no Set is supplied (network fallback)', () => {
+        const out = filterAlbumsLocal({ query: ratingQuery, rows });
+        expect(out).toBeUndefined();
+    });
+
+    it('hasRating: true keeps only rated rows', () => {
+        const out = filterAlbumsLocal({
+            query: ratingQuery,
+            ratedAlbumIds: new Set(['b']),
+            rows,
+        });
+        expect(out?.items.map((i) => i.id)).toEqual(['b']);
+        expect(out?.totalRecordCount).toBe(1);
+    });
+
+    it('hasRating: false keeps only unrated rows', () => {
+        const out = filterAlbumsLocal({
+            query: { ...ratingQuery, hasRating: false },
+            ratedAlbumIds: new Set(['b']),
+            rows,
+        });
+        expect(out?.items.map((i) => i.id)).toEqual(['a', 'c']);
+        expect(out?.totalRecordCount).toBe(2);
+    });
+});

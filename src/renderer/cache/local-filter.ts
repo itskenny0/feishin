@@ -125,7 +125,6 @@ const paginate = <T>(
 const hasUnsupportedAlbumFilter = (query: AlbumListQuery | undefined): boolean => {
     if (!query) return false;
     if (query.compilation !== undefined) return true;
-    if (query.hasRating !== undefined) return true;
     if (query.isRecentlyPlayed !== undefined) return true;
     if (query.musicFolderId) return true;
     if (query._custom && Object.keys(query._custom).length > 0) return true;
@@ -133,7 +132,6 @@ const hasUnsupportedAlbumFilter = (query: AlbumListQuery | undefined): boolean =
 };
 
 const hasUnsupportedSongFilter = (query: SongListQuery): boolean => {
-    if (query.hasRating !== undefined) return true;
     if (query.musicFolderId) return true;
     if (query._custom && Object.keys(query._custom).length > 0) return true;
     return false;
@@ -203,6 +201,11 @@ const sortAlbums = (rows: CachedAlbum[], sortBy: AlbumListSort | undefined): Cac
 export interface FilterAlbumsArgs {
     favoriteAlbumIds?: Set<string>;
     query: AlbumListQuery;
+    // Ids of albums carrying a user rating (favorites-table rows whose
+    // Rating is a positive number). Required when the query carries
+    // `hasRating`; the filter returns undefined (network fallback) when the
+    // set wasn't supplied.
+    ratedAlbumIds?: Set<string>;
     rows: CachedAlbum[];
 }
 
@@ -217,7 +220,7 @@ export interface FilterAlbumsArgs {
  * caller can fall through to the network.
  */
 export const filterAlbumsLocal = (args: FilterAlbumsArgs): AlbumListResponse | undefined => {
-    const { favoriteAlbumIds, query, rows } = args;
+    const { favoriteAlbumIds, query, ratedAlbumIds, rows } = args;
     if (hasUnsupportedAlbumFilter(query)) return undefined;
 
     const start = performance.now();
@@ -231,6 +234,14 @@ export const filterAlbumsLocal = (args: FilterAlbumsArgs): AlbumListResponse | u
     } else if (query.favorite === false) {
         if (!favoriteAlbumIds) return undefined;
         out = out.filter((r) => !favoriteAlbumIds.has(r.Id));
+    }
+
+    if (query.hasRating === true) {
+        if (!ratedAlbumIds) return undefined;
+        out = out.filter((r) => ratedAlbumIds.has(r.Id));
+    } else if (query.hasRating === false) {
+        if (!ratedAlbumIds) return undefined;
+        out = out.filter((r) => !ratedAlbumIds.has(r.Id));
     }
 
     if (query.artistIds && query.artistIds.length > 0) {
@@ -515,6 +526,8 @@ const sortSongs = (rows: CachedSong[], sortBy: SongListSort | undefined): Cached
 export interface FilterSongsArgs {
     favoriteSongIds?: Set<string>;
     query: SongListQuery;
+    // Ids of songs carrying a user rating — same contract as ratedAlbumIds.
+    ratedSongIds?: Set<string>;
     rows: CachedSong[];
 }
 
@@ -525,7 +538,7 @@ export interface FilterSongsArgs {
  * back to the network.
  */
 export const filterSongsLocal = (args: FilterSongsArgs): SongListResponse | undefined => {
-    const { favoriteSongIds, query, rows } = args;
+    const { favoriteSongIds, query, ratedSongIds, rows } = args;
     if (hasUnsupportedSongFilter(query)) return undefined;
 
     const start = performance.now();
@@ -539,6 +552,14 @@ export const filterSongsLocal = (args: FilterSongsArgs): SongListResponse | unde
     } else if (query.favorite === false) {
         if (!favoriteSongIds) return undefined;
         out = out.filter((r) => !favoriteSongIds.has(r.Id));
+    }
+
+    if (query.hasRating === true) {
+        if (!ratedSongIds) return undefined;
+        out = out.filter((r) => ratedSongIds.has(r.Id));
+    } else if (query.hasRating === false) {
+        if (!ratedSongIds) return undefined;
+        out = out.filter((r) => !ratedSongIds.has(r.Id));
     }
 
     if (query.albumIds && query.albumIds.length > 0) {
