@@ -152,11 +152,27 @@ function useOfflineSongUrl(
                 const row = await localMediaStore.get(song._serverId, song.id);
                 if (cancelled) return;
                 if (row?.Blob) {
+                    // MATERIALIZE the blob into memory before minting the
+                    // object URL. Dexie returns IndexedDB-FILE-BACKED blobs;
+                    // on Android 16 WebView (confirmed via remote-debug
+                    // heartbeats: <audio> playing blob:, readyState 4, then
+                    // the renderer dies natively with a quiet 38MB heap)
+                    // handing such a blob to the media element kills the
+                    // render process ~200ms into playback. An in-memory copy
+                    // detaches playback from the IDB blob registry. Costs the
+                    // compressed file size in RAM transiently — fine for
+                    // music files.
+                    const bytes = await row.Blob.arrayBuffer();
+                    if (cancelled) return;
+                    const materialized = new Blob([bytes], {
+                        type: row.Blob.type || 'audio/mpeg',
+                    });
                     revoke();
-                    const url = URL.createObjectURL(row.Blob);
+                    const url = URL.createObjectURL(materialized);
                     objectUrlRef.current = url;
                     console.info(`${TAG} playback substitution: serving local blob`, {
                         bytes: row.ByteSize,
+                        materialized: true,
                         songId: song.id,
                     });
                     setSettled({ key: targetKey, url });

@@ -59,38 +59,60 @@ let listenersAttached = false;
 // until the receiver acks), so the final pre-crash heartbeats and logs arrive
 // once the device is back online.
 const RING_KEY = 'remote_debug_ring';
-const RING_MAX = 800;
-const RING_PERSIST_INTERVAL_MS = 250;
+// String-append ring: entries are NDJSON lines in one string, persisted with
+// a single setItem per entry (write-through — the crash kills the renderer
+// with no JS error, so the last synchronous write IS the evidence horizon).
+// Trimmed from the front when over budget.
+const RING_MAX_CHARS = 400_000;
 const BACKLOG_RETRY_MS = 30_000;
 
-let ring: ShipperEntry[] = [];
-let ringDirty = false;
-let ringPersistTimer: null | ReturnType<typeof setInterval> = null;
+let ringStr = '';
 let backlogRetryTimer: null | ReturnType<typeof setInterval> = null;
 
 const persistRing = (): void => {
-    if (!ringDirty) return;
-    ringDirty = false;
     try {
-        localStorage.setItem(RING_KEY, JSON.stringify(ring));
+        localStorage.setItem(RING_KEY, ringStr);
     } catch {
         // Quota/serialization failures must never break the app.
     }
 };
 
-const recordToRing = (entry: ShipperEntry, persistImmediately = false): void => {
-    ring.push(entry);
-    if (ring.length > RING_MAX) ring.splice(0, ring.length - RING_MAX);
-    ringDirty = true;
-    if (persistImmediately) persistRing();
+const recordToRing = (entry: ShipperEntry): void => {
+    ringStr += `${JSON.stringify(entry)}\n`;
+    if (ringStr.length > RING_MAX_CHARS) {
+        // Drop the oldest ~25%, cutting at a line boundary.
+        const cut = ringStr.indexOf('\n', Math.floor(RING_MAX_CHARS / 4));
+        ringStr = cut >= 0 ? ringStr.slice(cut + 1) : '';
+    }
+    persistRing();
+};
+
+const parseRing = (raw: null | string): ShipperEntry[] => {
+    if (!raw) return [];
+    // Current string-NDJSON format; tolerate the earlier JSON-array format.
+    try {
+        if (raw.startsWith('[')) return JSON.parse(raw) as ShipperEntry[];
+    } catch {
+        return [];
+    }
+    return raw
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => {
+            try {
+                return JSON.parse(line) as ShipperEntry;
+            } catch {
+                return null;
+            }
+        })
+        .filter((e): e is ShipperEntry => e !== null);
 };
 
 const shipBacklog = (): void => {
     if (!endpointUrl) return;
     let leftover: ShipperEntry[] = [];
     try {
-        const raw = localStorage.getItem(RING_KEY);
-        if (raw) leftover = JSON.parse(raw) as ShipperEntry[];
+        leftover = parseRing(localStorage.getItem(RING_KEY));
     } catch {
         leftover = [];
     }
@@ -116,8 +138,8 @@ const shipBacklog = (): void => {
                 if (res.ok) {
                     // Acked — drop ONLY the previous-session entries; keep the
                     // current session's mirror intact.
-                    ring = ring.filter((e) => e.session === session);
-                    ringDirty = true;
+                    const mine = parseRing(ringStr).filter((e) => e.session === session);
+                    ringStr = mine.map((e) => `${JSON.stringify(e)}\n`).join('');
                     persistRing();
                     if (backlogRetryTimer) {
                         clearInterval(backlogRetryTimer);
@@ -178,7 +200,7 @@ const post = (body: string, useBeacon = false): void => {
 };
 
 const shipNow = (entry: ShipperEntry): void => {
-    recordToRing(entry, entry.level === 'error');
+    recordToRing(entry);
     post(JSON.stringify(entry));
 };
 
@@ -299,13 +321,16 @@ const start = (endpoint: string): void => {
     // BEFORE the first persist could overwrite it, then upload it as backlog
     // — retrying until the receiver acks, in case we boot still offline.
     try {
-        const raw = localStorage.getItem(RING_KEY);
-        ring = raw ? (JSON.parse(raw) as ShipperEntry[]) : [];
+        const raw = localStorage.getItem(RING_KEY) ?? '';
+        // Tolerate the earlier JSON-array format by re-encoding it.
+        ringStr = raw.startsWith('[')
+            ? parseRing(raw)
+                  .map((e) => `${JSON.stringify(e)}\n`)
+                  .join('')
+            : raw;
     } catch {
-        ring = [];
+        ringStr = '';
     }
-    ringDirty = false;
-    ringPersistTimer = setInterval(persistRing, RING_PERSIST_INTERVAL_MS);
     shipBacklog();
     backlogRetryTimer = setInterval(shipBacklog, BACKLOG_RETRY_MS);
 
@@ -344,10 +369,6 @@ const stop = (): void => {
     active = false;
     flushQueue(true);
     persistRing();
-    if (ringPersistTimer) {
-        clearInterval(ringPersistTimer);
-        ringPersistTimer = null;
-    }
     if (backlogRetryTimer) {
         clearInterval(backlogRetryTimer);
         backlogRetryTimer = null;
