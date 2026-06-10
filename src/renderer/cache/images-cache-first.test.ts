@@ -59,11 +59,15 @@ vi.mock('/@/renderer/cache/stats', () => ({
 
 vi.mock('/@/shared/components/image/use-native-image', () => ({
     NO_ARTWORK_URL: 'feishin://no-artwork',
+    registerThumbnailDegradedProbe: vi.fn(),
     registerThumbnailUrlCache: vi.fn(),
 }));
 
 vi.mock('/@/renderer/lib/network-status', () => ({
     getIsOnline: () => mocks.online.value,
+    markServerReachable: vi.fn(),
+    markServerUnreachable: vi.fn(),
+    subscribeIsOnline: () => () => {},
 }));
 
 const VARIANTS = {

@@ -2,6 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { ImageRequest } from '/@/shared/types/domain-types';
 
+// Whether the most recent serve for (item, variant) was DEGRADED (stale row
+// or under-sized substitute). Queried at adoption time to decide whether to
+// arm the upgrade re-resolve.
+type ThumbnailDegradedProbe = (itemId: string, variant: string) => boolean;
+
 // The renderer registers a thumbnail resolver at startup. Shared code
 // (this hook) lives in a bundle that doesn't have direct access to
 // renderer-only modules, so we expose a tiny registration point and call
@@ -13,7 +18,6 @@ type ThumbnailResolver = (
     variant: string,
     request: ImageRequest | string,
 ) => Promise<string>;
-
 // Refcounted shared-URL pair. When registered, the hook prefers these over
 // the per-call `resolveThumbnailRef` so concurrent mounts of the same item
 // share ONE object URL (revoked only when the last consumer releases it),
@@ -32,11 +36,22 @@ type ThumbnailUrlPeeker = (itemId: string, variant: string) => string | undefine
 // `<BaseImage>` skipping its load debounce / viewport wait when the cover
 // would paint synchronously anyway).
 type ThumbnailUrlProber = (itemId: string, variant: string) => boolean;
+
 // The releaser MUST be keyed by the SAME (itemId, variant) the URL was
 // acquired with — two surfaces of one item at different variants each own
 // their own shared URL + refcount. Releasing by bare itemId would
-// decrement (and prematurely revoke) the wrong variant's entry.
-type ThumbnailUrlReleaser = (itemId: string, variant: string) => void;
+// decrement (and prematurely revoke) the wrong variant's entry. The
+// optional `url` is the blob: URL the consumer actually held, so a release
+// that races an upgrade (which displaces the keyed entry) settles against
+// the right blob instead of corrupting the fresh entry's refcount.
+type ThumbnailUrlReleaser = (itemId: string, variant: string, url?: string) => void;
+
+/**
+ * Fired by the cache layer (with `detail: { itemId, variant }`) when the
+ * exact bucket for a previously-degraded serve lands in Dexie. Consumers
+ * holding a degraded adoption re-resolve to pick up the fresh blob.
+ */
+export const THUMBNAIL_UPGRADED_EVENT = 'feishin:thumbnail-upgraded';
 
 // Surface bucket used when a request doesn't declare one (legacy callers,
 // the `imageUrl` branch, or anything that hasn't threaded a `type` through).
@@ -58,9 +73,14 @@ let acquireThumbnailUrlRef: null | ThumbnailUrlAcquirer = null;
 let releaseThumbnailUrlRef: null | ThumbnailUrlReleaser = null;
 let peekThumbnailUrlRef: null | ThumbnailUrlPeeker = null;
 let probeThumbnailUrlRef: null | ThumbnailUrlProber = null;
+let probeDegradedRef: null | ThumbnailDegradedProbe = null;
 
 export const registerThumbnailResolver = (fn: null | ThumbnailResolver): void => {
     resolveThumbnailRef = fn;
+};
+
+export const registerThumbnailDegradedProbe = (fn: null | ThumbnailDegradedProbe): void => {
+    probeDegradedRef = fn;
 };
 
 export const registerThumbnailUrlCache = (
@@ -103,8 +123,8 @@ const tryAcquireSharedThumbnail = async (
     }
 };
 
-const releaseSharedThumbnailUrl = (itemId: string, variant: string): void => {
-    releaseThumbnailUrlRef?.(itemId, variant);
+const releaseSharedThumbnailUrl = (itemId: string, variant: string, url?: string): void => {
+    releaseThumbnailUrlRef?.(itemId, variant, url);
 };
 
 const tryResolveThumbnail = async (
@@ -154,6 +174,14 @@ export function useNativeImage({
     const sharedUrlRef = useRef<null | { itemId: string; variant: string }>(null);
     const onFetchErrorRef = useRef(onFetchError);
     const [state, setState] = useState<NativeImageState>({ status: 'idle' });
+    // Armed when the CURRENT adoption was served degraded (stale row /
+    // under-sized substitute) — a matching `feishin:thumbnail-upgraded`
+    // event then forces a re-resolve to pick up the fresh blob.
+    const degradedRef = useRef<null | { itemId: string; variant: string }>(null);
+    // Set by the upgrade handler so the re-resolve keeps painting the old
+    // (still-valid, grace-protected) URL instead of flashing a skeleton.
+    const keepSrcOnNextResolveRef = useRef(false);
+    const [upgradeNonce, setUpgradeNonce] = useState(0);
 
     // STABLE signature of the request. Deliberately omits volatile /
     // identity-only fields: when `home` renders from a snapshot and then
@@ -206,10 +234,13 @@ export function useNativeImage({
             if (sharedUrlRef.current) {
                 // Shared refcounted URL: release our reference instead of
                 // revoking — the cache revokes once the last consumer lets
-                // go. Release by the SAME (item, variant) we acquired with.
+                // go. Release by the SAME (item, variant) we acquired with,
+                // carrying the held URL so a release racing an upgrade
+                // settles against the displaced entry, not the fresh one.
                 releaseSharedThumbnailUrl(
                     sharedUrlRef.current.itemId,
                     sharedUrlRef.current.variant,
+                    objectUrlRef.current,
                 );
                 sharedUrlRef.current = null;
             } else {
@@ -256,11 +287,23 @@ export function useNativeImage({
                 sharedUrlRef.current = { itemId: request.cacheItemId, variant: cacheVariant };
                 loadedRequestSignatureRef.current = requestSignature;
                 setState({ displaySrc: peeked, status: 'loaded' });
+                degradedRef.current = probeDegradedRef?.(request.cacheItemId, cacheVariant)
+                    ? { itemId: request.cacheItemId, variant: cacheVariant }
+                    : null;
                 return;
             }
         }
 
-        setState({ status: 'loading' });
+        // An upgrade re-resolve keeps painting the old (grace-protected) URL
+        // while the fresh blob resolves — dropping to a skeleton for a
+        // background quality bump would look like a redraw.
+        const keepSrc = keepSrcOnNextResolveRef.current;
+        keepSrcOnNextResolveRef.current = false;
+        setState((currentState) =>
+            keepSrc && currentState.displaySrc
+                ? { displaySrc: currentState.displaySrc, status: 'loading' }
+                : { status: 'loading' },
+        );
 
         const abortController = new AbortController();
         abortControllerRef.current = abortController;
@@ -319,7 +362,7 @@ export function useNativeImage({
                                 late.startsWith('blob:') &&
                                 objectUrlRef.current !== late
                             ) {
-                                releaseSharedThumbnailUrl(cacheItemId, cacheVariant);
+                                releaseSharedThumbnailUrl(cacheItemId, cacheVariant, late);
                             }
                         });
                     }
@@ -331,7 +374,7 @@ export function useNativeImage({
                         // bailing so we don't leak the object URL.
                         if (cached && cached.startsWith('blob:')) {
                             if (useShared) {
-                                releaseSharedThumbnailUrl(cacheItemId, cacheVariant);
+                                releaseSharedThumbnailUrl(cacheItemId, cacheVariant, cached);
                             } else {
                                 URL.revokeObjectURL(cached);
                             }
@@ -345,6 +388,7 @@ export function useNativeImage({
                         // hang for the full timeout against an unreachable
                         // server, pinning the cell in a skeleton.
                         loadedRequestSignatureRef.current = requestSignature;
+                        degradedRef.current = null;
                         setState({ status: 'error' });
                         onFetchErrorRef.current?.();
                         return;
@@ -356,6 +400,12 @@ export function useNativeImage({
                             : null;
                         loadedRequestSignatureRef.current = requestSignature;
                         setState({ displaySrc: cached, status: 'loaded' });
+                        // A degraded serve (stale row / under-sized
+                        // substitute) re-resolves when the exact bucket
+                        // lands — see the upgrade-event effect below.
+                        degradedRef.current = probeDegradedRef?.(cacheItemId, cacheVariant)
+                            ? { itemId: cacheItemId, variant: cacheVariant }
+                            : null;
                         return;
                     }
                     // Cache lookup lost the 5s race (timedOut) but the
@@ -397,6 +447,9 @@ export function useNativeImage({
                 objectUrlRef.current = objectUrl;
                 sharedUrlRef.current = null;
                 loadedRequestSignatureRef.current = requestSignature;
+                // A direct fetch of the raw URL is full quality — never
+                // degraded.
+                degradedRef.current = null;
                 setState({ displaySrc: objectUrl, status: 'loaded' });
             } catch {
                 if (abortController.signal.aborted) {
@@ -424,7 +477,30 @@ export function useNativeImage({
         // object identity. A new request object carrying the same signature
         // (the home snapshot → react-query swap) is a no-op for this effect,
         // so an already-loaded image is never torn down and re-resolved.
-    }, [enabled, fetchPriority, requestSignature]);
+        // `upgradeNonce` forces a re-resolve after a degraded adoption's
+        // exact bucket lands (the signature alone would short-circuit it).
+    }, [enabled, fetchPriority, requestSignature, upgradeNonce]);
+
+    // Degraded-adoption upgrades: when the cache layer announces that the
+    // exact bucket for the (item, variant) we adopted DEGRADED has been
+    // written, force the resolve effect to run again — it releases the old
+    // reference and adopts the fresh blob (keeping the old src painted in
+    // the meantime, so the bump never flashes a skeleton).
+    useEffect(() => {
+        if (typeof window === 'undefined') return undefined;
+        const onUpgraded = (event: Event): void => {
+            const armed = degradedRef.current;
+            const detail = (event as CustomEvent<{ itemId: string; variant: string }>).detail;
+            if (!armed || !detail) return;
+            if (detail.itemId !== armed.itemId || detail.variant !== armed.variant) return;
+            degradedRef.current = null;
+            loadedRequestSignatureRef.current = null;
+            keepSrcOnNextResolveRef.current = true;
+            setUpgradeNonce((nonce) => nonce + 1);
+        };
+        window.addEventListener(THUMBNAIL_UPGRADED_EVENT, onUpgraded);
+        return () => window.removeEventListener(THUMBNAIL_UPGRADED_EVENT, onUpgraded);
+    }, []);
 
     useEffect(() => {
         return () => {
@@ -435,6 +511,7 @@ export function useNativeImage({
                     releaseSharedThumbnailUrl(
                         sharedUrlRef.current.itemId,
                         sharedUrlRef.current.variant,
+                        objectUrlRef.current,
                     );
                     sharedUrlRef.current = null;
                 } else {

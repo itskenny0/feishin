@@ -30,12 +30,13 @@ vi.mock('/@/renderer/cache/stats', () => ({
 
 vi.mock('/@/shared/components/image/use-native-image', () => ({
     NO_ARTWORK_URL: 'feishin://no-artwork',
+    registerThumbnailDegradedProbe: vi.fn(),
     registerThumbnailUrlCache: vi.fn(),
 }));
 
 import { getActiveCacheDb, type LibraryCacheDb, openCacheDb } from '/@/renderer/cache/db';
 import { cachedBytes, evict } from '/@/renderer/cache/eviction';
-import { resolveThumbnail } from '/@/renderer/cache/images';
+import { imageVariantsInternals, resolveThumbnail } from '/@/renderer/cache/images';
 import { variantConfigHash } from '/@/renderer/cache/variant-config';
 import { DEFAULT_IMAGE_VARIANTS, useSettingsStore } from '/@/renderer/store/settings.store';
 
@@ -185,7 +186,32 @@ describe('resolveThumbnail — config-hash staleness', () => {
         ).toBe(0);
     });
 
-    it('treats a row with a stale config hash as a miss and regenerates it', async () => {
+    it('serves a stale-config row INSTANTLY and schedules a background regenerate', async () => {
+        // Serve-stale-while-revalidate: the display path never blocks on a
+        // refetch for a stale row (that made covers visibly re-load on every
+        // page against a slow server) — it paints the stale blob and lets the
+        // debounced background generate replace the row.
+        const db = getActiveCacheDb()!;
+        await putVariant(db, 'abc', 'table', 4096, Date.now(), {
+            __cfgHash: 'stale-hash-from-an-older-config',
+        });
+
+        globalThis.fetch = vi.fn(async () => jpegResponse()) as unknown as typeof fetch;
+        const scheduleSpy = vi
+            .spyOn(imageVariantsInternals, 'scheduleVariantGenerate')
+            .mockImplementation(() => {});
+
+        const out = await resolveThumbnail('abc', 'table', RAW_URL);
+
+        expect(out).toMatch(/^blob:mock\//);
+        expect(
+            (globalThis.fetch as never as { mock: { calls: unknown[] } }).mock.calls.length,
+        ).toBe(0);
+        expect(scheduleSpy).toHaveBeenCalledWith('abc', 'table', expect.anything());
+        scheduleSpy.mockRestore();
+    });
+
+    it('regenerates a stale-config row in-line on the sweep path (_skipBlobUrl)', async () => {
         const db = getActiveCacheDb()!;
         await putVariant(db, 'abc', 'table', 4096, Date.now(), {
             __cfgHash: 'stale-hash-from-an-older-config',
@@ -205,9 +231,8 @@ describe('resolveThumbnail — config-hash staleness', () => {
                 }) as unknown as Response,
         ) as unknown as typeof fetch;
 
-        const out = await resolveThumbnail('abc', 'table', RAW_URL);
+        await resolveThumbnail('abc', 'table', RAW_URL, { _skipBlobUrl: true });
 
-        expect(out).toMatch(/^blob:mock\//);
         expect(
             (globalThis.fetch as never as { mock: { calls: unknown[] } }).mock.calls.length,
         ).toBe(1);

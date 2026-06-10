@@ -111,3 +111,54 @@ export const variantConfigHash = (cfg: LocalCacheImageVariants): string => {
         .join(',');
     return `m=${cfg.mode}|f=${cfg.format}|q=${cfg.quality}|${variants}`;
 };
+
+/**
+ * Whether a cached row written under `storedHash` is stale for the LIVE
+ * config — compared on the parameters that actually affect THAT row's
+ * pixels: mode, format, quality, and the row's own variant px.
+ *
+ * Deliberately IGNORES enabled bits and other variants' px: a full-config
+ * string compare invalidated every cached cover when an unrelated bit
+ * flipped (release 4cab184c7 toggled the DEFAULT fullScreen enabled flag and
+ * every user's entire thumbnail cache went "stale" — each cover then dropped
+ * its Dexie hit and re-fetched over the network on view).
+ *
+ * Unparseable hashes are stale (conservative: regenerate). A variant missing
+ * from the stored hash is stale (the row predates the variant's definition).
+ * A variant the LIVE config doesn't define is fresh — there is no live px to
+ * disagree with, and serving the row beats refetching it forever.
+ */
+export const isRowHashStale = (
+    storedHash: string,
+    variant: string,
+    cfg: LocalCacheImageVariants,
+): boolean => {
+    const parsed = parseConfigHash(storedHash);
+    if (!parsed) return true;
+    if (parsed.format !== cfg.format || parsed.mode !== cfg.mode || parsed.quality !== cfg.quality)
+        return true;
+    const storedPx = parsed.variantPx[variant];
+    if (storedPx === undefined) return true;
+    const live = cfg.variants[variant as VariantName];
+    if (!live) return false;
+    return storedPx !== live.px;
+};
+
+const parseConfigHash = (
+    hash: string,
+): null | { format: string; mode: string; quality: number; variantPx: Record<string, number> } => {
+    const match = /^m=([^|]+)\|f=([^|]+)\|q=([^|]+)\|(.*)$/.exec(hash);
+    if (!match) return null;
+    const quality = Number(match[3]);
+    if (!Number.isFinite(quality)) return null;
+    const variantPx: Record<string, number> = {};
+    for (const entry of match[4].split(',')) {
+        if (!entry) continue;
+        const fields = entry.split(':');
+        if (fields.length !== 3) return null;
+        const px = Number(fields[2]);
+        if (!Number.isFinite(px)) return null;
+        variantPx[fields[0]] = px;
+    }
+    return { format: match[2], mode: match[1], quality, variantPx };
+};

@@ -10,9 +10,19 @@ import type { CachedThumbnail } from './types';
 
 import { awaitActiveCacheDb, getActiveCacheDb } from './db';
 import { recordStat } from './stats';
-import { nearestLargerVariant, variantConfigHash, type VariantName } from './variant-config';
+import {
+    isRowHashStale,
+    nearestLargerVariant,
+    variantConfigHash,
+    type VariantName,
+} from './variant-config';
 
-import { getIsOnline, markServerUnreachable } from '/@/renderer/lib/network-status';
+import {
+    getIsOnline,
+    markServerReachable,
+    markServerUnreachable,
+    subscribeIsOnline,
+} from '/@/renderer/lib/network-status';
 import {
     DEFAULT_IMAGE_VARIANTS,
     type LocalCacheImageVariants,
@@ -20,6 +30,7 @@ import {
 } from '/@/renderer/store/settings.store';
 import {
     NO_ARTWORK_URL,
+    registerThumbnailDegradedProbe,
     registerThumbnailUrlCache,
 } from '/@/shared/components/image/use-native-image';
 
@@ -463,10 +474,26 @@ export const acquireThumbnailUrl = async (
  * variant they acquired with. Safe to call with a non-shared (raw
  * fallback) item/variant — it is a no-op when the pair isn't tracked.
  */
-export const releaseThumbnailUrl = (itemId: string, variant?: number | string): void => {
+export const releaseThumbnailUrl = (
+    itemId: string,
+    variant?: number | string,
+    url?: string,
+): void => {
+    // A release carrying the consumer's own URL may refer to an entry that an
+    // upgrade has displaced from the keyed registry — settle it against the
+    // orphan map so the refcount of the entry now under the key (the FRESH
+    // blob) is never corrupted by a stale consumer's release.
+    if (url && orphanedUrls.has(url)) {
+        releaseOrphanedUrl(url);
+        return;
+    }
     const key = variantKey(itemId, normaliseVariant(variant));
     const entry = sharedObjectUrls.get(key);
     if (!entry) return;
+    // URL-carrying release that matches neither the orphan map nor the keyed
+    // entry: the consumer's blob was already fully settled (revoked) — a
+    // keyed decrement would hit the WRONG (newer) entry.
+    if (url && entry.url !== url) return;
     entry.refCount -= 1;
     if (entry.refCount <= 0) {
         entry.refCount = 0;
@@ -529,6 +556,118 @@ const emitWritten = (): void => {
     }
 };
 
+// ---------------------------------------------------------------------------
+// Degraded-serve upgrade plumbing.
+//
+// Device evidence (2026-06-10): the fullscreen player asked for `fullScreen`
+// while the connectivity signal said "unreachable"; the resolver served the
+// only cached variant (a tiny `table` cover) and the surface settled on it
+// FOREVER — `useNativeImage` keys on a stable request signature, so nothing
+// ever re-resolved when connectivity recovered. The cache layer therefore
+// remembers every degraded serve, regenerates the exact bucket when the
+// network returns, announces the write (`feishin:thumbnail-upgraded`) so
+// surfaces re-resolve, and invalidates the shared URL entry so the
+// re-resolve mints the fresh blob instead of re-adopting the old one.
+// ---------------------------------------------------------------------------
+
+export const THUMBNAIL_UPGRADED_EVENT = 'feishin:thumbnail-upgraded';
+
+interface DegradedServe {
+    itemId: string;
+    request: ImageRequest | string;
+    variant: string;
+}
+
+// (item, variant) pairs a DISPLAY path served degraded (stale row,
+// insufficient fallback, or an offline skip), with the request retained so
+// the exact bucket can regenerate once the network allows. Cleared by the
+// exact-bucket write (or its authoritative 404).
+const degradedServes = new Map<string, DegradedServe>();
+
+/**
+ * Whether the most recent serve for this (item, variant) was DEGRADED (a
+ * stale row or an under-sized substitute). Consumers use it at adoption time
+ * to decide whether to arm the `feishin:thumbnail-upgraded` re-resolve.
+ */
+export const wasServedDegraded = (itemId: string, variant?: number | string): boolean =>
+    degradedServes.has(variantKey(itemId, normaliseVariant(variant)));
+
+const recordDegradedServe = (
+    itemId: string,
+    variant: string,
+    request: ImageRequest | string,
+): void => {
+    degradedServes.set(variantKey(itemId, variant), { itemId, request, variant });
+};
+
+// Orphaned shared URLs: entries displaced from `sharedObjectUrls` by an
+// upgrade while consumers still held references. Keyed by URL (the consumer
+// passes its own URL on release) with the outstanding refcount; the last
+// release schedules a grace-delayed revoke (the releasing consumer may still
+// be PAINTING the URL while its replacement resolves).
+const orphanedUrls = new Map<string, number>();
+
+const releaseOrphanedUrl = (url: string): void => {
+    const remaining = (orphanedUrls.get(url) ?? 1) - 1;
+    if (remaining > 0) {
+        orphanedUrls.set(url, remaining);
+        return;
+    }
+    orphanedUrls.delete(url);
+    setTimeout(() => {
+        try {
+            URL.revokeObjectURL(url);
+        } catch {
+            // Already revoked / invalid — nothing actionable.
+        }
+    }, ZERO_REF_GRACE_MS);
+};
+
+// A fresh exact-bucket row just landed: the in-memory shared entry (if any)
+// now holds OUTDATED bytes. Displace it so the next peek/acquire mints from
+// the fresh row; outstanding consumer references move to the orphan map.
+const invalidateSharedThumbnail = (key: string): void => {
+    const entry = sharedObjectUrls.get(key);
+    if (!entry) return;
+    sharedObjectUrls.delete(key);
+    zeroRefSince.delete(key);
+    if (entry.refCount <= 0) {
+        try {
+            URL.revokeObjectURL(entry.url);
+        } catch {
+            // Already revoked / invalid — nothing actionable.
+        }
+        return;
+    }
+    orphanedUrls.set(entry.url, entry.refCount);
+};
+
+// The exact bucket was just written (fresh fetch or background generate).
+// Clear the degraded record, displace the now-outdated shared entry, and
+// tell consumers to re-resolve.
+const finishUpgrade = (itemId: string, variant: string): void => {
+    const key = variantKey(itemId, variant);
+    degradedServes.delete(key);
+    invalidateSharedThumbnail(key);
+    if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+            new CustomEvent(THUMBNAIL_UPGRADED_EVENT, { detail: { itemId, variant } }),
+        );
+    }
+};
+
+// Degraded serves made while offline couldn't schedule their regenerate
+// (the fetch was doomed). Flush them when connectivity returns.
+subscribeIsOnline(() => {
+    if (!getIsOnline() || degradedServes.size === 0) return;
+    console.info('[image-variants] connectivity restored — regenerating degraded covers', {
+        count: degradedServes.size,
+    });
+    for (const entry of degradedServes.values()) {
+        imageVariantsInternals.scheduleVariantGenerate(entry.itemId, entry.variant, entry.request);
+    }
+});
+
 export interface ResolveThumbnailOptions {
     // Internal flag used by resolveThumbnailWithBytes. When true the
     // resolver skips URL.createObjectURL so the sweep does not register
@@ -586,13 +725,19 @@ const getImageVariantsConfig = (): LocalCacheImageVariants => {
 // config (a px / format / quality / mode change) and regenerate them lazily.
 const currentConfigHash = (): string => variantConfigHash(getImageVariantsConfig());
 
-// A cached blob row is stale when it carries a `__cfgHash` that no longer
-// matches the live config. Rows WITHOUT a stored hash (legacy / pre-staleness)
-// are treated as fresh — regenerating every one on first access after an
-// upgrade would stampede the network for no visible benefit.
+// A cached blob row is stale when the parameters that shaped ITS pixels
+// (mode / format / quality / its own variant px) no longer match the live
+// config. Compared field-wise via `isRowHashStale`, NOT as a whole-hash
+// string: a full-config compare invalidated every cached cover when an
+// unrelated bit flipped (4cab184c7 toggled the DEFAULT fullScreen enabled
+// flag and every pre-existing row went "stale" at once). Rows WITHOUT a
+// stored hash (legacy / pre-staleness) are treated as fresh — regenerating
+// every one on first access after an upgrade would stampede the network for
+// no visible benefit.
 const isStaleRow = (row: CachedThumbnail | undefined): boolean => {
     if (!row?.__cfgHash) return false;
-    return row.__cfgHash !== currentConfigHash();
+    if (!row.Variant) return row.__cfgHash !== currentConfigHash();
+    return isRowHashStale(row.__cfgHash, row.Variant, getImageVariantsConfig());
 };
 
 // The px a resolve should fetch + record for `resolvedVariant`. An explicit
@@ -762,6 +907,12 @@ const resolveFallbackPick = async (
             stale,
             sufficient,
         });
+        // An under-sized or stale substitute is a DEGRADED serve — remember
+        // it so the exact bucket regenerates (now, or on reconnect when
+        // offline) and the surface gets the upgrade event.
+        if (!sufficient || stale) {
+            recordDegradedServe(itemId, requestedVariant, request);
+        }
         // Kick off the exact-size variant in the background (debounced) so
         // the substitute is replaced by the real bucket on the next render.
         if (getIsOnline()) {
@@ -904,10 +1055,30 @@ export const resolveThumbnail = async (
             }
             if (row) {
                 if (row.Blob && isStaleRow(row)) {
-                    // The cover was generated under an older variant config
-                    // (px / format / quality / mode / enable changed). Drop the
-                    // hit and fall through to refetch so the row is regenerated
-                    // under the live config.
+                    if (wantsDisplayBlob) {
+                        // Serve-stale-while-revalidate: a stale-config row is
+                        // still a perfectly good cover. Paint it INSTANTLY and
+                        // regenerate the exact bucket in the background —
+                        // dropping the hit to block on a refetch made every
+                        // page visit visibly re-load its covers against a slow
+                        // server.
+                        console.info('[image-variants] stale variant served, regenerating', {
+                            itemId,
+                            variant: resolvedVariant,
+                        });
+                        recordDegradedServe(itemId, resolvedVariant, request);
+                        if (getIsOnline()) {
+                            imageVariantsInternals.scheduleVariantGenerate(
+                                itemId,
+                                resolvedVariant,
+                                request,
+                            );
+                        }
+                        recordStat('blobHit');
+                        return { blob: row.Blob, bytes: 0 };
+                    }
+                    // Sweep / background-generate path: refetch in-line — this
+                    // IS the regeneration that replaces the stale row.
                     console.info('[image-variants] stale variant, regenerating', {
                         itemId,
                         variant: resolvedVariant,
@@ -966,8 +1137,10 @@ export const resolveThumbnail = async (
                 // raw URL and the <img> errors out to the unloader quickly.
                 // (When `fallback` exists here it was insufficient AND we're
                 // online — the first branch handled every offline+fallback
-                // combination.)
+                // combination.) Recorded as degraded so the bucket fetches
+                // once connectivity returns and the surface repaints.
                 if (!getIsOnline()) {
+                    recordDegradedServe(itemId, resolvedVariant, request);
                     return { blob: undefined, bytes: 0 };
                 }
             }
@@ -1033,6 +1206,11 @@ export const resolveThumbnail = async (
                     signal.removeEventListener('abort', upstreamAbort);
                 }
             }
+            // Any HTTP response (even an error status) means the server is
+            // reachable again — image stalls flip the shared connectivity
+            // signal to "unreachable", so image SUCCESSES must flip it back
+            // (axios traffic alone may be sparse while covers sweep).
+            markServerReachable();
             if (!res.ok) {
                 if (res.status === 404) {
                     if (db === getActiveCacheDb()) {
@@ -1049,6 +1227,9 @@ export const resolveThumbnail = async (
                                 Variant: resolvedVariant,
                             });
                             recordStat('missWrite');
+                            // Authoritatively no artwork — the degraded serve
+                            // is as upgraded as it will ever get.
+                            degradedServes.delete(variantKey(itemId, resolvedVariant));
                         } catch (err) {
                             console.warn('[image-variants] thumbnail miss-write failed', {
                                 error: (err as Error)?.message,
@@ -1119,6 +1300,7 @@ export const resolveThumbnail = async (
                 Variant: resolvedVariant,
             });
             emitWritten();
+            finishUpgrade(itemId, resolvedVariant);
             missCount += 1;
             recordStat('fetched', blob.size);
             console.info('[image-variants] thumbnail fetched', {
@@ -1248,3 +1430,7 @@ registerThumbnailUrlCache(
     peekThumbnailUrl,
     hasThumbnailUrl,
 );
+
+// Degraded-serve probe: lets `useNativeImage` arm its upgrade re-resolve
+// when the blob it just adopted was a stale/under-sized substitute.
+registerThumbnailDegradedProbe(wasServedDegraded);

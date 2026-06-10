@@ -60,6 +60,7 @@ vi.mock('/@/renderer/cache/stats', () => ({
 
 vi.mock('/@/shared/components/image/use-native-image', () => ({
     NO_ARTWORK_URL: 'feishin://no-artwork',
+    registerThumbnailDegradedProbe: vi.fn(),
     registerThumbnailUrlCache: vi.fn(),
 }));
 
