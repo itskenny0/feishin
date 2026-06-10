@@ -51,6 +51,87 @@ let heartbeatSeq = 0;
 let consolePatches: ConsolePatch[] = [];
 let listenersAttached = false;
 
+// ── Crash-surviving ring buffer ─────────────────────────────────────────────
+// The headline crash happens while the device is OFFLINE (airplane mode), so
+// nothing can ship live. Every entry is also mirrored into a localStorage
+// ring — synchronous writes survive a process kill — and on the next launch
+// any leftover ring from a PREVIOUS session uploads as backlog (retrying
+// until the receiver acks), so the final pre-crash heartbeats and logs arrive
+// once the device is back online.
+const RING_KEY = 'remote_debug_ring';
+const RING_MAX = 800;
+const RING_PERSIST_INTERVAL_MS = 250;
+const BACKLOG_RETRY_MS = 30_000;
+
+let ring: ShipperEntry[] = [];
+let ringDirty = false;
+let ringPersistTimer: null | ReturnType<typeof setInterval> = null;
+let backlogRetryTimer: null | ReturnType<typeof setInterval> = null;
+
+const persistRing = (): void => {
+    if (!ringDirty) return;
+    ringDirty = false;
+    try {
+        localStorage.setItem(RING_KEY, JSON.stringify(ring));
+    } catch {
+        // Quota/serialization failures must never break the app.
+    }
+};
+
+const recordToRing = (entry: ShipperEntry, persistImmediately = false): void => {
+    ring.push(entry);
+    if (ring.length > RING_MAX) ring.splice(0, ring.length - RING_MAX);
+    ringDirty = true;
+    if (persistImmediately) persistRing();
+};
+
+const shipBacklog = (): void => {
+    if (!endpointUrl) return;
+    let leftover: ShipperEntry[] = [];
+    try {
+        const raw = localStorage.getItem(RING_KEY);
+        if (raw) leftover = JSON.parse(raw) as ShipperEntry[];
+    } catch {
+        leftover = [];
+    }
+    // Only a PREVIOUS session's ring is backlog; the current session's ring
+    // is the live mirror of what's already being shipped.
+    const backlog = leftover.filter((e) => e && e.session !== session);
+    if (backlog.length === 0) {
+        if (backlogRetryTimer) {
+            clearInterval(backlogRetryTimer);
+            backlogRetryTimer = null;
+        }
+        return;
+    }
+    const body = backlog.map((e) => JSON.stringify({ ...e, backlog: true })).join('\n');
+    try {
+        void fetch(endpointUrl, {
+            body,
+            headers: { 'Content-Type': 'application/x-ndjson' },
+            keepalive: true,
+            method: 'POST',
+        })
+            .then((res) => {
+                if (res.ok) {
+                    // Acked — drop ONLY the previous-session entries; keep the
+                    // current session's mirror intact.
+                    ring = ring.filter((e) => e.session === session);
+                    ringDirty = true;
+                    persistRing();
+                    if (backlogRetryTimer) {
+                        clearInterval(backlogRetryTimer);
+                        backlogRetryTimer = null;
+                    }
+                    console.info('[shipper] backlog delivered', { entries: backlog.length });
+                }
+            })
+            .catch(() => {});
+    } catch {
+        // retry timer will try again
+    }
+};
+
 /** `host`, `host:port`, or a full http(s) URL → POST target, or null. */
 export const normalizeEndpoint = (raw: string): null | string => {
     const trimmed = raw.trim();
@@ -97,10 +178,12 @@ const post = (body: string, useBeacon = false): void => {
 };
 
 const shipNow = (entry: ShipperEntry): void => {
+    recordToRing(entry, entry.level === 'error');
     post(JSON.stringify(entry));
 };
 
 const enqueue = (entry: ShipperEntry): void => {
+    recordToRing(entry);
     if (queue.length >= MAX_QUEUE) queue.shift();
     queue.push(entry);
 };
@@ -212,6 +295,20 @@ const start = (endpoint: string): void => {
     active = true;
     heartbeatSeq = 0;
 
+    // Load any leftover ring from a previous (possibly crashed) session
+    // BEFORE the first persist could overwrite it, then upload it as backlog
+    // — retrying until the receiver acks, in case we boot still offline.
+    try {
+        const raw = localStorage.getItem(RING_KEY);
+        ring = raw ? (JSON.parse(raw) as ShipperEntry[]) : [];
+    } catch {
+        ring = [];
+    }
+    ringDirty = false;
+    ringPersistTimer = setInterval(persistRing, RING_PERSIST_INTERVAL_MS);
+    shipBacklog();
+    backlogRetryTimer = setInterval(shipBacklog, BACKLOG_RETRY_MS);
+
     patchConsole();
     window.addEventListener('error', onWindowError);
     window.addEventListener('unhandledrejection', onUnhandledRejection);
@@ -246,6 +343,15 @@ const stop = (): void => {
     if (!active) return;
     active = false;
     flushQueue(true);
+    persistRing();
+    if (ringPersistTimer) {
+        clearInterval(ringPersistTimer);
+        ringPersistTimer = null;
+    }
+    if (backlogRetryTimer) {
+        clearInterval(backlogRetryTimer);
+        backlogRetryTimer = null;
+    }
     unpatchConsole();
     if (listenersAttached) {
         window.removeEventListener('error', onWindowError);

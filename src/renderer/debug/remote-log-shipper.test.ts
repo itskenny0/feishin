@@ -101,6 +101,41 @@ describe('remote log shipper', () => {
         expect(heartbeats[1].seq).toBe(heartbeats[0].seq + 1);
     });
 
+    it('persists entries to the localStorage ring and ships a crashed session as backlog', async () => {
+        // Session 1: offline (every POST fails). Entries must survive in the
+        // localStorage ring even though nothing ships.
+        fetchMock.mockRejectedValue(new Error('offline'));
+        setRemoteDebug(false, '');
+        initRemoteLogShipper();
+        setRemoteDebug(true);
+
+        console.error('PRE-CRASH EVIDENCE');
+        vi.advanceTimersByTime(600); // a heartbeat + a ring persist tick
+
+        const ringRaw = localStorage.getItem('remote_debug_ring');
+        expect(ringRaw).toContain('PRE-CRASH EVIDENCE');
+
+        // "Crash": tear down WITHOUT a clean stop clearing anything — the
+        // reset helper persists, like a real process kill after the last
+        // 250ms persist tick.
+        __resetRemoteLogShipperForTests();
+
+        // Session 2: back online. The previous session's ring must upload as
+        // backlog and clear once the receiver acks.
+        fetchMock.mockClear();
+        fetchMock.mockResolvedValue({ ok: true });
+        initRemoteLogShipper();
+        setRemoteDebug(true, '192.168.1.5');
+
+        await vi.advanceTimersByTimeAsync(50);
+        const backlogBodies = shippedBodies().filter((b) => b.includes('"backlog":true'));
+        expect(backlogBodies.join('\n')).toContain('PRE-CRASH EVIDENCE');
+
+        await vi.advanceTimersByTimeAsync(300);
+        const ringAfter = localStorage.getItem('remote_debug_ring') ?? '[]';
+        expect(ringAfter).not.toContain('PRE-CRASH EVIDENCE');
+    });
+
     it('disabling restores console and stops traffic', () => {
         setRemoteDebug(false, '');
         initRemoteLogShipper();
