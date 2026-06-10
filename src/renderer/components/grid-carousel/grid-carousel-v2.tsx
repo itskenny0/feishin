@@ -133,13 +133,17 @@ function BaseGridCarousel(props: GridCarouselProps) {
     const currentPageRef = useRef(currentPage.page);
     currentPageRef.current = currentPage.page;
 
+    // setCurrentPage is listed even though setState identities are stable:
+    // the upgraded React Compiler's preserve-manual-memoization check
+    // requires the source deps to cover its inferred set, and it infers the
+    // setter here.
     const handlePrevPage = useCallback(() => {
         setCurrentPage((prev) => ({
             isNext: false,
             page: prev.page > 0 ? prev.page - 1 : 0,
         }));
         onPrevPage(currentPageRef.current);
-    }, [onPrevPage]);
+    }, [onPrevPage, setCurrentPage]);
 
     const handleNextPage = useCallback(() => {
         setCurrentPage((prev) => ({
@@ -147,7 +151,7 @@ function BaseGridCarousel(props: GridCarouselProps) {
             page: prev.page + 1,
         }));
         onNextPage(currentPageRef.current);
-    }, [onNextPage]);
+    }, [onNextPage, setCurrentPage]);
 
     const cardsToShow = getCardsToShow({
         isLargerThan2xl: cq.is2xl,
