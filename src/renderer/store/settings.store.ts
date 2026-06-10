@@ -3478,7 +3478,10 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                 if (version <= 58) {
                     // Introduce per-section toggles for the artist detail page.
                     // Default everything to hidden so existing users opt-in explicitly.
-                    if (!state.general.artistPageSections) {
+                    // `state.general` is guarded: sparse blobs (tests / partial
+                    // imports) may not carry the slice, and a throwing migrate
+                    // makes zustand discard the WHOLE persisted state.
+                    if (state.general && !state.general.artistPageSections) {
                         state.general.artistPageSections = {
                             ...initialState.general.artistPageSections,
                         };

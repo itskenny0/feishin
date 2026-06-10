@@ -243,6 +243,9 @@ importers:
       semver:
         specifier: ^7.8.2
         version: 7.8.2
+      source-map-support:
+        specifier: ^0.5.21
+        version: 0.5.21
       string-to-color:
         specifier: ^2.2.2
         version: 2.2.2
