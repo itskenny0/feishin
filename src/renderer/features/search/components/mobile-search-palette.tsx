@@ -2,7 +2,7 @@ import { openModal } from '@mantine/modals';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { t } from 'i18next';
 import { nanoid } from 'nanoid/non-secure';
-import { Dispatch, useCallback, useDeferredValue, useMemo } from 'react';
+import { Dispatch, useCallback, useDeferredValue, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createSearchParams, generatePath, useNavigate } from 'react-router';
 
@@ -202,6 +202,25 @@ export function MobileSearchPalette({
     const server = useCurrentServer();
     const deferredQuery = useDeferredValue(query);
     const hasQuery = query.trim() !== '';
+
+    // Focus the search field on mount so the soft keyboard pops immediately
+    // when the palette opens from the bottom tab bar. The input's
+    // `data-autofocus` only works inside a Mantine focus trap — and this
+    // palette is a routed PAGE (/command), so nothing else ever focuses it.
+    // rAF defers past the route transition's first paint; preventScroll keeps
+    // the header from jumping under the keyboard animation.
+    useEffect(() => {
+        // Immediately, then again next frame — the page-transition animation
+        // can steal focus right after mount on the Android WebView.
+        searchInputRef.current?.focus({ preventScroll: true });
+        const frame = requestAnimationFrame(() => {
+            searchInputRef.current?.focus({ preventScroll: true });
+        });
+        return () => cancelAnimationFrame(frame);
+        // Mount-only: re-focusing on later renders would steal focus back
+        // from result rows the user tabbed/clicked into.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const handleSearchPage = useCallback(() => {
         navigate(
