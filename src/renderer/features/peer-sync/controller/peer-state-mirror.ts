@@ -82,8 +82,12 @@ const ensureImageHelperLoaded = (): void => {
         .then((mod) => {
             getItemImageUrlRef = mod.getItemImageUrl as GetItemImageUrlFn;
         })
-        .catch(() => {
-            getItemImageUrlLoading = false;
+        .catch((err) => {
+            // Leave the loading flag set — retrying on every 2Hz state frame
+            // would just spam the console; the wire-art fallback covers us.
+            warn('image helper import failed; using wire art', {
+                error: (err as Error)?.message,
+            });
         });
 };
 
@@ -153,6 +157,10 @@ export const ensureQueueHydrated = async (qIds: string[], qIdx: number): Promise
     lastHydrateKey = key;
     lastHydrateAttemptAt = Date.now();
 
+    // Snapshot the target so a server/target switch mid-hydration can't
+    // paint another target's queue with this fetch's metadata.
+    const targetAtStart = useRemoteTargetStore.getState().targetDeviceId;
+
     if (missing.length > 0) {
         const server = useAuthStore.getState().currentServer;
         if (!server || server.type !== ServerType.JELLYFIN || !server.userId) return;
@@ -176,8 +184,10 @@ export const ensureQueueHydrated = async (qIds: string[], qIdx: number): Promise
         }
     }
 
-    // Patch only when the mirror still shows this exact queue.
-    const { actions, mirrored } = useRemoteTargetStore.getState();
+    // Patch only when the mirror still shows this exact queue for the SAME
+    // target the hydration started against.
+    const { actions, mirrored, targetDeviceId } = useRemoteTargetStore.getState();
+    if (targetDeviceId !== targetAtStart) return;
     const current = mirrored?.queue;
     if (!Array.isArray(current) || current.length !== qIds.length) return;
     if (!current.every((s: Song, i: number) => s?.id === qIds[i])) return;

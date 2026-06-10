@@ -3,6 +3,7 @@ import type { RefObject } from 'react';
 import isElectron from 'is-electron';
 import { useEffect, useImperativeHandle, useRef, useState } from 'react';
 
+import i18n from '/@/i18n/i18n';
 import { eventEmitter } from '/@/renderer/events/event-emitter';
 import { usePlayerEvents } from '/@/renderer/features/player/audio-player/hooks/use-player-events';
 import { getSongUrl } from '/@/renderer/features/player/audio-player/hooks/use-stream-url';
@@ -17,6 +18,7 @@ import {
     usePlayerStore,
     useSettingsStore,
 } from '/@/renderer/store';
+import { toast } from '/@/shared/components/toast/toast';
 import { PlayerStatus } from '/@/shared/types/types';
 
 export interface MpvPlayerEngineHandle extends AudioPlayer {}
@@ -149,6 +151,15 @@ export const MpvPlayerEngine = (props: MpvPlayerEngineProps) => {
                 } catch (err) {
                     console.warn('[mpv-player] failed to resolve song URLs during init', {
                         error: (err as Error)?.message,
+                    });
+                    // Downloaded blobs live in the renderer's IndexedDB; the
+                    // native mpv process can't read them, so offline desktop
+                    // playback has no path. Say so instead of silent silence.
+                    toast.error({
+                        message: i18n.t('player.mpvOfflineUnavailable', {
+                            defaultValue:
+                                'Cannot reach the server — desktop (MPV) playback needs a server connection. Downloaded tracks play in the web/mobile player.',
+                        }),
                     });
                 }
             }
@@ -420,6 +431,11 @@ async function replaceMpvQueue(transcode: {
     } catch (err) {
         console.warn('[mpv-player] failed to resolve song URLs for queue replacement', {
             error: (err as Error)?.message,
+        });
+        toast.warn({
+            message: i18n.t('player.cannotQueueNext', {
+                defaultValue: 'Cannot queue the next track — server connection required.',
+            }),
         });
     }
 }
