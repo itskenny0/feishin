@@ -31,6 +31,7 @@ const IGNORED_PRESETS = ['Flexi + Martin - astral projection'];
 
 type ButterchurnVisualizer = {
     connectAudio: (audioNode: AudioNode) => void;
+    disconnectAudio: (audioNode: AudioNode) => void;
     loadPreset: (preset: any, blendTime: number) => void;
     render: () => void;
     setRendererSize: (width: number, height: number) => void;
@@ -52,6 +53,12 @@ const VisualizerInner = ({ chromeless }: { chromeless?: boolean }) => {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const containerRef = useRef<HTMLDivElement | null>(null);
     const visualizerRef = useRef<ButterchurnVisualizer | undefined>(undefined);
+    // Audio nodes connectAudio() was called with — cleanup MUST disconnect
+    // them, or the WebAudio graph keeps the whole butterchurn instance (and
+    // its WebAssembly memory) alive: every pause-kill/re-open then leaked a
+    // full Wasm instance until instantiate() failed with
+    // "Cannot allocate Wasm memory for new instance" (device, 2026-06-10).
+    const connectedNodesRef = useRef<AudioNode[]>([]);
     const isInitializedRef = useRef(false);
     const [isVisualizerReady, setIsVisualizerReady] = useState(false);
     const [librariesLoaded, setLibrariesLoaded] = useState(false);
@@ -124,6 +131,18 @@ const VisualizerInner = ({ chromeless }: { chromeless?: boolean }) => {
     }, [playbackType, isPlaying]);
 
     const cleanupVisualizer = () => {
+        // Detach from the audio graph FIRST so the instance is collectable.
+        if (visualizerRef.current) {
+            for (const node of connectedNodesRef.current) {
+                try {
+                    visualizerRef.current.disconnectAudio(node);
+                } catch {
+                    // Node may already be gone (engine swap) — harmless.
+                }
+            }
+        }
+        connectedNodesRef.current = [];
+
         if (animationFrameRef.current) {
             cancelAnimationFrame(animationFrameRef.current);
             animationFrameRef.current = undefined;
@@ -215,6 +234,7 @@ const VisualizerInner = ({ chromeless }: { chromeless?: boolean }) => {
                 for (const node of nodes) {
                     butterchurnInstance.connectAudio(node);
                 }
+                connectedNodesRef.current = nodes;
 
                 visualizerRef.current = butterchurnInstance;
                 isInitializedRef.current = true;
