@@ -67,7 +67,7 @@ export const OfflineDownloadBanner = () => {
                             name: sync.name,
                         })}
                     </Text>
-                    <Progress animated={pct === undefined} size="sm" value={pct ?? 100} />
+                    <Progress size="sm" value={pct ?? 100} />
                     <Text c="dimmed" size="xs" truncate>
                         {itemsText} · {bytesText}
                         {rateText}
