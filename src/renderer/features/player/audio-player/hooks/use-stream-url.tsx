@@ -111,6 +111,7 @@ function useOfflineSongUrl(
     // could swap in.
     const [settled, setSettled] = useState<null | { key: string; url: string | undefined }>(null);
     const objectUrlRef = useRef<string | undefined>(undefined);
+    const pendingRevokeRef = useRef<string | undefined>(undefined);
     // Reactive availability signal. The Dexie lookup below can race the
     // offline-media boot (the index loads ~seconds after first render): a
     // lookup that runs too early concludes "no local copy" and that verdict
@@ -129,19 +130,37 @@ function useOfflineSongUrl(
     const targetKey =
         song?._serverId && playbackType === PlayerType.WEB ? `${song._serverId}|${song.id}` : null;
 
+    // Deferred one-generation revocation. Recovered device telemetry showed
+    // the Android WebView render process dying natively the moment an object
+    // URL was revoked while the <audio> element was still streaming it (the
+    // death frame is a second "serving local blob" for the SAME song). A URL
+    // is therefore never revoked when it might still be attached: minting a
+    // new URL revokes only the one from TWO generations back; everything
+    // still held is revoked on unmount, after React has detached the source.
+    const retireUrl = (url: string | undefined): void => {
+        if (!url) return;
+        if (pendingRevokeRef.current) {
+            URL.revokeObjectURL(pendingRevokeRef.current);
+        }
+        pendingRevokeRef.current = url;
+    };
+
     useEffect(() => {
         let cancelled = false;
 
-        const revoke = (): void => {
-            if (objectUrlRef.current) {
-                URL.revokeObjectURL(objectUrlRef.current);
-                objectUrlRef.current = undefined;
-            }
-        };
-
         if (!targetKey || !song) {
-            revoke();
+            retireUrl(objectUrlRef.current);
+            objectUrlRef.current = undefined;
             setSettled(null);
+            return () => {
+                cancelled = true;
+            };
+        }
+
+        // Already serving this exact song from a blob? Do NOT look up again.
+        // The availability-index dep re-fires this effect after the index
+        // lands; re-minting (and revoking the in-use URL) was the crash.
+        if (settled?.key === targetKey && settled.url) {
             return () => {
                 cancelled = true;
             };
@@ -154,20 +173,16 @@ function useOfflineSongUrl(
                 if (row?.Blob) {
                     // MATERIALIZE the blob into memory before minting the
                     // object URL. Dexie returns IndexedDB-FILE-BACKED blobs;
-                    // on Android 16 WebView (confirmed via remote-debug
-                    // heartbeats: <audio> playing blob:, readyState 4, then
-                    // the renderer dies natively with a quiet 38MB heap)
-                    // handing such a blob to the media element kills the
-                    // render process ~200ms into playback. An in-memory copy
-                    // detaches playback from the IDB blob registry. Costs the
-                    // compressed file size in RAM transiently — fine for
-                    // music files.
+                    // handing one to the Android media element ties playback
+                    // to the IDB blob registry. An in-memory copy detaches it.
+                    // Costs the compressed file size in RAM transiently —
+                    // fine for music files.
                     const bytes = await row.Blob.arrayBuffer();
                     if (cancelled) return;
                     const materialized = new Blob([bytes], {
                         type: row.Blob.type || 'audio/mpeg',
                     });
-                    revoke();
+                    retireUrl(objectUrlRef.current);
                     const url = URL.createObjectURL(materialized);
                     objectUrlRef.current = url;
                     console.info(`${TAG} playback substitution: serving local blob`, {
@@ -177,7 +192,8 @@ function useOfflineSongUrl(
                     });
                     setSettled({ key: targetKey, url });
                 } else {
-                    revoke();
+                    retireUrl(objectUrlRef.current);
+                    objectUrlRef.current = undefined;
                     setSettled({ key: targetKey, url: undefined });
                 }
             } catch (err) {
@@ -188,14 +204,32 @@ function useOfflineSongUrl(
             }
         })();
 
+        // Deps-change cleanup must NOT revoke: the element may still be
+        // streaming the URL (that revoke was the Android crash).
         return () => {
             cancelled = true;
-            revoke();
         };
         // song is fully represented by targetKey; listing it would re-run on
-        // every queue rebuild (new object identity, same song).
+        // every queue rebuild (new object identity, same song). `settled` is
+        // read for the already-serving short-circuit but must not re-trigger
+        // the effect (it is this effect's own output).
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [targetKey, playbackType, songAvailableOffline]);
+
+    // Unmount-only: by the time this runs React has detached our URLs from
+    // the audio element, so revoking everything still held is safe.
+    useEffect(() => {
+        return () => {
+            if (objectUrlRef.current) {
+                URL.revokeObjectURL(objectUrlRef.current);
+                objectUrlRef.current = undefined;
+            }
+            if (pendingRevokeRef.current) {
+                URL.revokeObjectURL(pendingRevokeRef.current);
+                pendingRevokeRef.current = undefined;
+            }
+        };
+    }, []);
 
     const isSettledForThisSong = targetKey !== null && settled?.key === targetKey;
     return {

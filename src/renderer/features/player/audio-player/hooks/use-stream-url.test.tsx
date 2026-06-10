@@ -146,6 +146,27 @@ describe('useSongUrl playback substitution', () => {
         await waitFor(() => expect(result.current).toBe('blob:fake-object-url'));
     });
 
+    it('does NOT re-mint or revoke a URL it is already serving when availability flips', async () => {
+        // Device-confirmed crash: the availability index landing AFTER
+        // playback already started re-fired the lookup, which revoked the
+        // object URL the <audio> element was actively streaming — the
+        // Android WebView render process dies natively on that. While the
+        // hook is already serving this song, an availability flip must be a
+        // no-op.
+        mocks.mediaGet.mockResolvedValue({ Blob: new Blob(['x']), ByteSize: 1, SongId: 's1' });
+
+        const { result } = renderHook(() => useSongUrl(SONG, true, TRANSCODE), { wrapper });
+        await waitFor(() => expect(result.current).toBe('blob:fake-object-url'));
+        expect(global.URL.createObjectURL).toHaveBeenCalledTimes(1);
+
+        flipAvailability(true);
+        await new Promise((r) => setTimeout(r, 50));
+
+        expect(global.URL.createObjectURL).toHaveBeenCalledTimes(1);
+        expect(global.URL.revokeObjectURL).not.toHaveBeenCalled();
+        expect(result.current).toBe('blob:fake-object-url');
+    });
+
     it('revokes the object URL on unmount', async () => {
         mocks.mediaGet.mockResolvedValue({ Blob: new Blob(['x']), ByteSize: 1, SongId: 's1' });
 
