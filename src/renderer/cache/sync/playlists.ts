@@ -54,3 +54,57 @@ export const runPlaylistsSweep = (ctx: SweepContext, server: ServerListItem): Pr
         writePage: writePlaylistsPage,
     });
 };
+
+/**
+ * Sync every playlist's SONG LIST into the `playlistSongs` sidecar.
+ *
+ * Without this, the sidecar only filled the first time a playlist's track
+ * page loaded successfully ONLINE — a "synced" library still rendered a
+ * never-opened playlist empty whenever the server was slow or unreachable
+ * (device, 2026-06-10: a downloaded 100+-track playlist showed "no items").
+ * Playlist counts are small (tens), so a sequential pass per hydration is
+ * cheap relative to the song/album sweeps.
+ */
+export const runPlaylistSongsSweep = async (
+    ctx: SweepContext,
+    server: ServerListItem,
+): Promise<void> => {
+    const { db, signal } = ctx;
+    const ids = (await db.playlists.toCollection().primaryKeys()) as string[];
+    console.info('[cache] sweep:playlist-songs starting', { playlists: ids.length });
+    let synced = 0;
+    let failed = 0;
+    for (const id of ids) {
+        if (signal.aborted) return;
+        try {
+            const result = await controller.getPlaylistSongList({
+                apiClientProps: { serverId: server.id, signal },
+                query: { id },
+            });
+            const items = result?.items ?? [];
+            const now = Date.now();
+            await db.transaction('rw', db.playlistSongs, async () => {
+                await db.playlistSongs.where('PlaylistId').equals(id).delete();
+                if (items.length === 0) return;
+                await db.playlistSongs.bulkPut(
+                    items.map((song, index) => ({
+                        __cachedAt: now,
+                        ListOrder: index,
+                        PlaylistId: id,
+                        SongId: song.id,
+                        SongPayload: song,
+                    })),
+                );
+            });
+            synced += 1;
+        } catch (err) {
+            if ((err as Error)?.name === 'AbortError') return;
+            failed += 1;
+            console.warn('[cache] sweep:playlist-songs failed', {
+                error: (err as Error)?.message,
+                id,
+            });
+        }
+    }
+    console.info('[cache] sweep:playlist-songs complete', { failed, synced });
+};

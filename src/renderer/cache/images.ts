@@ -1106,13 +1106,36 @@ export const resolveThumbnail = async (
                 const missAt = row.MissAt ?? 0;
                 const nowMs = Date.now();
                 if (nowMs - missAt < MISS_TTL_MS) {
-                    if (nowMs - (row.LastUsed ?? 0) > 3_600_000) {
-                        void db.thumbnails.update(dbKey, { LastUsed: nowMs });
+                    // CONTRADICTION GUARD: a 404 marker for THIS variant while
+                    // a SIBLING variant of the same item holds a real blob is
+                    // bogus (flaky proxy / load-shed 404 during a bad server
+                    // window) — the artwork demonstrably exists. Bust the
+                    // marker and refetch instead of feeding the surface the
+                    // no-artwork placeholder for the 7-day marker TTL
+                    // (device, 2026-06-10: fullscreen player showed the
+                    // placeholder while the miniplayer had the cover).
+                    const sibling = await db.thumbnails
+                        .where('ItemId')
+                        .equals(itemId)
+                        .toArray()
+                        .then((rows) => rows.some((r) => Boolean(r?.Blob)))
+                        .catch(() => false);
+                    if (sibling) {
+                        console.info('[image-variants] 404 marker contradicted by sibling blob', {
+                            itemId,
+                            variant: resolvedVariant,
+                        });
+                        // Fall through to refetch (success replaces the
+                        // marker; a genuine re-404 rewrites it).
+                    } else {
+                        if (nowMs - (row.LastUsed ?? 0) > 3_600_000) {
+                            void db.thumbnails.update(dbKey, { LastUsed: nowMs });
+                        }
+                        recordStat('missMarkerHit');
+                        return { blob: undefined, bytes: 0, noArtwork: true };
                     }
-                    recordStat('missMarkerHit');
-                    return { blob: undefined, bytes: 0, noArtwork: true };
                 }
-                // Stale miss: fall through to refetch.
+                // Stale miss (or contradicted marker): fall through to refetch.
             }
 
             // Cache-first paint path. The exact bucket missed, but a cover

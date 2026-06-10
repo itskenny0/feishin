@@ -184,3 +184,79 @@ describe('resolveThumbnail — stale rows on the display path', () => {
         expect(row.__cfgHash).toBe(variantConfigHash(LIVE_VARIANTS as LocalCacheImageVariants));
     });
 });
+
+describe('resolveThumbnail — contradictory 404 markers', () => {
+    // Device, 2026-06-10: a 7-day 404 marker for [item, fullScreen] (written
+    // during a flaky-server window) silently fed the fullscreen player the
+    // no-artwork placeholder — while the SAME item's table variant held a
+    // real cover. A marker contradicted by a sibling blob is bogus: ignore
+    // it, serve the fallback, and refetch the exact bucket.
+    it('serves the sibling fallback and refetches when a marker contradicts a cached blob', async () => {
+        // Fresh 404 marker for fullScreen…
+        mocks.store.set(JSON.stringify(['abc', 'fullScreen']), {
+            __cachedAt: Date.now(),
+            Blob: undefined,
+            ByteSize: 0,
+            ItemId: 'abc',
+            LastUsed: Date.now(),
+            MissAt: Date.now(),
+            Size: 0,
+            Variant: 'fullScreen',
+        });
+        // …while the table variant has a real cover.
+        const tableBlob = seedRow('abc', 'table', variantConfigHash(LIVE_VARIANTS as never));
+
+        globalThis.fetch = vi.fn(async () => okResponse()) as unknown as typeof fetch;
+        const scheduleSpy = vi
+            .spyOn(imageVariantsInternals, 'scheduleVariantGenerate')
+            .mockImplementation(() => {});
+
+        const out = await resolveThumbnail('abc', 'fullScreen', RAW_URL);
+
+        // NOT the no-artwork sentinel — the sibling cover serves as fallback.
+        expect(out).toMatch(/^blob:mock\//);
+        expect(globalThis.URL.createObjectURL).toHaveBeenCalledWith(tableBlob);
+        scheduleSpy.mockRestore();
+    });
+
+    it('the sweep path refetches through a contradicted marker (marker busted)', async () => {
+        mocks.store.set(JSON.stringify(['abc', 'fullScreen']), {
+            __cachedAt: Date.now(),
+            Blob: undefined,
+            ByteSize: 0,
+            ItemId: 'abc',
+            LastUsed: Date.now(),
+            MissAt: Date.now(),
+            Size: 0,
+            Variant: 'fullScreen',
+        });
+        seedRow('abc', 'table', variantConfigHash(LIVE_VARIANTS as never));
+        globalThis.fetch = vi.fn(async () => okResponse()) as unknown as typeof fetch;
+
+        await resolveThumbnail('abc', 'fullScreen', RAW_URL, { _skipBlobUrl: true });
+
+        expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+        const row = mocks.store.get(JSON.stringify(['abc', 'fullScreen']));
+        expect(row.Blob).toBeTruthy();
+        expect(row.MissAt).toBeUndefined();
+    });
+
+    it('honors a marker when NO sibling blob exists (genuine no-artwork)', async () => {
+        mocks.store.set(JSON.stringify(['abc', 'table']), {
+            __cachedAt: Date.now(),
+            Blob: undefined,
+            ByteSize: 0,
+            ItemId: 'abc',
+            LastUsed: Date.now(),
+            MissAt: Date.now(),
+            Size: 80,
+            Variant: 'table',
+        });
+        globalThis.fetch = vi.fn(async () => okResponse()) as unknown as typeof fetch;
+
+        const out = await resolveThumbnail('abc', 'table', RAW_URL);
+
+        expect(out).toBe('feishin://no-artwork');
+        expect(globalThis.fetch).not.toHaveBeenCalled();
+    });
+});

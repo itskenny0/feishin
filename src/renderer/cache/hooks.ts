@@ -139,9 +139,23 @@ export const snapshotSwr = async <TData>(args: {
     });
 
     try {
-        const fresh = await Promise.race([remote(ctx), timeoutPromise]);
+        const remotePromise = remote(ctx);
+        const fresh = await Promise.race([remotePromise, timeoutPromise]);
         if (timedOut) {
             console.info('[cache] snapshot cold network timed out', queryKey);
+            // LATE ADOPTION: a slow response that lost the race must still
+            // land — push it into the snapshot + query cache when it arrives
+            // so the page fills in instead of staying empty until a manual
+            // refresh (device, 2026-06-10: a long playlist rendered "no
+            // items" forever).
+            void remotePromise
+                .then((late) => {
+                    if (late === null || late === undefined) return;
+                    writeSnapshot(queryKey, late);
+                    queryClient.setQueryData(queryKey, late);
+                    console.info('[cache] cold network late result adopted', queryKey);
+                })
+                .catch(() => {});
             return fresh;
         }
         writeSnapshot(queryKey, fresh);
@@ -311,9 +325,28 @@ export const cachedSwr = async <TData>(args: {
     };
 
     try {
-        const fresh = await Promise.race([remote(ctx), timeoutPromise]);
+        const remotePromise = remote(ctx);
+        const fresh = await Promise.race([remotePromise, timeoutPromise]);
         if (timedOut) {
             console.info('[cache] cold network timed out', queryKey);
+            // LATE ADOPTION: the slow response still lands when it arrives —
+            // persisted to Dexie + snapshot and pushed into the query cache
+            // so the surface fills in instead of settling on empty forever.
+            void remotePromise
+                .then(async (late) => {
+                    if (late === null || late === undefined) return;
+                    if (db && apply) {
+                        try {
+                            await apply(db, late);
+                        } catch (applyErr) {
+                            console.warn('[cache] apply failed (late)', queryKey, applyErr);
+                        }
+                    }
+                    writeSnapshot(queryKey, late);
+                    queryClient.setQueryData(queryKey, late);
+                    console.info('[cache] cold network late result adopted', queryKey);
+                })
+                .catch(() => {});
             return fallbackOnFailure();
         }
         if (fresh === null || fresh === undefined) {

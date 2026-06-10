@@ -138,3 +138,36 @@ describe('useNativeImage — degraded-cover upgrade', () => {
         expect(result.current.displaySrc).toBe('blob:resolved/abc-itemCard');
     });
 });
+
+describe('useNativeImage — late shared-cache result adoption', () => {
+    it('adopts a resolver result that arrives after the 5s cap when nothing else displayed', async () => {
+        vi.useFakeTimers();
+        let resolveAcquire: (v: string) => void = () => {};
+        const acquire = vi.fn(() => new Promise<string>((r) => (resolveAcquire = r)));
+        const release = vi.fn();
+        registerThumbnailUrlCache(acquire, release, () => undefined);
+
+        // The raw-URL fallback fetch hangs forever (slow server).
+        globalThis.fetch = vi.fn(() => new Promise<Response>(() => {})) as unknown as typeof fetch;
+
+        const { result } = renderHook(() => useNativeImage({ enabled: true, request }));
+
+        // 5s cap fires — hook falls through to the (hanging) raw fetch.
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(5_100);
+        });
+        expect(result.current.displaySrc).toBeUndefined();
+
+        // The slow resolver result finally lands — it must be ADOPTED (the
+        // old behavior released it, leaving the surface on the placeholder
+        // forever while the raw fetch hung).
+        await act(async () => {
+            resolveAcquire('blob:late/abc-itemCard');
+            await vi.advanceTimersByTimeAsync(0);
+        });
+
+        expect(result.current.displaySrc).toBe('blob:late/abc-itemCard');
+        expect(release).not.toHaveBeenCalled();
+        vi.useRealTimers();
+    });
+});

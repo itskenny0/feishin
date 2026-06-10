@@ -351,19 +351,28 @@ export function useNativeImage({
                         : tryResolveThumbnail(cacheItemId, cacheVariant, request);
                     if (useShared) {
                         void lookupPromise.then((late) => {
-                            // If the 5s cap won the race but we ALSO already
-                            // adopted the late result below, don't release it
-                            // (that would revoke a URL we're displaying). Only
-                            // release when it arrived after the timeout AND we
-                            // never adopted it.
-                            if (
-                                timedOut &&
-                                late &&
-                                late.startsWith('blob:') &&
-                                objectUrlRef.current !== late
-                            ) {
-                                releaseSharedThumbnailUrl(cacheItemId, cacheVariant, late);
+                            if (!timedOut || !late || !late.startsWith('blob:')) return;
+                            if (objectUrlRef.current === late) return;
+                            // The resolver result arrived AFTER the 5s cap.
+                            // If nothing else has painted yet (the raw-URL
+                            // fallback fetch can hang for minutes against a
+                            // slow server) ADOPT it — releasing it left the
+                            // surface on the placeholder forever (device,
+                            // 2026-06-10: fullscreen player art).
+                            if (!abortController.signal.aborted && objectUrlRef.current === null) {
+                                objectUrlRef.current = late;
+                                sharedUrlRef.current = {
+                                    itemId: cacheItemId,
+                                    variant: cacheVariant,
+                                };
+                                loadedRequestSignatureRef.current = requestSignature;
+                                degradedRef.current = probeDegradedRef?.(cacheItemId, cacheVariant)
+                                    ? { itemId: cacheItemId, variant: cacheVariant }
+                                    : null;
+                                setState({ displaySrc: late, status: 'loaded' });
+                                return;
                             }
+                            releaseSharedThumbnailUrl(cacheItemId, cacheVariant, late);
                         });
                     }
                     const cached = await Promise.race([lookupPromise, cacheTimeout]);
@@ -443,6 +452,12 @@ export function useNativeImage({
                     return;
                 }
 
+                // A late resolver adoption may have painted while this
+                // fetch was in flight — keep it (clobbering would leak its
+                // shared refcount and re-decode the same cover).
+                if (objectUrlRef.current) {
+                    return;
+                }
                 const objectUrl = URL.createObjectURL(blob);
                 objectUrlRef.current = objectUrl;
                 sharedUrlRef.current = null;

@@ -9,7 +9,7 @@ import { runArtistsSweep } from './artists';
 import { runFavoritesSweep } from './favorites';
 import { runGenresSweep } from './genres';
 import { startSyncHeartbeat, stopSyncHeartbeat } from './heartbeat';
-import { runPlaylistsSweep } from './playlists';
+import { runPlaylistSongsSweep, runPlaylistsSweep } from './playlists';
 import { runSongsSweep } from './songs';
 import { runThumbnailsSweep } from './thumbnails';
 
@@ -136,6 +136,16 @@ export const hydrate = async (server: ServerListItem, kind: 'full' | 'lazy'): Pr
             await runPlaylistsSweep({ db, entity: 'playlists', signal }, server);
             if (signal.aborted) {
                 console.warn('[cache] hydrate: aborted between steps', { after: 'playlists' });
+                return;
+            }
+            // Track lists too — without them a "synced" playlist still hits
+            // the network (and renders empty against a slow server) the
+            // first time it's opened.
+            await runPlaylistSongsSweep({ db, entity: 'playlists', signal }, server);
+            if (signal.aborted) {
+                console.warn('[cache] hydrate: aborted between steps', {
+                    after: 'playlist-songs',
+                });
                 return;
             }
         } else {

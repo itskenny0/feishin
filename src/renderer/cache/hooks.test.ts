@@ -153,3 +153,52 @@ describe('cachedSwr — lock-starvation fallback (perf fix #2)', () => {
         expect(remote).toHaveBeenCalled();
     });
 });
+
+describe('cold-timeout late adoption', () => {
+    // A slow server response that loses the 8s cold race must still LAND —
+    // the page filled in late beats a permanently empty playlist (device,
+    // 2026-06-10: a downloaded 100+-track playlist rendered "no items"
+    // forever because the late response was discarded).
+    it('snapshotSwr adopts a late remote result into snapshot + query cache', async () => {
+        vi.useFakeTimers();
+        const queryKey: QueryKey = ['test', 'late-snap', Math.random()];
+        let resolveRemote: (v: unknown) => void = () => {};
+        const remote = () => new Promise<unknown>((r) => (resolveRemote = r));
+
+        const promise = snapshotSwr({ ctx: makeCtx(queryKey), queryKey, remote });
+        await vi.advanceTimersByTimeAsync(8_000);
+        await expect(promise).resolves.toBeNull(); // timed out cold
+
+        resolveRemote({ items: ['late'] });
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(readSnapshot(queryKey)).toEqual({ items: ['late'] });
+    });
+
+    it('cachedSwr adopts a late remote result (apply + snapshot)', async () => {
+        vi.useFakeTimers();
+        useCacheStore.setState((s) => ({ ...s, cacheAvailable: true }) as never);
+        const queryKey: QueryKey = ['test', 'late-cached', Math.random()];
+        let resolveRemote: (v: unknown) => void = () => {};
+        const remote = () => new Promise<unknown>((r) => (resolveRemote = r));
+        const apply = vi.fn(async () => {});
+
+        const promise = cachedSwr({
+            apply,
+            ctx: makeCtx(queryKey),
+            fromCache: async () => undefined,
+            queryKey,
+            remote,
+        });
+        await vi.advanceTimersByTimeAsync(8_000);
+        await expect(promise).resolves.toBeNull();
+
+        resolveRemote({ items: ['late'] });
+        await vi.advanceTimersByTimeAsync(0);
+        // Drain the adoption's async apply.
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(apply).toHaveBeenCalledWith(FAKE_DB, { items: ['late'] });
+        expect(readSnapshot(queryKey)).toEqual({ items: ['late'] });
+    });
+});
