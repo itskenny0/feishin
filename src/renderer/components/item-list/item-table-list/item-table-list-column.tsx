@@ -18,6 +18,7 @@ import React, {
     useEffect,
     useRef,
     useState,
+    useSyncExternalStore,
 } from 'react';
 import { CellComponentProps } from 'react-window-v2';
 
@@ -61,6 +62,10 @@ import { YearColumn } from '/@/renderer/components/item-list/item-table-list/col
 import { useItemDragDropState } from '/@/renderer/components/item-list/item-table-list/hooks/use-item-drag-drop-state';
 import { TableItemProps } from '/@/renderer/components/item-list/item-table-list/item-table-list';
 import { useItemTableListColumnResizeLive } from '/@/renderer/components/item-list/item-table-list/item-table-list-context';
+import {
+    getListDataVersion,
+    subscribeListDataVersion,
+} from '/@/renderer/components/item-list/item-table-list/table-version-store';
 import { ItemControls, ItemListItem } from '/@/renderer/components/item-list/types';
 import { useLongPress } from '/@/renderer/hooks/use-long-press';
 import { Flex } from '/@/shared/components/flex/flex';
@@ -105,6 +110,12 @@ export interface ItemTableListInnerColumn extends ItemTableListColumn {
 
 const ItemTableListColumnBase = (props: ItemTableListColumn) => {
     const type = props.columnType ?? (props.columns[props.columnIndex].id as TableColumn);
+
+    // Re-render this cell whenever ANY list page write lands — the
+    // accessor-mode item maps mutate in place, react-window v2 won't
+    // re-invoke mounted cells for us, and a cell that mounted before its
+    // page landed must repaint once it does (see table-version-store.ts).
+    useSyncExternalStore(subscribeListDataVersion, getListDataVersion, getListDataVersion);
 
     const isHeaderEnabled = !!props.enableHeader;
     const isDataRow = isHeaderEnabled ? props.rowIndex > 0 : true;
@@ -373,11 +384,25 @@ const ItemTableListColumnBase = (props: ItemTableListColumn) => {
     }
 };
 
-export const ItemTableListColumn = memo(ItemTableListColumnBase, (prevProps, nextProps) => {
+/**
+ * Cell memo comparator — exported for direct regression testing.
+ *
+ * NOTE: `prevItem === nextItem` below is NOT a change detector — both
+ * sides call the same live accessor reading the CURRENT backing map, so
+ * for in-place mutations they always agree. The real change signal is
+ * `dataVersion`: omitting it froze every cell that mounted before its
+ * page's data landed (playlists table: first rows stuck as skeletons
+ * forever, device 2026-06-10). It still catches accessor-identity swaps.
+ */
+export const itemTableListColumnPropsEqual = (
+    prevProps: ItemTableListColumn,
+    nextProps: ItemTableListColumn,
+): boolean => {
     const prevItem = prevProps.getRowItem?.(prevProps.rowIndex);
     const nextItem = nextProps.getRowItem?.(nextProps.rowIndex);
 
     return (
+        prevProps.dataVersion === nextProps.dataVersion &&
         prevProps.rowIndex === nextProps.rowIndex &&
         prevProps.columnIndex === nextProps.columnIndex &&
         prevProps.data === nextProps.data &&
@@ -405,7 +430,9 @@ export const ItemTableListColumn = memo(ItemTableListColumnBase, (prevProps, nex
         prevProps.playlistId === nextProps.playlistId &&
         prevItem === nextItem
     );
-});
+};
+
+export const ItemTableListColumn = memo(ItemTableListColumnBase, itemTableListColumnPropsEqual);
 
 const NonMutedColumns = [TableColumn.TITLE, TableColumn.TITLE_ARTIST, TableColumn.TITLE_COMBINED];
 

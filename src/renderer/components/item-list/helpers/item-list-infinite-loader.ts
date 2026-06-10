@@ -16,6 +16,7 @@ import {
     prepareExplicitRefresh,
     shouldRevalidateFromNetwork,
 } from '/@/renderer/cache';
+import { bumpListDataVersion } from '/@/renderer/components/item-list/item-table-list/table-version-store';
 import { useListContext } from '/@/renderer/context/list-context';
 import { eventEmitter } from '/@/renderer/events/event-emitter';
 import {
@@ -103,6 +104,35 @@ export const infiniteLoaderDataQueryKey = (
     return [serverId, 'item-list-infinite-loader', itemType];
 };
 
+// ---------------------------------------------------------------------------
+// Module-level item-map registry.
+//
+// The per-index item map MUST be shared by every hook instance rendering the
+// same list: React mounts sibling instances during suspense retries (the
+// loader suspends while its first page resolves), and a slow first-page
+// fetch resolved into a DISCARDED instance's per-instance ref — its map died
+// with it while `pagesLoaded` (React Query cache) said "loaded", freezing the
+// first page as skeletons forever (playlists table, device 2026-06-10).
+// Keying the maps here by the serialized data query key makes reads and
+// writes converge on one map no matter which instance issued the fetch.
+// Entries are cleared (not deleted) on query-change resets so live readers
+// keep a coherent view; memory stays bounded by the libraries' list sizes.
+// ---------------------------------------------------------------------------
+interface SharedListMaps {
+    dataMap: Map<number, unknown>;
+    idToIndexMap: Map<string, number>;
+}
+const sharedListMaps = new Map<string, SharedListMaps>();
+
+const acquireSharedListMaps = (key: string): SharedListMaps => {
+    let entry = sharedListMaps.get(key);
+    if (!entry) {
+        entry = { dataMap: new Map(), idToIndexMap: new Map() };
+        sharedListMaps.set(key, entry);
+    }
+    return entry;
+};
+
 export const useItemListInfiniteLoader = ({
     eventKey,
     fetchThreshold = 0.5,
@@ -123,22 +153,27 @@ export const useItemListInfiniteLoader = ({
     const previousDataQueryKeyRef = useRef<string>('');
     const isRefetchingRef = useRef<boolean>(false);
 
-    // The heavy per-index item map and id→index map are held in refs and
-    // mutated IN PLACE. Previously these lived in the React Query cache and
-    // were fully cloned (`new Map(...)`) on every page write and every
-    // favorite/rating toggle — O(n) per mutation over thousands of entries,
-    // which the persister then re-walked. Reads (`getItem`/`getItemIndex`)
-    // now go through stable accessors that close over these refs, so their
-    // identity no longer changes on a version bump.
-    const dataMapRef = useRef<Map<number, unknown>>(new Map());
-    const idToIndexMapRef = useRef<Map<string, number>>(new Map());
+    // The heavy per-index item map and id→index map live in a MODULE-LEVEL
+    // registry shared by every hook instance of the same list (see
+    // `sharedListMaps` above) and are mutated IN PLACE. Reads
+    // (`getItem`/`getItemIndex`) go through stable accessors, so their
+    // identity never changes on a version bump.
+    const sharedMapsKey = useMemo(
+        () => JSON.stringify([serverId, itemType, query]),
+        [serverId, itemType, query],
+    );
+    const sharedMaps = acquireSharedListMaps(sharedMapsKey);
+    const dataMapRef = useRef<Map<number, unknown>>(sharedMaps.dataMap);
+    dataMapRef.current = sharedMaps.dataMap;
+    const idToIndexMapRef = useRef<Map<string, number>>(sharedMaps.idToIndexMap);
+    idToIndexMapRef.current = sharedMaps.idToIndexMap;
 
-    // Replace the ref-held maps with empty ones. Allocating fresh Maps (rather
-    // than `.clear()`ing in place) keeps any in-flight `loadedItems` snapshot
-    // referencing the old data until the next version bump swaps it out.
+    // Clear the shared maps in place — every instance (and any in-flight
+    // write continuation) keeps pointing at the SAME map, so a reset never
+    // strands data in an orphaned instance.
     const resetDataMaps = useCallback(() => {
-        dataMapRef.current = new Map();
-        idToIndexMapRef.current = new Map();
+        dataMapRef.current.clear();
+        idToIndexMapRef.current.clear();
     }, []);
 
     const { data: totalItemCount } = useSuspenseQuery<number, any, number, any>(listCountQuery);
@@ -199,6 +234,10 @@ export const useItemListInfiniteLoader = ({
                     new Promise<void>((resolve) => setTimeout(resolve, 250)),
                 ]);
             }
+
+            // Bulletproof render signal for mounted cells (module-scope, no
+            // React instance in the chain).
+            bumpListDataVersion();
 
             // … then bump the small version/pagesLoaded blob in the query cache
             // to schedule a render.
@@ -445,7 +484,18 @@ export const useItemListInfiniteLoader = ({
 
             const thresholdDistance = Math.floor(itemsPerPage * fetchThreshold);
 
-            const isCurrentPageLoaded = currentData?.pagesLoaded[pageNumber] ?? false;
+            // A page only counts as loaded if its items are actually PRESENT
+            // in the live map. `pagesLoaded` persists in the React Query
+            // cache while the item maps live in hook refs — when an initial
+            // page's slow fetch outlives the render instance that issued it
+            // (suspense retry, remount), the flag said "loaded" while the
+            // committed instance's map stayed empty, freezing the first rows
+            // as skeletons forever (playlists table, device 2026-06-10).
+            // Checking the page's first item self-heals every such mismatch.
+            const isCurrentPageLoaded =
+                (currentData?.pagesLoaded[pageNumber] ?? false) &&
+                (pageNumber * itemsPerPage >= (totalItemCount ?? 0) ||
+                    dataMapRef.current.has(pageNumber * itemsPerPage));
 
             // Fetch current page if not loaded
             if (!isCurrentPageLoaded) {
@@ -470,7 +520,7 @@ export const useItemListInfiniteLoader = ({
                 }
             }
         },
-        [itemsPerPage, fetchThreshold, queryClient, dataQueryKey, fetchPage],
+        [itemsPerPage, fetchThreshold, queryClient, dataQueryKey, fetchPage, totalItemCount],
     );
 
     const onRangeChanged = useMemo(

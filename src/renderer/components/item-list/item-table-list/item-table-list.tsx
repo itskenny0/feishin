@@ -62,6 +62,10 @@ import {
     type TableScrollShadowStore,
 } from '/@/renderer/components/item-list/item-table-list/table-scroll-shadow-store';
 import {
+    getListDataVersion,
+    subscribeListDataVersion,
+} from '/@/renderer/components/item-list/item-table-list/table-version-store';
+import {
     ItemControls,
     ItemListHandle,
     ItemTableListColumnConfig,
@@ -1245,6 +1249,9 @@ const ItemTableListStickyUI = memo(
 ItemTableListStickyUI.displayName = 'ItemTableListStickyUI';
 
 const MobileTrackRowCell = (cellProps: CellComponentProps<TableItemProps>) => {
+    // Same live-version subscription as MemoizedCellRouter — see
+    // table-version-store.ts.
+    useSyncExternalStore(subscribeListDataVersion, getListDataVersion, getListDataVersion);
     const type = cellProps.columns[cellProps.columnIndex]?.id as TableColumn;
     return (
         <MobileTrackRowColumn {...(cellProps as any)} controls={cellProps.controls} type={type} />
