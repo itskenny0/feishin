@@ -14,7 +14,7 @@ import {
     snapshotSwr,
     toCachedAlbumRow,
 } from '/@/renderer/cache';
-import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
+import { useCachedItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { useFuzzyGenreIds } from '/@/renderer/features/genres/api/genres-api';
 import { useGenreListSuspenseQuery } from '/@/renderer/features/genres/queries/genres-queries';
 import { isCleanGenreName } from '/@/renderer/features/home/utils/genre-filter';
@@ -340,7 +340,7 @@ const GenreItem = memo(({ genre }: { genre: Genre & { color: string; path: strin
     }, [isVisible]);
 
     const { data: coverAlbum } = useGenreCoverAlbum(genre.id, serverId, isVisible);
-    const coverImageUrl = useItemImageUrl({
+    const coverImageUrl = useCachedItemImageUrl({
         id: coverAlbum?.imageId || undefined,
         imageUrl: coverAlbum?.imageUrl || undefined,
         itemType: LibraryItem.ALBUM,

@@ -7,7 +7,7 @@ import { Link } from 'react-router';
 
 import styles from './feature-card-shell.module.css';
 
-import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
+import { useCachedItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { ContextMenuController } from '/@/renderer/features/context-menu/context-menu-controller';
 import { setFeatureCardHovered } from '/@/renderer/features/home/components/feature-card/hover-signal';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
@@ -60,7 +60,7 @@ const SongTile = ({
     onContextMenu: (e: ReactMouseEvent<HTMLButtonElement>, song: Song) => void;
     song: Song;
 }) => {
-    const imageUrl = useItemImageUrl({
+    const imageUrl = useCachedItemImageUrl({
         id: song.imageId || undefined,
         imageUrl: song.imageUrl || undefined,
         itemType: LibraryItem.SONG,
@@ -117,7 +117,7 @@ export const FeatureCardShell = ({
     const songsPerCard = useHomeFeatureCardSongsPerCard();
 
     const backgroundSong = data.backgroundSong ?? data.songs[0] ?? null;
-    const backgroundImageUrl = useItemImageUrl({
+    const backgroundImageUrl = useCachedItemImageUrl({
         id: backgroundSong?.imageId || undefined,
         imageUrl: backgroundSong?.imageUrl || undefined,
         itemType: LibraryItem.SONG,

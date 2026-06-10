@@ -8,7 +8,7 @@ import styles from './dummy-album-detail-route.module.css';
 import { api } from '/@/renderer/api';
 import { queryKeys } from '/@/renderer/api/query-keys';
 import { cachedSwr, readSnapshot, toCachedSongRow } from '/@/renderer/cache';
-import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
+import { useCachedItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
 import { AnimatedPage } from '/@/renderer/features/shared/components/animated-page';
 import { LibraryContainer } from '/@/renderer/features/shared/components/library-container';
@@ -130,7 +130,7 @@ const DummyAlbumDetailRoute = () => {
         },
     ];
 
-    const imageUrl = useItemImageUrl({
+    const imageUrl = useCachedItemImageUrl({
         id: detailQuery?.data?.imageId || undefined,
         itemType: LibraryItem.ALBUM,
         type: 'header',

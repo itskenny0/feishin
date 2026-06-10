@@ -6,7 +6,7 @@ import { generatePath, Link } from 'react-router';
 
 import styles from './sidebar-playlist-list.module.css';
 
-import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
+import { ItemImage } from '/@/renderer/components/item-image/item-image';
 import { albumQueries } from '/@/renderer/features/albums/api/album-api';
 import { ContextMenuController } from '/@/renderer/features/context-menu/context-menu-controller';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
@@ -27,7 +27,6 @@ import { ActionIcon, ActionIconGroup } from '/@/shared/components/action-icon/ac
 import { ButtonProps } from '/@/shared/components/button/button';
 import { Group } from '/@/shared/components/group/group';
 import { Icon } from '/@/shared/components/icon/icon';
-import { Image } from '/@/shared/components/image/image';
 import { Text } from '/@/shared/components/text/text';
 import { Album, AlbumListSort, LibraryItem, SortOrder } from '/@/shared/types/domain-types';
 import { Play } from '/@/shared/types/types';
@@ -60,12 +59,6 @@ const AlbumRowButton = memo(({ item, name, onContextMenu }: AlbumRowButtonProps)
         [player, item._serverId],
     );
 
-    const imageUrl = useItemImageUrl({
-        id: item.imageId || undefined,
-        itemType: LibraryItem.ALBUM,
-        type: 'table',
-    });
-
     // On hover, warm the album-detail route chunk and prefetch the detail
     // query so the click resolves from cache without a loading flash. Both
     // calls dedupe internally (preloadRoute once per session, prefetchQuery
@@ -91,7 +84,13 @@ const AlbumRowButton = memo(({ item, name, onContextMenu }: AlbumRowButtonProps)
             to={url}
         >
             <div className={styles.rowGroup}>
-                <Image containerClassName={styles.imageContainer} src={imageUrl} />
+                <ItemImage
+                    containerClassName={styles.imageContainer}
+                    enableDebounce={false}
+                    id={item.imageId}
+                    itemType={LibraryItem.ALBUM}
+                    type="table"
+                />
                 <div className={styles.metadata}>
                     <Text className={styles.name} fw={500} size="md">
                         {name}

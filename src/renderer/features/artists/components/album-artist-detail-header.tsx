@@ -6,7 +6,7 @@ import { useParams } from 'react-router';
 import styles from './album-artist-detail-header.module.css';
 
 import { useIsEntityOfflineAvailable } from '/@/renderer/cache';
-import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
+import { useCachedItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { artistsQueries } from '/@/renderer/features/artists/api/artists-api';
 import { getArtistAlbumsGrouped } from '/@/renderer/features/artists/hooks/use-artist-albums-grouped';
 import { useDeleteArtistImage } from '/@/renderer/features/artists/mutations/delete-artist-image-mutation';
@@ -284,7 +284,7 @@ export const AlbumArtistDetailHeader = forwardRef<HTMLDivElement, AlbumArtistDet
             [detailQuery.data],
         );
 
-        const headerImageUrl = useItemImageUrl({
+        const headerImageUrl = useCachedItemImageUrl({
             id: detailQuery.data?.imageId || undefined,
             imageUrl: detailQuery.data?.imageUrl,
             itemType: LibraryItem.ALBUM_ARTIST,

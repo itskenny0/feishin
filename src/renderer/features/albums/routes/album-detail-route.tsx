@@ -2,7 +2,7 @@ import { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router';
 
-import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
+import { useCachedItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { NativeScrollArea } from '/@/renderer/components/native-scroll-area/native-scroll-area';
 import { AlbumDetailContent } from '/@/renderer/features/albums/components/album-detail-content';
 import { AlbumDetailHeader } from '/@/renderer/features/albums/components/album-detail-header';
@@ -37,7 +37,7 @@ const AlbumDetailRoute = () => {
     });
 
     const imageUrl =
-        useItemImageUrl({
+        useCachedItemImageUrl({
             id: detailQuery?.data?.imageId || undefined,
             itemType: LibraryItem.ALBUM,
             type: 'itemCard',

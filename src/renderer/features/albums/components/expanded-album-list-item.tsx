@@ -6,7 +6,7 @@ import { Fragment, Suspense, useCallback, useRef } from 'react';
 
 import styles from './expanded-album-list-item.module.css';
 
-import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
+import { useCachedItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { getDraggedItems } from '/@/renderer/components/item-list/helpers/get-dragged-items';
 import { useDefaultItemListControls } from '/@/renderer/components/item-list/helpers/item-list-controls';
 import {
@@ -237,7 +237,7 @@ const ExpandedAlbumListItemContent = ({ albumData }: ExpandedAlbumListItemConten
     const albumDisplayName =
         (useFsName ? filesystemNameFromAlbumPath(albumData.path) : null) || albumData.name;
 
-    const imageUrl = useItemImageUrl({
+    const imageUrl = useCachedItemImageUrl({
         id: albumData.imageId || undefined,
         itemType: LibraryItem.ALBUM,
         type: 'itemCard',

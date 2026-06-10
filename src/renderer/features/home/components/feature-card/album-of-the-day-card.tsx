@@ -5,7 +5,7 @@ import { generatePath, Link } from 'react-router';
 
 import styles from './album-of-the-day-card.module.css';
 
-import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
+import { useCachedItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { albumQueries } from '/@/renderer/features/albums/api/album-api';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
 import { AppRoute } from '/@/renderer/router/routes';
@@ -124,7 +124,7 @@ export const AlbumOfTheDayCard = () => {
         enabled: Boolean(featured && serverId),
     });
 
-    const imageUrl = useItemImageUrl({
+    const imageUrl = useCachedItemImageUrl({
         id: featured?.imageId || undefined,
         imageUrl: featured?.imageUrl || undefined,
         itemType: LibraryItem.ALBUM,

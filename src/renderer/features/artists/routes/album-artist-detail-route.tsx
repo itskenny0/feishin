@@ -3,7 +3,7 @@ import { Suspense, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router';
 
-import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
+import { useCachedItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { NativeScrollArea } from '/@/renderer/components/native-scroll-area/native-scroll-area';
 import { albumQueries } from '/@/renderer/features/albums/api/album-api';
 import { artistsQueries } from '/@/renderer/features/artists/api/artists-api';
@@ -77,14 +77,14 @@ const AlbumArtistDetailRouteContent = () => {
         serverId,
     });
 
-    const imageUrl = useItemImageUrl({
+    const imageUrl = useCachedItemImageUrl({
         id: detailQuery.data?.imageId || undefined,
         imageUrl: detailQuery.data?.imageUrl,
         itemType: LibraryItem.ALBUM_ARTIST,
         type: 'header',
     });
 
-    const libraryBackgroundImageUrl = useItemImageUrl({
+    const libraryBackgroundImageUrl = useCachedItemImageUrl({
         id: detailQuery.data?.imageId || undefined,
         imageUrl: detailQuery.data?.imageUrl,
         itemType: LibraryItem.ALBUM_ARTIST,
