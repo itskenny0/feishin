@@ -1,4 +1,4 @@
-import { UseSuspenseQueryResult } from '@tanstack/react-query';
+import { useQueryClient, UseSuspenseQueryResult } from '@tanstack/react-query';
 import { forwardRef, Fragment, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router';
@@ -7,6 +7,7 @@ import styles from './album-artist-detail-header.module.css';
 
 import { useIsEntityOfflineAvailable } from '/@/renderer/cache';
 import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
+import { artistsQueries } from '/@/renderer/features/artists/api/artists-api';
 import { getArtistAlbumsGrouped } from '/@/renderer/features/artists/hooks/use-artist-albums-grouped';
 import { useDeleteArtistImage } from '/@/renderer/features/artists/mutations/delete-artist-image-mutation';
 import { useUploadArtistImage } from '/@/renderer/features/artists/mutations/upload-artist-image-mutation';
@@ -151,7 +152,8 @@ export const AlbumArtistDetailHeader = forwardRef<HTMLDivElement, AlbumArtistDet
             },
         ];
 
-        const { addToQueueByFetch } = usePlayer();
+        const { addToQueueByData, addToQueueByFetch } = usePlayer();
+        const queryClient = useQueryClient();
         const playButtonBehavior = usePlayButtonBehavior();
         const setFavorite = useSetFavorite();
         const setRating = useSetRating();
@@ -163,9 +165,44 @@ export const AlbumArtistDetailHeader = forwardRef<HTMLDivElement, AlbumArtistDet
         const artistReleaseTypeItems = useArtistReleaseTypeItems();
 
         const handlePlay = useCallback(
-            (type?: Play) => {
+            async (type?: Play) => {
                 if (!server?.id || !routeId) return;
 
+                // The big Play plays the TOP SONGS list shown below, in its
+                // displayed order — not artist radio and not the discography
+                // dump. Use the SAME query (including the community/personal
+                // toggle the section persists) so the queue matches the rows
+                // on screen exactly.
+                try {
+                    const storedType = window.localStorage.getItem(
+                        'album-artist-top-songs-query-type',
+                    );
+                    const topSongsType = storedType?.includes('personal')
+                        ? ('personal' as const)
+                        : ('community' as const);
+                    const topSongs = await queryClient.fetchQuery(
+                        artistsQueries.topSongs({
+                            query: {
+                                artist: detailQuery.data?.name || '',
+                                artistId: routeId,
+                                type: topSongsType,
+                            },
+                            serverId: server.id,
+                        }),
+                    );
+                    const items = topSongs?.items ?? [];
+                    if (items.length > 0) {
+                        addToQueueByData(items, type || playButtonBehavior);
+                        return;
+                    }
+                } catch (err) {
+                    console.warn('[artist-detail] top songs play failed; falling back', {
+                        error: (err as Error)?.message,
+                    });
+                }
+
+                // Fallback (no top songs available): enqueue the discography
+                // in its displayed grouping/sort order.
                 const albums = albumsQuery.data?.items || [];
                 const sortedAlbums = sortAlbumList(albums, sortBy, sortOrder);
 
@@ -187,8 +224,11 @@ export const AlbumArtistDetailHeader = forwardRef<HTMLDivElement, AlbumArtistDet
                 );
             },
             [
+                addToQueueByData,
                 addToQueueByFetch,
+                detailQuery.data,
                 playButtonBehavior,
+                queryClient,
                 routeId,
                 server.id,
                 albumsQuery.data?.items,
