@@ -1,13 +1,14 @@
 import clsx from 'clsx';
 import { t } from 'i18next';
 import { AnimatePresence, HTMLMotionProps, motion, Variants } from 'motion/react';
-import { Fragment, useEffect, useMemo, useRef } from 'react';
+import { Fragment, useMemo, useRef } from 'react';
 import { generatePath, Link } from 'react-router';
 
 import styles from './full-screen-player-image.module.css';
 
 import { useCachedItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { useActiveNowPlayingItem } from '/@/renderer/features/jellyfin-remote-target/hooks/use-active-player-source';
+import { useCrossfadeImageSlots } from '/@/renderer/features/player/hooks/use-crossfade-image-slots';
 import {
     useIsRadioActive,
     useRadioPlayer,
@@ -27,7 +28,6 @@ import { Group } from '/@/shared/components/group/group';
 import { Icon } from '/@/shared/components/icon/icon';
 import { Stack } from '/@/shared/components/stack/stack';
 import { Text } from '/@/shared/components/text/text';
-import { useSetState } from '/@/shared/hooks/use-set-state';
 import { ExplicitStatus, LibraryItem, QueueSong } from '/@/shared/types/domain-types';
 import { albumFolderFromSongPath } from '/@/shared/utils/album-folder-from-path';
 import { isPlausibleReleaseYear } from '/@/shared/utils/release-year';
@@ -132,57 +132,14 @@ export const FullScreenPlayerImage = () => {
         type: 'fullScreenPlayer',
     });
 
-    const [imageState, setImageState] = useSetState({
-        bottomExplicit: nextSong?.explicitStatus === ExplicitStatus.EXPLICIT,
-        bottomImage: nextImageUrl,
-        current: 0,
-        topExplicit: currentSong?.explicitStatus === ExplicitStatus.EXPLICIT,
-        topImage: currentImageUrl,
-    });
-
-    // Track previous song to detect changes
-    const previousSongRef = useRef<string | undefined>(songKey);
-    const imageStateRef = useRef(imageState);
-
-    // Keep ref in sync
-    useEffect(() => {
-        imageStateRef.current = imageState;
-    }, [imageState]);
-
-    // Update images when song or size changes (skip when playing radio - no album art)
-    useEffect(() => {
-        if (isPlayingRadio) {
-            return;
-        }
-        if (songKey === previousSongRef.current) {
-            return;
-        }
-
-        const isTop = imageStateRef.current.current === 0;
-
-        setImageState({
-            bottomExplicit:
-                (isTop ? currentSong?.explicitStatus : nextSong?.explicitStatus) ===
-                ExplicitStatus.EXPLICIT,
-            bottomImage: isTop ? currentImageUrl : nextImageUrl,
-            current: isTop ? 1 : 0,
-            topExplicit:
-                (isTop ? nextSong?.explicitStatus : currentSong?.explicitStatus) ===
-                ExplicitStatus.EXPLICIT,
-            topImage: isTop ? nextImageUrl : currentImageUrl,
-        });
-
-        previousSongRef.current = songKey;
-    }, [
-        isPlayingRadio,
-        songKey,
+    const imageState = useCrossfadeImageSlots({
+        currentExplicit: currentSong?.explicitStatus === ExplicitStatus.EXPLICIT,
         currentImageUrl,
-        nextSong?._uniqueId,
+        nextExplicit: nextSong?.explicitStatus === ExplicitStatus.EXPLICIT,
         nextImageUrl,
-        setImageState,
-        currentSong?.explicitStatus,
-        nextSong?.explicitStatus,
-    ]);
+        paused: isPlayingRadio,
+        songKey,
+    });
 
     // Memo keyed on the song id — the metadata badges only need to rebuild
     // when the track actually changes, not on every parent re-render (which

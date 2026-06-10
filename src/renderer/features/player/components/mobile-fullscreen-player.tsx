@@ -32,6 +32,7 @@ import { MobileFullscreenPlayerMetadata } from '/@/renderer/features/player/comp
 import { MobileFullscreenPlayerProgress } from '/@/renderer/features/player/components/mobile-fullscreen-player-progress';
 import { MobileFullscreenPlayerVolume } from '/@/renderer/features/player/components/mobile-fullscreen-player-volume';
 import { MobileFullscreenVisualizerCard } from '/@/renderer/features/player/components/mobile-fullscreen-visualizer-card';
+import { useCrossfadeImageSlots } from '/@/renderer/features/player/hooks/use-crossfade-image-slots';
 import { coverGestureArbiter } from '/@/renderer/features/player/utils/cover-swipe-signal';
 import {
     useIsRadioActive,
@@ -209,35 +210,11 @@ const BackgroundImage = memo(({ dynamicBackground, dynamicIsImage }: BackgroundI
         type: 'itemCard',
     });
 
-    const [imageState, setImageState] = useState({
-        bottomImage: nextImageUrl,
-        current: 0,
-        topImage: currentImageUrl,
+    const imageState = useCrossfadeImageSlots({
+        currentImageUrl,
+        nextImageUrl,
+        songKey: currentSong?._uniqueId,
     });
-
-    const previousSongRef = useRef<string | undefined>(currentSong?._uniqueId);
-    const imageStateRef = useRef(imageState);
-
-    useEffect(() => {
-        imageStateRef.current = imageState;
-    }, [imageState]);
-
-    // Update images when song changes
-    useEffect(() => {
-        if (currentSong?._uniqueId === previousSongRef.current) {
-            return;
-        }
-
-        const isTop = imageStateRef.current.current === 0;
-
-        setImageState({
-            bottomImage: isTop ? currentImageUrl : nextImageUrl,
-            current: isTop ? 1 : 0,
-            topImage: isTop ? nextImageUrl : currentImageUrl,
-        });
-
-        previousSongRef.current = currentSong?._uniqueId;
-    }, [currentSong?._uniqueId, currentImageUrl, nextSong?._uniqueId, nextImageUrl]);
 
     if (!dynamicBackground || !dynamicIsImage) {
         return null;

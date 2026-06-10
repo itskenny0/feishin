@@ -15,6 +15,7 @@ import { useCachedItemImageUrl } from '/@/renderer/components/item-image/item-im
 import { useActiveNowPlayingItem } from '/@/renderer/features/jellyfin-remote-target/hooks/use-active-player-source';
 import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
+import { useCrossfadeImageSlots } from '/@/renderer/features/player/hooks/use-crossfade-image-slots';
 import {
     coverGestureArbiter,
     decideCoverSwipeCommit,
@@ -33,7 +34,6 @@ import {
 import { Center } from '/@/shared/components/center/center';
 import { Icon } from '/@/shared/components/icon/icon';
 import { PlaybackSelectors } from '/@/shared/constants/playback-selectors';
-import { useSetState } from '/@/shared/hooks/use-set-state';
 import { LibraryItem } from '/@/shared/types/domain-types';
 
 const imageVariants: Variants = {
@@ -157,10 +157,10 @@ export const MobileFullscreenPlayerAlbumArt = () => {
         type: 'fullScreenPlayer',
     });
 
-    const [imageState, setImageState] = useSetState({
-        bottomImage: nextImageUrl,
-        current: 0,
-        topImage: currentImageUrl,
+    const imageState = useCrossfadeImageSlots({
+        currentImageUrl,
+        nextImageUrl,
+        songKey: currentSong?._uniqueId,
     });
 
     const updateImageSize = useCallback(() => {
@@ -176,32 +176,6 @@ export const MobileFullscreenPlayerAlbumArt = () => {
     useLayoutEffect(() => {
         updateImageSize();
     }, [updateImageSize]);
-
-    // Track previous song to detect changes
-    const previousSongRef = useRef<string | undefined>(currentSong?._uniqueId);
-    const imageStateRef = useRef(imageState);
-
-    // Keep ref in sync
-    useEffect(() => {
-        imageStateRef.current = imageState;
-    }, [imageState]);
-
-    // Update images when song or size changes
-    useEffect(() => {
-        if (currentSong?._uniqueId === previousSongRef.current) {
-            return;
-        }
-
-        const isTop = imageStateRef.current.current === 0;
-
-        setImageState({
-            bottomImage: isTop ? currentImageUrl : nextImageUrl,
-            current: isTop ? 1 : 0,
-            topImage: isTop ? nextImageUrl : currentImageUrl,
-        });
-
-        previousSongRef.current = currentSong?._uniqueId;
-    }, [currentSong?._uniqueId, currentImageUrl, nextSong?._uniqueId, nextImageUrl, setImageState]);
 
     /*
      * Spotify-style finger-tracking carousel swipe on the cover. Same

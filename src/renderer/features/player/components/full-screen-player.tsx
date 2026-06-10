@@ -1,13 +1,5 @@
 import { AnimatePresence, motion, Variants } from 'motion/react';
-import {
-    CSSProperties,
-    memo,
-    ReactNode,
-    useEffect,
-    useLayoutEffect,
-    useRef,
-    useState,
-} from 'react';
+import { CSSProperties, memo, ReactNode, useLayoutEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation } from 'react-router';
 
@@ -17,6 +9,7 @@ import { useCachedItemImageUrl } from '/@/renderer/components/item-image/item-im
 import { SONG_TABLE_COLUMNS } from '/@/renderer/components/item-list/item-table-list/default-columns';
 import { FullScreenPlayerImage } from '/@/renderer/features/player/components/full-screen-player-image';
 import { FullScreenPlayerQueue } from '/@/renderer/features/player/components/full-screen-player-queue';
+import { useCrossfadeImageSlots } from '/@/renderer/features/player/hooks/use-crossfade-image-slots';
 import {
     useIsRadioActive,
     useRadioPlayer,
@@ -101,36 +94,11 @@ const BackgroundImage = memo(({ dynamicBackground, dynamicIsImage }: BackgroundI
         type: 'itemCard',
     });
 
-    const [imageState, setImageState] = useState({
-        bottomImage: nextImageUrl,
-        current: 0,
-        topImage: currentImageUrl,
+    const imageState = useCrossfadeImageSlots({
+        currentImageUrl,
+        nextImageUrl,
+        songKey: currentSong?._uniqueId,
     });
-
-    const previousSongRef = useRef<string | undefined>(currentSong?._uniqueId);
-    const imageStateRef = useRef(imageState);
-
-    // Keep ref in sync
-    useEffect(() => {
-        imageStateRef.current = imageState;
-    }, [imageState]);
-
-    // Update images when song changes
-    useEffect(() => {
-        if (currentSong?._uniqueId === previousSongRef.current) {
-            return;
-        }
-
-        const isTop = imageStateRef.current.current === 0;
-
-        setImageState({
-            bottomImage: isTop ? currentImageUrl : nextImageUrl,
-            current: isTop ? 1 : 0,
-            topImage: isTop ? nextImageUrl : currentImageUrl,
-        });
-
-        previousSongRef.current = currentSong?._uniqueId;
-    }, [currentSong?._uniqueId, currentImageUrl, nextSong?._uniqueId, nextImageUrl]);
 
     if (!dynamicBackground || !dynamicIsImage) {
         return null;
