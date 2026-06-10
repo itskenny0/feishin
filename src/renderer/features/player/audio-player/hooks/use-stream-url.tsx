@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { api } from '/@/renderer/api';
 import { localMediaStore } from '/@/renderer/cache/media-store';
+import { useIsSongOfflineAvailable } from '/@/renderer/cache/use-offline-availability';
 import { TranscodingConfig, usePlaybackType } from '/@/renderer/store';
 import { QueueSong } from '/@/shared/types/domain-types';
 import { PlayerType } from '/@/shared/types/types';
@@ -97,14 +98,36 @@ export function useSongUrl(
  */
 function useOfflineSongUrl(
     song: QueueSong | undefined,
-    current: boolean,
+    _current: boolean,
 ): { pending: boolean; url: string | undefined } {
     const playbackType = usePlaybackType();
-    const [blobUrl, setBlobUrl] = useState<string | undefined>(undefined);
-    // Start "pending" on the web engine so the remote query waits for the
-    // first lookup. Non-web (MPV) never substitutes, so it's never pending.
-    const [pending, setPending] = useState<boolean>(playbackType === PlayerType.WEB);
+    // The settled verdict of the LAST COMPLETED lookup, keyed by the song it
+    // was for. Keying lets `pending` be DERIVED during render: when the song
+    // changes, the very first render already reports pending — the old
+    // setPending-in-effect approach left one commit window where the remote
+    // query fired (jellyfin's getStreamUrl is a sync URL builder, so offline
+    // it still "succeeds" instantly) and handed the audio element a dead
+    // network URL; its error handler then paused playback before the blob
+    // could swap in.
+    const [settled, setSettled] = useState<null | { key: string; url: string | undefined }>(null);
     const objectUrlRef = useRef<string | undefined>(undefined);
+    // Reactive availability signal. The Dexie lookup below can race the
+    // offline-media boot (the index loads ~seconds after first render): a
+    // lookup that runs too early concludes "no local copy" and that verdict
+    // used to be cached in state for the rest of the session — an OFFLINE
+    // app launch then played a dead network URL forever. Subscribing to the
+    // availability index re-runs the lookup when the index lands at boot or
+    // when a download completes mid-session.
+    const songAvailableOffline = useIsSongOfflineAvailable(song?._serverId, song?.id);
+
+    // MPV cannot play blob URLs — only substitute for the web-audio path.
+    // Substitution applies to EVERY player slot, including the next-track
+    // preload (`current` is ignored deliberately): preloading the blob gives
+    // gapless playback offline, and preloading the remote URL while offline
+    // fed the second audio element a dead URL whose error handler paused the
+    // (healthy, blob-served) current track.
+    const targetKey =
+        song?._serverId && playbackType === PlayerType.WEB ? `${song._serverId}|${song.id}` : null;
 
     useEffect(() => {
         let cancelled = false;
@@ -116,17 +139,14 @@ function useOfflineSongUrl(
             }
         };
 
-        // MPV cannot play blob URLs — only substitute for the web-audio path.
-        if (!song?._serverId || !current || playbackType !== PlayerType.WEB) {
+        if (!targetKey || !song) {
             revoke();
-            setBlobUrl(undefined);
-            setPending(false);
+            setSettled(null);
             return () => {
                 cancelled = true;
             };
         }
 
-        setPending(true);
         void (async () => {
             try {
                 const row = await localMediaStore.get(song._serverId, song.id);
@@ -139,18 +159,16 @@ function useOfflineSongUrl(
                         bytes: row.ByteSize,
                         songId: song.id,
                     });
-                    setBlobUrl(url);
+                    setSettled({ key: targetKey, url });
                 } else {
                     revoke();
-                    setBlobUrl(undefined);
+                    setSettled({ key: targetKey, url: undefined });
                 }
             } catch (err) {
                 if (!cancelled) {
                     console.warn(`${TAG} substitution lookup failed`, err);
-                    setBlobUrl(undefined);
+                    setSettled({ key: targetKey, url: undefined });
                 }
-            } finally {
-                if (!cancelled) setPending(false);
             }
         })();
 
@@ -158,9 +176,18 @@ function useOfflineSongUrl(
             cancelled = true;
             revoke();
         };
-    }, [song?._serverId, song?.id, current, playbackType]);
+        // song is fully represented by targetKey; listing it would re-run on
+        // every queue rebuild (new object identity, same song).
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [targetKey, playbackType, songAvailableOffline]);
 
-    return { pending, url: blobUrl };
+    const isSettledForThisSong = targetKey !== null && settled?.key === targetKey;
+    return {
+        // Pending whenever a lookup is owed for the current song — including
+        // the renders BEFORE the effect commits its verdict.
+        pending: targetKey !== null && !isSettledForThisSong,
+        url: isSettledForThisSong ? settled.url : undefined,
+    };
 }
 
 export const getSongUrl = async (

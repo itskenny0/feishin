@@ -17,6 +17,7 @@ import type { ReactNode } from 'react';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react';
+import { useSyncExternalStore } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { PlayerType } from '/@/shared/types/types';
@@ -24,10 +25,17 @@ import { PlayerType } from '/@/shared/types/types';
 // `PlayerType` can't be referenced inside vi.hoisted (it runs before imports),
 // so seed with the underlying string value (PlayerType.WEB === 'web').
 const mocks = vi.hoisted(() => ({
+    availabilityListeners: new Set<() => void>(),
     getStreamUrl: vi.fn(),
     mediaGet: vi.fn(),
     playbackType: 'web' as string,
+    songAvailable: { value: false },
 }));
+
+const flipAvailability = (value: boolean) => {
+    mocks.songAvailable.value = value;
+    mocks.availabilityListeners.forEach((cb) => cb());
+};
 
 vi.mock('/@/renderer/api', () => ({
     api: { controller: { getStreamUrl: mocks.getStreamUrl } },
@@ -39,6 +47,19 @@ vi.mock('/@/renderer/cache/media-store', () => ({
 
 vi.mock('/@/renderer/store', () => ({
     usePlaybackType: () => mocks.playbackType,
+}));
+
+// Reactive availability signal backed by a controllable external store so a
+// test can flip "song became available offline" and assert the hook reacts.
+vi.mock('/@/renderer/cache/use-offline-availability', () => ({
+    useIsSongOfflineAvailable: () =>
+        useSyncExternalStore(
+            (cb) => {
+                mocks.availabilityListeners.add(cb);
+                return () => mocks.availabilityListeners.delete(cb);
+            },
+            () => mocks.songAvailable.value,
+        ),
 }));
 
 import { useSongUrl } from '/@/renderer/features/player/audio-player/hooks/use-stream-url';
@@ -62,6 +83,7 @@ const wrapper = ({ children }: { children: ReactNode }) => {
 beforeEach(() => {
     vi.clearAllMocks();
     mocks.playbackType = PlayerType.WEB;
+    mocks.songAvailable.value = false;
     mocks.getStreamUrl.mockResolvedValue('https://srv/remote/s1');
     // jsdom lacks createObjectURL.
     global.URL.createObjectURL = vi.fn(() => 'blob:fake-object-url');
@@ -104,6 +126,24 @@ describe('useSongUrl playback substitution', () => {
         // No blob URL created on MPV.
         expect(global.URL.createObjectURL).not.toHaveBeenCalled();
         expect(mocks.getStreamUrl).toHaveBeenCalledTimes(1);
+    });
+
+    it('re-runs the local lookup when offline availability flips on after mount', async () => {
+        // Boot race regression: the first lookup runs BEFORE the offline-media
+        // store has loaded its index (get -> undefined), so the hook concludes
+        // "no local copy" and serves the remote URL. When the availability
+        // index lands (or a download completes), the hook MUST re-check and
+        // swap to the blob — otherwise an offline launch plays a dead network
+        // URL for the whole session.
+        mocks.mediaGet.mockResolvedValue(undefined);
+
+        const { result } = renderHook(() => useSongUrl(SONG, true, TRANSCODE), { wrapper });
+        await waitFor(() => expect(result.current).toBe('https://srv/remote/s1'));
+
+        mocks.mediaGet.mockResolvedValue({ Blob: new Blob(['x']), ByteSize: 1, SongId: 's1' });
+        flipAvailability(true);
+
+        await waitFor(() => expect(result.current).toBe('blob:fake-object-url'));
     });
 
     it('revokes the object URL on unmount', async () => {
