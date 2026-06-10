@@ -29,9 +29,21 @@ vi.mock('/@/renderer/features/songs/api/songs-api', () => ({
     songsQueries: { random: (args: unknown) => args },
 }));
 vi.mock('/@/renderer/cache/db', () => ({ getActiveCacheDb }));
-vi.mock('/@/renderer/cache/store', () => ({
-    useCacheStore: { getState: () => ({ cacheAvailable: true }) },
-}));
+// useCacheStore is used both as a hook (selector) and via .getState().
+// vi.hoisted so the hoisted vi.mock factory below can reference it.
+const { useCacheStore } = vi.hoisted(() => {
+    const state = {
+        cacheAvailable: true,
+        offlineAvailability: { entityKeys: new Set<string>(), songKeys: new Set<string>() },
+    };
+    return {
+        useCacheStore: Object.assign((selector: (s: typeof state) => unknown) => selector(state), {
+            getState: () => state,
+        }),
+    };
+});
+vi.mock('/@/renderer/cache/store', () => ({ useCacheStore }));
+vi.mock('/@/renderer/lib/network-status', () => ({ useIsOnline: () => true }));
 vi.mock('/@/renderer/hooks/use-haptic', () => ({ triggerHaptic: vi.fn() }));
 vi.mock('/@/shared/components/icon/icon', () => ({ Icon: () => <span data-testid="icon" /> }));
 vi.mock('/@/shared/components/toast/toast', () => ({

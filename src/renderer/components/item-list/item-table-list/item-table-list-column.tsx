@@ -24,6 +24,7 @@ import { CellComponentProps } from 'react-window-v2';
 import styles from './item-table-list-column.module.css';
 
 import i18n from '/@/i18n/i18n';
+import { useOfflineRowDimmed } from '/@/renderer/cache/use-offline-row-dimmed';
 import { useItemSelectionState } from '/@/renderer/components/item-list/helpers/item-list-state';
 import { isNoHorizontalPaddingColumn } from '/@/renderer/components/item-list/item-detail-list/utils';
 import { ActionsColumn } from '/@/renderer/components/item-list/item-table-list/columns/actions-column';
@@ -456,6 +457,11 @@ export const TableColumnTextContainer = (
     const isDragging = props.isDragging ?? false;
     const mergedRef = useMergedRef(containerRef, props.dragRef ?? null);
 
+    // Offline UX: a song row with no downloaded copy can't play while the
+    // app is offline — grey it out (reads the in-memory availability
+    // snapshot; no per-row Dexie traffic; always false while online).
+    const offlineDimmed = useOfflineRowDimmed(isDataRow ? item : null);
+
     const isLastColumn = props.columnIndex === props.columns.length - 1;
     const isLastRow =
         isDataRow &&
@@ -557,6 +563,7 @@ export const TableColumnTextContainer = (
                 [styles.large]: props.size === 'large',
                 [styles.left]: props.columns[props.columnIndex].align === 'start',
                 [styles.noHorizontalPadding]: isNoHorizontalPaddingColumn(props.type),
+                [styles.offlineDimmed]: offlineDimmed,
                 [styles.paddingLg]: props.cellPadding === 'lg',
                 [styles.paddingMd]: props.cellPadding === 'md',
                 [styles.paddingSm]: props.cellPadding === 'sm',
@@ -625,6 +632,11 @@ export const TableColumnContainer = (
 
     const isDragging = props.isDragging ?? false;
     const mergedRef = useMergedRef(containerRef, props.dragRef ?? null);
+
+    // Offline UX: a song row with no downloaded copy can't play while the
+    // app is offline — grey it out (reads the in-memory availability
+    // snapshot; no per-row Dexie traffic; always false while online).
+    const offlineDimmed = useOfflineRowDimmed(isDataRow ? item : null);
 
     const isLastColumn = props.columnIndex === props.columns.length - 1;
     const isLastRow =
@@ -729,6 +741,7 @@ export const TableColumnContainer = (
                 [styles.large]: props.size === 'large',
                 [styles.left]: props.columns[props.columnIndex].align === 'start',
                 [styles.noHorizontalPadding]: isNoHorizontalPaddingColumn(props.type),
+                [styles.offlineDimmed]: offlineDimmed,
                 [styles.paddingLg]: props.cellPadding === 'lg',
                 [styles.paddingMd]: props.cellPadding === 'md',
                 [styles.paddingSm]: props.cellPadding === 'sm',

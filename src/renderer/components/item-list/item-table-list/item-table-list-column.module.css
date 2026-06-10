@@ -455,3 +455,9 @@
         margin-right: -12px;
     }
 }
+
+/* Offline UX: song rows without a downloaded copy are unplayable while the
+   app is offline — dim the whole row so the state is visible at a glance. */
+.container.data-row.offline-dimmed {
+    opacity: 0.4;
+}

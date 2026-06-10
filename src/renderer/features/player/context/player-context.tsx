@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 
 import { queryKeys } from '/@/renderer/api/query-keys';
 import { resolveSongsByItemTypeLocal } from '/@/renderer/cache';
+import { useCacheStore } from '/@/renderer/cache/store';
 import { albumQueries } from '/@/renderer/features/albums/api/album-api';
 import { artistsQueries } from '/@/renderer/features/artists/api/artists-api';
 import {
@@ -29,10 +30,13 @@ import {
     getPlaylistSongsById,
     getSongsByFolder,
 } from '/@/renderer/features/player/utils';
+import { selectOfflinePlayable } from '/@/renderer/features/player/utils/offline-play-guard';
 import { playlistsQueries } from '/@/renderer/features/playlists/api/playlists-api';
 import { songsQueries } from '/@/renderer/features/songs/api/songs-api';
+import { getIsOnline } from '/@/renderer/lib/network-status';
 import { AddToQueueType, usePlayerActions, useSettingsStore } from '/@/renderer/store';
 import { useAuthStore } from '/@/renderer/store/auth.store';
+import { usePlayerStoreBase } from '/@/renderer/store/player.store';
 import { LogCategory, logFn } from '/@/renderer/utils/logger';
 import { logMsg } from '/@/renderer/utils/logger-message';
 import { shuffle as shuffleArray } from '/@/renderer/utils/shuffle';
@@ -287,8 +291,27 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
         (data: Song[], type: AddToQueueType, playSongId?: string) => {
             if (tryRemotePlay(data, type, playSongId)) return;
 
+            // Offline guard: while offline only downloaded songs can actually
+            // play (use-stream-url serves a local blob; a non-downloaded song
+            // resolves to a dead URL). Block the request with a clear toast
+            // when the targeted/only songs aren't downloaded, and narrow
+            // multi-song adds to the downloaded subset. No-op while online.
+            const songKeys = useCacheStore.getState().offlineAvailability.songKeys;
+            const guard = selectOfflinePlayable({
+                isAvailable: (serverId, songId) => songKeys.has(`${serverId}:${songId}`),
+                online: getIsOnline(),
+                playSongId,
+                songs: data,
+            });
+            if (!guard.allowed) {
+                console.warn('[offline-ux] play blocked — song(s) not available offline');
+                toast.warn({ message: t('error.offlineNotAvailable') });
+                return;
+            }
+            const playableData = guard.playable;
+
             const filters = useSettingsStore.getState().playback.filters;
-            const filteredData = filterSongsByPlayerFilters(data, filters);
+            const filteredData = filterSongsByPlayerFilters(playableData, filters);
 
             if (typeof type === 'object' && 'edge' in type && type.edge !== null) {
                 const edge = type.edge === 'top' ? 'top' : 'bottom';
@@ -296,7 +319,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
                 logFn.debug(logMsg[LogCategory.PLAYER].addToQueueByData, {
                     category: LogCategory.PLAYER,
                     meta: {
-                        data: data.length,
+                        data: playableData.length,
                         edge,
                         filtered: filteredData.length,
                         type,
@@ -308,13 +331,13 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
             } else {
                 logFn.debug(logMsg[LogCategory.PLAYER].addToQueueByType, {
                     category: LogCategory.PLAYER,
-                    meta: { data: data.length, filtered: filteredData.length, type },
+                    meta: { data: playableData.length, filtered: filteredData.length, type },
                 });
 
                 storeActions.addToQueueByType(filteredData, type as Play, playSongId);
             }
         },
-        [storeActions, tryRemotePlay],
+        [storeActions, tryRemotePlay, t],
     );
 
     const addToQueueByFetch = useCallback(
@@ -733,6 +756,23 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
         storeActions.mediaPause();
     }, [getRemoteCtx, storeActions]);
 
+    // Queue-jump offline guard. A queue can be built online and then played
+    // offline; jumping to a non-downloaded queue item would hand the audio
+    // element a dead URL. When offline, refuse the jump for a song that has no
+    // local blob and surface the same toast. Returns true when the jump was
+    // blocked. No-op while online or when the song is downloaded.
+    const blockOfflineJump = useCallback(
+        (song: undefined | { _serverId: string; id: string }): boolean => {
+            if (!song || getIsOnline()) return false;
+            const songKeys = useCacheStore.getState().offlineAvailability.songKeys;
+            if (songKeys.has(`${song._serverId}:${song.id}`)) return false;
+            console.warn('[offline-ux] queue jump blocked — song not available offline');
+            toast.warn({ message: t('error.offlineNotAvailable') });
+            return true;
+        },
+        [t],
+    );
+
     const mediaPlayByIndex = useCallback(
         (index: number) => {
             logFn.debug(logMsg[LogCategory.PLAYER].mediaPlayByIndex, {
@@ -771,9 +811,11 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
                 }
                 return;
             }
+            const target = usePlayerStoreBase.getState().getQueueOrder().items[index];
+            if (blockOfflineJump(target)) return;
             storeActions.mediaPlayByIndex(index);
         },
-        [getRemoteCtx, storeActions],
+        [blockOfflineJump, getRemoteCtx, storeActions],
     );
 
     const mediaPlay = useCallback(
@@ -808,9 +850,18 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
                 useRemoteTargetStore.getState().actions.setPaused(false);
                 return;
             }
+            // A bare `mediaPlay()` (resume current) is never blocked; only an
+            // explicit jump to a specific queued song is guarded offline.
+            if (id) {
+                const items = usePlayerStoreBase.getState().getQueueOrder().items;
+                const target = items.find(
+                    (s) => (s as { _uniqueId?: string })._uniqueId === id || s.id === id,
+                );
+                if (blockOfflineJump(target)) return;
+            }
             storeActions.mediaPlay(id);
         },
-        [getRemoteCtx, mediaPlayByIndex, storeActions],
+        [blockOfflineJump, getRemoteCtx, mediaPlayByIndex, storeActions],
     );
 
     const mediaPrevious = useCallback(() => {

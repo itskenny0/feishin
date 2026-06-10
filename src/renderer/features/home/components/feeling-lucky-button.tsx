@@ -1,7 +1,12 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { LUCKY_QUEUE_SIZE, pickRandomFromCache } from './feeling-lucky';
+import {
+    LUCKY_QUEUE_SIZE,
+    offlineSongIdsForServer,
+    pickRandomFromCache,
+    pickRandomOfflineFromCache,
+} from './feeling-lucky';
 import styles from './feeling-lucky-button.module.css';
 
 import { getActiveCacheDb } from '/@/renderer/cache/db';
@@ -9,6 +14,7 @@ import { useCacheStore } from '/@/renderer/cache/store';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
 import { songsQueries } from '/@/renderer/features/songs/api/songs-api';
 import { useLongPress } from '/@/renderer/hooks/use-long-press';
+import { useIsOnline } from '/@/renderer/lib/network-status';
 import { queryClient } from '/@/renderer/lib/react-query';
 import { useCurrentServer } from '/@/renderer/store';
 import { Icon } from '/@/shared/components/icon/icon';
@@ -31,6 +37,11 @@ import { Play } from '/@/shared/types/types';
  *
  * Two-stage remote fetch: a small first batch starts playback as fast as the
  * server can return it; the larger tail fills the queue in the background.
+ *
+ * OFFLINE behaviour: when the combined connectivity signal is offline, every
+ * gesture (tap, long-press, right-click) draws ONLY from the downloaded-offline
+ * pool — no network endpoint is touched. If nothing is downloaded for the
+ * current server the button hides entirely (it reappears once back online).
  */
 const FIRST_BATCH_LIMIT = 20;
 const TAIL_BATCH_LIMIT = 80;
@@ -38,11 +49,25 @@ const TAIL_BATCH_LIMIT = 80;
 export const FeelingLuckyButton = () => {
     const { t } = useTranslation();
     const server = useCurrentServer();
+    const online = useIsOnline();
     const { addToQueueByData } = usePlayer();
     const [loading, setLoading] = useState(false);
     // Guard against overlapping runs (double-tap, or a long-press plus the
     // Android WebView's own contextmenu both firing the remote path).
     const inFlightRef = useRef(false);
+
+    // How many of this server's songs are downloaded offline. Read from the
+    // in-memory availability snapshot (no Dexie). Drives both the offline pick
+    // pool and the "hide when offline + empty" rule.
+    const offlineCount = useCacheStore((s) => {
+        if (!server?.id) return 0;
+        let count = 0;
+        const prefix = `${server.id}:`;
+        for (const key of s.offlineAvailability.songKeys) {
+            if (key.startsWith(prefix)) count += 1;
+        }
+        return count;
+    });
 
     const fetchRemote = useCallback(async () => {
         const serverId = server?.id;
@@ -80,22 +105,62 @@ export const FeelingLuckyButton = () => {
         }
     }, [addToQueueByData, server?.id, t]);
 
-    // Local-cache pick (tap / left-click). Falls back to remote on miss.
+    // Offline pick: random songs drawn ONLY from the downloaded pool. Never
+    // touches the network — used for every gesture while offline.
+    const pickFromOffline = useCallback(async () => {
+        const serverId = server?.id;
+        const db =
+            useCacheStore.getState().cacheAvailable === true ? getActiveCacheDb() : undefined;
+        if (!serverId || !db) {
+            console.info('[offline-ux] lucky: offline but cache unavailable', {
+                offline: true,
+                poolSize: 0,
+            });
+            toast.warn({ message: t('error.offlineNotAvailable') });
+            return;
+        }
+        const offlineIds = offlineSongIdsForServer(
+            useCacheStore.getState().offlineAvailability.songKeys,
+            serverId,
+        );
+        const songs = await pickRandomOfflineFromCache(db, offlineIds, LUCKY_QUEUE_SIZE);
+        console.info('[offline-ux] lucky: offline pool pick', {
+            offline: true,
+            poolSize: songs.length,
+        });
+        if (songs.length === 0) {
+            toast.warn({ message: t('error.offlineNotAvailable') });
+            return;
+        }
+        addToQueueByData(songs, Play.NOW);
+    }, [addToQueueByData, server?.id, t]);
+
+    // Local-cache pick (tap / left-click) for the ONLINE path. Falls back to
+    // remote on miss.
     const pickFromCache = useCallback(async () => {
         const db =
             useCacheStore.getState().cacheAvailable === true ? getActiveCacheDb() : undefined;
         if (!db) {
-            console.info('[feeling-lucky] cache unavailable — falling back to remote');
+            console.info('[offline-ux] lucky: online cache unavailable — remote', {
+                offline: false,
+                poolSize: 0,
+            });
             await fetchRemote();
             return;
         }
         const songs = await pickRandomFromCache(db, LUCKY_QUEUE_SIZE);
         if (songs.length === 0) {
-            console.info('[feeling-lucky] cache empty — falling back to remote');
+            console.info('[offline-ux] lucky: online cache empty — remote', {
+                offline: false,
+                poolSize: 0,
+            });
             await fetchRemote();
             return;
         }
-        console.info('[feeling-lucky] cache pick', songs.length, 'tracks');
+        console.info('[offline-ux] lucky: online cache pick', {
+            offline: false,
+            poolSize: songs.length,
+        });
         addToQueueByData(songs, Play.NOW);
     }, [addToQueueByData, fetchRemote]);
 
@@ -119,14 +184,24 @@ export const FeelingLuckyButton = () => {
         [server?.id, t],
     );
 
-    const playCache = useCallback(() => {
-        void run(pickFromCache);
-    }, [run, pickFromCache]);
-    const playRemote = useCallback(() => {
-        void run(fetchRemote);
-    }, [run, fetchRemote]);
+    // Tap / left-click. Offline → offline pool only; online → cache-then-remote.
+    const playPrimary = useCallback(() => {
+        void run(online ? pickFromCache : pickFromOffline);
+    }, [run, online, pickFromCache, pickFromOffline]);
+    // Long-press / right-click. Offline → offline pool (no network); online →
+    // fresh remote set.
+    const playSecondary = useCallback(() => {
+        void run(online ? fetchRemote : pickFromOffline);
+    }, [run, online, fetchRemote, pickFromOffline]);
 
-    const longPressHandlers = useLongPress({ onLongPress: playRemote });
+    const longPressHandlers = useLongPress({ onLongPress: playSecondary });
+
+    // Offline with nothing downloaded for this server: hide the button. It
+    // reappears automatically once back online (useIsOnline re-renders).
+    const hidden = useMemo(() => !online && offlineCount === 0, [online, offlineCount]);
+    if (hidden) {
+        return null;
+    }
 
     return (
         <button
@@ -134,10 +209,10 @@ export const FeelingLuckyButton = () => {
             aria-label={t('page.home.feelingLucky_tooltip')}
             className={`${styles.luckyButton}${loading ? ` ${styles.loading}` : ''}`}
             disabled={loading}
-            onClick={playCache}
+            onClick={playPrimary}
             onContextMenu={(event) => {
                 event.preventDefault();
-                playRemote();
+                playSecondary();
             }}
             type="button"
             {...longPressHandlers}
