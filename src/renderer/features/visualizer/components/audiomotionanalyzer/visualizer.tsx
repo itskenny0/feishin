@@ -3,10 +3,12 @@ import { useTranslation } from 'react-i18next';
 
 import styles from './visualizer.module.css';
 
+import { useIdleControls } from '/@/renderer/features/player/hooks/use-idle-controls';
 import { useWebAudio } from '/@/renderer/features/player/hooks/use-webaudio';
 import { getVisualizerAudioNodes } from '/@/renderer/features/player/utils/get-visualizer-audio-nodes';
 import { openVisualizerSettingsModal } from '/@/renderer/features/player/utils/open-visualizer-settings-modal';
 import { ComponentErrorBoundary } from '/@/renderer/features/shared/components/component-error-boundary';
+import { useIsMobileShell } from '/@/renderer/hooks/use-breakpoint';
 import { usePlaybackType, useSettingsStore } from '/@/renderer/store';
 import {
     useFullScreenPlayerStore,
@@ -412,6 +414,10 @@ const VisualizerInner = () => {
 };
 
 export interface VisualizerProps {
+    // Background mode: the visualizer renders BEHIND other UI (e.g. as the
+    // mobile fullscreen player's backdrop). Its controls would be visible
+    // but non-interactive back there — render none at all.
+    chromeless?: boolean;
     // When rendered inside the dedicated full-screen visualizer overlay, the
     // overlay supplies its own close / configure controls. Hiding this
     // component's built-in top icon-group avoids a second, redundant control
@@ -419,18 +425,27 @@ export interface VisualizerProps {
     hideTopControls?: boolean;
 }
 
-export const Visualizer = ({ hideTopControls }: VisualizerProps = {}) => {
+export const Visualizer = ({ chromeless, hideTopControls }: VisualizerProps = {}) => {
     const { t } = useTranslation();
     const { visualizerExpanded } = useFullScreenPlayerStore();
     const { setStore } = useFullScreenPlayerStoreActions();
+    const isMobile = useIsMobileShell();
+    // Touch has no hover: reveal controls on touch, hide after an idle
+    // delay. Desktop keeps the CSS :hover gating (see the module css).
+    const { controlsVisible, revealControls } = useIdleControls();
 
     const handleToggleFullscreen = () => {
         setStore({ expanded: false, visualizerExpanded: !visualizerExpanded });
     };
 
+    const showControls = !chromeless && !hideTopControls && (!isMobile || controlsVisible);
+
     return (
-        <div className={styles.container}>
-            {!hideTopControls && (
+        <div
+            className={styles.container}
+            onTouchStart={isMobile && !chromeless ? revealControls : undefined}
+        >
+            {showControls && (
                 <Group className={`${styles.iconGroup} ${styles.iconGroupTop}`} gap="xs">
                     <ActionIcon
                         aria-label={t('player.toggleFullscreenPlayer')}

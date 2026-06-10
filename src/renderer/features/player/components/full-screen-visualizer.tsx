@@ -1,22 +1,13 @@
 import { t } from 'i18next';
 import { motion, Variants } from 'motion/react';
-import {
-    lazy,
-    memo,
-    ReactNode,
-    Suspense,
-    useCallback,
-    useEffect,
-    useLayoutEffect,
-    useRef,
-    useState,
-} from 'react';
+import { lazy, memo, ReactNode, Suspense, useLayoutEffect, useRef } from 'react';
 import { useLocation } from 'react-router';
 
 import styles from './full-screen-visualizer.module.css';
 
 import { Lyrics } from '/@/renderer/features/lyrics/lyrics';
 import { FullScreenVisualizerSongInfo } from '/@/renderer/features/player/components/full-screen-visualizer-song-info';
+import { useIdleControls } from '/@/renderer/features/player/hooks/use-idle-controls';
 import { openVisualizerSettingsModal } from '/@/renderer/features/player/utils/open-visualizer-settings-modal';
 import { useHotkeys } from '/@/renderer/hooks/use-hotkeys';
 import { useIsMobile } from '/@/renderer/hooks/use-is-mobile';
@@ -167,30 +158,8 @@ export const FullScreenVisualizer = () => {
     // Idle auto-hide for the top controls (close + lyrics toggle). The
     // visualizer is a lean-back, full-bleed view; persistent buttons clutter
     // it. Fade them out after a few idle seconds and reveal on any pointer /
-    // touch / key activity. The timer is cleared on unmount so it can't fire
-    // against a torn-down component.
-    const [controlsVisible, setControlsVisible] = useState(true);
-    const idleTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-
-    const revealControls = useCallback(() => {
-        setControlsVisible(true);
-        if (idleTimerRef.current) {
-            clearTimeout(idleTimerRef.current);
-        }
-        idleTimerRef.current = setTimeout(() => {
-            setControlsVisible(false);
-        }, 3500);
-    }, []);
-
-    useEffect(() => {
-        // Kick off the initial idle countdown on mount.
-        revealControls();
-        return () => {
-            if (idleTimerRef.current) {
-                clearTimeout(idleTimerRef.current);
-            }
-        };
-    }, [revealControls]);
+    // touch / key activity (shared useIdleControls hook).
+    const { controlsVisible, revealControls } = useIdleControls();
 
     const handleCloseVisualizer = () => {
         setStore({ visualizerExpanded: false });
@@ -280,9 +249,12 @@ export const FullScreenVisualizer = () => {
                 {webAudio ? (
                     <Suspense fallback={<></>}>
                         {visualizerType === 'butterchurn' ? (
-                            <ButterchurnVisualizer hideTopControls />
+                            <ButterchurnVisualizer chromeless={!controlsVisible} hideTopControls />
                         ) : (
-                            <AudioMotionAnalyzerVisualizer hideTopControls />
+                            <AudioMotionAnalyzerVisualizer
+                                chromeless={!controlsVisible}
+                                hideTopControls
+                            />
                         )}
                     </Suspense>
                 ) : null}

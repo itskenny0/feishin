@@ -100,10 +100,13 @@ const FullscreenVisualizerBackground = memo(() => {
             <div className={styles.visualizerBackground}>
                 <ComponentErrorBoundary>
                     <Suspense fallback={null}>
+                        {/* chromeless: this instance is a BACKDROP behind the
+                            player UI — its own controls/preset overlay would
+                            show through but be non-interactive. */}
                         {visualizerType === 'butterchurn' ? (
-                            <ButterchurnVisualizer />
+                            <ButterchurnVisualizer chromeless />
                         ) : (
-                            <AudioMotionAnalyzerVisualizer />
+                            <AudioMotionAnalyzerVisualizer chromeless />
                         )}
                     </Suspense>
                 </ComponentErrorBoundary>

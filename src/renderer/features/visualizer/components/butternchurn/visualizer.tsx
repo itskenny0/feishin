@@ -3,10 +3,12 @@ import { useTranslation } from 'react-i18next';
 
 import styles from './visualizer.module.css';
 
+import { useIdleControls } from '/@/renderer/features/player/hooks/use-idle-controls';
 import { useWebAudio } from '/@/renderer/features/player/hooks/use-webaudio';
 import { getVisualizerAudioNodes } from '/@/renderer/features/player/utils/get-visualizer-audio-nodes';
 import { openVisualizerSettingsModal } from '/@/renderer/features/player/utils/open-visualizer-settings-modal';
 import { ComponentErrorBoundary } from '/@/renderer/features/shared/components/component-error-boundary';
+import { useIsMobileShell } from '/@/renderer/hooks/use-breakpoint';
 import {
     subscribeButterchurnPreset,
     useButterchurnSettings,
@@ -41,7 +43,7 @@ export function getButterchurnPresetOptions(presets: Record<string, string>) {
     );
 }
 
-const VisualizerInner = () => {
+const VisualizerInner = ({ chromeless }: { chromeless?: boolean }) => {
     const { webAudio } = useWebAudio();
     // useRef, not createRef — the latter allocates a NEW ref object on every
     // render, which (for effects that depend on the ref identity) causes
@@ -572,7 +574,7 @@ const VisualizerInner = () => {
             style={{ opacity: isVisualizerReady ? opacity : 0 }}
         >
             <canvas className={styles.canvas} ref={canvasRef} />
-            {isVisualizerReady && <CurrentPresetDisplay />}
+            {isVisualizerReady && !chromeless && <CurrentPresetDisplay />}
         </div>
     );
 };
@@ -588,6 +590,10 @@ const CurrentPresetDisplay = () => {
 };
 
 export interface VisualizerProps {
+    // Background mode: the visualizer renders BEHIND other UI (e.g. as the
+    // mobile fullscreen player's backdrop). Its controls and the preset
+    // overlay would be visible but non-interactive back there — render none.
+    chromeless?: boolean;
     // When rendered inside the dedicated full-screen visualizer overlay, the
     // overlay supplies its own close / configure controls. Hiding this
     // component's built-in top icon-group avoids a second, redundant control
@@ -596,10 +602,14 @@ export interface VisualizerProps {
     hideTopControls?: boolean;
 }
 
-export const Visualizer = ({ hideTopControls }: VisualizerProps = {}) => {
+export const Visualizer = ({ chromeless, hideTopControls }: VisualizerProps = {}) => {
     const { t } = useTranslation();
     const { visualizerExpanded } = useFullScreenPlayerStore();
     const { setStore } = useFullScreenPlayerStoreActions();
+    const isMobile = useIsMobileShell();
+    // Touch has no hover: reveal controls on touch, hide after an idle
+    // delay. Desktop keeps the CSS :hover gating (see the module css).
+    const { controlsVisible, revealControls } = useIdleControls();
     const { setSettings } = useSettingsStoreActions();
     const butterchurnSettings = useButterchurnSettings();
     const [presetsLoaded, setPresetsLoaded] = useState(false);
@@ -699,9 +709,15 @@ export const Visualizer = ({ hideTopControls }: VisualizerProps = {}) => {
         });
     };
 
+    const showTopControls = !chromeless && !hideTopControls && (!isMobile || controlsVisible);
+    const showBottomControls = !chromeless && (!isMobile || controlsVisible);
+
     return (
-        <div className={styles.container}>
-            {!hideTopControls && (
+        <div
+            className={styles.container}
+            onTouchStart={isMobile && !chromeless ? revealControls : undefined}
+        >
+            {showTopControls && (
                 <Group className={`${styles.iconGroup} ${styles.iconGroupTop}`} gap="xs">
                     <ActionIcon
                         aria-label={t('player.toggleFullscreenPlayer')}
@@ -721,32 +737,34 @@ export const Visualizer = ({ hideTopControls }: VisualizerProps = {}) => {
                     />
                 </Group>
             )}
-            <Group className={`${styles.iconGroup} ${styles.iconGroupBottom}`} gap="xs">
-                <ActionIcon
-                    aria-label={t('common.previous', { defaultValue: 'Previous' })}
-                    icon="arrowLeftS"
-                    iconProps={{ size: 'lg' }}
-                    onClick={handlePreviousPreset}
-                    tooltip={{
-                        label: t('common.previous', { defaultValue: 'Previous preset' }),
-                        openDelay: 400,
-                    }}
-                    variant="subtle"
-                />
-                <ActionIcon
-                    aria-label={t('common.next', { defaultValue: 'Next' })}
-                    icon="arrowRightS"
-                    iconProps={{ size: 'lg' }}
-                    onClick={handleNextPreset}
-                    tooltip={{
-                        label: t('common.next', { defaultValue: 'Next preset' }),
-                        openDelay: 400,
-                    }}
-                    variant="subtle"
-                />
-            </Group>
+            {showBottomControls && (
+                <Group className={`${styles.iconGroup} ${styles.iconGroupBottom}`} gap="xs">
+                    <ActionIcon
+                        aria-label={t('common.previous', { defaultValue: 'Previous' })}
+                        icon="arrowLeftS"
+                        iconProps={{ size: 'lg' }}
+                        onClick={handlePreviousPreset}
+                        tooltip={{
+                            label: t('common.previous', { defaultValue: 'Previous preset' }),
+                            openDelay: 400,
+                        }}
+                        variant="subtle"
+                    />
+                    <ActionIcon
+                        aria-label={t('common.next', { defaultValue: 'Next' })}
+                        icon="arrowRightS"
+                        iconProps={{ size: 'lg' }}
+                        onClick={handleNextPreset}
+                        tooltip={{
+                            label: t('common.next', { defaultValue: 'Next preset' }),
+                            openDelay: 400,
+                        }}
+                        variant="subtle"
+                    />
+                </Group>
+            )}
             <ComponentErrorBoundary>
-                <VisualizerInner />
+                <VisualizerInner chromeless={chromeless} />
             </ComponentErrorBoundary>
         </div>
     );
