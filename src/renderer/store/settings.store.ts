@@ -829,6 +829,18 @@ const RemoteSettingsSchema = z.object({
     username: z.string(),
 });
 
+/**
+ * Remote debug log shipping. When enabled, the renderer streams console
+ * output, errors and a high-frequency heartbeat to `endpoint`
+ * (`host[:port]`, plain HTTP) so crashes that kill the WebView — where
+ * devtools and local logs die with the process — can be diagnosed from
+ * another machine. Off by default; development tool, not a user feature.
+ */
+const RemoteDebugSettingsSchema = z.object({
+    enabled: z.boolean().default(false),
+    endpoint: z.string().default(''),
+});
+
 const WindowSettingsSchema = z.object({
     disableAutoUpdate: z.boolean(),
     exitToTray: z.boolean(),
@@ -1094,6 +1106,7 @@ export const ValidationSettingsStateSchema = z.object({
     playback: PlaybackSettingsSchema,
     queryBuilder: QueryBuilderSettingsSchema,
     remote: RemoteSettingsSchema,
+    remoteDebug: RemoteDebugSettingsSchema,
     tab: z.union([
         z.literal('general'),
         z.literal('hotkeys'),
@@ -2413,6 +2426,10 @@ const initialState: SettingsState = {
         port: 4333,
         username: 'feishin',
     },
+    remoteDebug: {
+        enabled: false,
+        endpoint: '',
+    },
     tab: 'general',
     tabSubpage: '',
     visualizer: {
@@ -3437,10 +3454,17 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
+                if (version <= 57) {
+                    // Seed the remote-debug log shipper slice (disabled).
+                    if (!state.remoteDebug || typeof state.remoteDebug !== 'object') {
+                        state.remoteDebug = initialState.remoteDebug;
+                    }
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 57,
+            version: 58,
         },
     ),
 );
@@ -3501,6 +3525,8 @@ export const useLyricsDisplaySettings = (key: string = 'default') =>
 export const useRemoteSettings = () => useSettingsStore((state) => state.remote, shallow);
 
 export const usePeerSyncSettings = () => useSettingsStore((state) => state.peerSync, shallow);
+
+export const useRemoteDebugSettings = () => useSettingsStore((state) => state.remoteDebug, shallow);
 
 export const useImageVariants = () =>
     useSettingsStore((state) => state.localCache.imageVariants, shallow);

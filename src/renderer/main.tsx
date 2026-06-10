@@ -9,6 +9,7 @@ import { del, get, set } from 'idb-keyval';
 import { createRoot } from 'react-dom/client';
 
 import { App } from '/@/renderer/app';
+import { initRemoteLogShipper } from '/@/renderer/debug/remote-log-shipper';
 import { queryClient } from '/@/renderer/lib/react-query';
 import { installConsoleCapture } from '/@/renderer/utils/console-capture';
 
@@ -29,6 +30,9 @@ if (typeof globalThis.Buffer === 'undefined') {
 // so mobile users (Capacitor on Android / iOS) can view logs from the
 // settings panel — they have no devtools console.
 installConsoleCapture();
+// After console capture so the shipper's wrapper is outermost and sees every
+// log line. No-op unless settings.remoteDebug is enabled.
+initRemoteLogShipper();
 
 /*
  * On a Capacitor Android cold start, the WebView often restores the

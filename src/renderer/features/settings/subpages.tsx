@@ -233,6 +233,10 @@ const LoggerSubpage = lazyDefault(
     () => import('/@/renderer/features/settings/components/advanced/logger-settings'),
     'LoggerSettings',
 );
+const RemoteDebugSubpage = lazyDefault(
+    () => import('/@/renderer/features/settings/components/advanced/remote-debug-settings'),
+    'RemoteDebugSettings',
+);
 const CacheSubpage = lazyDefault(
     () => import('/@/renderer/features/settings/components/window/cache-settngs'),
     'CacheSettings',
@@ -317,6 +321,16 @@ export const SETTINGS_SUBPAGES: Record<string, SubpageDef[]> = {
             Icon: RiBugLine,
             id: 'logger',
             label: (t) => t('page.setting.logger', { defaultValue: 'Logs' }),
+        },
+        {
+            Component: RemoteDebugSubpage,
+            description: (t) =>
+                t('page.setting.remoteDebugDescription', {
+                    defaultValue: 'Stream logs to a developer machine to diagnose crashes.',
+                }),
+            Icon: RiBugLine,
+            id: 'remote-debug',
+            label: (t) => t('page.setting.remoteDebug', { defaultValue: 'Remote debug' }),
         },
         {
             Component: CacheSubpage,
