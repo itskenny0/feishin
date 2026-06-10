@@ -29,6 +29,7 @@ vi.mock('/@/renderer/cache/stats', () => ({
 // The registration bridge into the shared hook is a no-op side effect for
 // these tests.
 vi.mock('/@/shared/components/image/use-native-image', () => ({
+    NO_ARTWORK_URL: 'feishin://no-artwork',
     registerThumbnailUrlCache: vi.fn(),
 }));
 
@@ -149,8 +150,10 @@ describe('acquireThumbnailUrl / releaseThumbnailUrl', () => {
         releaseThumbnailUrl('abc');
     });
 
-    it('falls back to the raw URL (un-refcounted) on a cache miss', async () => {
-        // No row + a 404 from the network → resolver returns the raw URL.
+    it('returns the no-artwork sentinel (un-refcounted) on an authoritative 404', async () => {
+        // No row + a 404 from the network → the server says this item HAS no
+        // artwork, so the resolver hands back the sentinel and the consumer
+        // shows its placeholder instead of re-fetching a URL known to 404.
         mocks.thumbnailsTable.get.mockResolvedValue(undefined);
         globalThis.fetch = vi.fn(async () => ({
             headers: { get: () => null },
@@ -159,7 +162,7 @@ describe('acquireThumbnailUrl / releaseThumbnailUrl', () => {
         })) as unknown as typeof fetch;
 
         const result = await acquireThumbnailUrl('missing', 1024, RAW_URL);
-        expect(result).toBe(RAW_URL);
+        expect(result).toBe('feishin://no-artwork');
         expect(globalThis.URL.createObjectURL).not.toHaveBeenCalled();
 
         // Releasing a non-tracked item is a harmless no-op.

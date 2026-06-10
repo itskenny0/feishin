@@ -51,6 +51,7 @@ vi.mock('/@/renderer/cache/stats', () => ({
 }));
 
 vi.mock('/@/shared/components/image/use-native-image', () => ({
+    NO_ARTWORK_URL: 'feishin://no-artwork',
     registerThumbnailUrlCache: vi.fn(),
 }));
 
@@ -201,8 +202,10 @@ describe('resolveThumbnail — variant keying', () => {
         // First: table -> 404
         (globalThis.fetch as any).mockResolvedValueOnce(notFoundResponse());
         const tableOut = await resolveThumbnail('abc', 'table', RAW_URL);
-        // 404 => no blob => falls back to raw URL.
-        expect(tableOut).toBe(RAW_URL);
+        // 404 with nothing else cached for the item => the authoritative
+        // no-artwork sentinel (NOT the raw URL — re-fetching it would 404
+        // again, or hang against an unreachable server).
+        expect(tableOut).toBe('feishin://no-artwork');
 
         const tableRow = mocks.store.get(JSON.stringify(['abc', 'table']));
         expect(tableRow).toBeTruthy();

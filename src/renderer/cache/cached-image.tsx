@@ -10,6 +10,8 @@ import { useEffect, useState } from 'react';
 
 import { resolveThumbnail } from './images';
 
+import { NO_ARTWORK_URL } from '/@/shared/components/image/use-native-image';
+
 export interface CachedImageProps extends ImgHTMLAttributes<HTMLImageElement> {
     itemId: string;
     placeholder?: string;
@@ -48,6 +50,12 @@ export const CachedImage = ({
                     if (url.startsWith('blob:')) URL.revokeObjectURL(url);
                     return;
                 }
+                if (url === NO_ARTWORK_URL) {
+                    // Authoritative no-artwork: render the placeholder (or
+                    // nothing) instead of re-fetching a URL known to 404.
+                    setResolved(placeholder ?? '');
+                    return;
+                }
                 if (url.startsWith('blob:')) createdBlobUrl = url;
                 setResolved(url);
             })
@@ -61,7 +69,7 @@ export const CachedImage = ({
             cancelled = true;
             if (createdBlobUrl) URL.revokeObjectURL(createdBlobUrl);
         };
-    }, [itemId, size, src, variant]);
+    }, [itemId, placeholder, size, src, variant]);
 
     return (
         <img

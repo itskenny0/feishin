@@ -18,7 +18,10 @@ import {
     type LocalCacheImageVariants,
     useSettingsStore,
 } from '/@/renderer/store/settings.store';
-import { registerThumbnailUrlCache } from '/@/shared/components/image/use-native-image';
+import {
+    NO_ARTWORK_URL,
+    registerThumbnailUrlCache,
+} from '/@/shared/components/image/use-native-image';
 
 // Single cache size for every blob. Covers any reasonable mobile / tablet
 // / desktop full-screen player display; on lower-DPR display surfaces the
@@ -122,6 +125,12 @@ export interface ResolverResult {
     // original URL.
     blob: Blob | undefined;
     bytes: number;
+    // True when the miss is AUTHORITATIVE: the server already told us this
+    // item has no artwork (a fresh 404 / negative-cache marker). Display
+    // callers surface their placeholder immediately instead of re-fetching
+    // the raw URL — which 404s again online and, against an unreachable
+    // server, leaves the cell in a skeleton for the full fetch timeout.
+    noArtwork?: boolean;
 }
 const inFlight = new Map<string, Promise<ResolverResult>>();
 
@@ -332,6 +341,9 @@ export const __resetSharedThumbnailUrls = (): void => {
 // Keyed by `variantKey` so a different variant of the same item resolves
 // on its own task and gets its own blob.
 interface AcquireResult {
+    // True when the miss was authoritative (404 / negative cache) — the
+    // awaiters return the NO_ARTWORK_URL sentinel instead of the raw URL.
+    noArtwork?: boolean;
     // The shared blob: URL when the resolve produced a cached blob, or
     // undefined on miss/failure (caller falls back to the raw URL).
     objectUrl: string | undefined;
@@ -348,6 +360,13 @@ const takeResolvedBlob = (key: string): Blob | undefined => {
     if (blob) lastResolvedBlob.delete(key);
     return blob;
 };
+
+// Parallel hand-off for the authoritative no-artwork outcome (fresh 404 or
+// negative-cache marker, with no substitute variant cached). Drained by the
+// acquire task alongside the blob slot so the consumer can surface its
+// placeholder instead of re-fetching the raw URL.
+const lastResolvedNoArt = new Set<string>();
+const takeResolvedNoArt = (key: string): boolean => lastResolvedNoArt.delete(key);
 
 /**
  * Acquire a stable, shared `blob:` URL for an item's cached thumbnail at a
@@ -402,7 +421,7 @@ export const acquireThumbnailUrl = async (
                 });
                 const blob = takeResolvedBlob(key);
                 if (!blob) {
-                    return { objectUrl: undefined };
+                    return { noArtwork: takeResolvedNoArt(key), objectUrl: undefined };
                 }
                 // Seed the shared entry with refCount 0; every awaiter
                 // (including this one) bumps it to its final value after
@@ -419,6 +438,9 @@ export const acquireThumbnailUrl = async (
 
     const result = await task;
     if (!result.objectUrl) {
+        // Authoritative no-artwork: surface the sentinel so the consumer
+        // shows its placeholder instead of re-fetching the raw URL.
+        if (result.noArtwork) return NO_ARTWORK_URL;
         // Cache miss / failure — fall back to the raw URL (un-refcounted).
         return url;
     }
@@ -795,6 +817,13 @@ export const resolveThumbnail = async (
                 }
                 return URL.createObjectURL(fallback);
             }
+            if (result.noArtwork) {
+                if (options?._wantBlob) {
+                    lastResolvedNoArt.add(dedupKey);
+                    return url;
+                }
+                return NO_ARTWORK_URL;
+            }
         }
         return url;
     }
@@ -865,7 +894,7 @@ export const resolveThumbnail = async (
                         void db.thumbnails.update(dbKey, { LastUsed: nowMs });
                     }
                     recordStat('missMarkerHit');
-                    return { blob: undefined, bytes: 0 };
+                    return { blob: undefined, bytes: 0, noArtwork: true };
                 }
                 // Stale miss: fall through to refetch.
             }
@@ -991,7 +1020,7 @@ export const resolveThumbnail = async (
                     });
                     recordStat('failed');
                 }
-                return { blob: undefined, bytes: 0 };
+                return { blob: undefined, bytes: 0, noArtwork: res.status === 404 };
             }
 
             const contentType = res.headers.get('content-type') ?? '';
@@ -1088,10 +1117,15 @@ export const resolveThumbnail = async (
         // one shared object URL. Return the raw URL as a sentinel — the
         // acquire path keys off the stashed Blob, not this return value.
         if (displayBlob) lastResolvedBlob.set(dedupKey, displayBlob);
+        else if (result.noArtwork) lastResolvedNoArt.add(dedupKey);
         return url;
     }
     if (options?._skipBlobUrl) return url;
-    return displayBlob ? URL.createObjectURL(displayBlob) : url;
+    if (displayBlob) return URL.createObjectURL(displayBlob);
+    // Authoritative no-artwork (404 / negative cache) with nothing usable
+    // cached: tell the consumer NOT to retry the raw URL.
+    if (result.noArtwork) return NO_ARTWORK_URL;
+    return url;
 };
 
 /**

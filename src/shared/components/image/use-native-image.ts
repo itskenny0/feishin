@@ -43,6 +43,16 @@ type ThumbnailUrlReleaser = (itemId: string, variant: string) => void;
 // Matches the resolver's own DEFAULT_VARIANT — the full-resolution cover.
 const DEFAULT_VARIANT = 'fullScreen';
 
+/**
+ * Sentinel "URL" the thumbnail resolver returns when the server has
+ * AUTHORITATIVELY said this item has no artwork (a 404, possibly served
+ * from the negative cache). Consumers jump straight to their error /
+ * placeholder state instead of fetching the raw URL — that fetch 404s
+ * again online and hangs for the full timeout against an unreachable
+ * server. Never a routable URL.
+ */
+export const NO_ARTWORK_URL = 'feishin://no-artwork';
+
 let resolveThumbnailRef: null | ThumbnailResolver = null;
 let acquireThumbnailUrlRef: null | ThumbnailUrlAcquirer = null;
 let releaseThumbnailUrlRef: null | ThumbnailUrlReleaser = null;
@@ -326,6 +336,17 @@ export function useNativeImage({
                                 URL.revokeObjectURL(cached);
                             }
                         }
+                        return;
+                    }
+                    if (cached === NO_ARTWORK_URL) {
+                        // Authoritative "this item has no artwork" (negative
+                        // cache / fresh 404). Surface the unloader NOW —
+                        // fetching the raw URL would 404 again online and
+                        // hang for the full timeout against an unreachable
+                        // server, pinning the cell in a skeleton.
+                        loadedRequestSignatureRef.current = requestSignature;
+                        setState({ status: 'error' });
+                        onFetchErrorRef.current?.();
                         return;
                     }
                     if (cached) {
