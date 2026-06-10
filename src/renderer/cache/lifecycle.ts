@@ -95,7 +95,7 @@ export const useCacheLifecycle = (): void => {
             });
             // Cancel any in-flight hydration sweep BEFORE closing the DB so
             // the sweep doesn't keep writing to a closed handle (Bug 2).
-            cancelHydration();
+            cancelHydration('subsystem disabled');
             // Wipe in-memory caches so a re-enable starts fresh and we don't
             // replay stale snapshot/search data from before the toggle.
             clearAllSnapshots();
@@ -252,7 +252,7 @@ export const useCacheLifecycle = (): void => {
             // Bug 3 — the in-flight hydration sweep was writing to the
             // previous server's DB. Cancel it before the next effect run
             // swaps the active DB to a different server.
-            cancelHydration();
+            cancelHydration('lifecycle cleanup');
             // Bug 3 — drop the snapshot map entries for the previous server
             // so that server-A's query data never bleeds into server-B's
             // placeholderData reads on the next mount.

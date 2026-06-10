@@ -193,11 +193,18 @@ export const hydrate = async (server: ServerListItem, kind: 'full' | 'lazy'): Pr
     });
 };
 
-export const cancelHydration = (): void => {
+export const cancelHydration = (reason: string = 'user'): void => {
+    // Only worth logging when a hydration was actually aborted — the cache
+    // lifecycle calls this defensively from its effect cleanup on every
+    // boot / server swap, and the unconditional "cancelled by user" warn
+    // made routine launches look like repeated user cancellations.
+    const hadInFlight = Boolean(currentController);
     if (currentController) {
         currentController.abort();
         currentController = undefined;
     }
     useCacheStore.getState().actions.setSweep(undefined);
-    console.warn('[cache] hydrate: cancelled by user');
+    if (hadInFlight) {
+        console.warn('[cache] hydrate: cancelled', { reason });
+    }
 };
