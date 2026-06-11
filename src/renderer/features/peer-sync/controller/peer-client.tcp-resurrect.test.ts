@@ -126,4 +126,24 @@ describe('peer-client native-TCP resurrection guard (S2-C)', () => {
         expect(wsConnects).toHaveLength(0);
         expect(isPeerClientConnected()).toBe(false);
     });
+
+    // The inverse regression (Windows, 2026-06-11): the S2-C guard compared
+    // `session?.args !== args`, but on a FIRST connect `session` is still
+    // null when the builder resolves (wire() hasn't run), so every initial
+    // mqtt:// connect was dropped as "torn down" and the client went silent.
+    // With no stop in between, the builder resolving MUST construct a client.
+    it('a first connect with no teardown DOES construct the TCP client', async () => {
+        const { startPeerClient } =
+            await import('/@/renderer/features/peer-sync/controller/peer-client');
+
+        startPeerClient(tcpArgs());
+        // builderGate was released by the previous test, so the import chain
+        // resolves on its own — just let the microtasks settle.
+        await Promise.resolve();
+        await Promise.resolve();
+        await new Promise<void>((res) => setTimeout(res, 0));
+
+        expect(tcpClientConstructions).toHaveLength(1);
+        expect(wsConnects).toHaveLength(0);
+    });
 });

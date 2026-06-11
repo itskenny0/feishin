@@ -327,6 +327,15 @@ interface ActiveSession {
 }
 
 let session: ActiveSession | null = null;
+// Monotonic start/stop epoch. Async connect paths (the native-TCP dynamic
+// import) capture it at start and bail if it moved — i.e. a later start OR a
+// stop happened while they were off the synchronous path. This is the ONLY
+// reliable supersession signal for those paths: `session` is still null on a
+// FIRST connect (wire() hasn't run yet), so guards comparing `session?.args`
+// misread "not started yet" as "torn down" and drop the brand-new
+// connection (Windows, 2026-06-11: every first mqtt:// connect died with
+// 'superseded/torn-down before connect').
+let clientEpoch = 0;
 
 /**
  * Small wrapper that publishes with a callback so a broker-side failure (out
@@ -555,6 +564,7 @@ export const startPeerClient = (args: PeerClientStartArgs, events: PeerEvents = 
         }
         stopPeerClient();
     }
+    const myEpoch = ++clientEpoch;
 
     const selfAddress: PeerAddress = { peerId: args.peerId, userId: args.userId };
     const presenceTopic = topicFor(selfAddress, 'presence');
@@ -622,16 +632,13 @@ export const startPeerClient = (args: PeerClientStartArgs, events: PeerEvents = 
         // synchronous WS path so a missing/broken plugin never strands the user.
         void buildNativeTcpStreamBuilder(args.brokerUrl, args.tls)
             .then((streamBuilder) => {
-                // The session might have been torn down / superseded while we
-                // were awaiting the dynamic import. Bail if so. S2-C: the guard
-                // must ALSO bail when the session was torn down to null (kill
-                // switch / unmount fired during the dynamic import) — not just
-                // when a fresh start superseded us. `session?.args !== args`
-                // bails on null (`undefined !== args` → true), closing the
-                // native-TCP analogue of the C3 resurrection window. The
-                // previous `session && session.args !== args` let a null session
-                // fall through and resurrect the just-torn-down subsystem on TCP.
-                if (session?.args !== args) {
+                // The start might have been superseded (a newer
+                // startPeerClient) or stopped (kill switch / unmount) while we
+                // were awaiting the dynamic import — the epoch moves in both
+                // cases, closing the C3/S2-C resurrection window WITHOUT
+                // misreading a first connect (session is still null here;
+                // wire() only runs below) as torn-down.
+                if (clientEpoch !== myEpoch) {
                     log('native-tcp build superseded/torn-down before connect; dropping');
                     return;
                 }
@@ -659,14 +666,14 @@ export const startPeerClient = (args: PeerClientStartArgs, events: PeerEvents = 
                 }
             })
             .catch((err) => {
-                // Defensive teardown guard mirroring the .then success path
-                // (S2-C). buildNativeTcpStreamBuilder already swallows its own
+                // Defensive teardown guard mirroring the .then success path.
+                // buildNativeTcpStreamBuilder already swallows its own
                 // failures (logs + returns null, which the .then guard above
                 // handles), so this .catch only fires on an UNEXPECTED throw in
                 // the chain (e.g. a synchronous throw from the .then handler).
-                // Even then, never resurrect a session that was torn down or
+                // Even then, never resurrect a start that was stopped or
                 // superseded while we were off the synchronous path.
-                if (session?.args !== args) {
+                if (clientEpoch !== myEpoch) {
                     log('native-tcp setup failed but session superseded/torn-down; dropping');
                     return;
                 }
@@ -925,6 +932,9 @@ export const isPeerClientConnected = (): boolean => Boolean(session?.client?.con
 
 /** Tear the session down. Clears our retained presence + state. */
 export const stopPeerClient = (): void => {
+    // Invalidate any in-flight async connect (native-TCP build) even when no
+    // session has wired yet — a stop between start and wire must win.
+    clientEpoch += 1;
     const s = session;
     if (!s) return;
     session = null;
