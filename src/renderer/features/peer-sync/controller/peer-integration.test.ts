@@ -119,6 +119,7 @@ beforeEach(() => {
             },
             queue: [],
             queueIndex: -1,
+            upcomingItemIds: [],
         },
         targetDeviceId: null,
     });
@@ -421,6 +422,7 @@ describe('applyPeerStateToStore', () => {
                 },
                 queue: [],
                 queueIndex: -1,
+                upcomingItemIds: [],
             },
             targetDeviceId: 'peer-target',
         });
@@ -483,6 +485,7 @@ describe('applyPeerStateToStore', () => {
                 },
                 queue: [],
                 queueIndex: -1,
+                upcomingItemIds: [],
             },
             targetDeviceId: 'jf-device-target',
         });

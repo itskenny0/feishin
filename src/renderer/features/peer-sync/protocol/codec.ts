@@ -103,6 +103,16 @@ const isValidState = (raw: Record<string, unknown>): raw is PeerState & Record<s
     // Any other type drops the frame so a garbage `nxt` can't poison the
     // controller's next-track resolution.
     if (raw.nxt !== undefined && raw.nxt !== null && typeof raw.nxt !== 'string') return false;
+    // `nxts` (true upcoming-id sequence) is an optional string[]. Absent =
+    // publisher doesn't carry it; present must be an array of strings within
+    // the same length cap as qIds so a hostile sender can't force a huge
+    // allocation. A non-array or a non-string entry drops the whole frame so a
+    // garbage `nxts` can't poison the controller's queue-order resolution.
+    if (raw.nxts !== undefined) {
+        if (!Array.isArray(raw.nxts)) return false;
+        if (raw.nxts.length > MAX_DECODE_QUEUE_IDS) return false;
+        if (raw.nxts.some((id) => typeof id !== 'string')) return false;
+    }
     if (raw.qIds !== undefined) {
         if (!Array.isArray(raw.qIds)) return false;
         // Cap array length up front so a million-element qIds array doesn't

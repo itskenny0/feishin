@@ -2,6 +2,7 @@ import { act, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+    buildRemoteQueueView,
     resolveRemoteNextItem,
     useActiveNextItem,
     useActivePlayerSource,
@@ -353,6 +354,79 @@ describe('resolveRemoteNextItem (BUG 1)', () => {
 
     it('returns null when the queue / index is unknown and no nextItemId', () => {
         expect(resolveRemoteNextItem({ nextItemId: null, queue: [], queueIndex: -1 })).toBeNull();
+    });
+});
+
+describe('buildRemoteQueueView (shuffle up-next)', () => {
+    it('returns the default-order queue unchanged when no upcoming list is present', () => {
+        const queue = [song('a', 0), song('b', 0), song('c', 0)];
+        const view = buildRemoteQueueView({ queue, queueIndex: 0, upcomingItemIds: [] });
+        expect(view.map((s) => s.id)).toEqual(['a', 'b', 'c']);
+        // Same array reference — no needless allocation in the common (non-shuffle) path.
+        expect(view).toBe(queue);
+    });
+
+    it('reorders into [current, ...upcoming, ...rest] under shuffle', () => {
+        // Default-order queue a,b,c,d. Current is 'c' (index 2). Target shuffles
+        // and reports it will play d, then a, next.
+        const queue = [song('a', 0), song('b', 0), song('c', 0), song('d', 0)];
+        const view = buildRemoteQueueView({
+            queue,
+            queueIndex: 2,
+            upcomingItemIds: ['d', 'a'],
+        });
+        // current 'c' first, then true upcoming 'd','a', then leftover 'b'.
+        expect(view.map((s) => s.id)).toEqual(['c', 'd', 'a', 'b']);
+    });
+
+    it('keeps the whole queue reachable (every item shown exactly once)', () => {
+        const queue = [song('a', 0), song('b', 0), song('c', 0), song('d', 0)];
+        const view = buildRemoteQueueView({
+            queue,
+            queueIndex: 1,
+            upcomingItemIds: ['d'],
+        });
+        expect(view.map((s) => s.id).sort()).toEqual(['a', 'b', 'c', 'd']);
+        // No duplicates.
+        expect(new Set(view.map((s) => s.id)).size).toBe(view.length);
+    });
+
+    it('drops upcoming ids not present in the mirrored queue (not yet hydrated)', () => {
+        const queue = [song('a', 0), song('b', 0)];
+        const view = buildRemoteQueueView({
+            queue,
+            queueIndex: 0,
+            upcomingItemIds: ['zzz', 'b'],
+        });
+        // 'zzz' isn't in the queue → skipped; 'b' surfaces right after current.
+        expect(view.map((s) => s.id)).toEqual(['a', 'b']);
+    });
+
+    it('returns the rows as the same Song references from the queue (stable identity)', () => {
+        const a = song('a', 0);
+        const b = song('b', 0);
+        const queue = [a, b];
+        const view = buildRemoteQueueView({ queue, queueIndex: 0, upcomingItemIds: ['b'] });
+        expect(view[0]).toBe(a);
+        expect(view[1]).toBe(b);
+    });
+
+    it('returns [] for an empty queue', () => {
+        expect(buildRemoteQueueView({ queue: [], queueIndex: -1, upcomingItemIds: ['a'] })).toEqual(
+            [],
+        );
+    });
+
+    it('omits the current track from the leftover tail even when queueIndex is unknown', () => {
+        // queueIndex -1 (unknown). Upcoming drives the order; every queue item
+        // still appears once.
+        const queue = [song('a', 0), song('b', 0), song('c', 0)];
+        const view = buildRemoteQueueView({
+            queue,
+            queueIndex: -1,
+            upcomingItemIds: ['c', 'a'],
+        });
+        expect(view.map((s) => s.id)).toEqual(['c', 'a', 'b']);
     });
 });
 

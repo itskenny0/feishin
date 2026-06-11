@@ -181,6 +181,7 @@ const emptyMirrored: RemoteMirrored = {
     },
     queue: [],
     queueIndex: -1,
+    upcomingItemIds: [],
 };
 
 /**

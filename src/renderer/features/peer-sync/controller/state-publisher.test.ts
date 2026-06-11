@@ -42,6 +42,7 @@ import {
 } from '/@/renderer/features/peer-sync/controller/peer-loop-guard';
 import {
     __isStatePublisherRunning,
+    deriveUpcomingTrackIds,
     PUBLISH_THROTTLE_MS,
     startStatePublisher,
     stopStatePublisher,
@@ -52,7 +53,7 @@ import {
 } from '/@/renderer/features/peer-sync/controller/transport-selector';
 import { usePlayerStoreBase } from '/@/renderer/store/player.store';
 import { useTimestampStoreBase } from '/@/renderer/store/timestamp.store';
-import { PlayerStatus } from '/@/shared/types/types';
+import { PlayerRepeat, PlayerStatus } from '/@/shared/types/types';
 
 const stubSong = (id: string, uniqueId: string) =>
     ({
@@ -173,6 +174,122 @@ describe('state-publisher', () => {
         const f = publishedFrames[0];
         expect(f.track?.id).toBe('song-2');
         expect(f.nxt).toBeNull();
+    });
+
+    // BUG (shuffle up-next): the publisher must ship the TRUE upcoming sequence
+    // in `nxts`, not the default-order neighbours.
+    it('emits the default-order upcoming sequence as nxts with shuffle off', () => {
+        // Seeded: index 1 (song-1), repeat off → upcoming is just song-2.
+        // Pin shuffle off explicitly — seedQueue preserves the prior player's
+        // shuffle flag, so a preceding shuffle-on test would otherwise leak.
+        usePlayerStoreBase.setState((s) => ({
+            ...s,
+            player: { ...s.player, shuffle: 'none' as never },
+        }));
+        startStatePublisher();
+        const f = publishedFrames[0];
+        expect(f.nxts).toEqual(['song-2']);
+        // nxts[0] stays consistent with nxt.
+        expect(f.nxts?.[0]).toBe(f.nxt);
+    });
+
+    it('emits the SHUFFLE-resolved upcoming sequence as nxts (not default neighbours)', () => {
+        // Shuffle on, shuffled order [2,1,0], player.index 0 → current song-2.
+        // Playback order after the current is shuffled[1]=1 (song-1),
+        // shuffled[2]=0 (song-0). Default-order neighbours of song-2 would be
+        // nothing — nxts must report the shuffle sequence.
+        usePlayerStoreBase.setState((s) => ({
+            ...s,
+            player: { ...s.player, index: 0, shuffle: 'track' as never },
+            queue: { ...s.queue, shuffled: [2, 1, 0] },
+        }));
+        startStatePublisher();
+        const f = publishedFrames[0];
+        expect(f.track?.id).toBe('song-2');
+        expect(f.nxts).toEqual(['song-1', 'song-0']);
+        expect(f.nxts?.[0]).toBe(f.nxt);
+    });
+
+    it('omits nxts at the end of the queue with repeat off', () => {
+        // Last default-order track, repeat off → nothing upcoming → field omitted.
+        usePlayerStoreBase.setState((s) => ({ ...s, player: { ...s.player, index: 2 } }));
+        startStatePublisher();
+        const f = publishedFrames[0];
+        expect(f.track?.id).toBe('song-2');
+        expect('nxts' in f).toBe(false);
+    });
+
+    describe('deriveUpcomingTrackIds (pure)', () => {
+        const idOf = (u: string) => ({ u0: 'song-0', u1: 'song-1', u2: 'song-2' })[u];
+        const base = {
+            defaultIds: ['u0', 'u1', 'u2'],
+            songIdByUniqueId: idOf as (u: string) => string | undefined,
+        };
+
+        it('returns the default-order tail when shuffle is off (repeat off)', () => {
+            expect(
+                deriveUpcomingTrackIds({
+                    ...base,
+                    playerIndex: 0,
+                    repeat: PlayerRepeat.NONE,
+                    shuffled: [],
+                    shuffleOn: false,
+                }),
+            ).toEqual(['song-1', 'song-2']);
+        });
+
+        it('walks the shuffled order when shuffle is on', () => {
+            // shuffled [2,1,0], current playback pos 0 → next pos 1 (default idx
+            // 1 → song-1), pos 2 (default idx 0 → song-0).
+            expect(
+                deriveUpcomingTrackIds({
+                    ...base,
+                    playerIndex: 0,
+                    repeat: PlayerRepeat.NONE,
+                    shuffled: [2, 1, 0],
+                    shuffleOn: true,
+                }),
+            ).toEqual(['song-1', 'song-0']);
+        });
+
+        it('wraps to the front under repeat=all but never repeats the current item', () => {
+            // default order, index 1, repeat all → song-2, then wrap to song-0,
+            // stop before looping back onto the current (song-1).
+            expect(
+                deriveUpcomingTrackIds({
+                    ...base,
+                    playerIndex: 1,
+                    repeat: PlayerRepeat.ALL,
+                    shuffled: [],
+                    shuffleOn: false,
+                }),
+            ).toEqual(['song-2', 'song-0']);
+        });
+
+        it('returns [] for repeat=one (current track replays)', () => {
+            expect(
+                deriveUpcomingTrackIds({
+                    ...base,
+                    playerIndex: 0,
+                    repeat: PlayerRepeat.ONE,
+                    shuffled: [],
+                    shuffleOn: false,
+                }),
+            ).toEqual([]);
+        });
+
+        it('honours the limit', () => {
+            expect(
+                deriveUpcomingTrackIds({
+                    ...base,
+                    limit: 1,
+                    playerIndex: 0,
+                    repeat: PlayerRepeat.NONE,
+                    shuffled: [],
+                    shuffleOn: false,
+                }),
+            ).toEqual(['song-1']);
+        });
     });
 
     it('publishes again on a player mutation (track change)', () => {

@@ -48,6 +48,81 @@ const log = (...args: unknown[]) => console.info('[peer-sync]', ...args);
 export const PUBLISH_THROTTLE_MS = 500;
 /** Cap the queue id list we put on the wire. Matches the builder's own cap. */
 const MAX_QUEUE_IDS = 200;
+/** How many upcoming (shuffle-correct) track ids to ship in `nxts`. Matches the
+ *  builder's MAX_PEER_NEXT_IDS cap; the controller only renders a handful of
+ *  "up next" rows before the user scrolls into the default-order tail. */
+const MAX_NEXT_IDS = 64;
+
+/**
+ * Derive the target's TRUE upcoming playback sequence — the song ids it will
+ * actually play next, in order, shuffle + repeat aware. This is the list the
+ * controller renders as "up next" so a shuffling target's queue panel shows the
+ * right songs instead of the default-order neighbours of the current track.
+ *
+ * Pure and exported for direct unit coverage. Walks the SAME structures the
+ * engine's `getPlayerData().nextSong` derivation uses:
+ *   - `playerIndex` is the current PLAYBACK position (shuffled index when
+ *     shuffle is on, default index otherwise);
+ *   - `shuffled` maps a playback position → an index into `defaultIds`;
+ *   - `defaultIds[i]` is the `_uniqueId` of the i-th default-order item;
+ *   - `songIdByUniqueId` resolves a `_uniqueId` to the wire SONG id.
+ *
+ * Repeat semantics mirror the engine:
+ *   - `'one'` → the target replays the current track, so there is no distinct
+ *     "next" sequence; return [] (the controller keeps showing the current).
+ *   - `'all'` → wrap past the end back to the front (stopping before we loop
+ *     onto the current item or exceed the cap).
+ *   - `'off'` → stop at the end of the queue.
+ *
+ * The first element is guaranteed to equal `getPlayerData().nextSong?.id`
+ * (same mapping), so `nxts[0]` and `nxt` stay consistent.
+ */
+export const deriveUpcomingTrackIds = (args: {
+    defaultIds: string[];
+    limit?: number;
+    playerIndex: number;
+    repeat: PlayerRepeat;
+    shuffled: number[];
+    shuffleOn: boolean;
+    songIdByUniqueId: (uniqueId: string) => string | undefined;
+}): string[] => {
+    const { defaultIds, playerIndex, repeat, shuffled, shuffleOn, songIdByUniqueId } = args;
+    const limit = Math.max(0, args.limit ?? MAX_NEXT_IDS);
+    if (limit === 0) return [];
+    // Repeat-one replays the current track — no forward sequence to show.
+    if (repeat === PlayerRepeat.ONE) return [];
+
+    // Playback-order length: the shuffled array when shuffling, else the
+    // default-order length.
+    const playbackLength = shuffleOn ? shuffled.length : defaultIds.length;
+    if (playbackLength <= 0) return [];
+
+    const out: string[] = [];
+    // Walk forward through PLAYBACK positions. Cap the loop at playbackLength so
+    // a repeat=all wrap can't spin forever; we never want to show the same item
+    // twice, so we also stop once we'd loop back onto the starting position.
+    for (let step = 1; step <= playbackLength && out.length < limit; step += 1) {
+        let playbackPos = playerIndex + step;
+        if (playbackPos >= playbackLength) {
+            if (repeat !== PlayerRepeat.ALL) break; // end of queue, no wrap
+            playbackPos = playbackPos % playbackLength;
+            // Wrapped all the way back onto the current item — stop.
+            if (
+                playbackPos ===
+                ((playerIndex % playbackLength) + playbackLength) % playbackLength
+            ) {
+                break;
+            }
+        }
+        // Map the playback position to a default-order index, then to a uniqueId.
+        const defaultIdx = shuffleOn ? shuffled[playbackPos] : playbackPos;
+        const uniqueId = defaultIds[defaultIdx];
+        if (uniqueId === undefined) continue;
+        const songId = songIdByUniqueId(uniqueId);
+        if (songId) out.push(songId);
+    }
+    return out;
+};
 
 /** Map the store's PlayerRepeat enum to the compact wire enum. */
 const repeatToWire = (repeat: PlayerRepeat): PeerRepeatMode => {
@@ -135,6 +210,27 @@ const buildCurrentState = () => {
     // an empty queue has no meaningful next.
     const nxt = song ? (state.getPlayerData().nextSong?.id ?? null) : undefined;
 
+    // BUG (shuffle up-next): the controller can't reconstruct the target's TRUE
+    // upcoming SEQUENCE from `qIds` (default order) when shuffle is on — slicing
+    // at `qIdx + 1` shows the wrong songs. Derive the real upcoming ids here from
+    // the SAME structures the engine uses (player.index over queue.shuffled), so
+    // the controller's queue panel mirrors what the target will actually play.
+    // Only emit when there's a current track; the codec/builder cap + filter the
+    // list, and an empty result is omitted from the wire (consumers fall back to
+    // the default-order slice).
+    const shuffleOn = state.player.shuffle === PlayerShuffle.TRACK;
+    const nxts = song
+        ? deriveUpcomingTrackIds({
+              defaultIds: state.queue.default,
+              limit: MAX_NEXT_IDS,
+              playerIndex: state.player.index,
+              repeat: state.player.repeat,
+              shuffled: state.queue.shuffled,
+              shuffleOn,
+              songIdByUniqueId: (uniqueId) => state.queue.songs[uniqueId]?.id,
+          })
+        : undefined;
+
     return buildState({
         // `song.duration` is ALREADY milliseconds for every server (the
         // jellyfin/navidrome/subsonic normalizers all yield ms), so it must NOT
@@ -144,6 +240,7 @@ const buildCurrentState = () => {
         dur: song?.duration ?? 0,
         mut: state.player.muted,
         nxt,
+        nxts,
         paused: state.player.status !== PlayerStatus.PLAYING,
         pos: Math.max(0, Math.round(positionSec * 1000)),
         qIds: qIds.length > 0 ? qIds : undefined,

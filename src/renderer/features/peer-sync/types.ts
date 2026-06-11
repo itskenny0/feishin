@@ -149,7 +149,7 @@ export type PeerRepeatMode = 'all' | 'off' | 'one';
 /**
  * Retained target → controller state snapshot. Late joiners get the latest.
  *
- * Optional fields (`mut`, `qIds`, `qIdx`, `lyr`, `rate`, `nxt`) were added
+ * Optional fields (`mut`, `qIds`, `qIdx`, `lyr`, `rate`, `nxt`, `nxts`) were added
  * after the initial v1 cut. Older readers ignore unknown keys and the codec
  * validates each optional field's type independently, so a frame produced by a
  * newer publisher decodes cleanly on an older consumer (just without the
@@ -175,6 +175,18 @@ export interface PeerState {
      * (end of queue, repeat off). Consumers fall back to the default-order
      * `qIds[qIdx + 1]` derivation when this is absent. */
     nxt?: null | string;
+    /**
+     * The target's TRUE upcoming playback sequence — a short, capped list of
+     * track ids in the order the target will actually play them, resolved on
+     * the target against its shuffle map + repeat mode. Optional — emitted by
+     * Feishin targets so a controller can render a shuffle-correct "up next" /
+     * queue list (where slicing the DEFAULT-order `qIds` at `qIdx + 1` shows
+     * the WRONG songs once the target is shuffling). `nxt` is just this list's
+     * first element; `nxts` carries the next few so the queue panel can show
+     * the real sequence rather than a single track. Absent on older publishers
+     * and from non-Feishin lanes — consumers then fall back to the default-order
+     * queue slice. Capped at 64 ids on the wire. */
+    nxts?: string[];
     /** True when the target is paused. */
     paused: boolean;
     /** Current position in milliseconds. */

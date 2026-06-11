@@ -292,6 +292,15 @@ export const peerStateToMirrored = (state: PeerState, oneWayOffsetMs = 0): Remot
     // "unchanged") so we don't clobber a known value with a guess.
     if (state.nxt !== undefined) {
         out.nextItemId = state.nxt;
+        // BUG (shuffle up-next): the queue / "up next" panel can't reconstruct
+        // the target's true upcoming SEQUENCE from `qIds` (default order) under
+        // shuffle. Carry the shuffle-correct id list so the panel renders the
+        // right songs. `nxt !== undefined` marks a new-enough publisher (nxt is
+        // nxts[0]); set the list whenever that holds, defaulting to `[]` when
+        // the frame omits `nxts` (end of queue / nothing upcoming) so a stale
+        // sequence from a prior frame is cleared rather than lingering. Older
+        // publishers (nxt undefined) leave the mirror's value untouched.
+        out.upcomingItemIds = Array.isArray(state.nxts) ? state.nxts : [];
     }
     return out;
 };

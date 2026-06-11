@@ -187,6 +187,82 @@ export const resolveRemoteNextItem = (mirrored: {
 };
 
 /**
+ * Reorder a mirrored remote queue into the shuffle-correct DISPLAY order for
+ * the "up next" / queue panel. (shuffle up-next bug)
+ *
+ * The wire deliberately ships `queue` (`qIds`) in DEFAULT order so a controller
+ * tap maps to the right receiver index (T8). But slicing that default order at
+ * `queueIndex + 1` shows the WRONG upcoming songs once the target is shuffling.
+ * `upcomingItemIds` carries the target's TRUE upcoming playback sequence, so we
+ * render:
+ *
+ *   [ current track,
+ *     ...upcoming songs resolved from the queue by id (true playback order),
+ *     ...the remaining queue items not yet shown, in default order ]
+ *
+ * The leftover default-order tail keeps the WHOLE queue reachable/scrollable
+ * while the IMMEDIATE up-next rows are truthful. Songs are looked up in the
+ * mirrored (hydrated) queue by id so rows carry real metadata; an upcoming id
+ * not (yet) in the queue is dropped (the queue hydrate path fills it on a later
+ * tick). Each returned row is the same Song object reference from `queue`, so
+ * downstream `_uniqueId` synthesis stays stable.
+ *
+ * Falls back to the unmodified default-order `queue` when `upcomingItemIds` is
+ * empty (Jellyfin lane, older publishers, or shuffle off where default order is
+ * already correct). Pure + exported for direct unit coverage.
+ */
+export const buildRemoteQueueView = (mirrored: {
+    queue: Song[];
+    queueIndex: number;
+    upcomingItemIds: string[];
+}): Song[] => {
+    const { queue, queueIndex, upcomingItemIds } = mirrored;
+    if (!Array.isArray(queue) || queue.length === 0) return [];
+    if (!Array.isArray(upcomingItemIds) || upcomingItemIds.length === 0) {
+        return queue;
+    }
+
+    // Index the queue by id (first occurrence wins) so we can resolve upcoming
+    // ids to their hydrated Song objects.
+    const byId = new Map<string, Song>();
+    for (const song of queue) {
+        if (song?.id && !byId.has(song.id)) byId.set(song.id, song);
+    }
+
+    const out: Song[] = [];
+    const usedQueueIndices = new Set<number>();
+
+    // 1. Current track at the top (when the index is known and in range).
+    if (queueIndex >= 0 && queueIndex < queue.length) {
+        out.push(queue[queueIndex]);
+        usedQueueIndices.add(queueIndex);
+    }
+
+    // 2. The true upcoming sequence, resolved by id. Skip ids missing from the
+    //    queue and ids already emitted (e.g. the current track under repeat-one
+    //    edge cases) so the same song never shows twice.
+    const usedIds = new Set<string>(out.map((s) => s.id));
+    for (const id of upcomingItemIds) {
+        if (usedIds.has(id)) continue;
+        const song = byId.get(id);
+        if (!song) continue;
+        out.push(song);
+        usedIds.add(id);
+    }
+
+    // 3. Everything else in default order, so the whole queue stays reachable.
+    for (let i = 0; i < queue.length; i += 1) {
+        if (usedQueueIndices.has(i)) continue;
+        const song = queue[i];
+        if (song?.id && usedIds.has(song.id)) continue;
+        out.push(song);
+        if (song?.id) usedIds.add(song.id);
+    }
+
+    return out;
+};
+
+/**
  * The track the active REMOTE target will play next — null in local mode (the
  * local player exposes its own next via `usePlayerData().nextSong`, which is
  * already shuffle-aware locally). Subscribes only to the queue/index/nextItemId

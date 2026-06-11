@@ -109,6 +109,30 @@ describe('peerStateToMirrored — controller-derived art', () => {
     });
 });
 
+describe('peerStateToMirrored — next-track + upcoming sequence', () => {
+    it('maps nxt → nextItemId and nxts → upcomingItemIds when the publisher reports them', () => {
+        const out = peerStateToMirrored(
+            baseState({ nxt: 'song-2', nxts: ['song-2', 'song-5', 'song-3'] }),
+        );
+        expect(out.nextItemId).toBe('song-2');
+        expect(out.upcomingItemIds).toEqual(['song-2', 'song-5', 'song-3']);
+    });
+
+    it('clears upcomingItemIds to [] when a new-enough publisher omits nxts (end of queue)', () => {
+        // nxt present (=> new publisher) but no nxts (nothing upcoming): the
+        // mirror must not keep a stale sequence around.
+        const out = peerStateToMirrored(baseState({ nxt: null }));
+        expect(out.nextItemId).toBeNull();
+        expect(out.upcomingItemIds).toEqual([]);
+    });
+
+    it('leaves both next fields untouched for an older publisher (nxt undefined)', () => {
+        const out = peerStateToMirrored(baseState());
+        expect('nextItemId' in out).toBe(false);
+        expect('upcomingItemIds' in out).toBe(false);
+    });
+});
+
 describe('ensureQueueHydrated — upcoming tracks', () => {
     it('hydrates qIds once and patches the mirrored queue with full songs', async () => {
         const state = baseState({ qIds: ['song-1', 'song-2', 'song-3'], qIdx: 0 });

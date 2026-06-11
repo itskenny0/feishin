@@ -22,6 +22,7 @@ import { useItemListColumnReorder } from '/@/renderer/components/item-list/helpe
 import { useItemListColumnResize } from '/@/renderer/components/item-list/helpers/use-item-list-column-resize';
 import { ItemListHandle } from '/@/renderer/components/item-list/types';
 import { eventEmitter } from '/@/renderer/events/event-emitter';
+import { buildRemoteQueueView } from '/@/renderer/features/jellyfin-remote-target/hooks/use-active-player-source';
 import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
 import { useIsPlayerFetching, usePlayer } from '/@/renderer/features/player/context/player-context';
 import { EmptyState } from '/@/renderer/features/shared/components/empty-state';
@@ -96,6 +97,13 @@ export const PlayQueue = forwardRef<ItemListHandle, QueueProps>(
         const remoteQueueIndex = useRemoteTargetStore((s) =>
             s.targetDeviceId === null ? -1 : s.mirrored.queueIndex,
         );
+        // Shuffle-correct up-next ordering: the target's TRUE upcoming sequence.
+        // When present, the queue panel renders [current, ...upcoming, ...rest]
+        // instead of slicing the DEFAULT-order mirror at queueIndex+1 (wrong
+        // under shuffle). Stable array reference unless the sequence changes.
+        const remoteUpcomingItemIds = useRemoteTargetStore((s) =>
+            s.targetDeviceId === null ? null : s.mirrored.upcomingItemIds,
+        );
 
         const [debouncedSearchTerm] = useDebouncedValue(searchTerm, 200);
 
@@ -106,13 +114,25 @@ export const PlayQueue = forwardRef<ItemListHandle, QueueProps>(
         // The mirror exposes Song[] (no _uniqueId); the table key is _uniqueId,
         // so we synthesize a stable id-based key. Position suffix disambiguates
         // duplicate tracks within the remote queue.
+        //
+        // Order: buildRemoteQueueView reorders into [current, ...true upcoming,
+        // ...rest] when the target reports a shuffle-correct upcoming sequence;
+        // otherwise it returns the default-order mirror unchanged. The current
+        // track therefore sits at the top of the list under shuffle (matching a
+        // Spotify-style "now playing + up next" view), and is highlighted by id
+        // below rather than by the wire queueIndex.
         const remoteData: QueueSong[] = useMemo(() => {
             if (!isRemote || !remoteQueue) return [];
-            return remoteQueue.map((song, idx) => ({
+            const view = buildRemoteQueueView({
+                queue: remoteQueue,
+                queueIndex: remoteQueueIndex,
+                upcomingItemIds: remoteUpcomingItemIds ?? [],
+            });
+            return view.map((song, idx) => ({
                 ...(song as Song),
                 _uniqueId: `remote:${song.id}:${idx}`,
             })) as QueueSong[];
-        }, [isRemote, remoteQueue]);
+        }, [isRemote, remoteQueue, remoteQueueIndex, remoteUpcomingItemIds]);
 
         useEffect(() => {
             // In remote mode the queue comes from the mirror (see remoteData below);
@@ -245,8 +265,21 @@ export const PlayQueue = forwardRef<ItemListHandle, QueueProps>(
         const currentSong = usePlayerSong();
 
         const localCurrentSongUniqueId = currentSong?._uniqueId;
-        const remoteCurrentSongUniqueId =
-            isRemote && remoteQueueIndex >= 0 ? remoteData[remoteQueueIndex]?._uniqueId : undefined;
+        // The now-playing track's id, resolved from the DEFAULT-order mirror by
+        // the wire queueIndex. buildRemoteQueueView may have moved that track to
+        // the top of the displayed list (under shuffle), so the highlight is
+        // matched by id against the reordered rows rather than by index.
+        const remoteCurrentSongId =
+            isRemote && remoteQueue && remoteQueueIndex >= 0
+                ? (remoteQueue[remoteQueueIndex]?.id ?? undefined)
+                : undefined;
+        const remoteCurrentSongUniqueId = useMemo(
+            () =>
+                remoteCurrentSongId
+                    ? remoteData.find((row) => row.id === remoteCurrentSongId)?._uniqueId
+                    : undefined,
+            [remoteData, remoteCurrentSongId],
+        );
         const currentSongUniqueId = isRemote ? remoteCurrentSongUniqueId : localCurrentSongUniqueId;
 
         const { focused, ref: containerFocusRef } = useFocusWithin();

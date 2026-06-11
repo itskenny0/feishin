@@ -29,6 +29,16 @@ export interface RemoteMirrored {
     playState: RemoteMirroredPlayState;
     queue: Song[];
     queueIndex: number; // -1 if unknown
+    /**
+     * The target's TRUE upcoming playback sequence — track ids in the order it
+     * will actually play them, shuffle + repeat aware. Carried only by the MQTT
+     * lane (wire `nxts`); empty `[]` on the Jellyfin lane and from publishers
+     * that don't report it. When present, the queue / "up next" panel renders
+     * `[current, ...upcoming, ...remaining-default-order]` so a shuffling
+     * target shows the right songs instead of the default-order neighbours of
+     * the current track (slicing `queue` at `queueIndex + 1` is wrong under
+     * shuffle). Empty → consumers fall back to the default-order slice. */
+    upcomingItemIds: string[];
 }
 
 export interface RemoteMirroredPlayState {

@@ -35,6 +35,10 @@ export interface StateSnapshotInput {
      *  (resolved against its shuffle map / repeat mode). Pass undefined to omit
      *  the field; pass null when there is explicitly no next track. */
     nxt?: null | string;
+    /** Optional — the target's TRUE upcoming playback sequence (track ids in
+     *  the order it will actually play them, shuffle + repeat aware). Pass
+     *  undefined or [] to omit. Capped to MAX_PEER_NEXT_IDS on publish. */
+    nxts?: string[];
     paused: boolean;
     pos: number;
     /** Optional — queue id list. Pass undefined or [] to omit. */
@@ -50,6 +54,11 @@ export interface StateSnapshotInput {
 }
 
 const MAX_PEER_QUEUE_IDS = 200;
+/** Cap on the `nxts` upcoming-id list. The controller only renders a handful
+ *  of "up next" rows before the user scrolls into the (default-order) tail, so
+ *  a short cap keeps the frame small while still giving a truthful immediate
+ *  sequence. Stays well under the codec's array sanity check. */
+const MAX_PEER_NEXT_IDS = 64;
 /** Wire range for `vol` — 0-100. Anything outside is clamped on publish so a
  *  buggy producer can't push a NaN / out-of-range volume through to peers. */
 const MIN_VOL = 0;
@@ -105,6 +114,19 @@ export const buildState = (input: StateSnapshotInput): PeerState => {
     // try to resolve.
     if (input.nxt !== undefined) {
         out.nxt = typeof input.nxt === 'string' && input.nxt.length > 0 ? input.nxt : null;
+    }
+    // Upcoming playback sequence (shuffle-correct). Filter non-string / empty
+    // entries (a producer bug can't ship a "" the consumer would try to
+    // resolve) and cap the length. Only emit when something survives — an
+    // empty list is omitted entirely so "publisher doesn't carry it" and
+    // "explicitly nothing upcoming" both decode as "absent" and the consumer
+    // falls back to the default-order slice. `.slice()` copies so the caller
+    // can't mutate the array post-publish.
+    if (Array.isArray(input.nxts) && input.nxts.length > 0) {
+        const filtered = input.nxts
+            .slice(0, MAX_PEER_NEXT_IDS)
+            .filter((id): id is string => typeof id === 'string' && id.length > 0);
+        if (filtered.length > 0) out.nxts = filtered;
     }
     if (Array.isArray(input.qIds) && input.qIds.length > 0) {
         // `.slice(0, N)` copies, so the caller can't mutate the array after

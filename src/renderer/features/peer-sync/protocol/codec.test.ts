@@ -292,6 +292,119 @@ describe('peer-sync codec', () => {
         expect(codec.decode(bytes)).toBeNull();
     });
 
+    // BUG (shuffle up-next): the `nxts` (true playback-order upcoming ids) field
+    // must round-trip, stay optional/back-compat, cap its length, and drop a
+    // garbage array.
+    it('round-trips a state frame carrying the shuffle up-next list (`nxts`)', () => {
+        const frame = buildState({
+            dur: 1000,
+            nxt: 'b',
+            nxts: ['b', 'd', 'a'],
+            paused: false,
+            pos: 0,
+            qIds: ['a', 'b', 'c', 'd'],
+            qIdx: 2,
+            rep: 'off',
+            shuf: true,
+            track: { album: null, art: null, artist: null, id: 'c', title: 'x' },
+            vol: 100,
+        });
+        expect(frame.nxts).toEqual(['b', 'd', 'a']);
+        const decoded = codec.decode(codec.encode(frame));
+        expect(decoded).toEqual(frame);
+        expect((decoded as typeof frame).nxts).toEqual(['b', 'd', 'a']);
+    });
+
+    it('buildState omits nxts when undefined and when empty', () => {
+        const omitted = buildState({
+            dur: 1000,
+            paused: false,
+            pos: 0,
+            rep: 'off',
+            shuf: false,
+            track: null,
+            vol: 100,
+        });
+        expect('nxts' in omitted).toBe(false);
+
+        const empty = buildState({
+            dur: 1000,
+            nxts: [],
+            paused: false,
+            pos: 0,
+            rep: 'off',
+            shuf: false,
+            track: null,
+            vol: 100,
+        });
+        expect('nxts' in empty).toBe(false);
+    });
+
+    it('buildState filters non-string nxts entries and caps the list length', () => {
+        const big = Array.from({ length: 200 }, (_, i) => `id-${i}`);
+        const frame = buildState({
+            dur: 1000,
+            // bad entries are dropped, good ones survive in order
+            nxts: ['a', '', 'b'] as string[],
+            paused: false,
+            pos: 0,
+            rep: 'off',
+            shuf: true,
+            track: null,
+            vol: 100,
+        });
+        expect(frame.nxts).toEqual(['a', 'b']);
+
+        const capped = buildState({
+            dur: 1000,
+            nxts: big,
+            paused: false,
+            pos: 0,
+            rep: 'off',
+            shuf: true,
+            track: null,
+            vol: 100,
+        });
+        expect(capped.nxts && capped.nxts.length).toBeLessThanOrEqual(64);
+        expect(capped.nxts?.[0]).toBe('id-0');
+    });
+
+    it('drops a state frame whose `nxts` array contains a non-string entry', () => {
+        const malformed = {
+            dur: 100,
+            nxts: ['a', 7, 'b'],
+            paused: true,
+            pos: 0,
+            rep: 'off',
+            shuf: true,
+            t: 'state',
+            track: null,
+            ts: Date.now(),
+            v: PROTOCOL_VERSION,
+            vol: 100,
+        };
+        const bytes = new TextEncoder().encode(JSON.stringify(malformed));
+        expect(codec.decode(bytes)).toBeNull();
+    });
+
+    it('drops a state frame whose `nxts` is not an array', () => {
+        const malformed = {
+            dur: 100,
+            nxts: 'not-an-array',
+            paused: true,
+            pos: 0,
+            rep: 'off',
+            shuf: true,
+            t: 'state',
+            track: null,
+            ts: Date.now(),
+            v: PROTOCOL_VERSION,
+            vol: 100,
+        };
+        const bytes = new TextEncoder().encode(JSON.stringify(malformed));
+        expect(codec.decode(bytes)).toBeNull();
+    });
+
     it('accepts a state frame from an older publisher that omits the v1+ optional fields', () => {
         // Hand-build the frame so `buildState` doesn't tack on optional
         // fields — this simulates what an older publisher would emit.
