@@ -205,14 +205,6 @@
         "vite-plugin-pwa": "^1.3.0",
         "vitest": "^2.1.9"
     },
-    "pnpm": {
-        "onlyBuiltDependencies": [
-            "electron",
-            "electron-winstaller",
-            "esbuild",
-            "sharp"
-        ]
-    },
-    "productName": "feishin",
-    "packageManager": "pnpm@11.5.2"
+    "packageManager": "pnpm@11.5.2",
+    "productName": "feishin"
 }
