@@ -17,11 +17,13 @@
 }
 
 .main-content-container.sidebar-expanded {
-    grid-template-columns: var(--sidebar-width) 1fr;
+    /* min() guards against a rogue persisted --sidebar-width eating the
+       content column (the JS clamp is authoritative; this is the backstop). */
+    grid-template-columns: min(var(--sidebar-width), 40vw) 1fr;
 }
 
 .main-content-container.right-expanded {
-    grid-template-columns: var(--sidebar-width) 1fr var(--right-sidebar-width);
+    grid-template-columns: min(var(--sidebar-width), 40vw) 1fr var(--right-sidebar-width);
 }
 
 .main-content-container.sidebar-collapsed.right-expanded {

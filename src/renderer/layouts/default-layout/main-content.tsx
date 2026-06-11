@@ -90,10 +90,23 @@ export const MainContent = ({ shell }: { shell?: boolean }) => {
 
     useEffect(() => {
         if (mainContentRef.current && !isResizing && !isResizingRight) {
-            mainContentRef.current.style.setProperty('--sidebar-width', leftWidth);
-            mainContentRef.current.style.setProperty('--right-sidebar-width', rightWidth);
+            // The live drag clamps widths, but the PERSISTED value is applied
+            // verbatim here — installs carrying a pre-clamp (or corrupted)
+            // leftWidth rendered a sidebar grid column far wider than the nav
+            // it contains, swallowing the content area (Windows, 2026-06-11).
+            // Sanitize persisted values through the same constraints.
+            const leftPx = Number.parseInt(leftWidth, 10);
+            const safeLeft = Number.isFinite(leftPx)
+                ? `${constrainSidebarWidth(leftPx)}px`
+                : '400px';
+            const rightPx = Number.parseInt(rightWidth, 10);
+            const safeRight = Number.isFinite(rightPx)
+                ? `${constrainRightSidebarWidth(rightPx)}px`
+                : rightWidth;
+            mainContentRef.current.style.setProperty('--sidebar-width', safeLeft);
+            mainContentRef.current.style.setProperty('--right-sidebar-width', safeRight);
             mainContentRef.current.style.setProperty('--right-sidebar-height', rightHeight);
-            initialRightWidthRef.current = rightWidth;
+            initialRightWidthRef.current = safeRight;
             initialRightHeightRef.current = rightHeight;
         }
     }, [leftWidth, rightWidth, rightHeight, isResizing, isResizingRight]);
