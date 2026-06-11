@@ -710,6 +710,22 @@ export const runThumbnailsSweep = async (
         status: 'idle',
     }));
 
+    // Per-item stuck warnings flooded telemetry on slow servers (dozens of
+    // lines per sweep, one per slow item). Warn for the first few, then
+    // sample 1-in-50 with a running count — the 15s pool snapshot below
+    // already shows WHICH items are wedged.
+    let stuckWarnCount = 0;
+    const warnWorkerStuck = (itemId: string, workerId: number): void => {
+        stuckWarnCount += 1;
+        if (stuckWarnCount <= 5 || stuckWarnCount % 50 === 0) {
+            console.warn('[cache] thumbnails sweep: worker stuck >5s on item', {
+                itemId,
+                stuckSoFar: stuckWarnCount,
+                workerId,
+            });
+        }
+    };
+
     // Periodic worker-pool snapshot. Every 15s, log what every worker
     // is currently doing — `status` field shows whether the worker is
     // idle, fetching, or post-processing (writing to Dexie). Catches
@@ -802,10 +818,7 @@ export const runThumbnailsSweep = async (
                 status: 'fetching',
             };
             const stuckTimer = setTimeout(() => {
-                console.warn('[cache] thumbnails sweep: worker stuck >5s on item', {
-                    itemId: next.itemId,
-                    workerId,
-                });
+                warnWorkerStuck(next.itemId, workerId);
             }, 5_000);
             // `transient` outcomes (and thrown errors) must NOT count as a fast
             // success for backoff recovery, even when they complete quickly.
