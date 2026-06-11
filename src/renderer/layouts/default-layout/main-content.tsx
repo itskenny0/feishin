@@ -108,8 +108,21 @@ export const MainContent = ({ shell }: { shell?: boolean }) => {
             mainContentRef.current.style.setProperty('--right-sidebar-height', rightHeight);
             initialRightWidthRef.current = safeRight;
             initialRightHeightRef.current = rightHeight;
+            // Diagnostic for the Windows "sidebar extends into content"
+            // report (2026-06-11): the persisted-width clamp above did NOT
+            // resolve it on the affected install, so capture what the grid
+            // actually computes there. One line per apply; remove once the
+            // root cause is confirmed from device telemetry.
+            const computed = getComputedStyle(mainContentRef.current);
+            console.info('[layout] sidebar apply', {
+                collapsed,
+                gridColumns: computed.gridTemplateColumns,
+                persistedLeft: leftWidth,
+                safeLeft,
+                viewportW: window.innerWidth,
+            });
         }
-    }, [leftWidth, rightWidth, rightHeight, isResizing, isResizingRight]);
+    }, [collapsed, leftWidth, rightWidth, rightHeight, isResizing, isResizingRight]);
 
     const startResizing = useCallback(
         (position: 'left' | 'right' | 'top', mouseEvent?: MouseEvent) => {
