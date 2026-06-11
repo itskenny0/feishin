@@ -42,8 +42,13 @@ export const useSoftKeyboardVisible = ({
     thresholdPx = 150,
 }: UseSoftKeyboardVisibleOptions = {}): boolean => {
     const [visible, setVisible] = useState(false);
-    // Largest visual-viewport height observed — our baseline for the "shrink".
-    const maxHeightRef = useRef(0);
+    // Baseline geometry: the largest viewport height observed AT THE CURRENT
+    // viewport width. Keyboards never change the width — but rotation and
+    // window resizes do, and a grow-only baseline read a portrait→landscape
+    // rotation as a permanently-open keyboard (the landscape height sits
+    // hundreds of px under the portrait peak), hiding the mini-player until
+    // restart. A width change re-seeds the baseline for the new geometry.
+    const baselineRef = useRef({ height: 0, width: 0 });
 
     useEffect(() => {
         if (!enabled) {
@@ -55,13 +60,28 @@ export const useSoftKeyboardVisible = ({
         if (!vv) return;
 
         // Seed the baseline from whatever's tallest right now.
-        maxHeightRef.current = Math.max(window.innerHeight || 0, vv.height);
+        baselineRef.current = {
+            height: Math.max(window.innerHeight || 0, vv.height),
+            width: vv.width,
+        };
 
         let last = false;
 
         const evaluate = () => {
-            const baseline = Math.max(maxHeightRef.current, window.innerHeight || 0, vv.height);
-            maxHeightRef.current = baseline;
+            if (Math.abs(vv.width - baselineRef.current.width) > 1) {
+                // Width changed → rotation or window resize, not a keyboard.
+                baselineRef.current = {
+                    height: Math.max(window.innerHeight || 0, vv.height),
+                    width: vv.width,
+                };
+            } else {
+                baselineRef.current.height = Math.max(
+                    baselineRef.current.height,
+                    window.innerHeight || 0,
+                    vv.height,
+                );
+            }
+            const baseline = baselineRef.current.height;
             const next = baseline - vv.height > thresholdPx;
             if (next !== last) {
                 last = next;

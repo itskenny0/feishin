@@ -128,6 +128,7 @@ const PinnedTile = memo(({ pin }: { pin: Pin }) => {
             onClick={handleOpen}
             onClickCapture={longPressHandlers.onClickCapture}
             onContextMenu={openContextMenu}
+            onContextMenuCapture={longPressHandlers.onContextMenuCapture}
             onKeyDown={handleKeyDown}
             onPointerCancel={longPressHandlers.onPointerCancel}
             onPointerDown={longPressHandlers.onPointerDown}

@@ -145,6 +145,7 @@ const QuickPickTile = ({ item }: { item: QuickPickItem }) => {
             className={styles.tile}
             onClickCapture={handleClickCapture}
             onContextMenu={openContextMenu}
+            onContextMenuCapture={longPressHandlers.onContextMenuCapture}
             onMouseEnter={() => prefetchAlbumDetail(item.id)}
             onPointerCancel={longPressHandlers.onPointerCancel}
             onPointerDown={(e) => {

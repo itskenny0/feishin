@@ -10,9 +10,10 @@ import {
     hasFeature,
     hasFeatureWithVersion,
     replacePathPrefix,
+    sortSongsByFetchedOrder,
     VersionInfo,
 } from '/@/shared/api/utils';
-import { ServerListItem, ServerType } from '/@/shared/types/domain-types';
+import { LibraryItem, ServerListItem, ServerType, Song } from '/@/shared/types/domain-types';
 import { ServerFeature } from '/@/shared/types/features-types';
 
 const server = (overrides: Partial<ServerListItem> = {}): ServerListItem => ({
@@ -137,5 +138,26 @@ describe('replacePathPrefix', () => {
 
     it('strips then prepends when both prefixes are given', () => {
         expect(replacePathPrefix('/music/song.flac', '/music', '/media')).toBe('/media/song.flac');
+    });
+});
+
+describe('sortSongsByFetchedOrder', () => {
+    const song = (id: string, track: number) =>
+        ({
+            albumArtists: [],
+            artists: [],
+            discNumber: 1,
+            genres: [],
+            id,
+            trackNumber: track,
+        }) as unknown as Song;
+
+    // Pinned songs / play-by-id promise the caller's id order; the SONG case
+    // used to fall through unmatched and the tail re-sort by disc/track
+    // silently discarded it (review matrix, 2026-06-11).
+    it('preserves the requested id order for explicit song ids', () => {
+        const songs = [song('a', 5), song('b', 1), song('c', 3)];
+        const result = sortSongsByFetchedOrder(songs, ['c', 'a', 'b'], LibraryItem.SONG);
+        expect(result.map((s) => s.id)).toEqual(['c', 'a', 'b']);
     });
 });

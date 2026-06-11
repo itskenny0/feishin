@@ -23,15 +23,17 @@ interface MockVisualViewport {
     dispatch: () => void;
     height: number;
     removeEventListener: (type: string, cb: () => void) => void;
+    width: number;
 }
 
-const makeViewport = (height: number): MockVisualViewport => {
+const makeViewport = (height: number, width = 390): MockVisualViewport => {
     const listeners = new Set<() => void>();
     return {
         addEventListener: (_type, cb) => listeners.add(cb),
         dispatch: () => listeners.forEach((cb) => cb()),
         height,
         removeEventListener: (_type, cb) => listeners.delete(cb),
+        width,
     };
 };
 
@@ -108,6 +110,35 @@ describe('useSoftKeyboardVisible', () => {
         });
 
         expect(result.current).toBe(false);
+    });
+
+    // Review-matrix finding (2026-06-11): the baseline only ever grew, so
+    // rotating portrait→landscape (height drops below the portrait baseline
+    // with NO keyboard) read as a permanently-open keyboard and the
+    // mini-player never came back. Keyboards never change the viewport
+    // WIDTH — a width change must re-seed the baseline.
+    it('does not read an orientation change as a keyboard', () => {
+        const { result } = renderHook(() => useSoftKeyboardVisible({ enabled: true }));
+
+        act(() => {
+            // Rotate to landscape: width and height swap, no keyboard.
+            viewport.width = 844;
+            viewport.height = 360;
+            Object.defineProperty(window, 'innerHeight', {
+                configurable: true,
+                value: 360,
+                writable: true,
+            });
+            viewport.dispatch();
+        });
+        expect(result.current).toBe(false);
+
+        act(() => {
+            // A real keyboard in landscape still trips it (same width).
+            viewport.height = 180;
+            viewport.dispatch();
+        });
+        expect(result.current).toBe(true);
     });
 
     it('always reports hidden when gating is disabled', () => {

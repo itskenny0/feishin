@@ -355,6 +355,13 @@ export const sortSongsByFetchedOrder = (
                 // This is a simplified approach - you may need to adjust based on your data structure
                 matchedId = fetchedIds.find((id) => song.playlistItemId === id);
                 break;
+            // Explicit song ids (pinned songs, play-by-id): match by the
+            // song's own id so the caller's requested order is preserved.
+            // Without this case every song fell through unmatched and the
+            // tail re-sort by disc/track silently discarded the order.
+            case LibraryItem.SONG:
+                matchedId = fetchedIds.find((id) => song.id === id);
+                break;
             default:
                 break;
         }

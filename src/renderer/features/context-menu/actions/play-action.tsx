@@ -27,7 +27,22 @@ export const PlayAction = ({ ids, itemType, songs }: PlayActionProps) => {
                 itemType === LibraryItem.PLAYLIST_SONG ||
                 itemType === LibraryItem.QUEUE_SONG
             ) {
-                player.addToQueueByData(songs || [], playType);
+                // Menus opened from partial entities (pinned tiles build a
+                // minimal { id, name, imageId } stub) must not enqueue the
+                // stub — the queue row / now-playing / scrobble payload
+                // would have no duration/artist/album. Resolve full songs
+                // by id instead. PLAYLIST_SONG/QUEUE_SONG keep the data
+                // path: their items carry playlist/queue context a re-fetch
+                // would lose (and they always come from full rows).
+                const list = songs || [];
+                const hasStub =
+                    itemType === LibraryItem.SONG &&
+                    (list.length === 0 || list.some((s) => s.duration == null));
+                if (hasStub) {
+                    player.addToQueueByFetch(serverId, ids, LibraryItem.SONG, playType);
+                } else {
+                    player.addToQueueByData(list, playType);
+                }
             } else {
                 player.addToQueueByFetch(serverId, ids, itemType, playType);
             }

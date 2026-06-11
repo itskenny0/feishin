@@ -28,7 +28,12 @@ export const usePrefetchUpcomingCovers = (): void => {
 
     useEffect(() => {
         let cancelled = false;
-        const generation = new AbortController();
+        // One controller per prefetch() invocation: a song change aborts the
+        // previous wait instead of letting it ride waitForPlaybackFlowing's
+        // cap (a stale song's wait can never resolve by condition, and each
+        // pending wait holds two store subscriptions — rapid skipping piled
+        // them up; review matrix, 2026-06-11).
+        let inflightWait: AbortController | null = null;
 
         const prefetch = async () => {
             const state = usePlayerStoreBase.getState();
@@ -39,14 +44,17 @@ export const usePrefetchUpcomingCovers = (): void => {
             const upcoming = items.slice(index + 1, index + 1 + PREFETCH_COUNT);
             if (upcoming.length === 0) return;
 
+            inflightWait?.abort();
+            const myWait = new AbortController();
+            inflightWait = myWait;
             try {
                 await waitForPlaybackFlowing({
                     maxWaitMs: 8000,
-                    signal: generation.signal,
+                    signal: myWait.signal,
                     songId: current?.id ?? '',
                 });
             } catch {
-                return; // aborted — a newer generation took over
+                return; // aborted — a newer prefetch took over (or unmount)
             }
             if (cancelled || !getIsOnline()) return;
 
@@ -71,17 +79,24 @@ export const usePrefetchUpcomingCovers = (): void => {
                     // Warm Dexie only — no object URL to leak.
                     _skipBlobUrl: true,
                 })
+                    .then(() => {
+                        // Mark done only on SUCCESS — a transient failure
+                        // must stay eligible for re-warming on the next
+                        // queue change (the resolver itself negative-caches
+                        // authoritative 404s, so no-artwork items don't
+                        // retry-spam through this path either).
+                        prefetchedRef.current.add(key);
+                        if (prefetchedRef.current.size > PREFETCHED_RECALL_LIMIT) {
+                            const oldest = prefetchedRef.current.values().next();
+                            if (!oldest.done) prefetchedRef.current.delete(oldest.value);
+                        }
+                    })
                     .catch(() => {
                         // Best-effort: the on-demand path retries when the
                         // fullscreen player actually asks for it.
                     })
                     .finally(() => {
                         inflightRef.current.delete(key);
-                        prefetchedRef.current.add(key);
-                        if (prefetchedRef.current.size > PREFETCHED_RECALL_LIMIT) {
-                            const oldest = prefetchedRef.current.values().next();
-                            if (!oldest.done) prefetchedRef.current.delete(oldest.value);
-                        }
                     });
             }
             if (started > 0) {
@@ -113,7 +128,7 @@ export const usePrefetchUpcomingCovers = (): void => {
 
         return () => {
             cancelled = true;
-            generation.abort();
+            inflightWait?.abort();
             unsubscribe();
         };
     }, []);

@@ -51,6 +51,10 @@ export const useLongPress = ({ disabled, onLongPress, onPress }: UseLongPressOpt
     // Snapshot the active pointer that armed the timer so we don't fire
     // onPress for an unrelated lift (e.g. lifting a stray second finger).
     const primaryPointerId = useRef<null | number>(null);
+    // Timestamp of the last timer fire — used to swallow the native
+    // contextmenu some WebViews ALSO emit for the same long-press, without
+    // a sticky flag that could eat a later legitimate right-click.
+    const longPressFiredAt = useRef(0);
 
     const clear = useCallback(() => {
         if (timer.current !== null) {
@@ -115,6 +119,7 @@ export const useLongPress = ({ disabled, onLongPress, onPress }: UseLongPressOpt
             timer.current = window.setTimeout(() => {
                 longPressed.current = true;
                 suppressNextClick.current = true;
+                longPressFiredAt.current = Date.now();
                 triggerHaptic('impact');
                 onLongPress(persisted);
             }, LONG_PRESS_MS);
@@ -176,5 +181,27 @@ export const useLongPress = ({ disabled, onLongPress, onPress }: UseLongPressOpt
         }
     }, []);
 
-    return { onClickCapture, onPointerCancel, onPointerDown, onPointerMove, onPointerUp };
+    // Some Android WebView configs ALSO fire a native `contextmenu` for the
+    // same long-press the timer already handled — consumers that wire both
+    // (onContextMenu for desktop right-click + onLongPress for touch) would
+    // open two stacked menus from one gesture. Swallow the native event in
+    // capture phase when our timer fired for the gesture still in flight.
+    const onContextMenuCapture = useCallback((event: React.MouseEvent<HTMLElement>) => {
+        // Time-bounded, not flag-based: a sticky flag would persist past the
+        // gesture (mouse pointerdowns return early and never reset it) and
+        // swallow a later legitimate desktop right-click.
+        if (Date.now() - longPressFiredAt.current < 800) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+    }, []);
+
+    return {
+        onClickCapture,
+        onContextMenuCapture,
+        onPointerCancel,
+        onPointerDown,
+        onPointerMove,
+        onPointerUp,
+    };
 };

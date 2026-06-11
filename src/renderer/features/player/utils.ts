@@ -145,19 +145,20 @@ export const getSongsByIds = async (args: {
     serverId: string;
 }): Promise<SongListResponse> => {
     const { id, queryClient, serverId } = args;
-    const items: Song[] = [];
 
-    for (const songId of id) {
-        const song = await queryClient.fetchQuery({
-            ...songsQueries.detail({
-                query: { id: songId },
-                serverId,
+    // Parallel per-id fetches — pins are few, and serial awaits made
+    // multi-pin enqueues pay N round-trips back-to-back.
+    const fetched = await Promise.all(
+        id.map((songId) =>
+            queryClient.fetchQuery({
+                ...songsQueries.detail({
+                    query: { id: songId },
+                    serverId,
+                }),
             }),
-        });
-        if (song) {
-            items.push(song as Song);
-        }
-    }
+        ),
+    );
+    const items = fetched.filter((song): song is Song => Boolean(song)) as Song[];
 
     return {
         items,

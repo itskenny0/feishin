@@ -472,6 +472,9 @@ export const initRemoteLogShipper = (): void => {
 
 /** Test seam: tear down and allow re-init. */
 export const __resetRemoteLogShipperForTests = (): void => {
+    // A pending debounced apply would otherwise outlive the reset and
+    // re-start the shipper after teardown.
+    cancelPendingApply();
     stop();
     initialized = false;
 };
