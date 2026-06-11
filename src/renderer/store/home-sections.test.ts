@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
     DEFAULT_HOME_ITEM_ORDER,
+    DEFAULT_HOME_ITEMS_ENABLED,
     HomeItem,
     resolveHomeSections,
 } from '/@/renderer/store/settings.store';
@@ -9,11 +10,15 @@ import {
 const ids = (items: Array<{ disabled: boolean; id: string }>) => items.map((i) => i.id);
 
 describe('resolveHomeSections', () => {
-    it('returns every live section in canonical order, all enabled, for empty input', () => {
+    it('returns every live section in canonical order with default flags for empty input', () => {
         for (const input of [undefined, null, []] as const) {
             const resolved = resolveHomeSections(input);
             expect(ids(resolved)).toEqual(DEFAULT_HOME_ITEM_ORDER);
-            expect(resolved.every((i) => i.disabled === false)).toBe(true);
+            // Lean default: pinned / quick picks / recently played /
+            // most played / playlists on, discovery shelves opt-in.
+            expect(resolved.map((i) => [i.id, i.disabled])).toEqual(
+                DEFAULT_HOME_ITEM_ORDER.map((id) => [id, !DEFAULT_HOME_ITEMS_ENABLED.has(id)]),
+            );
         }
     });
 
@@ -74,7 +79,7 @@ describe('resolveHomeSections', () => {
         expect(resolved.find((i) => i.id === HomeItem.RANDOM)?.disabled).toBe(false);
     });
 
-    it('appends newly-shipped live sections (enabled) in canonical slots', () => {
+    it('appends newly-shipped live sections (with their default flags) in canonical slots', () => {
         // Simulate a config saved before quickPicks/artists/playlists existed.
         const persisted = [
             { disabled: false, id: HomeItem.RECENTLY_PLAYED },
@@ -92,9 +97,10 @@ describe('resolveHomeSections', () => {
         for (const id of DEFAULT_HOME_ITEM_ORDER) {
             expect(map.has(id)).toBe(true);
         }
-        // ...and the ones not in the saved config default to enabled.
+        // ...and the ones not in the saved config follow the DEFAULT flags:
+        // quick picks / playlists ship enabled, artists ships disabled.
         expect(map.get(HomeItem.QUICK_PICKS)).toBe(false);
-        expect(map.get(HomeItem.ARTISTS)).toBe(false);
+        expect(map.get(HomeItem.ARTISTS)).toBe(true);
         expect(map.get(HomeItem.PLAYLISTS)).toBe(false);
     });
 

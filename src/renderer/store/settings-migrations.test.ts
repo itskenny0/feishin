@@ -82,10 +82,17 @@ describe('settings migrations', () => {
         expect(ids).not.toContain('libraryStats');
         expect(ids).toContain('quickPicks');
         expect(ids).toContain('pinned');
-        // Canonical order, everything enabled — exactly what the redesigned
-        // route rendered before sections became configurable.
+        // Canonical order with the lean default flags: pinned / quick picks /
+        // recently played / most played / playlists on, the rest opt-in.
         expect(ids[0]).toBe('pinned');
-        expect(items.every((i) => !i.disabled)).toBe(true);
+        const enabled = items.filter((i) => !i.disabled).map((i) => i.id);
+        expect(enabled).toEqual([
+            'pinned',
+            'quickPicks',
+            'recentlyPlayed',
+            'mostPlayed',
+            'playlists',
+        ]);
     });
 
     it('also resets v62-migrated blobs (order regression shipped in 0008)', async () => {

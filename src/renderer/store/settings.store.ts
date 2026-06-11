@@ -1284,13 +1284,27 @@ export const DEFAULT_HOME_ITEM_ORDER: HomeItem[] = [
     HomeItem.QUICK_PICKS,
     HomeItem.RECENTLY_PLAYED,
     HomeItem.MOST_PLAYED,
-    HomeItem.RECENTLY_ADDED,
     HomeItem.ARTISTS,
+    HomeItem.RECENTLY_ADDED,
     HomeItem.RANDOM,
     HomeItem.PLAYLISTS,
     HomeItem.RECENTLY_RELEASED,
     HomeItem.GENRES,
 ];
+
+/**
+ * Default enabled-state per section. A lean homepage out of the box —
+ * pins, quick picks, the two played shelves, and playlists; the heavier
+ * discovery shelves (artists, newly added, explore, recently released,
+ * genres) are opt-in via Settings → Home page.
+ */
+export const DEFAULT_HOME_ITEMS_ENABLED: ReadonlySet<HomeItem> = new Set([
+    HomeItem.MOST_PLAYED,
+    HomeItem.PINNED,
+    HomeItem.PLAYLISTS,
+    HomeItem.QUICK_PICKS,
+    HomeItem.RECENTLY_PLAYED,
+]);
 
 /**
  * Resolve a persisted `homeItems` array (which may be empty, contain legacy
@@ -1322,7 +1336,7 @@ export const resolveHomeSections = (
 
     for (const id of DEFAULT_HOME_ITEM_ORDER) {
         if (!seen.has(id)) {
-            resolved.push({ disabled: false, id });
+            resolved.push({ disabled: !DEFAULT_HOME_ITEMS_ENABLED.has(id), id });
         }
     }
 
@@ -1572,7 +1586,7 @@ export const sidebarItems: SidebarItemType[] = [
 // Built from DEFAULT_HOME_ITEM_ORDER (not Object.values(HomeItem)) so the dead
 // legacy enum members never leak into a fresh config.
 const homeItems: SortableItem<HomeItem>[] = DEFAULT_HOME_ITEM_ORDER.map((id) => ({
-    disabled: false,
+    disabled: !DEFAULT_HOME_ITEMS_ENABLED.has(id),
     id,
 }));
 
@@ -3635,10 +3649,20 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
+                if (version <= 63) {
+                    // New default home layout (lean: pinned / quick picks /
+                    // recently played / most played / playlists; discovery
+                    // shelves opt-in). One-time reset, mirroring the v63
+                    // order reset.
+                    if (state.general && Array.isArray(state.general.homeItems)) {
+                        state.general.homeItems = resolveHomeSections(null);
+                    }
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 63,
+            version: 64,
         },
     ),
 );
