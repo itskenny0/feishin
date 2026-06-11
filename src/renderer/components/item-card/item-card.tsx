@@ -1,7 +1,7 @@
 import clsx from 'clsx';
 import { AnimatePresence } from 'motion/react';
-import { Fragment, memo, ReactNode, useCallback, useMemo, useState } from 'react';
-import { generatePath, Link } from 'react-router';
+import { Fragment, memo, ReactNode, useCallback, useMemo, useRef, useState } from 'react';
+import { generatePath, Link, useNavigate } from 'react-router';
 
 import styles from './item-card.module.css';
 
@@ -18,6 +18,7 @@ import {
 import { ItemControls } from '/@/renderer/components/item-list/types';
 import { JoinedArtists } from '/@/renderer/features/albums/components/joined-artists';
 import { useDragDrop } from '/@/renderer/hooks/use-drag-drop';
+import { useLongPress } from '/@/renderer/hooks/use-long-press';
 import { prefetchAlbumDetail, preloadRoute } from '/@/renderer/router/route-preloaders';
 import { AppRoute } from '/@/renderer/router/routes';
 import { useShowFilesystemNameForAlbums, useShowRatings } from '/@/renderer/store';
@@ -223,6 +224,7 @@ const ItemCardStandardImageArea = memo(function ItemCardStandardImageArea({
     withControls?: boolean;
 }) {
     const [showControls, setShowControls] = useState(false);
+    const navigate = useNavigate();
 
     const handleMouseEnter = () => {
         if (withControls) {
@@ -239,6 +241,50 @@ const ItemCardStandardImageArea = memo(function ItemCardStandardImageArea({
     const imageContainerClassName = clsx(styles.imageContainer, {
         [styles.isRound]: isRound,
     });
+
+    // When the card renders as a navigation <Link> (no internalState — the home
+    // carousels / pinned-style surfaces), this is the branch that turns a touch
+    // tap into navigation explicitly. The bare <Link> default click is
+    // unreliable inside the Android WebView (the gesture pipeline can swallow
+    // the synthesised click after a tap), so on touch we navigate from the
+    // long-press hook's onPress instead. Long-press opens the item's context
+    // menu via the existing handleContextMenu → controls.onMore path.
+    const isLinkBranch = !!enableNavigation && !!navigationPath && (imageAsLink ?? !internalState);
+
+    // A touch tap fires both the long-press hook's onPress (which navigates)
+    // and, a moment later, the browser-synthesised click on the <Link> (which
+    // would navigate AGAIN, pushing a duplicate history entry). Swallow that
+    // one trailing click so back-navigation isn't doubled. Desktop never sets
+    // this (useLongPress ignores mouse pointers) so the native click path is
+    // untouched there.
+    const suppressNextClickRef = useRef(false);
+
+    const longPressHandlers = useLongPress({
+        onLongPress: (event) => handleContextMenu(event as React.MouseEvent<HTMLElement>),
+        onPress: () => {
+            if (isLinkBranch && navigationPath) {
+                suppressNextClickRef.current = true;
+                navigate(navigationPath, { state: { item: data } });
+            }
+        },
+    });
+
+    // Capture-phase guard: swallow both the post-long-press click (handled by
+    // the hook) AND the post-onPress duplicate-navigation click. Capture runs
+    // before React Router's <Link> onClick, so preventDefault here stops the
+    // native navigation cleanly.
+    const handleAreaClickCapture = useCallback(
+        (event: React.MouseEvent<HTMLElement>) => {
+            if (suppressNextClickRef.current) {
+                suppressNextClickRef.current = false;
+                event.preventDefault();
+                event.stopPropagation();
+                return;
+            }
+            longPressHandlers.onClickCapture(event);
+        },
+        [longPressHandlers],
+    );
 
     const isFavorite = 'userFavorite' in data && (data as { userFavorite: boolean }).userFavorite;
     const userRating =
@@ -291,17 +337,22 @@ const ItemCardStandardImageArea = memo(function ItemCardStandardImageArea({
         </>
     );
 
-    return enableNavigation && navigationPath && (imageAsLink ?? !internalState) ? (
+    return isLinkBranch ? (
         <Link
             className={imageContainerClassName}
             draggable={false}
             onClick={handleImageClick}
+            onClickCapture={handleAreaClickCapture}
             onContextMenu={handleContextMenu}
             onDragStart={handleLinkDragStart}
             onMouseEnter={handleMouseEnter}
             onMouseLeave={handleMouseLeave}
+            onPointerCancel={longPressHandlers.onPointerCancel}
+            onPointerDown={longPressHandlers.onPointerDown}
+            onPointerMove={longPressHandlers.onPointerMove}
+            onPointerUp={longPressHandlers.onPointerUp}
             state={{ item: data }}
-            to={navigationPath}
+            to={navigationPath as string}
         >
             {imageContainerContent}
         </Link>
@@ -309,9 +360,14 @@ const ItemCardStandardImageArea = memo(function ItemCardStandardImageArea({
         <div
             className={imageContainerClassName}
             onClick={handleImageClick}
+            onClickCapture={handleAreaClickCapture}
             onContextMenu={handleContextMenu}
             onMouseEnter={handleMouseEnter}
             onMouseLeave={handleMouseLeave}
+            onPointerCancel={longPressHandlers.onPointerCancel}
+            onPointerDown={longPressHandlers.onPointerDown}
+            onPointerMove={longPressHandlers.onPointerMove}
+            onPointerUp={longPressHandlers.onPointerUp}
         >
             {imageContainerContent}
         </div>
@@ -358,6 +414,7 @@ const CompactItemCardImageArea = memo(function CompactItemCardImageArea({
     withControls?: boolean;
 }) {
     const [showControls, setShowControls] = useState(false);
+    const navigate = useNavigate();
 
     const handleMouseEnter = () => {
         if (withControls) {
@@ -374,6 +431,35 @@ const CompactItemCardImageArea = memo(function CompactItemCardImageArea({
     const imageContainerClassName = clsx(styles.imageContainer, {
         [styles.isRound]: isRound,
     });
+
+    // See ItemCardStandardImageArea: explicit touch tap → navigate (Android
+    // WebView swallows the bare <Link> tap click), long-press → context menu.
+    const isLinkBranch = !!enableNavigation && !!navigationPath && (imageAsLink ?? !internalState);
+
+    const suppressNextClickRef = useRef(false);
+
+    const longPressHandlers = useLongPress({
+        onLongPress: (event) => handleContextMenu(event as React.MouseEvent<HTMLElement>),
+        onPress: () => {
+            if (isLinkBranch && navigationPath) {
+                suppressNextClickRef.current = true;
+                navigate(navigationPath, { state: { item: data } });
+            }
+        },
+    });
+
+    const handleAreaClickCapture = useCallback(
+        (event: React.MouseEvent<HTMLElement>) => {
+            if (suppressNextClickRef.current) {
+                suppressNextClickRef.current = false;
+                event.preventDefault();
+                event.stopPropagation();
+                return;
+            }
+            longPressHandlers.onClickCapture(event);
+        },
+        [longPressHandlers],
+    );
 
     const isFavorite = 'userFavorite' in data && (data as { userFavorite: boolean }).userFavorite;
     const userRating =
@@ -442,17 +528,22 @@ const CompactItemCardImageArea = memo(function CompactItemCardImageArea({
         </>
     );
 
-    return enableNavigation && navigationPath && (imageAsLink ?? !internalState) ? (
+    return isLinkBranch ? (
         <Link
             className={imageContainerClassName}
             draggable={false}
             onClick={handleImageClick}
+            onClickCapture={handleAreaClickCapture}
             onContextMenu={handleContextMenu}
             onDragStart={handleLinkDragStart}
             onMouseEnter={handleMouseEnter}
             onMouseLeave={handleMouseLeave}
+            onPointerCancel={longPressHandlers.onPointerCancel}
+            onPointerDown={longPressHandlers.onPointerDown}
+            onPointerMove={longPressHandlers.onPointerMove}
+            onPointerUp={longPressHandlers.onPointerUp}
             state={{ item: data }}
-            to={navigationPath}
+            to={navigationPath as string}
         >
             {imageContainerContent}
         </Link>
@@ -460,9 +551,14 @@ const CompactItemCardImageArea = memo(function CompactItemCardImageArea({
         <div
             className={imageContainerClassName}
             onClick={handleImageClick}
+            onClickCapture={handleAreaClickCapture}
             onContextMenu={handleContextMenu}
             onMouseEnter={handleMouseEnter}
             onMouseLeave={handleMouseLeave}
+            onPointerCancel={longPressHandlers.onPointerCancel}
+            onPointerDown={longPressHandlers.onPointerDown}
+            onPointerMove={longPressHandlers.onPointerMove}
+            onPointerUp={longPressHandlers.onPointerUp}
         >
             {imageContainerContent}
         </div>

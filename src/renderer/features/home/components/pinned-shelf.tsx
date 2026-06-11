@@ -7,8 +7,10 @@ import qpStyles from './spotify-home/quick-picks.module.css';
 
 import { ItemImage } from '/@/renderer/components/item-image/item-image';
 import { getTitlePath } from '/@/renderer/components/item-list/helpers/get-title-path';
+import { ContextMenuController } from '/@/renderer/features/context-menu/context-menu-controller';
 import { ShelfTitle } from '/@/renderer/features/home/components/spotify-home/shelf-title';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
+import { useLongPress } from '/@/renderer/hooks/use-long-press';
 import { useCurrentServerId, usePlayButtonBehavior } from '/@/renderer/store';
 import { Pin, PinItemType, usePins, usePinsActions } from '/@/renderer/store/pins.store';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
@@ -17,6 +19,24 @@ import { LibraryItem } from '/@/shared/types/domain-types';
 
 const isRoundType = (itemType: PinItemType) =>
     itemType === LibraryItem.ALBUM_ARTIST || itemType === LibraryItem.ARTIST;
+
+/**
+ * Reconstruct the minimal entity the per-type context menu needs from a
+ * stored Pin. The context-menu actions read `id` / `_serverId` / `name`
+ * (and optionally the image fields for the preview); the menu picked by
+ * `cmd.type` is the same one the rest of the app uses for that item type,
+ * so the entries match (play, add to playlist, favorite, pin/unpin, go to,
+ * etc.) without hand-building any menu here. `_itemType` mirrors the type
+ * so downstream `_itemType`-based branching resolves correctly.
+ */
+const pinToContextItem = (pin: Pin) => ({
+    _itemType: pin.itemType,
+    _serverId: pin.serverId,
+    id: pin.id,
+    imageId: pin.imageId ?? null,
+    imageUrl: pin.imageUrl ?? null,
+    name: pin.name,
+});
 
 /**
  * One pinned entry, rendered EXACTLY like the quick-picks tiles right below
@@ -59,6 +79,38 @@ const PinnedTile = memo(({ pin }: { pin: Pin }) => {
         [pin.id, pin.itemType, pin.serverId, removePin],
     );
 
+    // Open the pin's per-type context menu (same menu the rest of the app
+    // uses for that item type). Shared by desktop right-click and touch
+    // long-press. Bails if the gesture started on the unpin button so a
+    // press there only unpins.
+    const openContextMenu = useCallback(
+        (event: React.MouseEvent<HTMLElement>) => {
+            const target = event.target as HTMLElement;
+            if (target.closest('button')) {
+                return;
+            }
+            event.preventDefault();
+            event.stopPropagation();
+            ContextMenuController.call({
+                cmd: {
+                    items: [pinToContextItem(pin)] as never,
+                    type: pin.itemType as never,
+                },
+                event,
+            });
+        },
+        [pin],
+    );
+
+    // Tap keeps the existing onClick path (a plain div's click fires reliably
+    // on touch — unlike the React Router <Link> tap the carousels needed
+    // patched). Only long-press is added here; onClickCapture swallows the
+    // synthesised click that follows a long-press so the menu doesn't also
+    // navigate/play.
+    const longPressHandlers = useLongPress({
+        onLongPress: (event) => openContextMenu(event as React.MouseEvent<HTMLElement>),
+    });
+
     const handleKeyDown = useCallback(
         (e: React.KeyboardEvent) => {
             if (e.key === 'Enter' || e.key === ' ') {
@@ -74,7 +126,13 @@ const PinnedTile = memo(({ pin }: { pin: Pin }) => {
             aria-label={pin.name}
             className={qpStyles.tile}
             onClick={handleOpen}
+            onClickCapture={longPressHandlers.onClickCapture}
+            onContextMenu={openContextMenu}
             onKeyDown={handleKeyDown}
+            onPointerCancel={longPressHandlers.onPointerCancel}
+            onPointerDown={longPressHandlers.onPointerDown}
+            onPointerMove={longPressHandlers.onPointerMove}
+            onPointerUp={longPressHandlers.onPointerUp}
             role="button"
             tabIndex={0}
         >
@@ -91,7 +149,13 @@ const PinnedTile = memo(({ pin }: { pin: Pin }) => {
             <Text className={qpStyles.tileTitle} isNoSelect overflow="hidden">
                 {pin.name}
             </Text>
-            <div className={styles.unpinButton}>
+            <div
+                className={styles.unpinButton}
+                // Keep the long-press gesture (armed on the tile's pointerdown)
+                // from ever starting when the press lands on the unpin button —
+                // a press here only unpins, never pops the context menu.
+                onPointerDown={(e) => e.stopPropagation()}
+            >
                 <ActionIcon
                     aria-label={t('action.unpinFromHome', { postProcess: 'sentenceCase' })}
                     icon="unpin"

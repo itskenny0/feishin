@@ -1,13 +1,15 @@
-import { MouseEvent, Suspense, useCallback } from 'react';
+import { MouseEvent, Suspense, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { generatePath, Link } from 'react-router';
+import { generatePath, Link, useNavigate } from 'react-router';
 
 import styles from './quick-picks.module.css';
 
 import { ItemImage } from '/@/renderer/components/item-image/item-image';
 import { useAlbumInfiniteListSuspenseQuery } from '/@/renderer/features/albums/queries/albums-queries';
+import { ContextMenuController } from '/@/renderer/features/context-menu/context-menu-controller';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
 import { useSongListInfinite } from '/@/renderer/features/songs/components/song-infinite-carousel';
+import { useLongPress } from '/@/renderer/hooks/use-long-press';
 import { prefetchAlbumDetail } from '/@/renderer/router/route-preloaders';
 import { AppRoute } from '/@/renderer/router/routes';
 import { useCurrentServer, useCurrentServerId, usePlayButtonBehavior } from '/@/renderer/store';
@@ -64,22 +66,121 @@ interface QuickPickItem {
  * space, and the tap target is the tile itself). A truly empty history
  * collapses the whole zone.
  */
-const QuickPickTiles = ({ items }: { items: QuickPickItem[] }) => {
+const QuickPickTile = ({ item }: { item: QuickPickItem }) => {
     const { t } = useTranslation();
+    const navigate = useNavigate();
     const serverId = useCurrentServerId();
     const playButtonBehavior = usePlayButtonBehavior();
     const { addToQueueByFetch } = usePlayer();
 
+    const to = generatePath(AppRoute.LIBRARY_ALBUMS_DETAIL, { albumId: item.id });
+
     const handlePlay = useCallback(
-        (event: MouseEvent, albumId: string) => {
+        (event: MouseEvent) => {
             event.preventDefault();
             event.stopPropagation();
             if (!serverId) return;
-            addToQueueByFetch(serverId, [albumId], LibraryItem.ALBUM, playButtonBehavior);
+            addToQueueByFetch(serverId, [item.id], LibraryItem.ALBUM, playButtonBehavior);
         },
-        [addToQueueByFetch, playButtonBehavior, serverId],
+        [addToQueueByFetch, item.id, playButtonBehavior, serverId],
     );
 
+    // Open the album context menu. The tile always represents an ALBUM, so
+    // reuse the app's album menu (play / add to playlist / favorite / pin /
+    // go to / …). Build the minimal album entity the actions read; prefer the
+    // full album from routeState when the source stream carried one. Bail when
+    // the gesture started on the play button so a press there only plays.
+    const openContextMenu = useCallback(
+        (event: React.MouseEvent<HTMLElement>) => {
+            const target = event.target as HTMLElement;
+            if (target.closest('button')) {
+                return;
+            }
+            event.preventDefault();
+            event.stopPropagation();
+            const albumEntity = item.routeState ?? {
+                _itemType: LibraryItem.ALBUM,
+                _serverId: serverId,
+                id: item.id,
+                imageId: item.imageId ?? null,
+                imageUrl: item.imageUrl ?? null,
+                name: item.name,
+            };
+            ContextMenuController.call({
+                cmd: { items: [albumEntity] as never, type: LibraryItem.ALBUM },
+                event,
+            });
+        },
+        [item, serverId],
+    );
+
+    // Same touch-tap fix as the carousels: the bare <Link> tap click is
+    // unreliable in the Android WebView, so navigate from the long-press
+    // hook's onPress on touch and swallow the trailing synthesised click.
+    const suppressNextClickRef = useRef(false);
+
+    const longPressHandlers = useLongPress({
+        onLongPress: (event) => openContextMenu(event as React.MouseEvent<HTMLElement>),
+        onPress: () => {
+            suppressNextClickRef.current = true;
+            navigate(to, item.routeState ? { state: { item: item.routeState } } : undefined);
+        },
+    });
+
+    const handleClickCapture = useCallback(
+        (event: React.MouseEvent<HTMLElement>) => {
+            if (suppressNextClickRef.current) {
+                suppressNextClickRef.current = false;
+                event.preventDefault();
+                event.stopPropagation();
+                return;
+            }
+            longPressHandlers.onClickCapture(event);
+        },
+        [longPressHandlers],
+    );
+
+    return (
+        <Link
+            className={styles.tile}
+            onClickCapture={handleClickCapture}
+            onContextMenu={openContextMenu}
+            onMouseEnter={() => prefetchAlbumDetail(item.id)}
+            onPointerCancel={longPressHandlers.onPointerCancel}
+            onPointerDown={(e) => {
+                prefetchAlbumDetail(item.id);
+                longPressHandlers.onPointerDown(e);
+            }}
+            onPointerMove={longPressHandlers.onPointerMove}
+            onPointerUp={longPressHandlers.onPointerUp}
+            state={item.routeState ? { item: item.routeState } : undefined}
+            to={to}
+        >
+            <div className={styles.tileImage}>
+                <ItemImage
+                    id={item.imageId}
+                    itemType={LibraryItem.ALBUM}
+                    src={item.imageUrl ?? undefined}
+                    type="itemCard"
+                />
+            </div>
+            <Text className={styles.tileTitle} isNoSelect overflow="hidden">
+                {item.name}
+            </Text>
+            <button
+                aria-label={t('player.play', { defaultValue: 'Play' })}
+                className={styles.playButton}
+                onClick={handlePlay}
+                onPointerDown={(e) => e.stopPropagation()}
+                type="button"
+            >
+                <Icon icon="mediaPlay" size="lg" />
+            </button>
+        </Link>
+    );
+};
+
+const QuickPickTiles = ({ items }: { items: QuickPickItem[] }) => {
     if (items.length === 0) {
         return null;
     }
@@ -87,34 +188,7 @@ const QuickPickTiles = ({ items }: { items: QuickPickItem[] }) => {
     return (
         <div className={styles.grid}>
             {items.map((item) => (
-                <Link
-                    className={styles.tile}
-                    key={item.id}
-                    onMouseEnter={() => prefetchAlbumDetail(item.id)}
-                    onPointerDown={() => prefetchAlbumDetail(item.id)}
-                    state={item.routeState ? { item: item.routeState } : undefined}
-                    to={generatePath(AppRoute.LIBRARY_ALBUMS_DETAIL, { albumId: item.id })}
-                >
-                    <div className={styles.tileImage}>
-                        <ItemImage
-                            id={item.imageId}
-                            itemType={LibraryItem.ALBUM}
-                            src={item.imageUrl ?? undefined}
-                            type="itemCard"
-                        />
-                    </div>
-                    <Text className={styles.tileTitle} isNoSelect overflow="hidden">
-                        {item.name}
-                    </Text>
-                    <button
-                        aria-label={t('player.play', { defaultValue: 'Play' })}
-                        className={styles.playButton}
-                        onClick={(event) => handlePlay(event, item.id)}
-                        type="button"
-                    >
-                        <Icon icon="mediaPlay" size="lg" />
-                    </button>
-                </Link>
+                <QuickPickTile item={item} key={item.id} />
             ))}
         </div>
     );
