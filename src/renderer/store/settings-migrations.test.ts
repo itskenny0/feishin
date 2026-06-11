@@ -15,7 +15,10 @@ const loadStore = async () => {
     return module.useSettingsStore;
 };
 
-describe('settings migrations', () => {
+// Each test re-imports the settings store from scratch (vi.resetModules +
+// dynamic import of the full zod schema graph) — fast standalone but slow
+// enough under full-suite worker contention to trip the default 5s timeout.
+describe('settings migrations', { timeout: 20_000 }, () => {
     beforeEach(() => {
         localStorage.clear();
     });
