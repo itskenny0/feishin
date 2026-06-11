@@ -422,6 +422,27 @@ const apply = (settings: { enabled: boolean; endpoint: string }): void => {
     }
 };
 
+// The endpoint field writes through on every keystroke, and a naive apply()
+// restarted the shipper per character — the receiver logged ~20 two-line
+// sessions for one URL edit (observed 2026-06-11). Endpoint EDITS settle for
+// a moment before reconnecting; flipping the enabled switch (and the
+// boot-time apply) stays immediate.
+const APPLY_DEBOUNCE_MS = 1500;
+let applyTimer: null | ReturnType<typeof setTimeout> = null;
+const cancelPendingApply = (): void => {
+    if (applyTimer) {
+        clearTimeout(applyTimer);
+        applyTimer = null;
+    }
+};
+const applyDebounced = (settings: { enabled: boolean; endpoint: string }): void => {
+    cancelPendingApply();
+    applyTimer = setTimeout(() => {
+        applyTimer = null;
+        apply(settings);
+    }, APPLY_DEBOUNCE_MS);
+};
+
 let initialized = false;
 
 /** Boot-time entry point. Idempotent; subscribes to the settings store. */
@@ -429,10 +450,20 @@ export const initRemoteLogShipper = (): void => {
     if (initialized) return;
     initialized = true;
 
-    apply(useSettingsStore.getState().remoteDebug);
+    let prevApplied = useSettingsStore.getState().remoteDebug;
+    apply(prevApplied);
     useSettingsStore.subscribe(
         (state) => state.remoteDebug,
-        (remoteDebug) => apply(remoteDebug),
+        (remoteDebug) => {
+            const enabledChanged = remoteDebug.enabled !== prevApplied.enabled;
+            prevApplied = remoteDebug;
+            if (enabledChanged) {
+                cancelPendingApply();
+                apply(remoteDebug);
+            } else {
+                applyDebounced(remoteDebug);
+            }
+        },
         {
             equalityFn: (a, b) => a.enabled === b.enabled && a.endpoint === b.endpoint,
         },
