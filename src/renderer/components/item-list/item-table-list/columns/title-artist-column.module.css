@@ -57,6 +57,19 @@ a.title {
     user-select: none;
 }
 
+/* JoinedArtists renders a Mantine Text whose root resets white-space to
+   `normal`, which overrides the inherited `nowrap` above and lets a multi-
+   artist line wrap to several lines — overflowing the fixed-height, absolutely
+   positioned virtual row into the slot below. Pin every descendant to a single
+   clipped line (same idiom as mobile-track-row-column.module.css). */
+.artists :global(*) {
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .folder-icon {
     color: black;
     fill: rgb(255 215 100);
