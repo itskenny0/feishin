@@ -91,9 +91,21 @@ export interface ItemTableListColumn extends CellComponentProps<TableItemProps> 
 export const isSameCellStyle = (a?: CSSProperties, b?: CSSProperties): boolean => {
     if (a === b) return true;
     if (!a || !b) return false;
+    // react-window-v2's Grid positions every cell with
+    // `transform: translate(x, y)` and NEVER writes `top` — the row's
+    // vertical offset (and the pinned-grid horizontal scroll offset) lives
+    // ENTIRELY in `transform`, with the RTL variant using `right`. An
+    // earlier version of this comparator only checked
+    // top/left/width/height/position, so a cell whose ONLY change was its
+    // offset bailed out of the memo and stayed painted at its STALE
+    // transform — stacking its text over the cell that did move (the
+    // intermittent two-rows-in-one-slot double-paint in the queue panel and
+    // tracks table, device 2026-06-11).
     return (
         a.top === b.top &&
         a.left === b.left &&
+        a.right === b.right &&
+        a.transform === b.transform &&
         a.width === b.width &&
         a.height === b.height &&
         a.position === b.position
