@@ -59,7 +59,10 @@ describe('settings migrations', () => {
         expect(store.getState().peerSync.onboarded).toBe(false);
     });
 
-    it('rewrites persisted home sections through the resolver', async () => {
+    // v62 preserved stale persisted order that the redesigned home had been
+    // ignoring — honoring it reshuffled everyone's homepage (reported on
+    // device, 2026-06-11). v63 resets to the canonical order once.
+    it('resets home sections to canonical order (stale pre-redesign order)', async () => {
         seed(
             {
                 general: {
@@ -77,11 +80,31 @@ describe('settings migrations', () => {
         const items = store.getState().general.homeItems;
         const ids = items.map((i) => i.id);
         expect(ids).not.toContain('libraryStats');
-        // Saved order + flags preserved, new live sections appended enabled.
-        expect(ids[0]).toBe('recentlyPlayed');
-        expect(items[0].disabled).toBe(true);
         expect(ids).toContain('quickPicks');
         expect(ids).toContain('pinned');
+        // Canonical order, everything enabled — exactly what the redesigned
+        // route rendered before sections became configurable.
+        expect(ids[0]).toBe('pinned');
+        expect(items.every((i) => !i.disabled)).toBe(true);
+    });
+
+    it('also resets v62-migrated blobs (order regression shipped in 0008)', async () => {
+        seed(
+            {
+                general: {
+                    homeItems: [
+                        { disabled: false, id: 'random' },
+                        { disabled: false, id: 'recentlyPlayed' },
+                    ],
+                },
+            },
+            62,
+        );
+
+        const store = await loadStore();
+        const ids = store.getState().general.homeItems.map((i) => i.id);
+        expect(ids[0]).toBe('pinned');
+        expect(ids.length).toBeGreaterThan(8);
     });
 
     it('normalizes the retired waveform seekbar view back to the slider', async () => {

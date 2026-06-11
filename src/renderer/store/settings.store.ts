@@ -3622,10 +3622,23 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
+                if (version <= 62) {
+                    // v62 preserved the user's persisted homeItems ORDER — but
+                    // the redesigned home route had been IGNORING that setting
+                    // for releases, so the persisted order was stale data from
+                    // the pre-redesign panel and honoring it visibly reshuffled
+                    // everyone's homepage. Reset once to the canonical order
+                    // (exactly what the route rendered before sections became
+                    // configurable); users reorder from here intentionally.
+                    if (state.general && Array.isArray(state.general.homeItems)) {
+                        state.general.homeItems = resolveHomeSections(null);
+                    }
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 62,
+            version: 63,
         },
     ),
 );

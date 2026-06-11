@@ -79,6 +79,21 @@ export const DraggableItems = <K extends string, T extends SortableItem<K>>({
         );
     }, []);
 
+    // Touch-friendly reorder: Framer's drag needs touch-action:none + a
+    // steady finger, which is fiddly on phones — the arrow buttons move a
+    // row one slot per tap and work everywhere.
+    const handleMove = useCallback((id: string, direction: -1 | 1) => {
+        setLocalItems((current) => {
+            const index = current.findIndex((item) => item.id === id);
+            const target = index + direction;
+            if (index === -1 || target < 0 || target >= current.length) return current;
+            const next = [...current];
+            const [moved] = next.splice(index, 1);
+            next.splice(target, 0, moved);
+            return next;
+        });
+    }, []);
+
     const titleText = t(title);
     const descriptionText = t(description, {
         context: 'description',
@@ -136,11 +151,14 @@ export const DraggableItems = <K extends string, T extends SortableItem<K>>({
                     style={{ userSelect: 'none' }}
                     values={localItems}
                 >
-                    {localItems.map((item) => (
+                    {localItems.map((item, index) => (
                         <DraggableItem
                             handleChangeDisabled={handleChangeDisabled}
+                            isFirst={index === 0}
+                            isLast={index === localItems.length - 1}
                             item={item}
                             key={item.id}
+                            onMove={handleMove}
                             value={translatedItemMap[item.id]}
                         />
                     ))}

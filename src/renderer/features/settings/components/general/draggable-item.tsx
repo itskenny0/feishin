@@ -16,7 +16,11 @@ const DragHandle = ({ dragControls }: { dragControls: DragControls }) => {
             }}
             onPointerDown={(event) => dragControls.start(event)}
             size="xs"
-            style={{ cursor: 'grab' }}
+            // touchAction none is REQUIRED for Framer Motion drag on touch
+            // devices — without it the browser claims the gesture for
+            // scrolling and the drag never starts (reported on Android,
+            // 2026-06-11).
+            style={{ cursor: 'grab', touchAction: 'none' }}
             variant="transparent"
         />
     );
@@ -24,7 +28,11 @@ const DragHandle = ({ dragControls }: { dragControls: DragControls }) => {
 
 export interface DraggableItemProps {
     handleChangeDisabled: (id: string, e: boolean) => void;
+    isFirst: boolean;
+    isLast: boolean;
     item: SidebarItem;
+    /** Touch-friendly fallback: move the row one slot without dragging. */
+    onMove: (id: string, direction: -1 | 1) => void;
     value: string;
 }
 
@@ -33,7 +41,14 @@ interface SidebarItem {
     id: string;
 }
 
-export const DraggableItem = ({ handleChangeDisabled, item, value }: DraggableItemProps) => {
+export const DraggableItem = ({
+    handleChangeDisabled,
+    isFirst,
+    isLast,
+    item,
+    onMove,
+    value,
+}: DraggableItemProps) => {
     const dragControls = useDragControls();
 
     return (
@@ -45,7 +60,25 @@ export const DraggableItem = ({ handleChangeDisabled, item, value }: DraggableIt
                     size="xs"
                 />
                 <DragHandle dragControls={dragControls} />
-                <Text>{value}</Text>
+                <Text style={{ flex: 1 }}>{value}</Text>
+                <ActionIcon
+                    aria-label={t('common.moveUp', { defaultValue: 'Move up' })}
+                    disabled={isFirst}
+                    icon="arrowUp"
+                    iconProps={{ size: 'md' }}
+                    onClick={() => onMove(item.id, -1)}
+                    size="xs"
+                    variant="transparent"
+                />
+                <ActionIcon
+                    aria-label={t('common.moveDown', { defaultValue: 'Move down' })}
+                    disabled={isLast}
+                    icon="arrowDown"
+                    iconProps={{ size: 'md' }}
+                    onClick={() => onMove(item.id, 1)}
+                    size="xs"
+                    variant="transparent"
+                />
             </Group>
         </Reorder.Item>
     );
