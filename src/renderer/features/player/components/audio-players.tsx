@@ -19,6 +19,7 @@ import { MediaSessionHook } from '/@/renderer/features/player/hooks/use-media-se
 import { MPRISHook } from '/@/renderer/features/player/hooks/use-mpris';
 import { PlaybackHotkeysHook } from '/@/renderer/features/player/hooks/use-playback-hotkeys';
 import { PowerSaveBlockerHook } from '/@/renderer/features/player/hooks/use-power-save-blocker';
+import { UpcomingCoversPrefetch } from '/@/renderer/features/player/hooks/use-prefetch-upcoming-covers';
 import {
     InitialTimestampRestoreHook,
     QueueRestoreTimestampHook,
@@ -200,6 +201,7 @@ export const AudioPlayers = () => {
             <PeerSyncMount />
             <AutoDJHook />
             <UpcomingLyricsPrefetch />
+            <UpcomingCoversPrefetch />
             <QueueRestoreTimestampHook />
             <InitialTimestampRestoreHook />
             <UpdateCurrentSongHook />
