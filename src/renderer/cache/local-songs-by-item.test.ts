@@ -81,6 +81,24 @@ describe('resolveSongsByItemTypeLocal', () => {
         expect(songs?.map((s) => s.id)).toEqual(['p1', 'p2']);
     });
 
+    // Pinned songs on the homepage play via addToQueueByFetch(serverId, [id],
+    // SONG, …) — the resolver must answer plain song ids too (device,
+    // 2026-06-11: tapping a pinned song did nothing).
+    it('resolves individual songs by id, preserving request order', async () => {
+        mocks.songsRows.push(
+            songRow('s1', 'al1', 1, 1),
+            songRow('s2', 'al1', 1, 2),
+            songRow('s3', 'al2', 1, 1),
+        );
+
+        const songs = await resolveSongsByItemTypeLocal({
+            id: ['s3', 's1'],
+            itemType: LibraryItem.SONG,
+        });
+
+        expect(songs?.map((s) => s.id)).toEqual(['s3', 's1']);
+    });
+
     it('returns undefined when nothing is cached (caller keeps the network error)', async () => {
         const songs = await resolveSongsByItemTypeLocal({
             id: ['al-missing'],

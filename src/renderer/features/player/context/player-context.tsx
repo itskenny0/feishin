@@ -29,6 +29,7 @@ import {
     getGenreSongsById,
     getPlaylistSongsById,
     getSongsByFolder,
+    getSongsByIds,
 } from '/@/renderer/features/player/utils';
 import { selectOfflinePlayable } from '/@/renderer/features/player/utils/offline-play-guard';
 import { playlistsQueries } from '/@/renderer/features/playlists/api/playlists-api';
@@ -1376,6 +1377,19 @@ async function fetchSongsByItemTypeRemote(
 
             const results = await Promise.all(promises);
             songs.push(...results.flatMap((r) => r.items));
+            break;
+        }
+
+        // Explicit song ids — pinned songs on the homepage, play-by-id.
+        // Without this case the switch fell through and "play" on a pinned
+        // song silently queued nothing (device, 2026-06-11).
+        case LibraryItem.SONG: {
+            const songsResponse = await getSongsByIds({
+                id: args.id,
+                queryClient,
+                serverId,
+            });
+            songs.push(...songsResponse.items);
             break;
         }
     }

@@ -62,6 +62,18 @@ export const resolveSongsByItemTypeLocal = async (args: {
                 const songs = rows.map((r) => r.SongPayload).filter(Boolean);
                 return songs.length > 0 ? songs : undefined;
             }
+            // Plain song ids (pinned songs on the homepage, play-by-id).
+            // Preserve the caller's order — there is no natural sort for an
+            // explicit id list.
+            case LibraryItem.SONG: {
+                const rows = await db.songs.where('Id').anyOf(args.id).toArray();
+                if (rows.length === 0) return undefined;
+                const byId = new Map(rows.map((r) => [r.Id as string, r.Payload as Song]));
+                const songs = args.id
+                    .map((id) => byId.get(id))
+                    .filter((s): s is Song => Boolean(s));
+                return songs.length > 0 ? songs : undefined;
+            }
             default:
                 // Genres / folders have no usable local index — let the
                 // caller surface its network error.

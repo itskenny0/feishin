@@ -134,6 +134,38 @@ export const fetchPlaylistSongsBatch = async (args: {
     return res;
 };
 
+/**
+ * Resolve explicit song ids to full Song objects (pinned songs on the
+ * homepage, play-by-id). Fetches each id through songsQueries.detail so the
+ * result shares the detail cache; preserves the caller's id order.
+ */
+export const getSongsByIds = async (args: {
+    id: string[];
+    queryClient: QueryClient;
+    serverId: string;
+}): Promise<SongListResponse> => {
+    const { id, queryClient, serverId } = args;
+    const items: Song[] = [];
+
+    for (const songId of id) {
+        const song = await queryClient.fetchQuery({
+            ...songsQueries.detail({
+                query: { id: songId },
+                serverId,
+            }),
+        });
+        if (song) {
+            items.push(song as Song);
+        }
+    }
+
+    return {
+        items,
+        startIndex: 0,
+        totalRecordCount: items.length,
+    };
+};
+
 export const getAlbumSongsById = async (args: {
     id: string[];
     orderByIds?: boolean;
