@@ -8,6 +8,7 @@ import styles from './mobile-fullscreen-player.module.css';
 import { triggerHaptic } from '/@/renderer/hooks/use-haptic';
 import { AppRoute } from '/@/renderer/router/routes';
 import { useSetFullScreenPlayerStore } from '/@/renderer/store';
+import { useShowFilesystemNameForAlbums } from '/@/renderer/store/settings.store';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Group } from '/@/shared/components/group/group';
 import { Rating } from '/@/shared/components/rating/rating';
@@ -16,6 +17,7 @@ import { TextTitle } from '/@/shared/components/text-title/text-title';
 import { Text } from '/@/shared/components/text/text';
 import { PlaybackSelectors } from '/@/shared/constants/playback-selectors';
 import { Song } from '/@/shared/types/domain-types';
+import { albumFolderFromSongPath } from '/@/shared/utils/album-folder-from-path';
 import { isPlausibleReleaseYear } from '/@/shared/utils/release-year';
 
 interface MobileFullscreenPlayerMetadataProps {
@@ -48,12 +50,19 @@ export const MobileFullscreenPlayerMetadata = memo(
     }: MobileFullscreenPlayerMetadataProps) => {
         const isRadio = radioTitle !== undefined || radioStationName !== undefined;
         const setFullScreenPlayerStore = useSetFullScreenPlayerStore();
+        const useFsAlbumName = useShowFilesystemNameForAlbums();
 
         const title = isRadio ? radioTitle || radioStationName || 'Radio' : currentSong?.name;
         const artistsDisplay = isRadio
             ? radioArtist || radioStationName || '—'
             : currentSong?.artists?.map((a) => a.name).join(', ');
-        const album = isRadio ? radioStationName || '—' : currentSong?.album;
+        // Honor "show filesystem name for albums" like the mini-player and
+        // the desktop fullscreen player do (device, 2026-06-11: only this
+        // surface still showed the canonical album name).
+        const albumDisplayName =
+            (!isRadio && useFsAlbumName ? albumFolderFromSongPath(currentSong?.path) : null) ||
+            currentSong?.album;
+        const album = isRadio ? radioStationName || '—' : albumDisplayName;
         const container = currentSong?.container;
         const year = isPlausibleReleaseYear(currentSong?.releaseYear)
             ? currentSong?.releaseYear
