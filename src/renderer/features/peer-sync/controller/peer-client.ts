@@ -457,11 +457,16 @@ const resolveTcpPlugin = async (): Promise<
     try {
         const cap = getCapacitor();
         if (cap?.registerPlugin && isTcpPluginAvailable()) {
-            cachedTcpPlugin =
+            const proxy =
                 cap.registerPlugin<
                     import('/@/renderer/features/peer-sync/transport/native-tcp-stream').TcpSocketPlugin
                 >('TcpSocket');
-            if (cachedTcpPlugin) return cachedTcpPlugin;
+            if (proxy) {
+                const { wrapTcpPluginProxy } =
+                    await import('/@/renderer/features/peer-sync/transport/native-tcp-stream');
+                cachedTcpPlugin = wrapTcpPluginProxy(proxy);
+                return cachedTcpPlugin;
+            }
         }
     } catch (err) {
         warn('capacitor TcpSocket registration failed', { err: (err as Error).message });

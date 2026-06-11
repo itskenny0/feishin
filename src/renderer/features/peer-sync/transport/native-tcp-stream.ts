@@ -320,6 +320,25 @@ export interface ElectronTcpSocketBridge {
 }
 
 /**
+ * Wrap a Capacitor plugin PROXY in a plain object.
+ *
+ * Capacitor's `registerPlugin` returns a Proxy that forwards EVERY property
+ * access as a native method call — including `.then`. Returning the proxy
+ * from an async function (or passing it through any `await`/`Promise
+ * .resolve`) thenable-probes `.then`, the proxy forwards it to Java, and the
+ * call dies with `"TcpSocket.then()" is not implemented on android` before a
+ * socket ever opens (device, 2026-06-11 — raw mqtt:// brokers never worked
+ * on Android because of this). A plain object wrapper is not a thenable, so
+ * it survives awaits; methods delegate untouched.
+ */
+export const wrapTcpPluginProxy = (proxy: TcpSocketPlugin): TcpSocketPlugin => ({
+    addListener: (eventName, listener) => proxy.addListener(eventName, listener),
+    close: (options) => proxy.close(options),
+    open: (options) => proxy.open(options),
+    write: (options) => proxy.write(options),
+});
+
+/**
  * Wrap the Electron `window.api.tcpSocket` IPC bridge as a `TcpSocketPlugin`.
  *
  * The only structural differences from the Capacitor plugin are:

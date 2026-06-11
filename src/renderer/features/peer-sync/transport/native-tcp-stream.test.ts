@@ -6,6 +6,7 @@ import {
     NativeTcpStream,
     type PluginListenerHandle,
     type TcpSocketPlugin,
+    wrapTcpPluginProxy,
 } from '/@/renderer/features/peer-sync/transport/native-tcp-stream';
 
 // Let queued microtasks + the async boot()/open() settle.
@@ -219,5 +220,51 @@ describe('createElectronTcpSocketPlugin (IPC adapter)', () => {
                 id: 'sock-9',
             }),
         );
+    });
+});
+
+describe('wrapTcpPluginProxy', () => {
+    // Simulates Capacitor's registerPlugin proxy: EVERY property access —
+    // including `then` — forwards as a native method call that throws
+    // UNIMPLEMENTED. Returning such a proxy through an await used to kill
+    // the raw-TCP transport on Android.
+    const makeCapacitorishProxy = (impl: Partial<TcpSocketPlugin>) =>
+        new Proxy({} as TcpSocketPlugin, {
+            get(_t, prop: string) {
+                if (prop in impl) return impl[prop as keyof TcpSocketPlugin];
+                return () => {
+                    throw new Error(`"TcpSocket.${String(prop)}()" is not implemented on android`);
+                };
+            },
+        });
+
+    it('survives await (the proxy itself does not)', async () => {
+        const open = vi.fn(async () => ({ id: 'x' }));
+        const proxy = makeCapacitorishProxy({ open });
+
+        // Baseline: awaiting the raw proxy throws via its `then` trap.
+        await expect((async () => proxy)().then((p) => p)).rejects.toThrow(/then.*not implemented/);
+
+        const wrapped = await (async () => wrapTcpPluginProxy(proxy))();
+        await wrapped.open({ host: 'h', id: 'x', port: 1883 });
+        expect(open).toHaveBeenCalledWith({ host: 'h', id: 'x', port: 1883 });
+    });
+
+    it('delegates all four methods to the proxy', async () => {
+        const impl = {
+            addListener: vi.fn(() => ({ remove: vi.fn() })),
+            close: vi.fn(async () => undefined),
+            open: vi.fn(async () => ({ id: 'a' })),
+            write: vi.fn(async () => undefined),
+        };
+        const wrapped = wrapTcpPluginProxy(makeCapacitorishProxy(impl));
+        const listener = vi.fn();
+        wrapped.addListener('data', listener);
+        await wrapped.open({ host: 'h', id: 'a', port: 1 });
+        await wrapped.write({ data: 'ZA==', id: 'a' });
+        await wrapped.close({ id: 'a' });
+        expect(impl.addListener).toHaveBeenCalledWith('data', listener);
+        expect(impl.write).toHaveBeenCalledWith({ data: 'ZA==', id: 'a' });
+        expect(impl.close).toHaveBeenCalledWith({ id: 'a' });
     });
 });
