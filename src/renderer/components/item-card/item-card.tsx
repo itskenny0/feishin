@@ -47,6 +47,7 @@ import {
     Song,
 } from '/@/shared/types/domain-types';
 import { DragOperation, DragTarget } from '/@/shared/types/drag-and-drop';
+import { Play } from '/@/shared/types/types';
 import { stringToColor } from '/@/shared/utils/string-to-color';
 
 export type DataRow = {
@@ -265,6 +266,15 @@ const ItemCardStandardImageArea = memo(function ItemCardStandardImageArea({
             if (isLinkBranch && navigationPath) {
                 suppressNextClickRef.current = true;
                 navigate(navigationPath, { state: { item: data } });
+                return;
+            }
+            // Non-link cards (e.g. Home song shelves) have no detail route, so
+            // a touch tap on the cover plays the item instead of navigating.
+            // The bare onClick path is inert on these cards (it needs the
+            // internalState the carousels don't pass), so this is the ONLY
+            // touch entry point.
+            if (data && triggerCardTapPlay(controls, data, itemType, internalState)) {
+                suppressNextClickRef.current = true;
             }
         },
     });
@@ -446,6 +456,15 @@ const CompactItemCardImageArea = memo(function CompactItemCardImageArea({
             if (isLinkBranch && navigationPath) {
                 suppressNextClickRef.current = true;
                 navigate(navigationPath, { state: { item: data } });
+                return;
+            }
+            // Non-link cards (e.g. Home song shelves) have no detail route, so
+            // a touch tap on the cover plays the item instead of navigating.
+            // The bare onClick path is inert on these cards (it needs the
+            // internalState the carousels don't pass), so this is the ONLY
+            // touch entry point.
+            if (data && triggerCardTapPlay(controls, data, itemType, internalState)) {
+                suppressNextClickRef.current = true;
             }
         },
     });
@@ -1559,6 +1578,80 @@ const getItemNavigationPath = (
     const effectiveItemType = '_itemType' in data && data._itemType ? data._itemType : itemType;
 
     return getTitlePath(effectiveItemType, data.id);
+};
+
+/**
+ * Touch tap fallback for cards that are NOT a navigation <Link> — i.e. cards
+ * with no detail route (songs) where the cover would otherwise be inert on
+ * touch.
+ *
+ * On the Home "Most Played" / "Recently played" shelves a Jellyfin server
+ * renders SONG item-cards. Songs have no navigationPath (getTitlePath returns
+ * null for LibraryItem.SONG), so isLinkBranch is false and the cover renders
+ * as a plain <div>. Its only click handler is handleImageClick →
+ * useDoubleClick → controls.onClick/onDoubleClick, both of which early-return
+ * when the card has no internalState — and these carousels pass none. The
+ * long-press hook's onPress also no-oped for non-link cards. Net result:
+ * tapping a song cover did nothing (device, 2026-06-11).
+ *
+ * Mirrors the desktop hover play-button path: prefer the list-aware
+ * onDoubleClick when an internalState is present, otherwise fall back to the
+ * single-item onPlay (Play.NOW), which needs only the item. Returns true when
+ * an action was dispatched so the caller can suppress the trailing
+ * synthesised click.
+ */
+const triggerCardTapPlay = (
+    controls: ItemControls | undefined,
+    data: ItemCardData,
+    itemType: LibraryItem,
+    internalState?: ItemListStateActions,
+): boolean => {
+    if (!controls || !data || !('id' in data) || !data.id) {
+        return false;
+    }
+
+    const effectiveItemType =
+        '_itemType' in data && (data as { _itemType?: LibraryItem })._itemType
+            ? (data as { _itemType: LibraryItem })._itemType
+            : itemType;
+
+    const isSongItem =
+        effectiveItemType === LibraryItem.SONG || effectiveItemType === LibraryItem.PLAYLIST_SONG;
+
+    // Only songs have a meaningful "tap the cover to play" action. Non-song
+    // non-link cards (should not normally occur) stay inert here.
+    if (!isSongItem) {
+        return false;
+    }
+
+    if (controls.onDoubleClick && internalState) {
+        const rowId = internalState.extractRowId(data);
+        if (rowId) {
+            const index = internalState.findItemIndex(rowId);
+            controls.onDoubleClick({
+                event: null,
+                index,
+                internalState,
+                item: data,
+                itemType: effectiveItemType,
+                meta: { playType: Play.NOW },
+            });
+            return true;
+        }
+    }
+
+    if (controls.onPlay) {
+        controls.onPlay({
+            event: null,
+            internalState,
+            item: data,
+            itemType: effectiveItemType,
+            playType: Play.NOW,
+        });
+        return true;
+    }
+
+    return false;
 };
 
 const ItemCardRow = memo(
