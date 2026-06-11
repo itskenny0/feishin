@@ -2,7 +2,7 @@
 // MusicBrainz id mapping for songs, which feeds Discord RPC deep-links and the
 // home feature-card dedup key (both consume `mbzRecordingId` / `mbzTrackId`).
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { jfNormalize } from '/@/shared/api/jellyfin/jellyfin-normalize';
@@ -156,5 +156,44 @@ describe('jfNormalize.song MusicBrainz ids', () => {
 
         expect(result.mbzRecordingId).toBeNull();
         expect(result.mbzTrackId).toBeNull();
+    });
+});
+
+// Freeze regression (2026-06-11): a /Sessions NowPlayingItem carries no
+// MediaSources, so a remote-target controller re-normalizing the mirrored
+// track on every 2Hz frame logged "no media sources" once PER FRAME with the
+// full item object. The warn is now rate-limited to once per item id.
+describe('jfNormalize.song — "no media sources" warn is rate-limited per id', () => {
+    let warnSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+        warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    it('warns exactly once across many re-normalizations of the same id', () => {
+        const item = baseSong({ Id: 'freeze-track', MediaSources: [] });
+        for (let i = 0; i < 100; i += 1) {
+            jfNormalize.song(item, server);
+        }
+        const noMedia = warnSpy.mock.calls.filter((c) => String(c[0]).includes('no media sources'));
+        expect(noMedia).toHaveLength(1);
+    });
+
+    it('still warns for a different track id', () => {
+        jfNormalize.song(baseSong({ Id: 'track-a', MediaSources: [] }), server);
+        jfNormalize.song(baseSong({ Id: 'track-b', MediaSources: [] }), server);
+        const noMedia = warnSpy.mock.calls.filter((c) => String(c[0]).includes('no media sources'));
+        // track-a may already be in the warned-set from the prior test, but
+        // track-b is fresh — assert at least the distinct-id one fired.
+        expect(noMedia.length).toBeGreaterThanOrEqual(1);
+        expect(
+            warnSpy.mock.calls.some(
+                (c) => String(c[0]).includes('no media sources') && (c[1] as any)?.Id === 'track-b',
+            ),
+        ).toBe(true);
     });
 });

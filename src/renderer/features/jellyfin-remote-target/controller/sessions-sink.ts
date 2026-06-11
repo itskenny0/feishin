@@ -85,13 +85,6 @@ class SessionsSink {
             actions.setStatus('connected');
         }
 
-        const raw = rawsBySessionId[match.sessionId];
-        const mirror = mirrorSession(raw, server, this.prevQueueIdsByDevice[match.deviceId] ?? []);
-        perfMark('mirror.apply.jellyfin', {
-            isPaused: mirror.mirrored.playState?.isPaused,
-            positionMs: mirror.mirrored.playState?.positionMs,
-            volume: mirror.mirrored.playState?.volume,
-        });
         // Finding 2 + B4: decide a SINGLE owner per lane. When the live lane for
         // this target is MQTT, the MQTT state-mirror is the sole driver of
         // play-state, queue/queueIndex AND the now-playing item (peerStateToMirrored
@@ -100,23 +93,41 @@ class SessionsSink {
         // NOT write any of these — otherwise the now-playing item (and queue rows)
         // flicker between the rich Jellyfin Song and the bare MQTT stub every ~10s,
         // taking the mirror's duration / cover with them, and the two lanes can
-        // disagree on queueIndex. So while MQTT owns the lane we strip playState,
-        // queue/queueIndex, nowPlayingItem AND capabilities, and skip the hydrate
-        // entirely.
+        // disagree on queueIndex.
+        //
+        // FREEZE FIX (2026-06-11): the only mirror fields `mirrorSession` ever
+        // produces are { capabilities, nowPlayingItem, playState } — all of which
+        // are dropped when MQTT owns the lane — so `mirrorSession` (and the
+        // `jfNormalize.song(session.NowPlayingItem)` inside `deriveNowPlayingItem`)
+        // was pure wasted work on EVERY 2Hz sessions-frame while mirroring an MQTT
+        // peer. A `/Sessions` payload's embedded `NowPlayingItem` carries no
+        // `MediaSources`, so each of those discarded normalizations logged
+        // "Jellyfin song retrieved with no media sources" — once per frame, with
+        // the full item object. With remote-debug shipping on that warn line is
+        // JSON-stringified and written through to a localStorage ring on the main
+        // thread twice a second, on top of the 1Hz MQTT applies; on a low-end
+        // Android webview that sustained pressure is what walked the renderer into
+        // a hard freeze. Resolving the now-playing track is now done ONCE per
+        // track change by the MQTT lane's hydration cache, never per frame.
+        //
+        // So short-circuit BEFORE calling `mirrorSession`: the session-frame still
+        // drives the connection bookkeeping above (device list, reconcile,
+        // status→connected), but the now-playing/queue/play-state mirror is left
+        // entirely to the MQTT lane, and the hydrate is skipped.
         const mqttOwnsLane = pickTransportByJellyfinDeviceId(state.targetDeviceId) === 'mqtt';
         if (mqttOwnsLane) {
-            const {
-                capabilities: _droppedCapabilities,
-                nowPlayingItem: _droppedNowPlayingItem,
-                playState: _droppedPlayState,
-                queue: _droppedQueue,
-                queueIndex: _droppedQueueIndex,
-                ...rest
-            } = mirror.mirrored;
-            actions.applyMirrorFromServer(rest);
-            // MQTT is the queue owner — do not hydrate/write the Jellyfin queue.
+            // MQTT owns play-state/queue/now-playing; nothing left for the
+            // Jellyfin lane to write or hydrate this frame.
             return;
         }
+
+        const raw = rawsBySessionId[match.sessionId];
+        const mirror = mirrorSession(raw, server, this.prevQueueIdsByDevice[match.deviceId] ?? []);
+        perfMark('mirror.apply.jellyfin', {
+            isPaused: mirror.mirrored.playState?.isPaused,
+            positionMs: mirror.mirrored.playState?.positionMs,
+            volume: mirror.mirrored.playState?.volume,
+        });
 
         actions.applyMirrorFromServer(mirror.mirrored);
 

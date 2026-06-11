@@ -18,6 +18,29 @@ import { ServerListItem, ServerType } from '/@/shared/types/types';
 
 const TICKS_PER_MS = 10000;
 
+// A `/Sessions` payload's embedded NowPlayingItem never carries `MediaSources`,
+// so a remote-target controller that re-normalizes the mirrored track on every
+// 2Hz session frame used to log "no media sources" once PER FRAME, with the
+// full item object. With remote-debug shipping on, each such line is
+// JSON-stringified and written through to a localStorage ring on the main
+// thread, so the warn itself became sustained per-frame pressure. Rate-limit it
+// to once per item id (bounded set, oldest-evicted) so the SAME track warns at
+// most once no matter how many frames re-normalize it.
+const NO_MEDIA_SOURCE_WARN_CAP = 200;
+const warnedNoMediaSourceIds = new Set<string>();
+const warnNoMediaSourceOnce = (item: { Id?: string }): void => {
+    const id = typeof item?.Id === 'string' ? item.Id : '';
+    if (id && warnedNoMediaSourceIds.has(id)) return;
+    if (id) {
+        warnedNoMediaSourceIds.add(id);
+        if (warnedNoMediaSourceIds.size > NO_MEDIA_SOURCE_WARN_CAP) {
+            const oldest = warnedNoMediaSourceIds.values().next().value;
+            if (oldest !== undefined) warnedNoMediaSourceIds.delete(oldest);
+        }
+    }
+    console.warn('Jellyfin song retrieved with no media sources', item);
+};
+
 type AlbumOrSong = z.infer<typeof jfType._response.album> | z.infer<typeof jfType._response.song>;
 
 const KEYS_TO_OMIT = new Set(['AlbumArtist', 'Artist']);
@@ -189,7 +212,7 @@ const normalizeSong = (
             }
         }
     } else {
-        console.warn('Jellyfin song retrieved with no media sources', item);
+        warnNoMediaSourceOnce(item as { Id?: string });
     }
 
     const participants = getPeople(item);
