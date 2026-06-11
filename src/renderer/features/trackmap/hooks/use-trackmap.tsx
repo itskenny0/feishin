@@ -8,6 +8,7 @@ import {
     analyzeSong,
     TrackmapUndecodableError,
 } from '/@/renderer/features/trackmap/analysis/analyze-song';
+import { waitForPlaybackFlowing } from '/@/renderer/features/trackmap/analysis/defer-until-playing';
 import { useCurrentServer } from '/@/renderer/store/auth.store';
 import {
     useTrackmapEnabled,
@@ -57,16 +58,23 @@ export const useTrackmap = (song: null | QueueSong): UseTrackmapResult => {
         const ac = new AbortController();
         setState({ data: null, status: 'loading' });
 
-        analyzeSong({
-            allowNetwork: !(onlyOverLan && isUsingRemoteUrl),
-            maxFileSizeBytes,
-            sensitivity,
-            serverId,
-            signal: ac.signal,
-            songId,
-            songSizeBytes,
-            streamUrl: streamUrl ?? undefined,
-        })
+        // Don't race the playback stream: the analysis downloads + decodes
+        // the whole file, so starting it at click time inflates
+        // click-to-sound latency. Wait until sound is flowing (cap 4s so a
+        // paused queue restore still gets its trackmap).
+        waitForPlaybackFlowing({ maxWaitMs: 4000, signal: ac.signal, songId })
+            .then(() =>
+                analyzeSong({
+                    allowNetwork: !(onlyOverLan && isUsingRemoteUrl),
+                    maxFileSizeBytes,
+                    sensitivity,
+                    serverId,
+                    signal: ac.signal,
+                    songId,
+                    songSizeBytes,
+                    streamUrl: streamUrl ?? undefined,
+                }),
+            )
             .then((data) => {
                 if (ac.signal.aborted) return;
                 if (data) {
