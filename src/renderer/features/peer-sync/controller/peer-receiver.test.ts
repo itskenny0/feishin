@@ -20,6 +20,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { eventEmitter } from '/@/renderer/events/event-emitter';
 import {
     __resetInboundApply,
     isInboundApplyActive,
@@ -745,6 +746,65 @@ describe('applyPeerCommand play (queue replace/append)', () => {
             .items.map((s) => s.id);
         expect(ids).toEqual(['song-x', 'song-y']);
         expect(usePlayerStoreBase.getState().player.index).toBe(0);
+    });
+
+    // BUG 2: a remote PlayNow must START PLAYBACK on the target, not merely
+    // enqueue. The old path used setQueue (status → PLAYING but only a
+    // QUEUE_RESTORED event — no PLAYER_PLAY, which is what the engines listen
+    // to to actually load + start the current track). Assert both the status
+    // flip AND the PLAYER_PLAY emission so a regression back to setQueue is
+    // caught.
+    it('PlayNow actually starts playback (status PLAYING + PLAYER_PLAY emitted) — BUG 2', async () => {
+        // Begin from a paused, empty player — the "tap a song on the remote"
+        // cold-start scenario.
+        usePlayerStoreBase.getState().setQueue([], 0, 0);
+        usePlayerStoreBase.setState((state) => {
+            state.player.status = PlayerStatus.PAUSED;
+        });
+        const played: Array<{ id: string; index: number }> = [];
+        const onPlay = (p: { id: string; index: number }) => played.push(p);
+        eventEmitter.on('PLAYER_PLAY', onPlay);
+        try {
+            const r = applyPeerCommand(
+                SENDER,
+                buildCommand('play', {
+                    itemIds: ['song-x', 'song-y'],
+                    playCommand: 'PlayNow',
+                }),
+            );
+            expect(r.reason).toBe('applied');
+            await flushHydrate();
+
+            expect(usePlayerStoreBase.getState().player.status).toBe(PlayerStatus.PLAYING);
+            // The selected track started — at least one PLAYER_PLAY fired.
+            expect(played.length).toBeGreaterThan(0);
+        } finally {
+            eventEmitter.off('PLAYER_PLAY', onPlay);
+        }
+    });
+
+    it('PlayNow honours startIndex by starting on that track — BUG 2', async () => {
+        usePlayerStoreBase.getState().setQueue([], 0, 0);
+        const r = applyPeerCommand(
+            SENDER,
+            buildCommand('play', {
+                itemIds: ['song-x', 'song-y', 'song-z'],
+                playCommand: 'PlayNow',
+                startIndex: 2,
+            }),
+        );
+        expect(r.reason).toBe('applied');
+        await flushHydrate();
+
+        const state = usePlayerStoreBase.getState();
+        expect(state.getQueueOrder().items.map((s) => s.id)).toEqual([
+            'song-x',
+            'song-y',
+            'song-z',
+        ]);
+        // Playback started on the requested startIndex track.
+        expect(state.getCurrentSong()?.id).toBe('song-z');
+        expect(state.player.status).toBe(PlayerStatus.PLAYING);
     });
 
     it('an undefined playCommand still replaces (default PlayNow semantics)', async () => {

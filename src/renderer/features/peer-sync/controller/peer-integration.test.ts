@@ -106,6 +106,7 @@ beforeEach(() => {
     useRemoteTargetStore.setState({
         mirrored: {
             capabilities: [],
+            nextItemId: null,
             nowPlayingItem: null,
             playState: {
                 isMuted: false,
@@ -407,6 +408,7 @@ describe('applyPeerStateToStore', () => {
         useRemoteTargetStore.setState({
             mirrored: {
                 capabilities: [],
+                nextItemId: null,
                 nowPlayingItem: null,
                 playState: {
                     isMuted: true,
@@ -468,6 +470,7 @@ describe('applyPeerStateToStore', () => {
         useRemoteTargetStore.setState({
             mirrored: {
                 capabilities: [],
+                nextItemId: null,
                 nowPlayingItem: null,
                 playState: {
                     isMuted: false,

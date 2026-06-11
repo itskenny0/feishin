@@ -31,6 +31,10 @@ export interface StateSnapshotInput {
     lyr?: boolean;
     /** Optional — target mute state. Pass undefined to omit. */
     mut?: boolean;
+    /** Optional — the id of the track the target will actually play next
+     *  (resolved against its shuffle map / repeat mode). Pass undefined to omit
+     *  the field; pass null when there is explicitly no next track. */
+    nxt?: null | string;
     paused: boolean;
     pos: number;
     /** Optional — queue id list. Pass undefined or [] to omit. */
@@ -92,6 +96,15 @@ export const buildState = (input: StateSnapshotInput): PeerState => {
     if (typeof input.lyr === 'boolean') out.lyr = input.lyr;
     if (typeof input.rate === 'number' && Number.isFinite(input.rate)) {
         out.rate = clampFinite(input.rate, MIN_RATE, MAX_RATE);
+    }
+    // Next-track id: emit when the publisher supplied it (a non-empty string id
+    // OR an explicit null meaning "no next track"). `undefined` omits the field
+    // entirely so an older publisher that doesn't compute it can't be confused
+    // with one that knows there's no next track. Empty strings are coerced to
+    // null so a producer bug can't ship a meaningless "" id the consumer would
+    // try to resolve.
+    if (input.nxt !== undefined) {
+        out.nxt = typeof input.nxt === 'string' && input.nxt.length > 0 ? input.nxt : null;
     }
     if (Array.isArray(input.qIds) && input.qIds.length > 0) {
         // `.slice(0, N)` copies, so the caller can't mutate the array after

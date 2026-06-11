@@ -149,10 +149,11 @@ export type PeerRepeatMode = 'all' | 'off' | 'one';
 /**
  * Retained target → controller state snapshot. Late joiners get the latest.
  *
- * Optional fields (`mut`, `qIds`, `qIdx`, `lyr`, `rate`) were added after the
- * initial v1 cut. Older readers ignore unknown keys and the codec validates
- * each optional field's type independently, so a frame produced by a newer
- * publisher decodes cleanly on an older consumer (just without the extras).
+ * Optional fields (`mut`, `qIds`, `qIdx`, `lyr`, `rate`, `nxt`) were added
+ * after the initial v1 cut. Older readers ignore unknown keys and the codec
+ * validates each optional field's type independently, so a frame produced by a
+ * newer publisher decodes cleanly on an older consumer (just without the
+ * extras).
  *
  * Required fields stay required — bumping any of those is a v2 change.
  */
@@ -165,6 +166,15 @@ export interface PeerState {
     /** True when the target is muted (independent of volume). Optional —
      *  consumers older than this field treat `undefined` as "not muted". */
     mut?: boolean;
+    /**
+     * The track id the target will ACTUALLY play next, resolved on the target
+     * by its own shuffle map + repeat mode. Optional — emitted by Feishin
+     * targets so a controller can render the correct "up next" / peek cover
+     * even when the target has shuffle ON (where `qIds[qIdx + 1]` in DEFAULT
+     * order is the wrong song). `null`/absent when there is no next track
+     * (end of queue, repeat off). Consumers fall back to the default-order
+     * `qIds[qIdx + 1]` derivation when this is absent. */
+    nxt?: null | string;
     /** True when the target is paused. */
     paused: boolean;
     /** Current position in milliseconds. */

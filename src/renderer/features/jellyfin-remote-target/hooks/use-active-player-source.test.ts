@@ -2,6 +2,8 @@ import { act, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+    resolveRemoteNextItem,
+    useActiveNextItem,
     useActivePlayerSource,
     useActiveRepeat,
     useActiveShuffle,
@@ -313,5 +315,66 @@ describe('useActivePlayerSource (G4: slice-narrowed selector)', () => {
             });
         });
         expect(result.current.isPaused).toBe(false);
+    });
+});
+
+// BUG 1: the controller must derive "next" from the target-reported `nxt`
+// (mirrored as nextItemId), NOT the default-order queue, so shuffle on the
+// target shows the right upcoming track. Reuses the file's `song(id, durMs)`
+// helper.
+describe('resolveRemoteNextItem (BUG 1)', () => {
+    it('prefers the target-reported nextItemId over the default-order neighbour', () => {
+        const queue = [song('a', 0), song('b', 0), song('c', 0), song('d', 0)];
+        // Default-order next would be 'b' (index 1), but the shuffling target
+        // says it will actually play 'd' next.
+        const next = resolveRemoteNextItem({ nextItemId: 'd', queue, queueIndex: 0 });
+        expect(next?.id).toBe('d');
+    });
+
+    it('returns a bare id-shape when nextItemId is not in the mirrored queue', () => {
+        const next = resolveRemoteNextItem({
+            nextItemId: 'not-hydrated',
+            queue: [song('a', 0)],
+            queueIndex: 0,
+        });
+        expect(next?.id).toBe('not-hydrated');
+    });
+
+    it('falls back to default-order queue[queueIndex + 1] when nextItemId is null', () => {
+        const queue = [song('a', 0), song('b', 0), song('c', 0)];
+        const next = resolveRemoteNextItem({ nextItemId: null, queue, queueIndex: 0 });
+        expect(next?.id).toBe('b');
+    });
+
+    it('returns null at the end of the queue with no nextItemId', () => {
+        const queue = [song('a', 0), song('b', 0)];
+        expect(resolveRemoteNextItem({ nextItemId: null, queue, queueIndex: 1 })).toBeNull();
+    });
+
+    it('returns null when the queue / index is unknown and no nextItemId', () => {
+        expect(resolveRemoteNextItem({ nextItemId: null, queue: [], queueIndex: -1 })).toBeNull();
+    });
+});
+
+describe('useActiveNextItem (BUG 1)', () => {
+    it('is null in local mode (no target)', () => {
+        expect(renderHook(() => useActiveNextItem()).result.current).toBeNull();
+    });
+
+    it('surfaces the target-reported next track under shuffle', () => {
+        connect([]);
+        act(() => {
+            useRemoteTargetStore.getState().actions.applyMirrorFromServer({
+                nextItemId: 'd',
+                nowPlayingItem: song('a', 0),
+                queue: [song('a', 0), song('b', 0), song('c', 0), song('d', 0)],
+                queueIndex: 0,
+            });
+        });
+        let result!: { current: ReturnType<typeof useActiveNextItem> };
+        act(() => {
+            ({ result } = renderHook(() => useActiveNextItem()));
+        });
+        expect(result.current?.id).toBe('d');
     });
 });

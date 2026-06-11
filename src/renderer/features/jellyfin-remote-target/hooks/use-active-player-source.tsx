@@ -148,6 +148,67 @@ export const useActiveNowPlayingItem = (): null | Song => {
 };
 
 /**
+ * Resolve the target's actual next track from a mirror snapshot. (BUG 1)
+ *
+ * Preference order:
+ *   1. `nextItemId` — the id the TARGET itself reports it will play next
+ *      (resolved on the target against its shuffle map + repeat mode, carried
+ *      over the MQTT lane as `nxt`). Looked up in the mirrored queue so we
+ *      return a hydrated Song when one is available; falls back to a bare
+ *      `{ id }` shape when the id isn't (yet) in the mirrored queue so a
+ *      consumer can still load its cover by id.
+ *   2. Default-order `queue[queueIndex + 1]` — the pre-BUG-1 behaviour. Only
+ *      correct when the target isn't shuffling, which is exactly why (1) wins
+ *      when present, but it's the right fallback for the Jellyfin lane and
+ *      older publishers that don't carry `nextItemId`.
+ *
+ * Returns null when neither resolves (end of queue, unknown queue).
+ *
+ * Pure + exported so the gating rules get direct unit coverage without
+ * rendering the dependency-heavy album-art component.
+ */
+export const resolveRemoteNextItem = (mirrored: {
+    nextItemId: null | string;
+    queue: Song[];
+    queueIndex: number;
+}): null | Song => {
+    const { nextItemId, queue, queueIndex } = mirrored;
+    if (nextItemId) {
+        const found = queue.find((s) => s?.id === nextItemId);
+        if (found) return found;
+        // Known next id but not in the mirrored queue yet — hand back a minimal
+        // id-only shape so the cover resolver can still fetch art by id.
+        return { id: nextItemId } as Song;
+    }
+    if (queueIndex >= 0 && queueIndex + 1 < queue.length) {
+        return queue[queueIndex + 1] ?? null;
+    }
+    return null;
+};
+
+/**
+ * The track the active REMOTE target will play next — null in local mode (the
+ * local player exposes its own next via `usePlayerData().nextSong`, which is
+ * already shuffle-aware locally). Subscribes only to the queue/index/nextItemId
+ * slices so it doesn't churn on position ticks. (BUG 1 / BUG 3)
+ */
+export const useActiveNextItem = (): null | Song => {
+    const isRemote = useRemoteTargetStore((s) => s.targetDeviceId !== null);
+    const nextItem = useRemoteTargetStore(
+        useShallow((s) =>
+            s.targetDeviceId === null
+                ? null
+                : resolveRemoteNextItem({
+                      nextItemId: s.mirrored.nextItemId,
+                      queue: s.mirrored.queue,
+                      queueIndex: s.mirrored.queueIndex,
+                  }),
+        ),
+    );
+    return isRemote ? nextItem : null;
+};
+
+/**
  * Combined pause state for the active source. In remote mode, mirrors the
  * remote device's PlayState.IsPaused; in local mode, derives from the local
  * player status. Primitive boolean — components only re-render on flip.

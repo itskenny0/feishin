@@ -284,6 +284,15 @@ export const peerStateToMirrored = (state: PeerState, oneWayOffsetMs = 0): Remot
         );
         out.queueIndex = qIdx >= 0 && qIdx < state.qIds.length ? qIdx : -1;
     }
+    // BUG 1: surface the target's own "actual next track" id so the controller
+    // can render the correct up-next / peek cover under shuffle. Only carry it
+    // when the publisher supplied the field (string id OR explicit null);
+    // `undefined` means an older publisher that doesn't compute it — leave the
+    // mirror's prior value untouched (the reducer treats a missing key as
+    // "unchanged") so we don't clobber a known value with a guess.
+    if (state.nxt !== undefined) {
+        out.nextItemId = state.nxt;
+    }
     return out;
 };
 

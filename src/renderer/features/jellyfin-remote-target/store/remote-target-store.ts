@@ -168,6 +168,7 @@ interface RemoteTargetState {
 
 const emptyMirrored: RemoteMirrored = {
     capabilities: [],
+    nextItemId: null,
     nowPlayingItem: null,
     playState: {
         isMuted: false,

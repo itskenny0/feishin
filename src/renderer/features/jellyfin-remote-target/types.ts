@@ -17,6 +17,14 @@ export interface RemoteDevice {
 
 export interface RemoteMirrored {
     capabilities: string[];
+    /**
+     * Id of the track the target will ACTUALLY play next, as reported by the
+     * target itself (resolved against its shuffle map + repeat mode). Only the
+     * MQTT lane carries it (wire `nxt`); the Jellyfin lane leaves it null.
+     * `null` when there is no next track or the lane doesn't report it — in
+     * that case consumers fall back to `queue[queueIndex + 1]` (default order,
+     * correct only when the target isn't shuffling). (BUG 1) */
+    nextItemId: null | string;
     nowPlayingItem: null | Song;
     playState: RemoteMirroredPlayState;
     queue: Song[];

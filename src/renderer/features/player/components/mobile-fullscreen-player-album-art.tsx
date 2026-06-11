@@ -12,7 +12,10 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import styles from './mobile-fullscreen-player.module.css';
 
 import { useCachedItemImageUrl } from '/@/renderer/components/item-image/item-image';
-import { useActiveNowPlayingItem } from '/@/renderer/features/jellyfin-remote-target/hooks/use-active-player-source';
+import {
+    useActiveNextItem,
+    useActiveNowPlayingItem,
+} from '/@/renderer/features/jellyfin-remote-target/hooks/use-active-player-source';
 import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
 import { useCrossfadeImageSlots } from '/@/renderer/features/player/hooks/use-crossfade-image-slots';
@@ -132,6 +135,35 @@ export const MobileFullscreenPlayerAlbumArt = () => {
         itemType: LibraryItem.SONG,
         size: mainImageDimensions.idealSize,
         type: 'fullScreenPlayer',
+    });
+
+    // BUG 1 + BUG 3: the target's actual next track (shuffle/repeat-aware, via
+    // the wire `nxt` field) so a remote swipe can preview the correct upcoming
+    // cover. Falls back to the default-order queue's next inside the hook when
+    // the target doesn't report `nxt`.
+    const remoteNextSong = useActiveNextItem();
+    const remoteNextImageUrl = useCachedItemImageUrl({
+        id: remoteNextSong?.imageId || undefined,
+        imageUrl: remoteNextSong?.imageUrl,
+        itemType: LibraryItem.SONG,
+        size: mainImageDimensions.idealSize,
+        type: 'fullScreenPlayer',
+    });
+    // Remote queue boundaries. `hasNext` prefers the target-reported next id;
+    // `hasPrevious` is knowable from the mirrored default-order index. When the
+    // mirror can't tell (queueIndex unknown / -1) we leave the side OPEN — the
+    // target enforces the real boundary, so a swipe just no-ops there.
+    const remoteHasNext = useRemoteTargetStore((s) => {
+        if (s.targetDeviceId === null) return false;
+        if (s.mirrored.nextItemId) return true;
+        const { queue, queueIndex } = s.mirrored;
+        // queueIndex < 0 → unknown; allow the swipe (target enforces).
+        return queueIndex < 0 || queueIndex + 1 < queue.length;
+    });
+    const remoteHasPrevious = useRemoteTargetStore((s) => {
+        if (s.targetDeviceId === null) return false;
+        // queueIndex unknown (-1) → allow; else there's a previous iff index>0.
+        return s.mirrored.queueIndex !== 0;
     });
 
     const isPlayingRadio = isRadioActive && isRadioPlaying;
@@ -483,6 +515,225 @@ export const MobileFullscreenPlayerAlbumArt = () => {
     }, [coverSwipeX, isRemote, stopSnapBack]);
 
     /*
+     * BUG 3: remote-mode cover swipe. The local carousel above bails when
+     * `isRemote` (the local queue isn't the target's), so before this the
+     * fullscreen cover in Connect mode was a static image — swiping it did
+     * nothing. This effect re-uses the SAME single-owner native-touch
+     * arbitration pattern, simplified: a horizontal swipe past the commit
+     * threshold fires player.mediaNext()/mediaPrevious(), which already route
+     * through the peer dispatcher when a target is active. There's no
+     * crossfade carousel to drive (the target owns playback), so we track the
+     * finger on `remoteCoverSwipeX` for tactile feedback and snap back on
+     * release. Queue-boundary no-ops are respected when knowable
+     * (remoteHasNext / remoteHasPrevious); otherwise the swipe is allowed and
+     * the target enforces.
+     */
+    const remoteCoverSwipeX = useMotionValue(0);
+    const remoteCoverRef = useRef<HTMLDivElement | null>(null);
+    const remoteSnapBackRef = useRef<null | ReturnType<typeof animate>>(null);
+    const stopRemoteSnapBack = useCallback(() => {
+        if (remoteSnapBackRef.current) {
+            remoteSnapBackRef.current.stop();
+            remoteSnapBackRef.current = null;
+        }
+    }, []);
+    const remoteStateRef = useRef({
+        hasNext: remoteHasNext,
+        hasPrevious: remoteHasPrevious,
+        isSongDefined: Boolean(remoteSong?.id),
+        mediaNext,
+        mediaPrevious,
+    });
+    remoteStateRef.current = {
+        hasNext: remoteHasNext,
+        hasPrevious: remoteHasPrevious,
+        isSongDefined: Boolean(remoteSong?.id),
+        mediaNext,
+        mediaPrevious,
+    };
+
+    useEffect(() => {
+        // Only attach in remote mode; the local carousel owns the gesture
+        // otherwise. Re-running on `isRemote` (re)attaches when entering a
+        // Connect target.
+        if (!isRemote) return undefined;
+        const el = remoteCoverRef.current;
+        if (!el) return undefined;
+
+        let activeId: null | number = null;
+        let startX = 0;
+        let startY = 0;
+        let lastX = 0;
+        let lastT = 0;
+        let velocityX = 0;
+        let axis: 'declined' | 'none' | 'x' = 'none';
+
+        const findTouch = (e: TouchEvent): null | Touch => {
+            if (activeId === null) return null;
+            for (let i = 0; i < e.changedTouches.length; i += 1) {
+                const t = e.changedTouches[i];
+                if (t.identifier === activeId) return t;
+            }
+            return null;
+        };
+
+        const onTouchStart = (e: TouchEvent) => {
+            if (e.touches.length === 1) {
+                coverGestureArbiter.release();
+                activeId = null;
+                axis = 'none';
+            }
+            if (activeId !== null) return;
+            const touch = e.changedTouches[0];
+            if (!touch) return;
+            activeId = touch.identifier;
+            startX = touch.clientX;
+            startY = touch.clientY;
+            lastX = startX;
+            lastT = performance.now();
+            velocityX = 0;
+            axis = 'none';
+            stopRemoteSnapBack();
+        };
+
+        const onTouchMove = (e: TouchEvent) => {
+            if (activeId === null) return;
+            if (coverGestureArbiter.owner() === 'dismiss') {
+                axis = 'declined';
+                return;
+            }
+            if (axis === 'declined') return;
+            const touch = findTouch(e);
+            if (!touch) return;
+            const dx = touch.clientX - startX;
+            const dy = touch.clientY - startY;
+
+            if (axis === 'none') {
+                const adx = Math.abs(dx);
+                const ady = Math.abs(dy);
+                if (adx < 4 && ady < 4) return;
+                const song = remoteStateRef.current.isSongDefined;
+                if (adx > ady && song && coverGestureArbiter.claimCover()) {
+                    axis = 'x';
+                } else {
+                    axis = 'declined';
+                    return;
+                }
+            }
+
+            e.preventDefault();
+            const now = performance.now();
+            const dt = Math.max(1, now - lastT);
+            velocityX = ((touch.clientX - lastX) / dt) * 1000;
+            lastX = touch.clientX;
+            lastT = now;
+            remoteCoverSwipeX.set(dx);
+        };
+
+        const settle = (commit: boolean) => {
+            const wasX = axis === 'x';
+            activeId = null;
+            axis = 'none';
+            coverGestureArbiter.release();
+            stopRemoteSnapBack();
+            if (!wasX) return;
+
+            const snapBack = () => {
+                remoteSnapBackRef.current = animate(remoteCoverSwipeX, 0, {
+                    damping: 28,
+                    stiffness: 360,
+                    type: 'spring',
+                });
+            };
+
+            if (!commit) {
+                snapBack();
+                return;
+            }
+
+            const {
+                hasNext: hN,
+                hasPrevious: hP,
+                isSongDefined: song,
+                mediaNext: next,
+                mediaPrevious: prev,
+            } = remoteStateRef.current;
+            const width = mainImageRef.current?.offsetWidth ?? 320;
+            const offset = remoteCoverSwipeX.get();
+            const sinceLast = performance.now() - lastT;
+            const releaseVelocity = sinceLast > 120 ? 0 : velocityX;
+            // Reuse the shared commit-decision helper so the threshold + flick
+            // rules match the local carousel exactly. Radio is never active in
+            // remote mode, so isRadioActive is false here.
+            const decision = decideCoverSwipeCommit({
+                coverWidth: width,
+                hasNext: hN,
+                hasPrevious: hP,
+                isRadioActive: false,
+                isSongDefined: song,
+                offsetX: offset,
+                velocityX: releaseVelocity,
+            });
+
+            if (decision === 'next') {
+                console.info('[cover-swipe] remote commit next', { offset });
+                triggerHaptic('selection');
+                next();
+            } else if (decision === 'previous') {
+                console.info('[cover-swipe] remote commit prev', { offset });
+                triggerHaptic('selection');
+                prev();
+            } else {
+                console.info('[cover-swipe] remote snap back', {
+                    hasNext: hN,
+                    hasPrevious: hP,
+                    offset,
+                });
+            }
+            // The target owns the cover; always spring the local finger-track
+            // back to centre regardless of the decision.
+            snapBack();
+        };
+
+        const onTouchEnd = (e: TouchEvent) => {
+            if (activeId === null) return;
+            if (!findTouch(e) && e.touches.length > 0) return;
+            settle(true);
+        };
+
+        const onTouchCancel = (e: TouchEvent) => {
+            if (activeId === null) return;
+            if (!findTouch(e) && e.touches.length > 0) return;
+            settle(false);
+        };
+
+        el.addEventListener('touchstart', onTouchStart, { passive: true });
+        el.addEventListener('touchmove', onTouchMove, { passive: false });
+        el.addEventListener('touchend', onTouchEnd, { passive: true });
+        el.addEventListener('touchcancel', onTouchCancel, { passive: true });
+        return () => {
+            el.removeEventListener('touchstart', onTouchStart);
+            el.removeEventListener('touchmove', onTouchMove);
+            el.removeEventListener('touchend', onTouchEnd);
+            el.removeEventListener('touchcancel', onTouchCancel);
+            if (axis === 'x') {
+                stopRemoteSnapBack();
+                remoteCoverSwipeX.set(0);
+                coverGestureArbiter.release();
+            }
+        };
+    }, [isRemote, remoteCoverSwipeX, stopRemoteSnapBack]);
+
+    // Clean up the remote snap-back + arbiter ownership on unmount.
+    useEffect(
+        () => () => {
+            stopRemoteSnapBack();
+            coverGestureArbiter.release();
+        },
+        [stopRemoteSnapBack],
+    );
+
+    /*
      * Spotify-style swipe previews. The previous and next covers are
      * rendered offscreen to the left and right of the active cover;
      * both move with the same swipeX motion value as the main cover so
@@ -500,16 +751,54 @@ export const MobileFullscreenPlayerAlbumArt = () => {
     const nextImageSrc = !isRadioActive && nextSong?._uniqueId ? nextImageUrl : null;
     const previousImageSrc = !isRadioActive && previousSong?._uniqueId ? previousImageUrl : null;
 
-    // Remote mode: static cover of the mirrored now-playing item. The local
-    // queue's prev/next aren't the remote's, so we skip the swipe-preview
-    // carousel here; the transport buttons still drive the remote device.
+    // Remote next-cover peek source. Only the NEXT side is shown — the target
+    // reports its actual next track (`nxt` → useActiveNextItem), so the peek
+    // is correct under shuffle. We don't have the target's PREVIOUS cover
+    // cheaply (the mirror carries default-order ids only), so the left peek is
+    // omitted; the gesture still fires mediaPrevious() and the target enforces.
+    const remoteNextImageSrc =
+        remoteHasNext && remoteNextSong?.id ? remoteNextImageUrl || null : null;
+
+    // Remote mode: the mirrored now-playing cover, now swipeable (BUG 3). A
+    // horizontal swipe fires mediaNext()/mediaPrevious(), which route through
+    // the peer dispatcher to the target. The cover tracks the finger via
+    // `remoteCoverSwipeX` and the next-track peek (when the target reports it)
+    // slides in lockstep, mirroring the local carousel's feel.
     if (isRemote) {
         return (
             <div className={styles.imageContainer} ref={mainImageRef}>
-                <div
+                {remoteNextImageSrc && (
+                    <motion.div
+                        aria-hidden
+                        className={clsx(styles.image, styles.imageNextPreview, {
+                            [styles.imageNativeAspectRatio]: useImageAspectRatio,
+                        })}
+                        style={{ x: remoteCoverSwipeX }}
+                    >
+                        <img
+                            alt=""
+                            className={styles.albumImage}
+                            draggable={false}
+                            src={remoteNextImageSrc}
+                            style={{
+                                objectFit: useImageAspectRatio ? 'contain' : 'cover',
+                                width: useImageAspectRatio ? 'auto' : '100%',
+                            }}
+                        />
+                    </motion.div>
+                )}
+                <motion.div
                     className={clsx(styles.image, {
                         [styles.imageNativeAspectRatio]: useImageAspectRatio,
                     })}
+                    // Same marker + inner-node placement the local cover uses so
+                    // the gesture arbiter resolves the swipe-vs-dismiss axis
+                    // race deterministically. CSS sets touch-action: pan-y here
+                    // so the browser keeps vertical pans (pull-to-dismiss) while
+                    // we own the horizontal axis.
+                    data-cover-swipe
+                    ref={remoteCoverRef}
+                    style={{ x: remoteCoverSwipeX }}
                 >
                     <ImageWithPlaceholder
                         className={PlaybackSelectors.playerCoverArt}
@@ -518,7 +807,7 @@ export const MobileFullscreenPlayerAlbumArt = () => {
                         src={remoteImageUrl || ''}
                         useImageAspectRatio={useImageAspectRatio}
                     />
-                </div>
+                </motion.div>
             </div>
         );
     }

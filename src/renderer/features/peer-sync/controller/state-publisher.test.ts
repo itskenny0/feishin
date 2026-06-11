@@ -143,6 +143,38 @@ describe('state-publisher', () => {
         expect(f.qIds).toEqual(['song-0', 'song-1', 'song-2']);
     });
 
+    it('emits the default-order next track id as nxt with shuffle off (BUG 1)', () => {
+        // Seeded queue: index 1 (song-1), repeat off → next is song-2.
+        startStatePublisher();
+        const f = publishedFrames[0];
+        expect(f.nxt).toBe('song-2');
+    });
+
+    it('emits the SHUFFLE-resolved next track id as nxt, not the default neighbour (BUG 1)', () => {
+        // Shuffle on, shuffled order [2,1,0], player.index 0 → current is
+        // default song-2. The DEFAULT-order neighbour after song-2 would be
+        // nothing (last in default order), but the SHUFFLE next is shuffled[1]
+        // === 1 → song-1. nxt must report the shuffle-resolved track.
+        usePlayerStoreBase.setState((s) => ({
+            ...s,
+            player: { ...s.player, index: 0, shuffle: 'track' as never },
+            queue: { ...s.queue, shuffled: [2, 1, 0] },
+        }));
+        startStatePublisher();
+        const f = publishedFrames[0];
+        expect(f.track?.id).toBe('song-2');
+        expect(f.nxt).toBe('song-1');
+    });
+
+    it('emits nxt=null at the end of the queue with repeat off (BUG 1)', () => {
+        // Move current to the last default-order track; repeat off → no next.
+        usePlayerStoreBase.setState((s) => ({ ...s, player: { ...s.player, index: 2 } }));
+        startStatePublisher();
+        const f = publishedFrames[0];
+        expect(f.track?.id).toBe('song-2');
+        expect(f.nxt).toBeNull();
+    });
+
     it('publishes again on a player mutation (track change)', () => {
         startStatePublisher();
         expect(publishedFrames.length).toBe(1);

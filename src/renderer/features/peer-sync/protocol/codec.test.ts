@@ -211,6 +211,87 @@ describe('peer-sync codec', () => {
         expect(frame.qIdx).toBe(1);
     });
 
+    // BUG 1: the `nxt` (actual-next-track id) field must round-trip and stay
+    // wire-compatible — an absent field decodes cleanly, an explicit null and a
+    // string id both survive, and a garbage type drops the frame.
+    it('round-trips a state frame carrying the BUG-1 next-track id (`nxt`)', () => {
+        const frame = buildState({
+            dur: 1000,
+            nxt: 'next-track-id',
+            paused: false,
+            pos: 0,
+            qIds: ['a', 'b', 'c'],
+            qIdx: 0,
+            rep: 'off',
+            shuf: true,
+            track: { album: null, art: null, artist: null, id: 'a', title: 'x' },
+            vol: 100,
+        });
+        expect(frame.nxt).toBe('next-track-id');
+        const decoded = codec.decode(codec.encode(frame));
+        expect(decoded).toEqual(frame);
+        expect((decoded as typeof frame).nxt).toBe('next-track-id');
+    });
+
+    it('buildState emits nxt=null for an explicit no-next-track, omits it when undefined', () => {
+        const explicitNone = buildState({
+            dur: 1000,
+            nxt: null,
+            paused: false,
+            pos: 0,
+            rep: 'off',
+            shuf: false,
+            track: null,
+            vol: 100,
+        });
+        // Explicit null is on the wire (distinguishable from "publisher omits").
+        expect(explicitNone.nxt).toBeNull();
+        expect(codec.decode(codec.encode(explicitNone))).toEqual(explicitNone);
+
+        const omitted = buildState({
+            dur: 1000,
+            paused: false,
+            pos: 0,
+            rep: 'off',
+            shuf: false,
+            track: null,
+            vol: 100,
+        });
+        expect('nxt' in omitted).toBe(false);
+    });
+
+    it('buildState coerces an empty-string nxt to null', () => {
+        const frame = buildState({
+            dur: 1000,
+            nxt: '',
+            paused: false,
+            pos: 0,
+            rep: 'off',
+            shuf: false,
+            track: null,
+            vol: 100,
+        });
+        expect(frame.nxt).toBeNull();
+    });
+
+    it('drops a state frame with a non-string / non-null nxt', () => {
+        const malformed = {
+            dur: 1000,
+            nxt: 42,
+            paused: false,
+            pos: 0,
+            rep: 'off',
+            shuf: false,
+            t: 'state',
+            track: null,
+            ts: Date.now(),
+            v: PROTOCOL_VERSION,
+            vol: 100,
+        };
+        const bytes = new TextEncoder().encode(JSON.stringify(malformed));
+        expect(codec.decode(bytes)).toBeNull();
+    });
+
     it('accepts a state frame from an older publisher that omits the v1+ optional fields', () => {
         // Hand-build the frame so `buildState` doesn't tack on optional
         // fields — this simulates what an older publisher would emit.

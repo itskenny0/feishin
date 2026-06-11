@@ -98,6 +98,11 @@ const isValidState = (raw: Record<string, unknown>): raw is PeerState & Record<s
     if (raw.lyr !== undefined && typeof raw.lyr !== 'boolean') return false;
     if (raw.rate !== undefined && !isFiniteNumber(raw.rate)) return false;
     if (raw.qIdx !== undefined && !isFiniteNumber(raw.qIdx)) return false;
+    // `nxt` (next-track id) is a nullable string: absent = publisher doesn't
+    // carry it, null = explicitly no next track, string = the next track id.
+    // Any other type drops the frame so a garbage `nxt` can't poison the
+    // controller's next-track resolution.
+    if (raw.nxt !== undefined && raw.nxt !== null && typeof raw.nxt !== 'string') return false;
     if (raw.qIds !== undefined) {
         if (!Array.isArray(raw.qIds)) return false;
         // Cap array length up front so a million-element qIds array doesn't

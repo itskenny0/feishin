@@ -125,6 +125,16 @@ const buildCurrentState = () => {
         ? state.getQueueOrder().items.findIndex((s) => s._uniqueId === song._uniqueId)
         : -1;
 
+    // BUG 1: the controller can't derive the ACTUAL next track from `qIds`
+    // (default order) when the target has shuffle on — `qIds[qIdx + 1]` is the
+    // wrong song. Resolve the real next track here through the SAME
+    // shuffle-aware + repeat-aware path the engine uses (`getPlayerData`), and
+    // ship its id as `nxt`. `null` means "no next track" (end of queue, repeat
+    // off); `undefined` is reserved for "publisher couldn't compute it" and is
+    // never produced here. Only emit it when we actually have a current track —
+    // an empty queue has no meaningful next.
+    const nxt = song ? (state.getPlayerData().nextSong?.id ?? null) : undefined;
+
     return buildState({
         // `song.duration` is ALREADY milliseconds for every server (the
         // jellyfin/navidrome/subsonic normalizers all yield ms), so it must NOT
@@ -133,6 +143,7 @@ const buildCurrentState = () => {
         // ms×1000 duration the controller rendered as ~2:04:06:24.
         dur: song?.duration ?? 0,
         mut: state.player.muted,
+        nxt,
         paused: state.player.status !== PlayerStatus.PLAYING,
         pos: Math.max(0, Math.round(positionSec * 1000)),
         qIds: qIds.length > 0 ? qIds : undefined,

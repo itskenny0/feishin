@@ -461,9 +461,28 @@ const applyQueueReplace = (
                         peerId: from.peerId,
                     });
                 } else {
-                    const startIndex = typeof args.startIndex === 'number' ? args.startIndex : 0;
-                    store.setQueue(songs, startIndex, 0);
-                    log('apply cmd queue', {
+                    // PlayNow / undefined: REPLACE the queue AND start playback.
+                    // BUG 2: the old path called `setQueue`, which loads the
+                    // queue and flips status to PLAYING but emits only
+                    // QUEUE_RESTORED — it never fires the PLAYER_PLAY event the
+                    // engines use to actually (re)load + start the current
+                    // track. The result was "remote play only enqueues, doesn't
+                    // play". Route through `addToQueueByType(Play.NOW)` — the
+                    // exact action a local "Play now" runs — which emits
+                    // PLAYER_PLAY via emitPlayerPlayEvent so the target starts
+                    // playing the selected track immediately. `startIndex` is
+                    // honoured by resolving it to the song id at that position
+                    // (Play.NOW seeks to `playSongId`).
+                    const startIndex =
+                        typeof args.startIndex === 'number' &&
+                        Number.isFinite(args.startIndex) &&
+                        args.startIndex >= 0 &&
+                        args.startIndex < songs.length
+                            ? args.startIndex
+                            : 0;
+                    const playSongId = songs[startIndex]?.id;
+                    store.addToQueueByType(songs, Play.NOW, playSongId);
+                    log('apply cmd queue (play now)', {
                         count: songs.length,
                         peerId: from.peerId,
                         startIndex,
