@@ -162,11 +162,51 @@ describe('startConnectLifecycle', () => {
         expect(onRevert).toHaveBeenCalledTimes(1);
     });
 
-    it('reverts when the transfer-play POST fails', async () => {
-        playSpy.mockRejectedValueOnce(new Error('boom'));
+    it('reverts when the transfer-play POST fails on every attempt and no MQTT lane exists', async () => {
+        // Reject every attempt — the retry must exhaust before failing.
+        playSpy.mockRejectedValue(new Error('boom'));
         setTarget();
         const onRevert = vi.fn();
         startConnectLifecycle({
+            // Force the Jellyfin-only path so the failure surfaces.
+            deps: { isMqttLane: () => false },
+            deviceId: 'dev-1',
+            deviceName: 'Living Room',
+            onRevert,
+            sessionId: 'sess-1',
+            t,
+            // Large timeout so the retry-exhaustion path (not the timeout clock)
+            // drives the failure deterministically.
+            timeoutMs: 60_000,
+            transfer: {
+                itemIds: ['s1'],
+                server: jellyfinServer,
+                startIndex: undefined,
+                startPositionTicks: 0,
+            },
+        });
+        // Flush the first rejection, then advance both retry backoffs (1.5s
+        // each) and their rejections until the lifecycle settles into failure.
+        await Promise.resolve();
+        await vi.advanceTimersByTimeAsync(1_600);
+        await vi.advanceTimersByTimeAsync(1_600);
+        await Promise.resolve();
+        const failCall = firstArgs(toastUpdate).find(
+            (arg) => typeof arg.message === 'string' && arg.message.includes('Could not connect'),
+        );
+        expect(failCall).toBeDefined();
+        expect(onRevert).toHaveBeenCalledTimes(1);
+        // 1 initial + 2 retries = 3 POST attempts.
+        expect(playSpy).toHaveBeenCalledTimes(3);
+    });
+
+    it('retries the transfer POST once and succeeds without reverting', async () => {
+        // First attempt rejects, retry resolves → connect proceeds, no revert.
+        playSpy.mockRejectedValueOnce(new Error('flaky')).mockResolvedValue(undefined as never);
+        setTarget();
+        const onRevert = vi.fn();
+        startConnectLifecycle({
+            deps: { isMqttLane: () => false },
             deviceId: 'dev-1',
             deviceName: 'Living Room',
             onRevert,
@@ -179,13 +219,98 @@ describe('startConnectLifecycle', () => {
                 startPositionTicks: 0,
             },
         });
-        // Flush the microtask queue for the rejected promise.
-        await vi.runOnlyPendingTimersAsync();
+        // Flush the first rejection's microtask, then advance ONLY the retry
+        // backoff (not the 8s connect timeout — a successful POST still waits
+        // for the /Sessions mirror to flip 'connected').
+        await Promise.resolve();
+        await vi.advanceTimersByTimeAsync(1_600);
+        // The retry resolved; no failure toast and no revert yet.
         const failCall = firstArgs(toastUpdate).find(
             (arg) => typeof arg.message === 'string' && arg.message.includes('Could not connect'),
         );
-        expect(failCall).toBeDefined();
-        expect(onRevert).toHaveBeenCalledTimes(1);
+        expect(failCall).toBeUndefined();
+        expect(onRevert).not.toHaveBeenCalled();
+        expect(playSpy).toHaveBeenCalledTimes(2);
+        // Now the first-mirror signal arrives → connected, still no revert.
+        act(() => {
+            useRemoteTargetStore.getState().actions.setStatus('connected');
+        });
+        const successCall = firstArgs(toastUpdate).find(
+            (arg) => typeof arg.message === 'string' && arg.message.includes('Now playing on'),
+        );
+        expect(successCall).toBeDefined();
+        expect(onRevert).not.toHaveBeenCalled();
+    });
+
+    it('connects via the MQTT lane when Jellyfin transfer fails but the peer is live', async () => {
+        // Jellyfin POST always rejects; MQTT lane is alive.
+        playSpy.mockRejectedValue(new Error('A network error occurred'));
+        setTarget();
+        const onRevert = vi.fn();
+        const mqttTransfer = vi.fn();
+        startConnectLifecycle({
+            deps: {
+                getPeerIdForJellyfinDeviceId: () => 'peer-1',
+                getUserId: () => 'user-1',
+                isMqttLane: () => true,
+                mqttTransfer,
+            },
+            deviceId: 'dev-1',
+            deviceName: 'Living Room',
+            onRevert,
+            sessionId: 'sess-1',
+            t,
+            // Large timeout so the retry/MQTT-fallback path settles the connect
+            // before the timeout clock could interfere.
+            timeoutMs: 60_000,
+            transfer: {
+                itemIds: ['s1'],
+                server: jellyfinServer,
+                startIndex: undefined,
+                startPositionTicks: 0,
+            },
+        });
+        // Drain the initial rejection + both retry backoffs (1.5s each) + their
+        // rejections, ending in the MQTT fallback.
+        await Promise.resolve();
+        await vi.advanceTimersByTimeAsync(1_600);
+        await vi.advanceTimersByTimeAsync(1_600);
+        await Promise.resolve();
+        // No failure toast, no revert — the MQTT lane completed the connect.
+        const failCall = firstArgs(toastUpdate).find(
+            (arg) => typeof arg.message === 'string' && arg.message.includes('Could not connect'),
+        );
+        expect(failCall).toBeUndefined();
+        expect(onRevert).not.toHaveBeenCalled();
+        // The transfer was dispatched over MQTT and the store flipped connected.
+        expect(mqttTransfer).toHaveBeenCalledTimes(1);
+        expect(mqttTransfer.mock.calls[0][0]).toMatchObject({ peerId: 'peer-1', userId: 'user-1' });
+        expect(useRemoteTargetStore.getState().status).toBe('connected');
+        const successCall = firstArgs(toastUpdate).find(
+            (arg) => typeof arg.message === 'string' && arg.message.includes('Now playing on'),
+        );
+        expect(successCall).toBeDefined();
+    });
+
+    it('attaches immediately over MQTT (no transfer) without waiting on Jellyfin', () => {
+        setTarget();
+        const onRevert = vi.fn();
+        startConnectLifecycle({
+            deps: { isMqttLane: () => true },
+            deviceId: 'dev-1',
+            deviceName: 'Living Room',
+            onRevert,
+            sessionId: 'sess-1',
+            t,
+            transfer: null,
+        });
+        // No Jellyfin /Sessions mirror needed — the live MQTT peer connects us.
+        expect(useRemoteTargetStore.getState().status).toBe('connected');
+        expect(onRevert).not.toHaveBeenCalled();
+        const successCall = firstArgs(toastUpdate).find(
+            (arg) => typeof arg.message === 'string' && arg.message.includes('Now playing on'),
+        );
+        expect(successCall).toBeDefined();
     });
 
     it('cancels and hides the toast if the user re-picks mid-connect', () => {
