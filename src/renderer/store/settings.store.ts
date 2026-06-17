@@ -965,6 +965,20 @@ const OfflineMediaSettingsSchema = z.object({
 });
 
 /**
+ * Android-only: where the offline cache (downloaded audio + image variants)
+ * physically lives. `storageVolumeId` null = internal storage / IndexedDB
+ * (the universal default); a non-null id selects an app-specific external
+ * volume (e.g. an SD card) and switches Android to the Capacitor filesystem
+ * blob backend. `blobBackendVersion` gates the one-time IndexedDB→filesystem
+ * migration on upgrade. Inert on every non-Android platform.
+ */
+const AndroidStorageSettingsSchema = z.object({
+    blobBackendVersion: z.number().int().default(0),
+    storageRootPath: z.string().nullable().default(null),
+    storageVolumeId: z.string().nullable().default(null),
+});
+
+/**
  * One surface bucket's variant config: whether the thumbnail sweep pre-caches
  * this resolution and the target longest-edge px (`0` = original / no resize).
  */
@@ -996,6 +1010,11 @@ const LocalCacheImageVariantsSchema = z.object({
 });
 
 const LocalCacheSettingsSchema = z.object({
+    android: AndroidStorageSettingsSchema.default({
+        blobBackendVersion: 0,
+        storageRootPath: null,
+        storageVolumeId: null,
+    }),
     capacityBytes: z.number().optional(),
     enabled: z.boolean().optional(),
     entities: LocalCacheEntitiesSchema.optional(),
@@ -2422,6 +2441,11 @@ const initialState: SettingsState = {
         },
     },
     localCache: {
+        android: {
+            blobBackendVersion: 0,
+            storageRootPath: null,
+            storageVolumeId: null,
+        },
         capacityBytes: undefined,
         enabled: undefined,
         entities: {
@@ -3659,10 +3683,29 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
+                if (version <= 64) {
+                    // Android storage-location slice. Seed it on the existing
+                    // localCache object so the storage picker + IndexedDB→
+                    // filesystem migration have somewhere to read/write.
+                    // `state.localCache` is guarded: sparse blobs may not carry
+                    // it, and a throwing migrate discards the WHOLE persisted
+                    // state.
+                    if (state.localCache && typeof state.localCache === 'object') {
+                        if (
+                            !state.localCache.android ||
+                            typeof state.localCache.android !== 'object'
+                        ) {
+                            state.localCache.android = {
+                                ...initialState.localCache.android,
+                            };
+                        }
+                    }
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 64,
+            version: 65,
         },
     ),
 );
