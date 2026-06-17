@@ -42,7 +42,15 @@ vi.mock('/@/renderer/api', () => ({
 }));
 
 vi.mock('/@/renderer/cache/media-store', () => ({
-    localMediaStore: { get: mocks.mediaGet },
+    localMediaStore: {
+        get: mocks.mediaGet,
+        // idb-backed rows expose their bytes via loadBlob and have no direct
+        // URL; fs-backed rows (a Path) resolve to a native file URL.
+        loadBlob: vi.fn(async (row: undefined | { Blob?: Blob }) => row?.Blob),
+        resolveUrl: vi.fn((row: undefined | { Path?: string }) =>
+            row?.Path ? `cap://${row.Path}` : undefined,
+        ),
+    },
 }));
 
 vi.mock('/@/renderer/store', () => ({
@@ -107,6 +115,22 @@ describe('useSongUrl playback substitution', () => {
         await waitFor(() => expect(result.current).toBe('blob:fake-object-url'));
         expect(global.URL.createObjectURL).toHaveBeenCalledTimes(1);
         // The remote stream URL must NOT be fetched when serving locally.
+        expect(mocks.getStreamUrl).not.toHaveBeenCalled();
+    });
+
+    it('serves a filesystem-backed copy via its native file URL (no object URL)', async () => {
+        mocks.mediaGet.mockResolvedValue({
+            Backend: 'capacitor-fs',
+            ByteSize: 1,
+            Path: '/sd/feishin-cache/audio/srv_s1',
+            SongId: 's1',
+        });
+
+        const { result } = renderHook(() => useSongUrl(SONG, true, TRANSCODE), { wrapper });
+
+        await waitFor(() => expect(result.current).toBe('cap:///sd/feishin-cache/audio/srv_s1'));
+        // The fs path must NOT mint an object URL, and must not hit the network.
+        expect(global.URL.createObjectURL).not.toHaveBeenCalled();
         expect(mocks.getStreamUrl).not.toHaveBeenCalled();
     });
 

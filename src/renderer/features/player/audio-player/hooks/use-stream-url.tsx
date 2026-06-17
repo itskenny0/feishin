@@ -200,23 +200,42 @@ function useOfflineSongUrl(
             try {
                 const row = await localMediaStore.get(song._serverId, song.id);
                 if (cancelled) return;
-                if (row?.Blob) {
+                // Filesystem backend (Android SD card / internal): the bytes
+                // live in a file. Hand the media element a native file URL
+                // (Capacitor.convertFileSrc, served with range support) — no
+                // object URL to mint or revoke, and the multi-megabyte audio
+                // never enters the JS heap.
+                const directUrl = row ? localMediaStore.resolveUrl(row) : undefined;
+                if (directUrl) {
+                    retireUrl(objectUrlRef.current);
+                    objectUrlRef.current = undefined;
+                    console.info(`${TAG} playback substitution: serving local file`, {
+                        bytes: row?.ByteSize,
+                        songId: song.id,
+                    });
+                    setSettled({ key: targetKey, url: directUrl });
+                    return;
+                }
+                // IndexedDB backend: load the inline blob and mint an object URL.
+                const blob = row ? await localMediaStore.loadBlob(row) : undefined;
+                if (cancelled) return;
+                if (blob) {
                     // MATERIALIZE the blob into memory before minting the
                     // object URL. Dexie returns IndexedDB-FILE-BACKED blobs;
                     // handing one to the Android media element ties playback
                     // to the IDB blob registry. An in-memory copy detaches it.
                     // Costs the compressed file size in RAM transiently —
                     // fine for music files.
-                    const bytes = await row.Blob.arrayBuffer();
+                    const bytes = await blob.arrayBuffer();
                     if (cancelled) return;
                     const materialized = new Blob([bytes], {
-                        type: row.Blob.type || 'audio/mpeg',
+                        type: blob.type || 'audio/mpeg',
                     });
                     retireUrl(objectUrlRef.current);
                     const url = URL.createObjectURL(materialized);
                     objectUrlRef.current = url;
                     console.info(`${TAG} playback substitution: serving local blob`, {
-                        bytes: row.ByteSize,
+                        bytes: row?.ByteSize,
                         materialized: true,
                         songId: song.id,
                     });
