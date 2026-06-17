@@ -17,7 +17,7 @@ export class IndexedDbBackend implements MediaBlobBackend {
         return ref.kind === 'idb' ? ref.blob : undefined;
     }
 
-    async remove(): Promise<void> {
+    async remove(_ref: BlobRef): Promise<void> {
         // Bytes are reclaimed when the Dexie row is deleted; nothing to do here.
     }
 

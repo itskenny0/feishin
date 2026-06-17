@@ -35,6 +35,7 @@ import {
 } from '/@/renderer/cache/offline-media';
 import { useCacheStore } from '/@/renderer/cache/store';
 import { useSmoothOfflineSync } from '/@/renderer/cache/use-smooth-offline-sync';
+import { StorageLocationSettings } from '/@/renderer/features/settings/components/connect/storage-location-settings';
 import { useAuthStore, useSettingsStore } from '/@/renderer/store';
 import { toast } from '/@/shared/components/toast/toast';
 import {
@@ -406,6 +407,9 @@ export const OfflineMediaSettings = () => {
                     value={sliderValue}
                 />
             </Stack>
+
+            {/* Storage location (Android only — renders null elsewhere) */}
+            <StorageLocationSettings />
 
             {/* Live download progress */}
             {smoothSync && (

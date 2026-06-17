@@ -172,6 +172,6 @@ describe('startFresh', () => {
         expect((db.thumbnails as any).rows.size).toBe(0);
         expect(fsFiles.has('/sd/audio/srv_s1')).toBe(false);
         const target = [...(db.offlineTargets as any).rows.values()][0];
-        expect(target.Status).toBe('pending');
+        expect(target.Status).toBe('idle');
     });
 });

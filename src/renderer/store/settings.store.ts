@@ -3387,6 +3387,7 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     // default until the user picks a cap.
                     if (!state.localCache || typeof state.localCache !== 'object') {
                         state.localCache = {
+                            android: { ...initialState.localCache.android },
                             capacityBytes: undefined,
                             enabled: undefined,
                             sweepProgressSmoothing: true,

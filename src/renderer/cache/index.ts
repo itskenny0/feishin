@@ -114,6 +114,7 @@ export {
     readSnapshot,
     writeSnapshot,
 } from './snapshot';
+export { StorageFirstStartModalHost } from './storage-first-start-modal';
 export { useCacheActions, useCacheStore } from './store';
 export {
     cancelHydration,

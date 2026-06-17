@@ -164,11 +164,17 @@ export const startFresh = async (opts?: { db?: LibraryCacheDb }): Promise<void> 
     await db.mediaBlobs.clear();
     await db.thumbnails.clear();
 
-    // Keep the offline targets but mark them pending so the next sync
-    // re-downloads them into the now-active location.
+    // Keep the offline targets but reset them to idle (with no downloaded
+    // bytes) so the next sync re-downloads them into the now-active location.
     const targets = await db.offlineTargets.toArray();
     for (const t of targets) {
-        await db.offlineTargets.put({ ...t, Status: 'pending', UpdatedAt: Date.now() });
+        await db.offlineTargets.put({
+            ...t,
+            Bytes: 0,
+            DownloadedCount: 0,
+            Status: 'idle',
+            UpdatedAt: Date.now(),
+        });
     }
 
     console.info(`${TAG} start-fresh complete`, { targets: targets.length });

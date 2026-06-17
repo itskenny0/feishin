@@ -1380,6 +1380,9 @@ export const resolveThumbnail = async (
             await db.thumbnails.put({
                 __cachedAt: Date.now(),
                 __cfgHash: currentConfigHash(),
+                // Always present (idb backend overrides via blobFields; fs leaves
+                // it undefined and sets Path). CachedThumbnail requires the key.
+                Blob: undefined,
                 ByteSize: blob.size,
                 Etag: res.headers.get('etag') ?? undefined,
                 Format: formatFromContentType(contentType),

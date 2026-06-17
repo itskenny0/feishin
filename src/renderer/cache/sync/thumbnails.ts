@@ -392,6 +392,8 @@ const fetchDownscaleUnit = async (
                 await db.thumbnails.put({
                     __cachedAt: now,
                     __cfgHash: cfgHash,
+                    // Always present; idb overrides via blobFields, fs sets Path.
+                    Blob: undefined,
                     ByteSize: blob.size,
                     Etag: undefined,
                     Format: format,
