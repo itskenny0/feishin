@@ -12,8 +12,11 @@
 
 import isElectron from 'is-electron';
 
+import type { BlobRef } from './backends/types';
 import type { LibraryCacheDb } from './db';
 
+import { backendForRef } from './backends/active-backend';
+import { refForRow } from './backends/types';
 import { getActiveCacheDb } from './db';
 import { useCacheStore } from './store';
 import { clearTrackmaps, sumTrackmapBytes } from './trackmap-cache';
@@ -23,6 +26,22 @@ import { useSettingsStore } from '/@/renderer/store';
 const TWO_GB = 2 * 1024 * 1024 * 1024;
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 const LARGE_THUMBNAIL_ROW_WARN = 50_000;
+
+/**
+ * Delete the backing files for filesystem-backed thumbnail rows that were just
+ * evicted. idb rows produce no refs here (their bytes died with the row), so
+ * this is a no-op on every non-Android platform. Best-effort: a failed unlink
+ * leaks one file, never blocks eviction.
+ */
+const reclaimEvictedFiles = async (refs: BlobRef[]): Promise<void> => {
+    for (const ref of refs) {
+        try {
+            await backendForRef(ref).remove(ref);
+        } catch (err) {
+            console.warn('[cache] eviction: file unlink failed', { err });
+        }
+    }
+};
 
 let cachedIsQuotaCapped: boolean | undefined;
 
@@ -231,6 +250,7 @@ export const evict = async (): Promise<void> => {
         // Compound `[ItemId, Variant]` keys — the v12 primary key. A bare
         // `ItemId` would delete nothing (variants are separate rows).
         const toDelete: [string, string][] = [];
+        const toRemoveFiles: BlobRef[] = [];
         await db.thumbnails
             .where('LastUsed')
             .below(cutoff)
@@ -239,6 +259,12 @@ export const evict = async (): Promise<void> => {
                 const itemId = row.ItemId;
                 const variant = row.Variant;
                 const byteSize = row.ByteSize;
+                // Filesystem-backed rows keep their bytes in a file; queue it
+                // for removal before nulling the (idb-only) Blob ref.
+                if (row.Path) {
+                    const ref = refForRow(row);
+                    if (ref) toRemoveFiles.push(ref);
+                }
                 (row as { Blob?: Blob }).Blob = undefined;
                 toDelete.push([itemId, variant]);
                 dropped += byteSize;
@@ -252,6 +278,7 @@ export const evict = async (): Promise<void> => {
                 console.warn('[cache] eviction: phase 1 bulkDelete failed', { err });
             }
         }
+        await reclaimEvictedFiles(toRemoveFiles);
     } catch (err) {
         console.warn('[cache] eviction: phase 1 query failed', { err });
     }
@@ -281,6 +308,7 @@ export const evict = async (): Promise<void> => {
             // Compound `[ItemId, Variant]` keys — the v12 primary key. A bare
             // `ItemId` would delete nothing (see phase 1).
             const toDelete: [string, string][] = [];
+            const toRemoveFiles: BlobRef[] = [];
             await db.thumbnails
                 .orderBy('LastUsed')
                 .until(() => used - dropped <= cap)
@@ -288,6 +316,10 @@ export const evict = async (): Promise<void> => {
                     const itemId = row.ItemId;
                     const variant = row.Variant;
                     const byteSize = row.ByteSize;
+                    if (row.Path) {
+                        const ref = refForRow(row);
+                        if (ref) toRemoveFiles.push(ref);
+                    }
                     // Drop the Blob ref ASAP — see comment block
                     // above. The row object is about to go out of
                     // scope but the Blob is by far its heaviest
@@ -311,6 +343,7 @@ export const evict = async (): Promise<void> => {
                     });
                 }
             }
+            await reclaimEvictedFiles(toRemoveFiles);
         } catch (err) {
             console.warn('[cache] eviction: phase 2 query failed', { err });
         }

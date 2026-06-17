@@ -91,6 +91,10 @@ vi.mock('/@/renderer/api', () => ({
 
 vi.mock('/@/renderer/cache/images', () => ({
     MAX_CACHE_SIZE: 1024,
+    persistThumbnailFields: vi.fn(async (_i: string, _v: string, blob: Blob) => ({
+        Backend: 'idb',
+        Blob: blob,
+    })),
     resolveThumbnailWithBytes: vi.fn(async () => ({ bytes: 2048, noArtwork: undefined, url: 'x' })),
     rewriteUrlToVariantSize: (url: string) => url,
 }));

@@ -44,6 +44,11 @@ vi.mock('/@/renderer/cache/db', () => ({
 
 vi.mock('/@/renderer/cache/images', () => ({
     MAX_CACHE_SIZE: 1024,
+    // Mirrors the real idb-backend path: bytes stay inline in the row.
+    persistThumbnailFields: vi.fn(async (_i: string, _v: string, blob: Blob) => ({
+        Backend: 'idb',
+        Blob: blob,
+    })),
     // The sync barrel's import graph also pulls these; inert stubs suffice.
     resolveThumbnail: vi.fn(async (_i: string, _v: string, r: string | { url?: string }) =>
         typeof r === 'string' ? r : (r?.url ?? ''),

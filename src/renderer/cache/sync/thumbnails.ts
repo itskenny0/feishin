@@ -24,6 +24,7 @@ import { getActiveCacheDb } from '/@/renderer/cache/db';
 import { evict } from '/@/renderer/cache/eviction';
 import {
     MAX_CACHE_SIZE,
+    persistThumbnailFields,
     resolveThumbnailWithBytes,
     rewriteUrlToVariantSize,
 } from '/@/renderer/cache/images';
@@ -387,10 +388,10 @@ const fetchDownscaleUnit = async (
         [...produced.entries()].map(async ([variant, { blob, format }]) => {
             bytes += blob.size;
             try {
+                const blobFields = await persistThumbnailFields(pending.itemId, variant, blob);
                 await db.thumbnails.put({
                     __cachedAt: now,
                     __cfgHash: cfgHash,
-                    Blob: blob,
                     ByteSize: blob.size,
                     Etag: undefined,
                     Format: format,
@@ -399,6 +400,7 @@ const fetchDownscaleUnit = async (
                     MissAt: undefined,
                     Size: variantPx.get(variant) ?? 0,
                     Variant: variant,
+                    ...blobFields,
                 });
             } catch (err) {
                 console.warn('[image-variants] sweep: downscale write failed', {

@@ -1,4 +1,4 @@
-import type { MediaBlobBackend } from './types';
+import type { BlobRef, MediaBlobBackend } from './types';
 import type { VolumeInfo } from './volumes';
 
 import { CapacitorFsBackend } from './capacitor-fs-backend';
@@ -49,6 +49,15 @@ export const getActiveBackend = (): MediaBlobBackend => {
     if (isAndroidNative() && configuredVolumeId()) return fsBackend;
     return idbBackend;
 };
+
+/**
+ * The backend that owns an EXISTING ref's bytes, chosen by the ref's kind —
+ * not by the active selection. After a volume switch (or a partial migration)
+ * fs- and idb-backed rows coexist, so load/resolveUrl/remove must dispatch on
+ * the row itself. New writes still go through getActiveBackend().store.
+ */
+export const backendForRef = (ref: BlobRef): MediaBlobBackend =>
+    ref.kind === 'fs' ? fsBackend : idbBackend;
 
 export const setActiveVolume = async (volumeId: null | string): Promise<void> => {
     const root = volumeId ? (volumes.find((v) => v.id === volumeId)?.path ?? null) : null;

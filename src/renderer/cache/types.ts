@@ -74,8 +74,12 @@ export interface CachedLyrics extends CachedBase {
  * tracked via the multi-entry `EntityKeys` array rather than a single owner.
  */
 export interface CachedMediaBlob {
-    // Decoded audio bytes.
-    Blob: Blob;
+    // Which blob backend owns the bytes. Undefined/'idb' = inline Blob (the
+    // historical layout); 'capacitor-fs' = bytes live in a file at `Path`.
+    Backend?: 'capacitor-fs' | 'idb';
+    // Decoded audio bytes. Present only on the idb backend; undefined when the
+    // bytes live on the filesystem (see `Path`).
+    Blob?: Blob;
     ByteSize: number;
     // Container/extension hint (e.g. 'flac', 'mp3') — drives the blob MIME so
     // the web-audio engine picks the right decoder.
@@ -88,8 +92,14 @@ export interface CachedMediaBlob {
     // `${serverId}:${songId}`.
     Key: OfflineKey;
     MimeType: string | undefined;
+    // Absolute file path of the bytes on the filesystem backend. Undefined on
+    // the idb backend.
+    Path?: string;
     ServerId: string;
     SongId: string;
+    // Id of the storage volume `Path` lives on (see active-backend). Undefined
+    // on the idb backend.
+    VolumeId?: string;
 }
 
 export interface CachedPlaylist extends CachedBase {
@@ -124,10 +134,15 @@ export interface CachedThumbnail extends CachedBase {
     // access. Undefined on legacy rows written before config-hash staleness was
     // introduced; those are honoured as-is (no upgrade-time re-fetch stampede).
     __cfgHash?: string;
+    // Which blob backend owns the bytes. Undefined/'idb' = inline Blob;
+    // 'capacitor-fs' = bytes live in a file at `Path`. Negative-cache markers
+    // (no bytes) leave this undefined.
+    Backend?: 'capacitor-fs' | 'idb';
     // Optional: a row without a Blob is a negative-cache marker meaning
     // "we tried, the server returned 404 / no artwork at time MissAt".
     // The thumbnail resolver and sweep both treat such rows as
     // known-miss until MissAt ages out and a refetch is allowed.
+    // On the filesystem backend the bytes live at `Path` instead of inline.
     Blob: Blob | undefined;
     ByteSize: number;
     Etag: string | undefined;
@@ -142,6 +157,9 @@ export interface CachedThumbnail extends CachedBase {
     // Set when the row was written as a negative-cache marker (a 404
     // from the server). Undefined on real blob rows.
     MissAt: number | undefined;
+    // Absolute file path of the bytes on the filesystem backend. Undefined on
+    // the idb backend and on negative-cache markers.
+    Path?: string;
     // The actual stored pixel size for this variant (the longest edge after
     // downscale, or 0 for the original/full-size variant). Metadata only —
     // the variant bucket, not Size, is part of the primary key.
@@ -151,6 +169,8 @@ export interface CachedThumbnail extends CachedBase {
     // primary key `[ItemId+Variant]` introduced in schema v11, so the cache
     // holds one blob per (item, surface) at that surface's target px.
     Variant: string;
+    // Id of the storage volume `Path` lives on. Undefined on the idb backend.
+    VolumeId?: string;
 }
 
 /**

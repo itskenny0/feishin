@@ -8,6 +8,8 @@ import type { ImageRequest } from '/@/shared/types/domain-types';
 
 import type { CachedThumbnail } from './types';
 
+import { backendForRef, getActiveBackend } from './backends/active-backend';
+import { refForRow, rowFieldsForRef } from './backends/types';
 import { awaitActiveCacheDb, getActiveCacheDb } from './db';
 import { recordStat } from './stats';
 import {
@@ -187,6 +189,62 @@ const releaseResolveSlot = (): void => {
 const variantKey = (itemId: string, variant: string): string => `${itemId}::${variant}`;
 
 // ---------------------------------------------------------------------------
+// Blob backend bridge for thumbnails.
+//
+// Thumbnail bytes go through the same pluggable backend as offline audio:
+// inline in the Dexie row (idb backend, the historical layout) or in a file
+// under the chosen Android volume (capacitor-fs backend). The row carries a
+// Path instead of a Blob in the latter case. We "rehydrate" fs rows on read —
+// loading the file into `row.Blob` right after each Dexie fetch — so every
+// downstream object-URL / size / staleness code path stays byte-for-byte the
+// same regardless of where the bytes live. Image blobs are small, so loading
+// them into memory (rather than using convertFileSrc) keeps the existing
+// shared-object-URL refcount machinery intact.
+
+const thumbBackendKey = (itemId: string, variant: string): string => `${itemId}::${variant}`;
+
+// Fill `row.Blob` from the filesystem backend for fs-backed rows that carry a
+// Path but no inline Blob. Mutates and returns the row. Negative-cache markers
+// (no Path, no Blob) and idb rows pass through untouched.
+const rehydrateRow = async <T extends CachedThumbnail | undefined>(row: T): Promise<T> => {
+    if (!row || row.Blob || !row.Path) return row;
+    const ref = refForRow(row);
+    if (!ref) return row;
+    try {
+        row.Blob = await backendForRef(ref).load(ref);
+    } catch (err) {
+        console.warn('[image-variants] thumbnail rehydrate failed', {
+            error: (err as Error)?.message,
+            itemId: row.ItemId,
+            variant: row.Variant,
+        });
+    }
+    return row;
+};
+
+const rehydrateRows = async (
+    rows: (CachedThumbnail | undefined)[],
+): Promise<(CachedThumbnail | undefined)[]> => Promise.all(rows.map((r) => rehydrateRow(r)));
+
+// Persist thumbnail bytes through the active backend and return the row fields
+// (Blob | Path/VolumeId/Backend) that encode where they landed.
+export const persistThumbnailFields = async (
+    itemId: string,
+    variant: string,
+    blob: Blob,
+): Promise<Partial<CachedThumbnail>> => {
+    const ref = await getActiveBackend().store('image', thumbBackendKey(itemId, variant), blob);
+    return rowFieldsForRef(ref) as Partial<CachedThumbnail>;
+};
+
+// Reclaim a thumbnail row's backing file (no-op for idb rows / negative-cache
+// markers).
+export const reclaimThumbnailBytes = async (row: CachedThumbnail): Promise<void> => {
+    const ref = refForRow(row);
+    if (ref) await backendForRef(ref).remove(ref);
+};
+
+// ---------------------------------------------------------------------------
 // Shared object-URL keep-alive (refcounted).
 //
 // Previously every mounted consumer called `URL.createObjectURL` for the
@@ -306,8 +364,10 @@ export const preloadThumbnailUrls = async (
 
     let rows: (CachedThumbnail | undefined)[];
     try {
-        rows = await db.thumbnails.bulkGet(
-            wanted.map((id) => [id, resolvedVariant] as [string, string]),
+        rows = await rehydrateRows(
+            await db.thumbnails.bulkGet(
+                wanted.map((id) => [id, resolvedVariant] as [string, string]),
+            ),
         );
     } catch {
         return;
@@ -837,7 +897,9 @@ export const getCachedThumbnailDataUrl = async (itemId: string): Promise<null | 
     const db = getActiveCacheDb();
     if (!db) return null;
     try {
-        const rows = await db.thumbnails.where('ItemId').equals(itemId).toArray();
+        const rows = await rehydrateRows(
+            await db.thumbnails.where('ItemId').equals(itemId).toArray(),
+        );
         let bestUnderCap: Blob | undefined;
         let bestUnderCapSize = -1;
         let smallest: Blob | undefined;
@@ -875,7 +937,9 @@ const resolveFallbackPick = async (
     const db = getActiveCacheDb();
     if (!db) return undefined;
     try {
-        const rows = await db.thumbnails.where('ItemId').equals(itemId).toArray();
+        const rows = await rehydrateRows(
+            await db.thumbnails.where('ItemId').equals(itemId).toArray(),
+        );
         const cached: Record<string, number> = {};
         const blobByVariant = new Map<string, Blob>();
         const staleByVariant = new Map<string, boolean>();
@@ -1031,7 +1095,7 @@ export const resolveThumbnail = async (
         if (gated) await acquireResolveSlot();
         try {
             if (signal?.aborted) return { blob: undefined, bytes: 0 };
-            const row = await db.thumbnails.get(dbKey);
+            const row = await rehydrateRow(await db.thumbnails.get(dbKey));
             // Early-attempt diagnostic — logs what the resolver is
             // being asked to look up and whether the cache hit.
             // Bounded so it doesn't spam.
@@ -1118,7 +1182,10 @@ export const resolveThumbnail = async (
                         .where('ItemId')
                         .equals(itemId)
                         .toArray()
-                        .then((rows) => rows.some((r) => Boolean(r?.Blob)))
+                        // A real cached cover is either an inline Blob (idb) or
+                        // a file Path (fs backend); negative-cache markers have
+                        // neither.
+                        .then((rows) => rows.some((r) => Boolean(r?.Blob || r?.Path)))
                         .catch(() => false);
                     if (sibling) {
                         console.info('[image-variants] 404 marker contradicted by sibling blob', {
@@ -1309,10 +1376,10 @@ export const resolveThumbnail = async (
                 });
             }
 
+            const blobFields = await persistThumbnailFields(itemId, resolvedVariant, blob);
             await db.thumbnails.put({
                 __cachedAt: Date.now(),
                 __cfgHash: currentConfigHash(),
-                Blob: blob,
                 ByteSize: blob.size,
                 Etag: res.headers.get('etag') ?? undefined,
                 Format: formatFromContentType(contentType),
@@ -1321,6 +1388,7 @@ export const resolveThumbnail = async (
                 MissAt: undefined,
                 Size: targetPx,
                 Variant: resolvedVariant,
+                ...blobFields,
             });
             emitWritten();
             finishUpgrade(itemId, resolvedVariant);
