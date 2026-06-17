@@ -19,9 +19,15 @@ export const useIsSongOfflineAvailable = (
     serverId: string | undefined,
     songId: string | undefined,
 ): boolean =>
-    useCacheStore((s) =>
-        serverId && songId ? s.offlineAvailability.songKeys.has(blobKey(serverId, songId)) : false,
-    );
+    useCacheStore((s) => {
+        // When the storage volume is absent (SD card removed), the downloaded
+        // bytes are unreachable — report unavailable so playback falls back to
+        // streaming. Always true on the idb backend.
+        if (!s.volumeAvailable) return false;
+        return serverId && songId
+            ? s.offlineAvailability.songKeys.has(blobKey(serverId, songId))
+            : false;
+    });
 
 /**
  * Whether an entity (album / artist / genre / playlist / song) has anything
@@ -34,6 +40,7 @@ export const useIsEntityOfflineAvailable = (
     entityId: string | undefined,
 ): boolean =>
     useCacheStore((s) => {
+        if (!s.volumeAvailable) return false;
         if (!serverId || !entityType || !entityId) return false;
         if (entityType === 'song') {
             return s.offlineAvailability.songKeys.has(blobKey(serverId, entityId));

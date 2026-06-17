@@ -1,6 +1,7 @@
 import type { BlobRef, MediaBlobBackend } from './types';
 import type { VolumeInfo } from './volumes';
 
+import { useCacheStore } from '../store';
 import { CapacitorFsBackend } from './capacitor-fs-backend';
 import { idbBackend } from './idb-backend';
 import { isAndroidNative, listVolumes } from './volumes';
@@ -70,6 +71,20 @@ export const setActiveVolume = async (volumeId: null | string): Promise<void> =>
         },
     });
     console.info(`${TAG} active volume set`, { root, volumeId });
+};
+
+/**
+ * Re-enumerate volumes and push the active backend's health into the cache
+ * store's `volumeAvailable` flag. Call on boot and on app resume so a removed/
+ * reinserted SD card flips the offline-availability gate + banner. Returns the
+ * resolved availability.
+ */
+export const reconcileVolumeHealth = async (): Promise<boolean> => {
+    await refreshVolumes();
+    const { available } = await getActiveBackend().health();
+    useCacheStore.getState().actions.setVolumeAvailable(available);
+    console.info(`${TAG} volume health`, { available });
+    return available;
 };
 
 export const markBlobBackendMigrated = (): void => {

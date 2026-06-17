@@ -19,6 +19,7 @@ export interface CacheStoreActions {
         setOfflineTargetStatuses: (statuses: Record<string, OfflineTargetStatus>) => void;
         setPendingMutations: (n: number) => void;
         setSweep: (s: CacheStoreState['sweep']) => void;
+        setVolumeAvailable: (v: boolean) => void;
     };
 }
 
@@ -48,6 +49,11 @@ export interface CacheStoreState {
     offlineTargetStatuses: Record<string, OfflineTargetStatus>;
     pendingMutations: number;
     sweep: undefined | { entity: EntityType; progress: SweepProgress };
+    // Android filesystem backend health: false while the configured storage
+    // volume (e.g. an SD card) is absent/unmounted, so offline reads fail and
+    // the UI surfaces a "reinsert card" banner. Always true on the idb backend
+    // and on every non-Android platform.
+    volumeAvailable: boolean;
 }
 
 /**
@@ -173,6 +179,10 @@ export const useCacheStore = createWithEqualityFn<CacheStoreActions & CacheStore
                     set((st) => {
                         st.sweep = s;
                     }),
+                setVolumeAvailable: (v) =>
+                    set((st) => {
+                        st.volumeAvailable = v;
+                    }),
             },
             activeServer: undefined,
             bytesUsed: undefined,
@@ -185,6 +195,7 @@ export const useCacheStore = createWithEqualityFn<CacheStoreActions & CacheStore
             offlineTargetStatuses: {},
             pendingMutations: 0,
             sweep: undefined,
+            volumeAvailable: true,
         })),
         { name: 'cache-store' },
     ),
@@ -192,3 +203,5 @@ export const useCacheStore = createWithEqualityFn<CacheStoreActions & CacheStore
 );
 
 export const useCacheActions = (): CacheStoreActions['actions'] => useCacheStore((s) => s.actions);
+
+export const useVolumeAvailable = (): boolean => useCacheStore((s) => s.volumeAvailable);

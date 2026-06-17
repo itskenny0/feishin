@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 
+import { reconcileVolumeHealth } from './backends/active-backend';
 import { isCacheAvailable } from './capability';
 import {
     closeCacheDb,
@@ -81,6 +82,23 @@ export const useCacheLifecycle = (): void => {
             cancelled = true;
         };
     }, [actions, enabled]);
+
+    // Job 1b — Android storage-volume health. Re-enumerates volumes and pushes
+    // the active backend's availability into the store on mount and whenever
+    // the app returns to the foreground, so a removed/reinserted SD card flips
+    // the offline-availability gate + banner. No-op on the idb backend (always
+    // available), so non-Android platforms pay one cheap call.
+    useEffect(() => {
+        if (!enabled) return;
+        void reconcileVolumeHealth();
+        const onVisible = (): void => {
+            if (document.visibilityState === 'visible') void reconcileVolumeHealth();
+        };
+        document.addEventListener('visibilitychange', onVisible);
+        return () => {
+            document.removeEventListener('visibilitychange', onVisible);
+        };
+    }, [enabled]);
 
     // Job 2 — open/close DB on currentServer change.
     useEffect(() => {

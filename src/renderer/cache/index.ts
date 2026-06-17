@@ -145,3 +145,4 @@ export { usePlatformCacheCapability } from './use-platform-cache-capability';
 export { useSmoothOfflineSync } from './use-smooth-offline-sync';
 export { useSmoothSweep } from './use-smooth-sweep';
 export type { SmoothSweepView } from './use-smooth-sweep';
+export { VolumeUnavailableBanner } from './volume-unavailable-banner';
