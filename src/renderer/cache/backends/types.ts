@@ -14,14 +14,12 @@
 
 export type BlobNamespace = 'audio' | 'image';
 
-export type BlobRef =
-    | { blob: Blob; kind: 'idb' }
-    | { kind: 'fs'; path: string; volumeId: string };
+export type BlobRef = { blob: Blob; kind: 'idb' } | { kind: 'fs'; path: string; volumeId: string };
 
 export interface MediaBlobBackend {
-    readonly id: 'capacitor-fs' | 'idb';
     /** Is the underlying store reachable right now? (SD card present/mounted.) */
     health(): Promise<{ available: boolean }>;
+    readonly id: 'capacitor-fs' | 'idb';
     /** Materialize the bytes for a ref, or undefined when missing/wrong-backend. */
     load(ref: BlobRef): Promise<Blob | undefined>;
     /** Reclaim the bytes for a ref. No-op for the idb backend (row deletion does it). */
