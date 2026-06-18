@@ -68,6 +68,7 @@ const seedPeerSync = (over: Record<string, unknown> = {}) => {
             brokerUrl: 'ws://broker.lan:8083',
             brokerUsername: '',
             enabled: true,
+            homeAssistant: { deviceName: '', enabled: false },
             jellyfinRemoteEnabled: true,
             onboarded: true,
             peerId: 'peer-xyz',
