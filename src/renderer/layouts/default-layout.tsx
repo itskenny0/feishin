@@ -3,7 +3,7 @@ import isElectron from 'is-electron';
 
 import styles from './default-layout.module.css';
 
-import { OfflineDownloadBanner } from '/@/renderer/cache';
+import { OfflineDownloadBanner, VolumeUnavailableBanner } from '/@/renderer/cache';
 import { ContextMenuController } from '/@/renderer/features/context-menu/context-menu-controller';
 import { MainContent } from '/@/renderer/layouts/default-layout/main-content';
 import { PlayerBar } from '/@/renderer/layouts/default-layout/player-bar';
@@ -40,6 +40,7 @@ export const DefaultLayout = ({ shell }: DefaultLayoutProps) => {
                 <PlayerBar />
             </div>
             <OfflineDownloadBanner />
+            <VolumeUnavailableBanner />
             <ContextMenuController.Root />
         </>
     );

@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
             entityKeys: new Set<string>(['srv:album:al1', 'srv:playlist:pl1']),
             songKeys: new Set<string>(['srv:s1', 'srv:s2']),
         },
+        volumeAvailable: true,
     },
 }));
 
@@ -40,6 +41,13 @@ describe('useIsSongOfflineAvailable', () => {
         const { result: b } = renderHook(() => useIsSongOfflineAvailable('srv', undefined));
         expect(a.current).toBe(false);
         expect(b.current).toBe(false);
+    });
+
+    it('is false when the storage volume is unavailable (SD card removed)', () => {
+        mocks.state.volumeAvailable = false;
+        const { result } = renderHook(() => useIsSongOfflineAvailable('srv', 's1'));
+        expect(result.current).toBe(false);
+        mocks.state.volumeAvailable = true;
     });
 });
 

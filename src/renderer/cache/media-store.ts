@@ -22,6 +22,8 @@ import type {
     OfflineTargetStatus,
 } from './types';
 
+import { backendForRef, getActiveBackend } from './backends/active-backend';
+import { refForRow, rowFieldsForRef } from './backends/types';
 import { getActiveCacheDb } from './db';
 
 const TAG = '[offline-media]';
@@ -99,6 +101,14 @@ export class LocalMediaStore {
     /** Wipe every offline blob AND every target. */
     async clearAll(): Promise<void> {
         const db = this.db();
+        // Reclaim filesystem-backed bytes before dropping metadata so SD-card
+        // files aren't orphaned. Only scan when the filesystem backend is
+        // active — idb rows have no external bytes, and scanning them would
+        // clone every audio blob into the heap (the documented OOM hazard).
+        if (getActiveBackend().id === 'capacitor-fs') {
+            const rows = await db.mediaBlobs.toArray();
+            for (const row of rows) await this.reclaimBytes(row);
+        }
         await db.mediaBlobs.clear();
         await db.offlineTargets.clear();
         console.info(`${TAG} cleared all offline media`);
@@ -121,7 +131,10 @@ export class LocalMediaStore {
     /** Delete a single song's blob outright (ignores entity membership). */
     async delete(serverId: string, songId: string): Promise<void> {
         const db = this.db();
-        await db.mediaBlobs.delete(blobKey(serverId, songId));
+        const key = blobKey(serverId, songId);
+        const row = await db.mediaBlobs.get(key);
+        if (row) await this.reclaimBytes(row);
+        await db.mediaBlobs.delete(key);
     }
 
     /**
@@ -137,6 +150,7 @@ export class LocalMediaStore {
             const remaining = row.EntityKeys.filter((k) => k !== entityKey);
             if (remaining.length === 0) {
                 reclaimed += row.ByteSize;
+                await this.reclaimBytes(row);
                 await db.mediaBlobs.delete(row.Key);
             } else {
                 row.EntityKeys = remaining;
@@ -175,7 +189,8 @@ export class LocalMediaStore {
         if (!db) return false;
         try {
             const row = await db.mediaBlobs.get(blobKey(serverId, songId));
-            return Boolean(row?.Blob);
+            // A downloaded song has bytes either inline (idb) or in a file (fs).
+            return Boolean(row?.Blob || row?.Path);
         } catch (err) {
             console.warn(`${TAG} has() failed`, err);
             return false;
@@ -264,6 +279,17 @@ export class LocalMediaStore {
         }
     }
 
+    /**
+     * Materialize a row's audio bytes via whichever backend owns them. Returns
+     * undefined for rows whose bytes are missing (e.g. an fs row whose volume
+     * is absent).
+     */
+    async loadBlob(row: CachedMediaBlob): Promise<Blob | undefined> {
+        const ref = refForRow(row);
+        if (!ref) return undefined;
+        return backendForRef(ref).load(ref);
+    }
+
     async patchTarget(key: string, patch: Partial<OfflineTargetRow>): Promise<void> {
         const db = this.db();
         const existing = await db.offlineTargets.get(key);
@@ -271,12 +297,12 @@ export class LocalMediaStore {
         await db.offlineTargets.put({ ...existing, ...patch, UpdatedAt: Date.now() });
     }
 
+    // --- offline targets -------------------------------------------------
+
     async putTarget(row: OfflineTargetRow): Promise<void> {
         const db = this.db();
         await db.offlineTargets.put(row);
     }
-
-    // --- offline targets -------------------------------------------------
 
     /**
      * Remove a target and reclaim any blobs it solely owned. Returns reclaimed
@@ -288,6 +314,17 @@ export class LocalMediaStore {
         await db.offlineTargets.delete(key);
         console.info(`${TAG} removed target`, { key, reclaimed });
         return reclaimed;
+    }
+
+    /**
+     * A directly-loadable URL for a row's bytes when the backend can provide
+     * one (filesystem → convertFileSrc). Undefined on the idb backend, whose
+     * consumers mint an object URL from `loadBlob` instead.
+     */
+    resolveUrl(row: CachedMediaBlob): string | undefined {
+        const ref = refForRow(row);
+        if (!ref) return undefined;
+        return backendForRef(ref).resolveUrl?.(ref);
     }
 
     /**
@@ -310,8 +347,8 @@ export class LocalMediaStore {
             }
             return false;
         }
+        const ref = await getActiveBackend().store('audio', key, blob);
         const row: CachedMediaBlob = {
-            Blob: blob,
             ByteSize: blob.size,
             Container: container,
             DownloadedAt: Date.now(),
@@ -320,6 +357,7 @@ export class LocalMediaStore {
             MimeType: mimeForContainer(container),
             ServerId: serverId,
             SongId: songId,
+            ...rowFieldsForRef(ref),
         };
         await db.mediaBlobs.put(row);
         return true;
@@ -363,6 +401,12 @@ export class LocalMediaStore {
 
     private dbOrUndefined(): LibraryCacheDb | undefined {
         return this.getDb();
+    }
+
+    /** Reclaim a row's backing bytes (deletes the file on the fs backend). */
+    private async reclaimBytes(row: CachedMediaBlob): Promise<void> {
+        const ref = refForRow(row);
+        if (ref) await backendForRef(ref).remove(ref);
     }
 }
 

@@ -7,7 +7,11 @@ import { Outlet, useLocation } from 'react-router';
 
 import styles from './mobile-layout.module.css';
 
-import { OfflineDownloadBanner, prepareExplicitRefresh } from '/@/renderer/cache';
+import {
+    OfflineDownloadBanner,
+    prepareExplicitRefresh,
+    VolumeUnavailableBanner,
+} from '/@/renderer/cache';
 import { eventEmitter } from '/@/renderer/events/event-emitter';
 import { ITEM_LIST_REFRESH_ALL } from '/@/renderer/events/events';
 import { ContextMenuController } from '/@/renderer/features/context-menu/context-menu-controller';
@@ -250,6 +254,7 @@ export const MobileLayout = ({ shell }: MobileLayoutProps) => {
                 )}
             </AnimatePresence>
             <OfflineDownloadBanner />
+            <VolumeUnavailableBanner />
             <ContextMenuController.Root />
         </>
     );

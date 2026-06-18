@@ -12,6 +12,7 @@ public class MainActivity extends BridgeActivity {
         // registered before the super call or it won't be loaded.
         registerPlugin(TcpSocketPlugin.class);
         registerPlugin(WakeLockPlugin.class);
+        registerPlugin(MediaVolumesPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

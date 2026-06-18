@@ -11,7 +11,7 @@ import isElectron from 'is-electron';
 import { lazy, memo, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 
 import i18n, { loadLanguage } from '/@/i18n/i18n';
-import { EnableCacheModal, useCacheLifecycle } from '/@/renderer/cache';
+import { EnableCacheModal, StorageFirstStartModalHost, useCacheLifecycle } from '/@/renderer/cache';
 import { WebAudioContext } from '/@/renderer/features/player/context/webaudio-context';
 import { useDocumentTitle } from '/@/renderer/features/shared/hooks/use-document-title';
 import {
@@ -109,6 +109,7 @@ const AppShell = memo(function AppShell() {
         <>
             <AppEffects />
             <EnableCacheModal />
+            <StorageFirstStartModalHost />
             <Notifications
                 containerWidth="300px"
                 position={isMobileShell ? 'top-center' : 'bottom-center'}
