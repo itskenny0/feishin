@@ -33,7 +33,7 @@ vi.mock('./active-backend', () => ({
     backendForRef: (ref: any) => (ref.kind === 'fs' ? fakeFs : fakeIdb),
 }));
 
-import { migrateBlobs, startFresh } from './migrate';
+import { countMigratable, migrateBlobs, startFresh } from './migrate';
 
 class TableShim<T extends Record<string, any>> {
     readonly rows = new Map<unknown, T>();
@@ -152,6 +152,31 @@ describe('migrateBlobs', () => {
         const db = makeDb([], [thumbRow('i1', { Blob: undefined, MissAt: 123 })]);
         const res = await migrateBlobs({ db, to: fakeFs as any, toVolumeId: 'V1' });
         expect(res).toEqual({ failed: 0, migrated: 0 });
+    });
+});
+
+describe('countMigratable', () => {
+    it('counts audio AND image rows not already at the target (the modal total)', async () => {
+        const db = makeDb(
+            [mediaRow('s1', { Backend: 'idb', Blob: new Blob(['a']) })], // ByteSize 100
+            [
+                thumbRow('i1', { Backend: 'idb', Blob: new Blob(['x']) }), // ByteSize 10
+                thumbRow('i2', { Backend: 'idb', Blob: new Blob(['y']) }), // ByteSize 10
+                thumbRow('i3', { Blob: undefined, MissAt: 1 }), // negative-cache: not counted
+            ],
+        );
+        // 1 audio (100) + 2 image (10+10) = 3 items, 120 bytes — images included.
+        const r = await countMigratable({ db, toBackendId: 'capacitor-fs', toVolumeId: 'V1' });
+        expect(r).toEqual({ bytes: 120, items: 3 });
+    });
+
+    it('excludes rows already at the target volume', async () => {
+        const db = makeDb(
+            [mediaRow('s1', { Backend: 'capacitor-fs', Path: '/sd/a', VolumeId: 'V1' })],
+            [thumbRow('i1', { Backend: 'idb', Blob: new Blob(['x']) })],
+        );
+        const r = await countMigratable({ db, toBackendId: 'capacitor-fs', toVolumeId: 'V1' });
+        expect(r).toEqual({ bytes: 10, items: 1 }); // only the idb thumbnail needs moving
     });
 });
 

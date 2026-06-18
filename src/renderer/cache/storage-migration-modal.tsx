@@ -10,7 +10,7 @@
 // health is reconciled.
 
 import { Button, Group, Modal, Progress, Stack, Text } from '@mantine/core';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import {
@@ -19,7 +19,7 @@ import {
     reconcileVolumeHealth,
     setActiveVolume,
 } from './backends/active-backend';
-import { migrateBlobs, startFresh } from './backends/migrate';
+import { countMigratable, migrateBlobs, startFresh } from './backends/migrate';
 import { formatBytes, formatCount } from './format';
 import { refreshOfflineAvailability, refreshOfflineStats } from './offline-media';
 
@@ -47,6 +47,30 @@ export const StorageMigrationModal = ({
     const { t } = useTranslation();
     const [busy, setBusy] = useState<'fresh' | 'move' | null>(null);
     const [progress, setProgress] = useState<null | { items: number; total: number }>(null);
+    // True count of what will move — audio AND the image cache. The offline-media
+    // stats only count audio, so passing those would read "0 items (0 B)" while
+    // thousands of cached covers actually migrate. Computed across both tables.
+    const [pending, setPending] = useState<null | { bytes: number; items: number }>(null);
+
+    useEffect(() => {
+        if (!opened) {
+            setPending(null);
+            return;
+        }
+        let cancelled = false;
+        void countMigratable({
+            toBackendId: targetVolumeId ? 'capacitor-fs' : 'idb',
+            toVolumeId: targetVolumeId,
+        }).then((result) => {
+            if (!cancelled) setPending(result);
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [opened, targetVolumeId]);
+
+    const displayItems = pending?.items ?? itemCount;
+    const displayBytes = pending?.bytes ?? totalBytes;
 
     const finalize = useCallback(async () => {
         markBlobBackendMigrated();
@@ -94,10 +118,10 @@ export const StorageMigrationModal = ({
                       'Your offline downloads need to move to the new storage system. Migrate them now, or start fresh and re-download.',
               })
             : t('page.setting.storageLocation.moveBody', {
-                  count: itemCount,
+                  count: displayItems,
                   defaultValue:
                       'Move {{count}} items ({{size}}) to {{volume}}, or start fresh there?',
-                  size: formatBytes(totalBytes),
+                  size: formatBytes(displayBytes),
                   volume: targetVolumeLabel,
               });
 
