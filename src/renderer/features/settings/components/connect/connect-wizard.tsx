@@ -8,7 +8,7 @@
  * Connect-related UI chrome (device-picker buttons, status pill, lane
  * badges) is hidden from the rest of the app.
  */
-import { Alert, Group, Radio, ScrollArea, Stack, Stepper } from '@mantine/core';
+import { Alert, Checkbox, Group, Radio, ScrollArea, Stack, Stepper } from '@mantine/core';
 import isElectron from 'is-electron';
 import { nanoid } from 'nanoid';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
@@ -385,8 +385,10 @@ const StepConfigure = ({
 interface StepFinishProps {
     brokerUrl: string;
     finished: boolean;
+    homeAssistant: boolean;
     onBack: () => void;
     onFinish: () => void;
+    onHomeAssistantChange: (value: boolean) => void;
     onRerun: () => void;
     saving: boolean;
     tier: BrokerTier;
@@ -395,8 +397,10 @@ interface StepFinishProps {
 const StepFinish = ({
     brokerUrl,
     finished,
+    homeAssistant,
     onBack,
     onFinish,
+    onHomeAssistantChange,
     onRerun,
     saving,
     tier,
@@ -443,6 +447,20 @@ const StepFinish = ({
                     </Group>
                 )}
             </Stack>
+            {!finished && (
+                <Checkbox
+                    checked={homeAssistant}
+                    description={t('page.setting.wizardHomeAssistant', {
+                        context: 'description',
+                        defaultValue:
+                            'Publish this player to Home Assistant over the same broker, using autodiscovery. A controllable device appears automatically — no Home Assistant configuration required. You can change this later in Sync & Connect.',
+                    })}
+                    label={t('page.setting.wizardHomeAssistant', {
+                        defaultValue: 'Also expose this player to Home Assistant',
+                    })}
+                    onChange={(e) => onHomeAssistantChange(e.currentTarget.checked)}
+                />
+            )}
             <Group justify="space-between">
                 <Button disabled={saving || finished} onClick={onBack} variant="default">
                     {t('common.back', { defaultValue: 'Back' })}
@@ -496,6 +514,9 @@ export const ConnectWizard = memo(() => {
     // changed the broker config (which resets the gate back to idle).
     const testTokenRef = useRef(0);
     const [saving, setSaving] = useState(false);
+    // Home Assistant opt-in (default off). Seeded from the persisted value so a
+    // re-run of the wizard reflects the current setting.
+    const [homeAssistant, setHomeAssistant] = useState(settings.homeAssistant?.enabled === true);
     // Guard against a double-tap on Finish racing two concurrent save flows
     // (Mantine's `loading` prop doesn't disable the underlying button, so
     // a fast pointer + slow IPC round-trip could fire `setEnabled` twice).
@@ -627,6 +648,7 @@ export const ConnectWizard = memo(() => {
                     brokerUrl: tier === 'embedded' ? '' : brokerUrl.trim(),
                     brokerUsername: tier === 'own' ? username : '',
                     enabled: true,
+                    homeAssistant: { enabled: homeAssistant },
                     jellyfinRemoteEnabled: true,
                     onboarded: true,
                     peerId,
@@ -655,6 +677,7 @@ export const ConnectWizard = memo(() => {
     }, [
         brokerUrl,
         currentServer?.username,
+        homeAssistant,
         password,
         settings.broker,
         settings.peerId,
@@ -720,8 +743,10 @@ export const ConnectWizard = memo(() => {
                         <StepFinish
                             brokerUrl={brokerUrl}
                             finished={finished}
+                            homeAssistant={homeAssistant}
                             onBack={goBack}
                             onFinish={handleFinish}
+                            onHomeAssistantChange={setHomeAssistant}
                             onRerun={handleRerun}
                             saving={saving}
                             tier={tier}

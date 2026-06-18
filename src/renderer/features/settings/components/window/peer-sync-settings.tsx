@@ -22,6 +22,7 @@ import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
+import { HomeAssistantSettings } from '/@/renderer/features/settings/components/connect/home-assistant-settings';
 import { SettingsSection } from '/@/renderer/features/settings/components/settings-section';
 import { usePeerSyncSettings, useSettingsStoreActions } from '/@/renderer/store';
 import { useCurrentServer } from '/@/renderer/store/auth.store';
@@ -669,6 +670,8 @@ export const PeerSyncSettings = memo(() => {
                     </Collapse>
                 </Stack>
             )}
+
+            <HomeAssistantSettings />
         </Stack>
     );
 });
