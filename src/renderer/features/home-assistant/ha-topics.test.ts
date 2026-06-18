@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+    haArtTopic,
     haAvailabilityTopic,
     haCmdTopic,
     haCmdWildcard,
@@ -20,6 +21,7 @@ describe('ha-topics', () => {
         const n = haNodeId('p1');
         expect(haAvailabilityTopic(n)).toBe('feishin/ha/feishin_p1/availability');
         expect(haStateTopic(n)).toBe('feishin/ha/feishin_p1/state');
+        expect(haArtTopic(n)).toBe('feishin/ha/feishin_p1/art');
         expect(haCmdTopic(n, 'play')).toBe('feishin/ha/feishin_p1/cmd/play');
         expect(haCmdWildcard(n)).toBe('feishin/ha/feishin_p1/cmd/+');
         expect(haDiscoveryTopic('sensor', n, 'title')).toBe(

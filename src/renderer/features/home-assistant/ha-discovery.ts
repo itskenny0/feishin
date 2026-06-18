@@ -9,7 +9,13 @@
 
 import type { HaCommandVerb } from './ha-topics';
 
-import { haAvailabilityTopic, haCmdTopic, haDiscoveryTopic, haStateTopic } from './ha-topics';
+import {
+    haArtTopic,
+    haAvailabilityTopic,
+    haCmdTopic,
+    haDiscoveryTopic,
+    haStateTopic,
+} from './ha-topics';
 
 export interface DiscoveryMsg {
     payload: string;
@@ -54,7 +60,14 @@ const components = (nodeId: string): Component[] => {
         }),
         {
             component: 'image',
-            config: { name: 'Artwork', url_template: '{{ value_json.artUrl }}', url_topic: state },
+            // Raw base64 cover bytes on a dedicated topic — HA decodes and
+            // serves them, so it never has to reach the media server.
+            config: {
+                content_type: 'image/jpeg',
+                image_encoding: 'b64',
+                image_topic: haArtTopic(nodeId),
+                name: 'Artwork',
+            },
             objectId: 'artwork',
         },
         button('play', 'Play'),
