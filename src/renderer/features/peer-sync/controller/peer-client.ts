@@ -496,7 +496,7 @@ const resolveTcpPlugin = async (): Promise<
  * null if no provider is available (caller then falls back to WS). Never
  * throws — any failure logs + returns null so a missing provider can't crash.
  */
-const buildNativeTcpStreamBuilder = async (
+export const buildNativeTcpStreamBuilder = async (
     brokerUrl: string,
     tls: boolean | undefined,
 ): Promise<(() => unknown) | null> => {

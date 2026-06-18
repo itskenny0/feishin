@@ -64,6 +64,7 @@ const resetPeerSync = () => {
             brokerUrl: '',
             brokerUsername: '',
             enabled: false,
+            homeAssistant: { deviceName: '', enabled: false },
             jellyfinRemoteEnabled: true,
             onboarded: false,
             peerId: '',
