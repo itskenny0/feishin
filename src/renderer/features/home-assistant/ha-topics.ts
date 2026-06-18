@@ -29,6 +29,11 @@ export const haAvailabilityTopic = (nodeId: string): string => `feishin/ha/${nod
 
 export const haStateTopic = (nodeId: string): string => `feishin/ha/${nodeId}/state`;
 
+// Raw base64 cover-art bytes (HA `image` entity with image_encoding: b64).
+// Published on track change so Home Assistant never has to reach the media
+// server to render artwork.
+export const haArtTopic = (nodeId: string): string => `feishin/ha/${nodeId}/art`;
+
 export const haCmdTopic = (nodeId: string, verb: HaCommandVerb): string =>
     `feishin/ha/${nodeId}/cmd/${verb}`;
 

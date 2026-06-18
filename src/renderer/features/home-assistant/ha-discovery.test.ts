@@ -29,6 +29,13 @@ describe('buildDiscovery', () => {
         expect(title.value_template).toContain('value_json.title');
     });
 
+    it('artwork uses base64 image bytes on the art topic (not a URL)', () => {
+        const art = JSON.parse(byTopic('homeassistant/image/feishin_p1/artwork/config').payload);
+        expect(art.image_topic).toBe('feishin/ha/feishin_p1/art');
+        expect(art.image_encoding).toBe('b64');
+        expect(art.url_topic).toBeUndefined();
+    });
+
     it('buttons publish to their own command topic', () => {
         const next = JSON.parse(byTopic('homeassistant/button/feishin_p1/next/config').payload);
         expect(next.command_topic).toBe('feishin/ha/feishin_p1/cmd/next');

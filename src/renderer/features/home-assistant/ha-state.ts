@@ -9,10 +9,8 @@
 
 import type { QueueSong } from '/@/shared/types/domain-types';
 
-import { getItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { usePlayerStoreBase } from '/@/renderer/store/player.store';
 import { useTimestampStoreBase } from '/@/renderer/store/timestamp.store';
-import { LibraryItem } from '/@/shared/types/domain-types';
 import { PlayerRepeat, PlayerShuffle, PlayerStatus } from '/@/shared/types/types';
 
 const log = (...a: unknown[]) => console.info('[home-assistant]', ...a);
@@ -22,7 +20,6 @@ const THROTTLE_MS = 1000;
 export interface HaStatePayload {
     album: string;
     artist: string;
-    artUrl: string;
     duration: number;
     muted: boolean;
     position: number;
@@ -45,7 +42,6 @@ const artistName = (current: QueueSong | undefined): string => {
 };
 
 export const buildHaState = (args: {
-    artUrl: string;
     current: QueueSong | undefined;
     muted: boolean;
     position: number;
@@ -58,7 +54,6 @@ export const buildHaState = (args: {
     return {
         album: current?.album ?? '',
         artist: artistName(current),
-        artUrl: args.artUrl,
         // QueueSong.duration is milliseconds on every server backend.
         duration: current?.duration ? Math.floor(current.duration / 1000) : 0,
         muted: args.muted,
@@ -71,33 +66,10 @@ export const buildHaState = (args: {
     };
 };
 
-// Resolve an absolute, server-reachable cover URL from the song's imageId.
-// QueueSong.imageUrl is null off the wire (it's populated lazily by the UI),
-// so Home Assistant — which fetches the URL itself — needs the real server URL
-// built from the id. `useRemoteUrl` prefers the server's external address so a
-// HA instance off-device can still reach it.
-const resolveArtUrl = (current: QueueSong | undefined): string => {
-    if (!current) return '';
-    try {
-        return (
-            getItemImageUrl({
-                id: current.imageId || undefined,
-                imageUrl: current.imageUrl || undefined,
-                itemType: LibraryItem.SONG,
-                serverId: current._serverId,
-                useRemoteUrl: true,
-            }) ?? ''
-        );
-    } catch {
-        return '';
-    }
-};
-
 const snapshot = (): HaStatePayload => {
     const p = usePlayerStoreBase.getState();
     const current = p.getCurrentSong();
     return buildHaState({
-        artUrl: resolveArtUrl(current),
         current,
         muted: p.player.muted,
         position: useTimestampStoreBase.getState().timestamp ?? 0,

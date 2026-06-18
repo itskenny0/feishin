@@ -26,6 +26,7 @@ vi.mock('/@/renderer/features/peer-sync/controller/peer-client', () => ({
 
 const stopPublisher = vi.fn();
 vi.mock('./ha-state', () => ({ startHaStatePublisher: vi.fn(() => stopPublisher) }));
+vi.mock('./ha-art', () => ({ startHaArtPublisher: vi.fn(() => vi.fn()) }));
 vi.mock('./ha-commands', () => ({ applyHaCommand: vi.fn() }));
 
 import { applyHaCommand } from './ha-commands';

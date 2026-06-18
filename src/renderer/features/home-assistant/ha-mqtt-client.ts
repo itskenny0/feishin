@@ -12,10 +12,12 @@ import type { IClientOptions, MqttClient } from 'mqtt';
 
 import mqtt from 'mqtt';
 
+import { startHaArtPublisher } from './ha-art';
 import { applyHaCommand } from './ha-commands';
 import { buildDiscovery, clearDiscovery } from './ha-discovery';
 import { startHaStatePublisher } from './ha-state';
 import {
+    haArtTopic,
     haAvailabilityTopic,
     haCmdWildcard,
     type HaCommandVerb,
@@ -48,6 +50,7 @@ interface HaSession {
     args: HaClientArgs;
     client: MqttClient;
     nodeId: string;
+    stopArtPublisher?: () => void;
     stopPublisher?: () => void;
 }
 
@@ -99,6 +102,10 @@ const wire = (client: MqttClient, args: HaClientArgs, nodeId: string): void => {
         s.stopPublisher?.();
         s.stopPublisher = startHaStatePublisher((payload) =>
             publish(client, haStateTopic(nodeId), payload, { retain: true }),
+        );
+        s.stopArtPublisher?.();
+        s.stopArtPublisher = startHaArtPublisher((base64) =>
+            publish(client, haArtTopic(nodeId), base64, { retain: true }),
         );
         client.subscribe(haCmdWildcard(nodeId), { qos: 1 }, (err) => {
             if (err) warn('subscribe failed', { err: err.message });
@@ -172,6 +179,7 @@ export const stopHaClient = (): void => {
     if (!s) return;
     log('stopping', { nodeId: s.nodeId });
     s.stopPublisher?.();
+    s.stopArtPublisher?.();
     try {
         // Remove the HA device + go offline (retained) before disconnecting.
         for (const msg of clearDiscovery(s.nodeId)) {
