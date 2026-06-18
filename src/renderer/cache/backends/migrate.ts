@@ -65,6 +65,45 @@ const writeRefFields = (
 
 const thumbKey = (row: CachedThumbnail): string => `${row.ItemId}::${row.Variant}`;
 
+const isAtTargetId = (
+    ref: BlobRef,
+    toBackendId: 'capacitor-fs' | 'idb',
+    toVolumeId?: null | string,
+): boolean => {
+    if (toBackendId === 'idb') return ref.kind === 'idb';
+    return ref.kind === 'fs' && ref.volumeId === toVolumeId;
+};
+
+/**
+ * Count how many blobs (audio AND images) + total bytes a migration to the
+ * given target would move — i.e. every row not already at the target. Drives
+ * the migration modal's "Move N items (X)" text, which must reflect the FULL
+ * move (the offline-media stats only count audio, so the image cache — often
+ * the bulk — would otherwise read as 0).
+ */
+export const countMigratable = async (opts: {
+    db?: LibraryCacheDb;
+    toBackendId: 'capacitor-fs' | 'idb';
+    toVolumeId?: null | string;
+}): Promise<{ bytes: number; items: number }> => {
+    const db = opts.db ?? getActiveCacheDb();
+    if (!db) return { bytes: 0, items: 0 };
+    let items = 0;
+    let bytes = 0;
+    const tally = (rows: Array<CachedMediaBlob | CachedThumbnail>): void => {
+        for (const row of rows) {
+            const ref = refForRow(row);
+            if (ref && !isAtTargetId(ref, opts.toBackendId, opts.toVolumeId)) {
+                items += 1;
+                bytes += row.ByteSize ?? 0;
+            }
+        }
+    };
+    tally(await db.mediaBlobs.toArray());
+    tally(await db.thumbnails.toArray());
+    return { bytes, items };
+};
+
 /**
  * Migrate every audio + image blob to `to`. Returns counts of migrated and
  * failed rows. Negative-cache thumbnail markers (no bytes) are left untouched.
