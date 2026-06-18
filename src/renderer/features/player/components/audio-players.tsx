@@ -101,6 +101,31 @@ const PeerSyncMount = () => {
     );
 };
 
+// Home Assistant MQTT bridge. Lazily mounted so the mqtt/bridge code stays out
+// of the main bundle until the user enables it. Gated only on the HA toggle +
+// a configured broker — independent of peer-sync's own enable flags.
+const LazyHomeAssistantHook = lazy(() =>
+    import('/@/renderer/features/home-assistant').then((module) => ({
+        default: module.HomeAssistantHook,
+    })),
+);
+
+const HomeAssistantMount = () => {
+    const haActive = useSettingsStore(
+        (state) =>
+            state.peerSync.homeAssistant?.enabled === true &&
+            Boolean(state.peerSync.brokerUrl?.trim()),
+    );
+
+    if (!haActive) return null;
+
+    return (
+        <Suspense fallback={null}>
+            <LazyHomeAssistantHook />
+        </Suspense>
+    );
+};
+
 const CODEC_PROBES = [
     { codec: 'mp3', container: 'mp3', mime: 'audio/mpeg' },
 
@@ -199,6 +224,7 @@ export const AudioPlayers = () => {
             <JellyfinRemoteControlHook />
             <SessionsPollerHook />
             <PeerSyncMount />
+            <HomeAssistantMount />
             <AutoDJHook />
             <UpcomingLyricsPrefetch />
             <UpcomingCoversPrefetch />
