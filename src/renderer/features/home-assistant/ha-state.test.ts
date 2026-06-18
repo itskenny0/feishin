@@ -16,6 +16,7 @@ const song = {
 describe('buildHaState', () => {
     it('maps a playing track', () => {
         const s = buildHaState({
+            artUrl: 'http://x/art.jpg',
             current: song,
             muted: false,
             position: 12.5,
@@ -41,6 +42,7 @@ describe('buildHaState', () => {
 
     it('falls back to album artists when track artists are absent', () => {
         const s = buildHaState({
+            artUrl: 'http://x/art.jpg',
             current: { ...song, artists: [] },
             muted: false,
             position: 0,
@@ -54,6 +56,7 @@ describe('buildHaState', () => {
 
     it('reports idle with no current song', () => {
         const s = buildHaState({
+            artUrl: 'http://x/art.jpg',
             current: undefined,
             muted: false,
             position: 0,
@@ -70,6 +73,7 @@ describe('buildHaState', () => {
 
     it('reports paused when a song is loaded but not playing', () => {
         const s = buildHaState({
+            artUrl: 'http://x/art.jpg',
             current: song,
             muted: true,
             position: 5,
