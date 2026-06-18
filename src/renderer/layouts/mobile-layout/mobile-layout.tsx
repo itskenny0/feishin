@@ -21,7 +21,8 @@ import { MobileSidebar } from '/@/renderer/features/sidebar/components/mobile-si
 import { useIsBigPhone } from '/@/renderer/hooks/use-breakpoint';
 import { useEdgeSwipe } from '/@/renderer/hooks/use-edge-swipe';
 import { usePullToRefresh } from '/@/renderer/hooks/use-pull-to-refresh';
-import { PlayerBar } from '/@/renderer/layouts/default-layout/player-bar';
+import { useSoftKeyboardVisible } from '/@/renderer/hooks/use-soft-keyboard-visible';
+import { isTouchOrNative, PlayerBar } from '/@/renderer/layouts/default-layout/player-bar';
 import { BottomTabBar } from '/@/renderer/layouts/mobile-layout/bottom-tab-bar';
 import { WindowBar } from '/@/renderer/layouts/window-bar';
 import {
@@ -81,6 +82,13 @@ export const MobileLayout = ({ shell }: MobileLayoutProps) => {
     const remoteTargetActive = useRemoteTargetStore((s) => s.targetDeviceId !== null);
     const hasSong = Boolean(currentSong?.id) || remoteTargetActive;
 
+    // When the soft keyboard opens, the mini-player slides out of view
+    // (player-bar's own .keyboard-hidden). But its grid track still reserves
+    // --mobile-playerbar-height, leaving a black band between content and the
+    // tab bar. Collapse the player row to 0 here — same gate as the bar's hide,
+    // so the two never desync — exactly as .has-no-song does for an empty queue.
+    const keyboardVisible = useSoftKeyboardVisible({ enabled: isTouchOrNative() });
+
     // Pull-to-refresh on the main content scroll container. A top overscroll
     // is the user's explicit "go to the server now": open the sync-first
     // explicit-refresh window (drops the row cache + library snapshots so
@@ -138,6 +146,7 @@ export const MobileLayout = ({ shell }: MobileLayoutProps) => {
             <div
                 className={clsx(styles.layout, {
                     [styles.hasNoSong]: !hasSong,
+                    [styles.keyboardHidden]: keyboardVisible,
                     [styles.macos]: windowBarStyle === Platform.MACOS,
                     [styles.windows]: windowBarStyle === Platform.WINDOWS,
                 })}

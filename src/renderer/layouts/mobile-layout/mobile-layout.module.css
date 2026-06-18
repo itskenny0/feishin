@@ -80,7 +80,14 @@
  * default layout above so Android browsers without dvh support get the
  * sane fallback.
  */
-.layout.has-no-song {
+.layout.has-no-song,
+/*
+ * Soft keyboard open: the mini-player slides out of view (player-bar's own
+ * .keyboard-hidden), so collapse its grid track to 0 — otherwise the reserved
+ * --mobile-playerbar-height shows as a black band between content and the tab
+ * bar. Identical row template to the empty-queue case.
+ */
+.layout.keyboard-hidden {
     grid-template-rows:
         calc(var(--mobile-window-bar-height) + var(--safe-top))
         calc(
