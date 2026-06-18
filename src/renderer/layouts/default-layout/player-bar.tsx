@@ -13,7 +13,7 @@ import { usePlayerbarOpenDrawer } from '/@/renderer/store';
 // desktop browser window (whose resize would otherwise also shrink the visual
 // viewport and wrongly hide the bar). `maxTouchPoints` catches mobile web /
 // PWA; `isNativePlatform` catches the Capacitor Android / iOS shells.
-const isTouchOrNative = (): boolean => {
+export const isTouchOrNative = (): boolean => {
     if (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0) return true;
     try {
         return Capacitor.isNativePlatform();
