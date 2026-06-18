@@ -1080,6 +1080,18 @@ const PeerSyncUiVisibilitySchema = z.object({
     statusPill: z.boolean().default(true),
 });
 
+/**
+ * Home Assistant MQTT bridge. When `enabled`, Feishin publishes an
+ * autodiscovered HA media-player device over the SAME broker the peer-sync
+ * slice points at — independent of `peerSync.enabled`. Defaults off.
+ */
+const HomeAssistantSettingsSchema = z.object({
+    /** Display name of the HA device. Empty → "Feishin". */
+    deviceName: z.string().default(''),
+    /** Master toggle for the HA bridge. */
+    enabled: z.boolean().default(false),
+});
+
 const PeerSyncSettingsSchema = z.object({
     /** Embedded broker settings (desktop only). */
     broker: PeerSyncBrokerSettingsSchema.default({
@@ -1101,6 +1113,8 @@ const PeerSyncSettingsSchema = z.object({
      *  fully inert; Jellyfin Sessions polling continues per
      *  `jellyfinRemoteEnabled`. */
     enabled: z.boolean().default(false),
+    /** Home Assistant MQTT bridge (default off). */
+    homeAssistant: HomeAssistantSettingsSchema.default({ deviceName: '', enabled: false }),
     /** Master toggle for Jellyfin Remote (device picker, controller,
      *  receiver, Sessions polling). Off = no remote-play UI or background
      *  polling whatsoever, regardless of `enabled`. Default true so
@@ -2502,6 +2516,7 @@ const initialState: SettingsState = {
         brokerUrl: '',
         brokerUsername: '',
         enabled: false,
+        homeAssistant: { deviceName: '', enabled: false },
         jellyfinRemoteEnabled: true,
         onboarded: false,
         peerId: '',
@@ -3703,10 +3718,26 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
+                if (version <= 65) {
+                    // Home Assistant MQTT bridge slice. Guarded: a sparse blob
+                    // may lack peerSync, and a throwing migrate discards ALL
+                    // persisted settings.
+                    if (state.peerSync && typeof state.peerSync === 'object') {
+                        if (
+                            !state.peerSync.homeAssistant ||
+                            typeof state.peerSync.homeAssistant !== 'object'
+                        ) {
+                            state.peerSync.homeAssistant = {
+                                ...initialState.peerSync.homeAssistant,
+                            };
+                        }
+                    }
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 65,
+            version: 66,
         },
     ),
 );
