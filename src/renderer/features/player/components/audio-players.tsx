@@ -126,6 +126,33 @@ const HomeAssistantMount = () => {
     );
 };
 
+// Android background-sync foreground service. Lazily mounted so the native
+// bridge code stays out of the main bundle until the cache is enabled. The hook
+// itself no-ops off Android-native, but we also gate the mount on the cache +
+// background-sync settings so the chunk isn't fetched on installs that never
+// use it.
+const LazySyncForegroundServiceHook = lazy(() =>
+    import('/@/renderer/features/sync-service').then((module) => ({
+        default: module.SyncForegroundServiceHook,
+    })),
+);
+
+const SyncForegroundServiceMount = () => {
+    const active = useSettingsStore(
+        (state) =>
+            state.localCache?.enabled === true &&
+            state.localCache?.android?.backgroundSync !== false,
+    );
+
+    if (!active) return null;
+
+    return (
+        <Suspense fallback={null}>
+            <LazySyncForegroundServiceHook />
+        </Suspense>
+    );
+};
+
 const CODEC_PROBES = [
     { codec: 'mp3', container: 'mp3', mime: 'audio/mpeg' },
 
@@ -225,6 +252,7 @@ export const AudioPlayers = () => {
             <SessionsPollerHook />
             <PeerSyncMount />
             <HomeAssistantMount />
+            <SyncForegroundServiceMount />
             <AutoDJHook />
             <UpcomingLyricsPrefetch />
             <UpcomingCoversPrefetch />

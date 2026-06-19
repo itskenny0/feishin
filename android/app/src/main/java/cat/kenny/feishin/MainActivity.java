@@ -13,6 +13,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(TcpSocketPlugin.class);
         registerPlugin(WakeLockPlugin.class);
         registerPlugin(MediaVolumesPlugin.class);
+        registerPlugin(SyncForegroundServicePlugin.class);
         super.onCreate(savedInstanceState);
     }
 }
