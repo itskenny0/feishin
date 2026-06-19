@@ -28,6 +28,21 @@
             android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
         </provider>
+
+        <!--
+            Background sync foreground service. Keeps the JS sync pipelines
+            (image-cache sweep + offline-media downloads) running while the app
+            is backgrounded / locked. Typed dataSync per Android 14+.
+        -->
+        <service
+            android:name=".SyncForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <!-- Receives the Pause / Stop notification action broadcasts. -->
+        <receiver
+            android:name=".SyncActionReceiver"
+            android:exported="false" />
     </application>
 
     <!-- Permissions -->
@@ -54,4 +69,12 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!--
+        Background library/offline sync. FOREGROUND_SERVICE_DATA_SYNC is the
+        Android 14+ typed-FGS permission required to start the dataSync
+        SyncForegroundService that keeps the JS sync pipelines progressing while
+        the app is backgrounded / the screen is locked.
+    -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 </manifest>

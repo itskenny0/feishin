@@ -65,6 +65,7 @@ export const setActiveVolume = async (volumeId: null | string): Promise<void> =>
     const current = androidSlice();
     useSettingsStore.getState().actions.setLocalCache({
         android: {
+            backgroundSync: current?.backgroundSync ?? true,
             blobBackendVersion: current?.blobBackendVersion ?? 0,
             storageRootPath: root,
             storageVolumeId: volumeId,
@@ -91,6 +92,7 @@ export const markBlobBackendMigrated = (): void => {
     const current = androidSlice();
     useSettingsStore.getState().actions.setLocalCache({
         android: {
+            backgroundSync: current?.backgroundSync ?? true,
             blobBackendVersion: FS_BACKEND_VERSION,
             storageRootPath: current?.storageRootPath ?? null,
             storageVolumeId: current?.storageVolumeId ?? null,

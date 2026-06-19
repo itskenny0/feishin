@@ -973,6 +973,13 @@ const OfflineMediaSettingsSchema = z.object({
  * migration on upgrade. Inert on every non-Android platform.
  */
 const AndroidStorageSettingsSchema = z.object({
+    // Keep the JS sync pipelines (image-cache sweep + offline-media downloads)
+    // running while the app is backgrounded / the screen is locked by wrapping
+    // each pipeline in a typed dataSync Android foreground service + a shared
+    // partial wake lock + a persistent progress notification. Default ON; the
+    // Zod default backfills the field on existing installs so no store version
+    // bump / migration is needed.
+    backgroundSync: z.boolean().default(true),
     blobBackendVersion: z.number().int().default(0),
     storageRootPath: z.string().nullable().default(null),
     storageVolumeId: z.string().nullable().default(null),
@@ -1011,6 +1018,7 @@ const LocalCacheImageVariantsSchema = z.object({
 
 const LocalCacheSettingsSchema = z.object({
     android: AndroidStorageSettingsSchema.default({
+        backgroundSync: true,
         blobBackendVersion: 0,
         storageRootPath: null,
         storageVolumeId: null,
@@ -2456,6 +2464,7 @@ const initialState: SettingsState = {
     },
     localCache: {
         android: {
+            backgroundSync: true,
             blobBackendVersion: 0,
             storageRootPath: null,
             storageVolumeId: null,

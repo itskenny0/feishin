@@ -12,6 +12,7 @@ import {
     ScrollArea,
     Slider,
     Stack,
+    Switch,
     Table,
     Text,
     TextInput,
@@ -22,6 +23,7 @@ import { useTranslation } from 'react-i18next';
 import { RiAddLine, RiDeleteBinLine, RiRefreshLine } from 'react-icons/ri';
 
 import { api } from '/@/renderer/api';
+import { isAndroidNative } from '/@/renderer/cache/backends/volumes';
 import { formatBytes } from '/@/renderer/cache/format';
 import { localMediaStore, requestPersistentStorage } from '/@/renderer/cache/media-store';
 import {
@@ -80,7 +82,9 @@ export const OfflineMediaSettings = () => {
 
     const cacheEnabled = useSettingsStore((s) => s.localCache?.enabled === true);
     const offlineCfg = useSettingsStore((s) => s.localCache?.offlineMedia);
+    const androidCfg = useSettingsStore((s) => s.localCache?.android);
     const setLocalCache = useSettingsStore((s) => s.actions.setLocalCache);
+    const backgroundSync = androidCfg?.backgroundSync !== false;
 
     const [targets, setTargets] = useState<OfflineTargetRow[]>([]);
     const [loadingTargets, setLoadingTargets] = useState(false);
@@ -141,6 +145,20 @@ export const OfflineMediaSettings = () => {
             });
         },
         [offlineCfg?.downloadOriginal, setLocalCache],
+    );
+
+    const handleToggleBackgroundSync = useCallback(
+        (checked: boolean) => {
+            setLocalCache({
+                android: {
+                    backgroundSync: checked,
+                    blobBackendVersion: androidCfg?.blobBackendVersion ?? 0,
+                    storageRootPath: androidCfg?.storageRootPath ?? null,
+                    storageVolumeId: androidCfg?.storageVolumeId ?? null,
+                },
+            });
+        },
+        [androidCfg, setLocalCache],
     );
 
     const handleSearch = useCallback(async () => {
@@ -410,6 +428,28 @@ export const OfflineMediaSettings = () => {
 
             {/* Storage location (Android only — renders null elsewhere) */}
             <StorageLocationSettings />
+
+            {/* Keep syncing in the background (Android only) */}
+            {isAndroidNative() && (
+                <Stack gap="xs">
+                    <Title order={6}>
+                        {t('page.setting.offlineMedia.backgroundSyncTitle', {
+                            defaultValue: 'Keep syncing in the background',
+                        })}
+                    </Title>
+                    <Switch
+                        checked={backgroundSync}
+                        description={t('page.setting.offlineMedia.backgroundSyncDescription', {
+                            defaultValue:
+                                'Keep library and offline-download syncs running while the app is in the background or the screen is locked. Shows a progress notification you can pause or stop.',
+                        })}
+                        label={t('page.setting.offlineMedia.backgroundSyncLabel', {
+                            defaultValue: 'Sync in the background',
+                        })}
+                        onChange={(e) => handleToggleBackgroundSync(e.currentTarget.checked)}
+                    />
+                </Stack>
+            )}
 
             {/* Live download progress */}
             {smoothSync && (
