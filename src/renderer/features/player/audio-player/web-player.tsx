@@ -552,7 +552,14 @@ export function WebPlayer() {
 
     const handleOnErrorPause = useCallback(() => {
         mediaPause();
+        // `toast.error` defaults to autoClose:false (errors stick until
+        // dismissed) — wrong for a transient playback blip, which left the toast
+        // permanently parked above the player bar. Give it an explicit timeout
+        // and a stable id so repeated errors refresh ONE toast instead of
+        // stacking a column of them.
         toast.error({
+            autoClose: 5000,
+            id: 'web-playback-error',
             message: t('error.playbackPausedDueToError'),
         });
     }, [mediaPause, t]);
