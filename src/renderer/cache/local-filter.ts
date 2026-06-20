@@ -122,6 +122,33 @@ const paginate = <T>(
     return items.slice(start, start + limit);
 };
 
+/**
+ * Decide what a list-count query's fromCache should return for a
+ * favourite-filtered count.
+ *
+ * A cached favourite count of 0 is NOT served as authoritative: an empty or
+ * wiped favourites table also reads as 0, and under sync-first that 0 would
+ * suppress the network fallback and pin the view to "nothing here" forever
+ * (an online refresh couldn't heal it). Returning `undefined` defers to the
+ * network — a genuine 0-favourites user pays one cheap count that also returns
+ * 0, while a stale/empty cache self-heals. This mirrors the sibling
+ * single-album / single-artist count branches that already use
+ * `count > 0 ? count : undefined`.
+ */
+export const cacheFavoriteCount = (args: {
+    favorite: boolean;
+    favoriteCount: number;
+    totalCount: number;
+}): number | undefined => {
+    if (args.favorite) {
+        return args.favoriteCount > 0 ? args.favoriteCount : undefined;
+    }
+    // "non-favourites" = total − favourites. With nothing cached we can't
+    // answer authoritatively, so defer to the network.
+    if (args.totalCount <= 0) return undefined;
+    return args.totalCount - args.favoriteCount;
+};
+
 const hasUnsupportedAlbumFilter = (query: AlbumListQuery | undefined): boolean => {
     if (!query) return false;
     if (query.compilation !== undefined) return true;

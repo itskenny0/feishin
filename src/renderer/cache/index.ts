@@ -53,6 +53,7 @@ export {
 export type { LocalCacheDebugSnapshot, PageRowRef } from './local-cache';
 export { debugLocalCache } from './local-cache';
 export {
+    cacheFavoriteCount,
     filterAlbumArtistsLocal,
     filterAlbumsLocal,
     filterArtistsLocal,

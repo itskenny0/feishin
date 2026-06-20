@@ -6,6 +6,7 @@ import { queryKeys } from '/@/renderer/api/query-keys';
 import { getOptimizedListCount } from '/@/renderer/api/utils-list-count';
 import {
     cachedSwr,
+    cacheFavoriteCount,
     filterSongsLocal,
     readEntityCountFallback,
     readSnapshot,
@@ -246,12 +247,12 @@ export const songsQueries = {
                                 .where('ItemType')
                                 .equals('Song')
                                 .toArray();
-                            if (args.query.favorite === true) {
-                                return favRows.filter((f) => f.IsFavorite).length;
-                            }
-                            const favCount = favRows.filter((f) => f.IsFavorite).length;
-                            const total = await db.songs.count();
-                            return total > 0 ? total - favCount : 0;
+                            const favoriteCount = favRows.filter((f) => f.IsFavorite).length;
+                            return cacheFavoriteCount({
+                                favorite: args.query.favorite,
+                                favoriteCount,
+                                totalCount: args.query.favorite ? 0 : await db.songs.count(),
+                            });
                         }
                         // Single-album or single-albumArtist count is cheap via Dexie
                         // index and avoids the virtual scroll thinking there are N total

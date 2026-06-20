@@ -6,6 +6,7 @@ import { queryKeys } from '/@/renderer/api/query-keys';
 import { getOptimizedListCount } from '/@/renderer/api/utils-list-count';
 import {
     cachedSwr,
+    cacheFavoriteCount,
     filterAlbumArtistsLocal,
     filterArtistsLocal,
     readSnapshot,
@@ -162,15 +163,14 @@ export const artistsQueries = {
                                 .where('ItemType')
                                 .equals('AlbumArtist')
                                 .toArray();
-                            if (args.query.favorite === true) {
-                                return favRows.filter((f) => f.IsFavorite).length;
-                            }
-                            const favCount = favRows.filter((f) => f.IsFavorite).length;
-                            const total = await db.artists
-                                .where('Kind')
-                                .equals('AlbumArtist')
-                                .count();
-                            return total > 0 ? total - favCount : 0;
+                            const favoriteCount = favRows.filter((f) => f.IsFavorite).length;
+                            return cacheFavoriteCount({
+                                favorite: args.query.favorite,
+                                favoriteCount,
+                                totalCount: args.query.favorite
+                                    ? 0
+                                    : await db.artists.where('Kind').equals('AlbumArtist').count(),
+                            });
                         }
                         if (args.query._custom) {
                             return undefined;
@@ -290,12 +290,14 @@ export const artistsQueries = {
                                 .where('ItemType')
                                 .equals('Artist')
                                 .toArray();
-                            if (args.query.favorite === true) {
-                                return favRows.filter((f) => f.IsFavorite).length;
-                            }
-                            const favCount = favRows.filter((f) => f.IsFavorite).length;
-                            const total = await db.artists.where('Kind').equals('Artist').count();
-                            return total > 0 ? total - favCount : 0;
+                            const favoriteCount = favRows.filter((f) => f.IsFavorite).length;
+                            return cacheFavoriteCount({
+                                favorite: args.query.favorite,
+                                favoriteCount,
+                                totalCount: args.query.favorite
+                                    ? 0
+                                    : await db.artists.where('Kind').equals('Artist').count(),
+                            });
                         }
                         if (args.query._custom) {
                             return undefined;

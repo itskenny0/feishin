@@ -24,6 +24,7 @@ import { controller } from '/@/renderer/api/controller';
 import { queryKeys } from '/@/renderer/api/query-keys';
 import {
     cachedSwr,
+    cacheFavoriteCount,
     filterAlbumsLocal,
     getActiveCacheDb,
     isCacheAvailableSync,
@@ -524,12 +525,12 @@ export const useAlbumListCountQuery = (args: AlbumListCountQueryArgs) => {
                             .where('ItemType')
                             .equals('Album')
                             .toArray();
-                        if (query.favorite === true) {
-                            return favRows.filter((f) => f.IsFavorite).length;
-                        }
-                        const favCount = favRows.filter((f) => f.IsFavorite).length;
-                        const total = await db.albums.count();
-                        return total > 0 ? total - favCount : 0;
+                        const favoriteCount = favRows.filter((f) => f.IsFavorite).length;
+                        return cacheFavoriteCount({
+                            favorite: query.favorite,
+                            favoriteCount,
+                            totalCount: query.favorite ? 0 : await db.albums.count(),
+                        });
                     }
                     // Single-artist count is cheap via the indexed column.
                     if (
