@@ -3,6 +3,10 @@ import type ReactPlayer from 'react-player';
 
 import { useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 
+import {
+    mediaErrorLabel,
+    redactMediaSrc,
+} from '/@/renderer/features/player/audio-player/engine/media-error';
 import { AudioPlayer, PlayerOnProgressProps } from '/@/renderer/features/player/audio-player/types';
 import { convertToLogVolume } from '/@/renderer/features/player/audio-player/utils/player-utils';
 import { LogCategory, logFn } from '/@/renderer/utils/logger';
@@ -202,9 +206,18 @@ export const WebPlayerEngine = (props: WebPlayerEngineProps) => {
 
             const { error } = target;
 
+            // `MediaError` stringifies to `{}` (code/message are non-enumerable),
+            // so decode it into something the shipped logs can act on: the error
+            // kind, numeric code, message, and the failing host+path (query
+            // dropped so the apiKey never reaches the logs).
             logFn.error(logMsg[LogCategory.PLAYER].playbackError, {
                 category: LogCategory.PLAYER,
-                meta: { error },
+                meta: {
+                    code: error?.code,
+                    kind: mediaErrorLabel(error?.code),
+                    message: error?.message || undefined,
+                    src: redactMediaSrc(target.currentSrc || target.src),
+                },
             });
 
             const isNetworkError =
@@ -295,6 +308,29 @@ export const WebPlayerEngine = (props: WebPlayerEngineProps) => {
             player1Ref.current?.getInternalPlayer()?.pause();
         }
     }, [isTransitioning, playerNum, playerStatus, pauseBothPlayers]);
+
+    // Recover from a STUCK media error on (re)play. Per the HTML5 media spec, an
+    // <audio> element that has errored keeps its `error` set and will refuse to
+    // play again until load() is called. ReactPlayer only calls load() when the
+    // `url` prop changes, so pressing play on the SAME song after an error was a
+    // permanent dead-end — the element stayed errored and silently refused to
+    // start (the recovered "song won't play even on retry" report). When
+    // playback is (re)started, reload the active player if it's sitting on an
+    // error and give the manual replay a fresh set of network retries. Guarded
+    // on `element.error` so healthy play/pause toggles are untouched.
+    useEffect(() => {
+        if (playerStatus !== PlayerStatus.PLAYING) return;
+        const activeRef = playerNum === 1 ? player1Ref : player2Ref;
+        const active = activeRef.current?.getInternalPlayer();
+        if (active instanceof HTMLAudioElement && active.error) {
+            (playerNum === 1 ? networkRetryCount1 : networkRetryCount2).current = 0;
+            active.load();
+            active.play().catch(() => {
+                // Still failing (e.g. network down) — the onError handler logs
+                // it and the retry loop takes over; nothing more to do here.
+            });
+        }
+    }, [playerStatus, playerNum]);
 
     useEffect(() => {
         const player1 = player1Ref.current?.getInternalPlayer();
