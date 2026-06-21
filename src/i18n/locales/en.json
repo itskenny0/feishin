@@ -607,7 +607,8 @@
         "syncGate": {
             "eyebrow": "Local library",
             "heading": "Building your offline library",
-            "subheading": "We are caching your library so everything loads instantly and works offline. This runs once — keep the app open until it finishes.",
+            "subheading": "We're caching your library's metadata — track, album and artist info plus artwork — so everything loads instantly and works offline. The songs themselves aren't downloaded here. This runs once; keep the app open until it finishes.",
+            "entitySongsHint": "metadata, not audio",
             "entitiesDone": "{{done}} / {{total}} done",
             "statItems": "Items",
             "statRate": "Rate",

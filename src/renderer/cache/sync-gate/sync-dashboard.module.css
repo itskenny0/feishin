@@ -298,6 +298,13 @@
     font-weight: 600;
 }
 
+.entity-hint {
+    margin-left: 0.5rem;
+    font-size: 0.72rem;
+    font-weight: 400;
+    color: var(--theme-colors-foreground-muted);
+}
+
 .entity-meta {
     font-family: var(--mono-font, ui-monospace, 'SFMono-Regular', Menlo, monospace);
     font-size: 0.78rem;

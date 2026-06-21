@@ -1042,13 +1042,15 @@ export const DEFAULT_IMAGE_VARIANTS: z.infer<typeof LocalCacheImageVariantsSchem
     mode: 'downscale',
     quality: 82,
     variants: {
-        // Pre-caching full-resolution originals is OFF by default: a bulk sweep
-        // of multi-megabyte originals takes hours. Originals load lazily on
-        // demand; users who want them pre-cached can enable this.
+        // Every bounded THUMBNAIL size is pre-cached by default so artwork is
+        // fully available offline (sync-only). Only the full-resolution
+        // `fullScreen` original stays OFF: a bulk sweep of multi-megabyte
+        // originals is gigabytes/hours — originals load lazily on demand, and
+        // users who want them pre-cached can enable that one explicitly.
         fullScreen: { enabled: false, px: 0 },
         header: { enabled: true, px: 300 },
         itemCard: { enabled: true, px: 300 },
-        sidebar: { enabled: false, px: 400 },
+        sidebar: { enabled: true, px: 400 },
         table: { enabled: true, px: 80 },
     },
 };
@@ -3787,10 +3789,28 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
+                if (version <= 68) {
+                    // Thumbnail autosync now covers every bounded thumbnail size
+                    // by default (sync-only — artwork fully available offline).
+                    // Enable the previously-off `sidebar` variant for existing
+                    // installs so they get all four. `fullScreen` (originals) is
+                    // left untouched — that one stays an explicit opt-in.
+                    // Guarded: a sparse blob may lack the variants slice, and a
+                    // throwing migrate discards ALL persisted settings.
+                    const variants = state.localCache?.imageVariants?.variants;
+                    if (variants && typeof variants === 'object') {
+                        for (const key of ['header', 'itemCard', 'sidebar', 'table']) {
+                            if (variants[key] && typeof variants[key] === 'object') {
+                                variants[key].enabled = true;
+                            }
+                        }
+                    }
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 68,
+            version: 69,
         },
     ),
 );

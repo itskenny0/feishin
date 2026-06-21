@@ -135,7 +135,7 @@ export const SyncDashboard = ({ onContinueAnyway, runner }: SyncDashboardProps) 
                 <p className={styles.subheading}>
                     {t('page.syncGate.subheading', {
                         defaultValue:
-                            'We are caching your library so everything loads instantly and works offline. This runs once — keep the app open until it finishes.',
+                            "We're caching your library's metadata — track, album and artist info plus artwork — so everything loads instantly and works offline. The songs themselves aren't downloaded here. This runs once; keep the app open until it finishes.",
                     })}
                 </p>
 
@@ -210,6 +210,13 @@ export const SyncDashboard = ({ onContinueAnyway, runner }: SyncDashboardProps) 
                                 <span className={styles.dot} />
                                 <span className={styles.entityName}>
                                     {t(ENTITY_LABEL_KEYS[entity], { defaultValue: entity })}
+                                    {entity === 'songs' && (
+                                        <span className={styles.entityHint}>
+                                            {t('page.syncGate.entitySongsHint', {
+                                                defaultValue: 'metadata, not audio',
+                                            })}
+                                        </span>
+                                    )}
                                 </span>
                                 <span className={styles.entityMeta}>{meta}</span>
                             </div>
