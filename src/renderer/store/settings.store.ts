@@ -930,9 +930,9 @@ const AutoDJSettingsSchema = z.object({
  *  - `capacityBytes` — user-configurable storage cap on web / Android.
  *    `undefined` falls back to the platform default (see `eviction.ts`).
  */
-// Per-entity sync toggles. Default ON for everything except thumbnails
-// (controlled separately via `thumbnailSizes` below — empty = no thumbnail
-// pre-cache, opt-in due to the size of the thumbnail blobs on disk).
+// Per-entity sync toggles. Default ON for everything. Artwork pre-cache is
+// controlled separately via `imageVariants` (zero enabled variants = no
+// pre-cache, lazy fetch only).
 const LocalCacheEntitiesSchema = z.object({
     albums: z.boolean().default(true),
     artists: z.boolean().default(true),
@@ -942,17 +942,6 @@ const LocalCacheEntitiesSchema = z.object({
     playlists: z.boolean().default(true),
     songs: z.boolean().default(true),
 });
-
-// Which `general.imageRes` buckets the thumbnail sweep pre-fetches. Empty
-// = no pre-cache (lazy fetch via <BaseImage> remains in place; thumbnails
-// still land in Dexie incidentally as the user browses).
-const LocalCacheThumbnailSizeSchema = z.enum([
-    'fullScreenPlayer',
-    'header',
-    'itemCard',
-    'sidebar',
-    'table',
-]);
 
 /**
  * Per-entity offline-media (audio download) config. Gated behind the
@@ -1041,7 +1030,6 @@ const LocalCacheSettingsSchema = z.object({
     // more concurrent fetches / IndexedDB writes. 24 is the default on
     // modern HTTP/2 servers. Range enforced at sweep start.
     thumbnailConcurrency: z.number().int().min(1).max(64).optional(),
-    thumbnailSizes: z.array(LocalCacheThumbnailSizeSchema).optional(),
 });
 
 /**
@@ -2500,7 +2488,6 @@ const initialState: SettingsState = {
             maxBytes: 2 * 1024 * 1024 * 1024,
         },
         sweepProgressSmoothing: true,
-        thumbnailSizes: [],
     },
     lyrics: {
         alignment: 'center',
@@ -3449,12 +3436,11 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                 }
 
                 if (version <= 45) {
-                    // Backfill per-entity toggles and thumbnail-size picker
-                    // for users upgrading from the first cache release. All
-                    // entities default ON so existing cache contents stay
-                    // populated. `thumbnailSizes` left empty so the user
-                    // explicitly opts in to thumbnail pre-cache (large blob
-                    // store).
+                    // Backfill per-entity toggles for users upgrading from the
+                    // first cache release. All entities default ON so existing
+                    // cache contents stay populated. (The legacy
+                    // `thumbnailSizes` picker was removed; artwork pre-cache is
+                    // now driven by `imageVariants`.)
                     if (state.localCache) {
                         if (!state.localCache.entities) {
                             state.localCache.entities = {
@@ -3466,9 +3452,6 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                                 playlists: true,
                                 songs: true,
                             };
-                        }
-                        if (!Array.isArray(state.localCache.thumbnailSizes)) {
-                            state.localCache.thumbnailSizes = [];
                         }
                     }
                 }

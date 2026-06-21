@@ -128,16 +128,10 @@ export const LibrarySyncSettings = () => {
     const bytesUsed = useCacheStore((s) => s.bytesUsed);
     const activeServer = useCacheStore((s) => s.activeServer);
     const cacheActions = useCacheStore((s) => s.actions);
-    // Three-state opt-in flag. `true` = cache is active and the controls
-    // below operate on a live DB. `false` / `undefined` = subsystem is
-    // inert and we render a muted hint instead of letting the user fire
-    // sync / clear actions against nothing.
-    const cacheEnabled = useSettingsStore((s) => s.localCache?.enabled === true);
     const setSettings = useSettingsStore((s) => s.actions.setSettings);
     const localCacheCap = useSettingsStore((s) => s.localCache?.capacityBytes);
     const setLocalCache = useSettingsStore((s) => s.actions.setLocalCache);
     const entities = useSettingsStore((s) => s.localCache?.entities);
-    const thumbnailSizes = useSettingsStore((s) => s.localCache?.thumbnailSizes);
     const thumbnailConcurrency = useSettingsStore((s) => s.localCache?.thumbnailConcurrency);
     const sweepProgressSmoothing = useSettingsStore(
         (s) => s.localCache?.sweepProgressSmoothing ?? false,
@@ -500,12 +494,6 @@ export const LibrarySyncSettings = () => {
         [setLocalCache],
     );
 
-    const handleToggleEnabled = useCallback(() => {
-        const next = !cacheEnabled;
-        console.info('[cache] dashboard: master toggle', { next });
-        setLocalCache({ enabled: next });
-    }, [cacheEnabled, setLocalCache]);
-
     // Defence in depth — the subpage manifest already gates on
     // `server?.type === 'jellyfin'`, but if a non-Jellyfin server is
     // somehow active we still want to render a clear notice.
@@ -594,165 +582,139 @@ export const LibrarySyncSettings = () => {
                 <Text c="dimmed">{t('page.setting.librarySyncDescription')}</Text>
             </Stack>
 
-            {/* Master toggle — gates the entire subsystem. When off the
-                controls below remain visible but inert so the user can
-                explore them before opting in. */}
-            <Stack gap={4}>
-                <Switch
-                    checked={cacheEnabled}
-                    label={t('page.setting.librarySyncDashboard.masterToggleLabel')}
-                    onChange={handleToggleEnabled}
-                />
-                {!cacheEnabled && (
-                    <Text c="dimmed" size="sm">
-                        {t('page.setting.librarySyncDashboard.masterToggleHint')}
-                    </Text>
-                )}
-            </Stack>
+            {/* Status line — the local cache is mandatory now (the blocking
+                first-sync gate + dashboard own the initial full sync), so this
+                is a read-only "on — required" notice rather than an opt-out
+                toggle. */}
+            <Alert color="blue" variant="light">
+                {t('page.setting.librarySyncDashboard.cacheRequiredStatus', {
+                    defaultValue:
+                        'Local cache is on and required — your library is kept on-device so the app loads instantly and works offline.',
+                })}
+            </Alert>
 
             {/* Per-entity toggles */}
-            {cacheEnabled && (
-                <Stack gap="xs">
-                    <Title order={6}>
-                        {t('page.setting.librarySyncDashboard.entityTogglesTitle', {
-                            defaultValue: 'What to sync',
-                        })}
-                    </Title>
-                    <Text c="dimmed" size="sm">
-                        {t('page.setting.librarySyncDashboard.entityTogglesHint', {
-                            defaultValue:
-                                'Pick which library types the sync downloads to local storage. Disabled entries are skipped on the next sync.',
-                        })}
-                    </Text>
-                    <Stack gap={4}>
-                        {ENTITY_DISPLAY_ORDER.map((entity) => {
-                            const checked = entities?.[entity as keyof typeof entities] !== false;
-                            return (
-                                <Switch
-                                    checked={checked}
-                                    key={`entity-toggle-${entity}`}
-                                    label={t(ENTITY_LABEL_KEYS[entity])}
-                                    onChange={(e) => {
-                                        const next = e.currentTarget.checked;
-                                        // Build the next entities object
-                                        // imperatively. The previous
-                                        // implementation used a single
-                                        // literal with `[entity]: next`
-                                        // alongside explicit per-entity
-                                        // keys; the perfectionist lint
-                                        // rule re-sorted them alpha-
-                                        // betically, which dropped the
-                                        // computed key into the middle
-                                        // of the literal — so toggling
-                                        // any entity sorted after
-                                        // `artists` (favorites / genres
-                                        // / playlists / songs) was
-                                        // silently a no-op because the
-                                        // later explicit key won.
-                                        const updated = {
-                                            albums: entities?.albums ?? true,
-                                            artists: entities?.artists ?? true,
-                                            favorites: entities?.favorites ?? true,
-                                            genres: entities?.genres ?? true,
-                                            lyrics: entities?.lyrics ?? true,
-                                            playlists: entities?.playlists ?? true,
-                                            songs: entities?.songs ?? true,
-                                        };
-                                        updated[entity as keyof typeof updated] = next;
-                                        setLocalCache({ entities: updated });
-                                    }}
-                                />
-                            );
-                        })}
-                    </Stack>
+            <Stack gap="xs">
+                <Title order={6}>
+                    {t('page.setting.librarySyncDashboard.entityTogglesTitle', {
+                        defaultValue: 'What to sync',
+                    })}
+                </Title>
+                <Text c="dimmed" size="sm">
+                    {t('page.setting.librarySyncDashboard.entityTogglesHint', {
+                        defaultValue:
+                            'Pick which library types the sync downloads to local storage. Disabled entries are skipped on the next sync.',
+                    })}
+                </Text>
+                <Stack gap={4}>
+                    {ENTITY_DISPLAY_ORDER.map((entity) => {
+                        const checked = entities?.[entity as keyof typeof entities] !== false;
+                        return (
+                            <Switch
+                                checked={checked}
+                                key={`entity-toggle-${entity}`}
+                                label={t(ENTITY_LABEL_KEYS[entity])}
+                                onChange={(e) => {
+                                    const next = e.currentTarget.checked;
+                                    // Build the next entities object
+                                    // imperatively. The previous
+                                    // implementation used a single
+                                    // literal with `[entity]: next`
+                                    // alongside explicit per-entity
+                                    // keys; the perfectionist lint
+                                    // rule re-sorted them alpha-
+                                    // betically, which dropped the
+                                    // computed key into the middle
+                                    // of the literal — so toggling
+                                    // any entity sorted after
+                                    // `artists` (favorites / genres
+                                    // / playlists / songs) was
+                                    // silently a no-op because the
+                                    // later explicit key won.
+                                    const updated = {
+                                        albums: entities?.albums ?? true,
+                                        artists: entities?.artists ?? true,
+                                        favorites: entities?.favorites ?? true,
+                                        genres: entities?.genres ?? true,
+                                        lyrics: entities?.lyrics ?? true,
+                                        playlists: entities?.playlists ?? true,
+                                        songs: entities?.songs ?? true,
+                                    };
+                                    updated[entity as keyof typeof updated] = next;
+                                    setLocalCache({ entities: updated });
+                                }}
+                            />
+                        );
+                    })}
+                </Stack>
 
-                    <Title mt="sm" order={6}>
-                        {t('page.setting.librarySyncDashboard.thumbnailsTitle', {
-                            defaultValue: 'Thumbnail pre-cache',
-                        })}
-                    </Title>
-                    <Text c="dimmed" size="sm">
-                        {t('page.setting.librarySyncDashboard.thumbnailsHint', {
-                            defaultValue:
-                                'Pre-cache all artwork at the largest display size so the grid renders instantly. Disable if you want lazy fetching only.',
-                        })}
-                    </Text>
-                    <Switch
-                        checked={(thumbnailSizes ?? []).length > 0}
-                        label={t('page.setting.librarySyncDashboard.thumbnailsToggleLabel', {
-                            defaultValue: 'Pre-cache thumbnails',
-                        })}
-                        onChange={(e) => {
-                            // The `thumbnailSizes` array is vestigial — the
-                            // cache now stores one blob per item at
-                            // MAX_CACHE_SIZE. Treat non-empty as "enabled"
-                            // and empty as "opt-out"; write `['itemCard']`
-                            // as the sentinel so older builds still
-                            // recognise the setting as populated.
-                            setLocalCache({
-                                thumbnailSizes: e.currentTarget.checked ? ['itemCard'] : [],
-                            });
-                        }}
-                    />
+                <Title mt="sm" order={6}>
+                    {t('page.setting.librarySyncDashboard.thumbnailsTitle', {
+                        defaultValue: 'Artwork pre-cache',
+                    })}
+                </Title>
+                <Text c="dimmed" size="sm">
+                    {t('page.setting.librarySyncDashboard.thumbnailsHint', {
+                        defaultValue:
+                            'Cover art is pre-cached during sync so grids render instantly. Choose which sizes to store and how fast to fetch them below.',
+                    })}
+                </Text>
 
-                    {/* Concurrency slider — how many thumbnail fetches to
+                {/* Concurrency slider — how many thumbnail fetches to
                         run in parallel during the sweep. Higher saturates the
                         link faster but spams the server / WebView. */}
-                    <Stack gap={4} mt="sm">
-                        <Group justify="space-between">
-                            <Text size="sm">
-                                {t('page.setting.librarySyncDashboard.thumbnailConcurrency', {
-                                    defaultValue: 'Parallel downloads',
-                                })}
-                            </Text>
-                            <Text c="dimmed" size="sm">
-                                {thumbnailConcurrency ?? 24}
-                            </Text>
-                        </Group>
-                        <Slider
-                            label={(value) => `${value}`}
-                            max={64}
-                            min={1}
-                            onChangeEnd={(value) => setLocalCache({ thumbnailConcurrency: value })}
-                            step={1}
-                            value={thumbnailConcurrency ?? 24}
-                        />
-                        <Text c="dimmed" size="xs">
-                            {t('page.setting.librarySyncDashboard.thumbnailConcurrencyHelp', {
-                                defaultValue:
-                                    'Number of cover-art fetches the sweep runs in parallel. Raise it to saturate a fast LAN; lower it if the server gets unhappy.',
+                <Stack gap={4} mt="sm">
+                    <Group justify="space-between">
+                        <Text size="sm">
+                            {t('page.setting.librarySyncDashboard.thumbnailConcurrency', {
+                                defaultValue: 'Parallel downloads',
                             })}
                         </Text>
-                    </Stack>
-
-                    {/* Progress bar animation toggle */}
-                    <Stack gap={4} mt="sm">
-                        <Switch
-                            checked={sweepProgressSmoothing}
-                            label={t('page.setting.librarySyncDashboard.smoothProgressLabel', {
-                                defaultValue: 'Animate sync progress bar',
-                            })}
-                            onChange={(e) =>
-                                setLocalCache({ sweepProgressSmoothing: e.currentTarget.checked })
-                            }
-                        />
-                        <Text c="dimmed" size="xs">
-                            {t('page.setting.librarySyncDashboard.smoothProgressHelp', {
-                                defaultValue:
-                                    'Interpolates the counter and progress bar between page updates at 20 fps. Smoother visuals but uses slightly more CPU while this page is open.',
-                            })}
+                        <Text c="dimmed" size="sm">
+                            {thumbnailConcurrency ?? 24}
                         </Text>
-                    </Stack>
+                    </Group>
+                    <Slider
+                        label={(value) => `${value}`}
+                        max={64}
+                        min={1}
+                        onChangeEnd={(value) => setLocalCache({ thumbnailConcurrency: value })}
+                        step={1}
+                        value={thumbnailConcurrency ?? 24}
+                    />
+                    <Text c="dimmed" size="xs">
+                        {t('page.setting.librarySyncDashboard.thumbnailConcurrencyHelp', {
+                            defaultValue:
+                                'Number of cover-art fetches the sweep runs in parallel. Raise it to saturate a fast LAN; lower it if the server gets unhappy.',
+                        })}
+                    </Text>
+                </Stack>
 
-                    {/* Multi-resolution artwork variant cache. Caches several
+                {/* Progress bar animation toggle */}
+                <Stack gap={4} mt="sm">
+                    <Switch
+                        checked={sweepProgressSmoothing}
+                        label={t('page.setting.librarySyncDashboard.smoothProgressLabel', {
+                            defaultValue: 'Animate sync progress bar',
+                        })}
+                        onChange={(e) =>
+                            setLocalCache({ sweepProgressSmoothing: e.currentTarget.checked })
+                        }
+                    />
+                    <Text c="dimmed" size="xs">
+                        {t('page.setting.librarySyncDashboard.smoothProgressHelp', {
+                            defaultValue:
+                                'Interpolates the counter and progress bar between page updates at 20 fps. Smoother visuals but uses slightly more CPU while this page is open.',
+                        })}
+                    </Text>
+                </Stack>
+
+                {/* Multi-resolution artwork variant cache. Caches several
                         cover sizes per item so dense lists/grids load without
                         decoding full-res JPEGs. The editor lives in its own
                         drill-down subpage; this row shows a summary + chevron. */}
-                    <ImageVariantsRow
-                        onOpen={() => setSettings({ tabSubpage: 'image-variants' })}
-                    />
-                </Stack>
-            )}
+                <ImageVariantsRow onOpen={() => setSettings({ tabSubpage: 'image-variants' })} />
+            </Stack>
 
             {/* Status + current sweep */}
             <Stack gap="xs">
@@ -930,11 +892,11 @@ export const LibrarySyncSettings = () => {
                 })}
             </Text>
 
-            {/* Actions — all disabled when the cache subsystem is off, so
-                the user can't fire mutations against an inert DB. */}
+            {/* Actions — the cache is always on, so these are only gated on
+                a live server / an active sweep. */}
             <Group>
                 <Button
-                    disabled={!cacheEnabled || sweeping || !currentServer}
+                    disabled={sweeping || !currentServer}
                     onClick={() => currentServer && handleSyncNow(currentServer)}
                 >
                     {t('page.setting.librarySyncDashboard.actionSyncNow')}
@@ -945,14 +907,14 @@ export const LibrarySyncSettings = () => {
                     </Button>
                 )}
                 <Button
-                    disabled={!cacheEnabled || !currentServer}
+                    disabled={!currentServer}
                     onClick={() => currentServer && void handleResync(currentServer)}
                     variant="default"
                 >
                     {t('page.setting.librarySyncDashboard.actionResync')}
                 </Button>
                 <Button
-                    disabled={!cacheEnabled || !currentServer}
+                    disabled={!currentServer}
                     onClick={() => currentServer && void handleForceFullResync(currentServer)}
                     variant="default"
                 >
@@ -960,19 +922,10 @@ export const LibrarySyncSettings = () => {
                         defaultValue: 'Force full re-sync',
                     })}
                 </Button>
-                <Button
-                    disabled={!cacheEnabled}
-                    onClick={() => void handleClearThumbnails()}
-                    variant="default"
-                >
+                <Button onClick={() => void handleClearThumbnails()} variant="default">
                     {t('page.setting.librarySyncDashboard.actionClearThumbnails')}
                 </Button>
-                <Button
-                    color="red"
-                    disabled={!cacheEnabled}
-                    onClick={() => void handleClearAll()}
-                    variant="filled"
-                >
+                <Button color="red" onClick={() => void handleClearAll()} variant="filled">
                     {t('page.setting.librarySyncDashboard.actionClearAll')}
                 </Button>
             </Group>
