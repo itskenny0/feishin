@@ -53,6 +53,17 @@ export type GateVerdict =
     // Block the app behind the dashboard until the first full sync completes.
     | { show: 'dashboard' };
 
+/**
+ * True when the gate released purely because every entity is currently `full`
+ * (the LIVE signal) and no durable flag has been persisted yet. The caller
+ * persists `firstSyncComplete` on this so a later background re-sync — which
+ * briefly flips an entity back to `partial` — can't re-block the app and flap
+ * the wizard into view. Once persisted, the verdict is `persisted-complete` and
+ * this returns false.
+ */
+export const isLiveCompleteVerdict = (verdict: GateVerdict): boolean =>
+    verdict.show === 'app' && verdict.reason === 'live-complete';
+
 const isEntityEnabled = (toggles: GateEntityToggles, entity: GateEntity): boolean => {
     if (!toggles) return true;
     return toggles[entity] !== false;

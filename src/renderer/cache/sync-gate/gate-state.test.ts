@@ -7,6 +7,7 @@ import {
     enabledGateEntities,
     GATE_ENTITIES,
     isFirstSyncComplete,
+    isLiveCompleteVerdict,
 } from './gate-state';
 
 const jellyfin = { id: 'srv1', type: 'jellyfin', userId: 'u1' };
@@ -35,6 +36,29 @@ describe('enabledGateEntities', () => {
 
     it('keeps entities that are true or absent', () => {
         expect(enabledGateEntities({ albums: true })).toContain('albums');
+    });
+});
+
+describe('isLiveCompleteVerdict', () => {
+    // The gate must promote a LIVE completion (all entities full, no persisted
+    // flag yet) into a durable persisted flag — otherwise a background re-sync
+    // that flips an entity back to 'partial' re-blocks the app, flapping the
+    // wizard into view repeatedly.
+    it('is true for an app verdict reached via live-complete', () => {
+        expect(isLiveCompleteVerdict({ reason: 'live-complete', show: 'app' })).toBe(true);
+    });
+
+    it('is false once the flag is already persisted', () => {
+        expect(isLiveCompleteVerdict({ reason: 'persisted-complete', show: 'app' })).toBe(false);
+    });
+
+    it('is false for other app reasons (no server, cache disabled, …)', () => {
+        expect(isLiveCompleteVerdict({ reason: 'no-server', show: 'app' })).toBe(false);
+        expect(isLiveCompleteVerdict({ reason: 'cache-disabled', show: 'app' })).toBe(false);
+    });
+
+    it('is false while the dashboard is blocking', () => {
+        expect(isLiveCompleteVerdict({ show: 'dashboard' })).toBe(false);
     });
 });
 

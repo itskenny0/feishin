@@ -14,7 +14,7 @@ import type { ReactNode } from 'react';
 import { useEffect, useMemo, useRef } from 'react';
 
 import { useCacheStore } from '../store';
-import { computeGateState } from './gate-state';
+import { computeGateState, isLiveCompleteVerdict } from './gate-state';
 import { StorageChoiceStep } from './storage-choice-step';
 import { SyncDashboard } from './sync-dashboard';
 import { useSyncRunner } from './use-sync-runner';
@@ -63,6 +63,21 @@ export const SyncGate = ({ children }: SyncGateProps) => {
             console.info(`${TAG} verdict`, { serverId, verdict: key });
         }
     }, [verdict, serverId]);
+
+    // Promote a LIVE completion (all entities full) into the durable
+    // per-server `firstSyncComplete` flag. Without this the gate only ever
+    // releases via the volatile live signal: a background re-sync (or a fresh
+    // `hydrate('full')`) flips each entity to `partial` as it sweeps, which
+    // re-blocks the app and flaps the wizard into view every few seconds, in a
+    // self-sustaining loop (re-block → runner remounts → hydrate → re-block).
+    // Persisting on the first all-full makes the release permanent, so
+    // subsequent verdicts short-circuit to `persisted-complete`.
+    useEffect(() => {
+        if (serverId && isLiveCompleteVerdict(verdict)) {
+            console.info(`${TAG} promoting live-complete → persisted`, { serverId });
+            setFirstSyncComplete(serverId, false);
+        }
+    }, [verdict, serverId, setFirstSyncComplete]);
 
     if (verdict.show === 'dashboard' && server) {
         return (
