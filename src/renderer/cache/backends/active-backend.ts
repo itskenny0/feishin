@@ -67,6 +67,7 @@ export const setActiveVolume = async (volumeId: null | string): Promise<void> =>
         android: {
             backgroundSync: current?.backgroundSync ?? true,
             blobBackendVersion: current?.blobBackendVersion ?? 0,
+            storageOnboarded: current?.storageOnboarded ?? false,
             storageRootPath: root,
             storageVolumeId: volumeId,
         },

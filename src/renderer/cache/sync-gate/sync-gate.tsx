@@ -15,9 +15,11 @@ import { useEffect, useMemo, useRef } from 'react';
 
 import { useCacheStore } from '../store';
 import { computeGateState } from './gate-state';
+import { StorageChoiceStep } from './storage-choice-step';
 import { SyncDashboard } from './sync-dashboard';
 import { useSyncRunner } from './use-sync-runner';
 
+import { isAndroidNative } from '/@/renderer/cache/backends/volumes';
 import { useCurrentServerWithCredential } from '/@/renderer/store/auth.store';
 import { useSettingsStore } from '/@/renderer/store/settings.store';
 
@@ -64,14 +66,39 @@ export const SyncGate = ({ children }: SyncGateProps) => {
 
     if (verdict.show === 'dashboard' && server) {
         return (
-            <BlockingDashboard
-                onEscape={() => setFirstSyncComplete(server.id, true)}
-                server={server}
-            />
+            <BlockingFlow onEscape={() => setFirstSyncComplete(server.id, true)} server={server} />
         );
     }
 
     return <>{children}</>;
+};
+
+// On Android, offer a storage-location choice BEFORE the sync starts. The sync
+// runner only mounts inside BlockingDashboard, so hydration does not begin until
+// the user taps "Start sync" here. Non-Android platforms skip straight to the
+// dashboard (isAndroidNative() is false). Gated on a persisted `storageOnboarded`
+// flag so the prompt appears once, not on every resumed sync.
+const BlockingFlow = ({
+    onEscape,
+    server,
+}: {
+    onEscape: () => void;
+    server: Parameters<typeof useSyncRunner>[0];
+}) => {
+    const androidSlice = useSettingsStore((s) => s.localCache?.android);
+    const setLocalCache = useSettingsStore((s) => s.actions.setLocalCache);
+    const needsStorageChoice = isAndroidNative() && androidSlice?.storageOnboarded !== true;
+
+    if (needsStorageChoice) {
+        return (
+            <StorageChoiceStep
+                onStart={() =>
+                    setLocalCache({ android: { ...androidSlice, storageOnboarded: true } })
+                }
+            />
+        );
+    }
+    return <BlockingDashboard onEscape={onEscape} server={server} />;
 };
 
 // Inner component so `useSyncRunner` (which kicks off hydration + retries) only

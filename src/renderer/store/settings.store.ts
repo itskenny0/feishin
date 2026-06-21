@@ -971,6 +971,11 @@ const AndroidStorageSettingsSchema = z.object({
     // bump / migration is needed.
     backgroundSync: z.boolean().default(true),
     blobBackendVersion: z.number().int().default(0),
+    // True once the user has been offered the pre-sync storage-location choice
+    // (the SyncGate shows it before the first sync on Android). Optional so fresh
+    // AND existing installs read `undefined` → prompt shown once; flipped to true
+    // when the user taps "Start sync". No migration / construction-site churn.
+    storageOnboarded: z.boolean().optional(),
     storageRootPath: z.string().nullable().default(null),
     storageVolumeId: z.string().nullable().default(null),
 });
@@ -1010,6 +1015,7 @@ const LocalCacheSettingsSchema = z.object({
     android: AndroidStorageSettingsSchema.default({
         backgroundSync: true,
         blobBackendVersion: 0,
+        storageOnboarded: false,
         storageRootPath: null,
         storageVolumeId: null,
     }),
