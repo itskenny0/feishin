@@ -54,6 +54,23 @@ const yieldLock = (): Promise<void> =>
         }
     });
 
+/**
+ * Items/sec a sweep reports. Computed over NEW work only: a resumed sweep seeds
+ * `itemsDone` with the resume cursor (items synced in a previous session) but
+ * measures elapsed time only for the current session, so dividing the raw
+ * `itemsDone` by elapsed inflates the rate and collapses the dashboard ETA to
+ * ~0s when part of the library was already synced. Subtract the resume baseline
+ * so the rate (and the ETA derived from it) reflects this session's throughput.
+ */
+export const sweepItemsPerSec = (
+    itemsDone: number,
+    resumeBaseline: number,
+    elapsedSec: number,
+): number => {
+    if (elapsedSec <= 0) return 0;
+    return Math.max(0, itemsDone - resumeBaseline) / elapsedSec;
+};
+
 // Module-level UTF-8 encoder for byte-length accounting. `.length` on a
 // JS string returns UTF-16 code units, which understates UTF-8 byte size
 // for non-ASCII content. TextEncoder gives the real wire size without
@@ -145,6 +162,9 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
 
     const sweepStartedAt = Date.now();
     let itemsDone = isDelta ? 0 : startIndex;
+    // Items already synced before this session started (the resume cursor).
+    // Excluded from the items/sec rate so a resumed sweep's ETA isn't inflated.
+    const resumeBaseline = itemsDone;
     let bytesDownloaded = 0;
     const initialTotal = total;
     // Per-page rate is used to detect throughput drops; the page log
@@ -242,7 +262,7 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
                         total !== undefined && itemsDone > 0
                             ? bytesDownloaded * (total / itemsDone)
                             : undefined,
-                    itemsPerSec: itemsDone / elapsedSec,
+                    itemsPerSec: sweepItemsPerSec(itemsDone, resumeBaseline, elapsedSec),
                     pageIndex,
                     pageTotal,
                     phase: 'fetching',
@@ -304,7 +324,7 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
 
         itemsDone += pageItems.length;
         const elapsed = (Date.now() - sweepStartedAt) / 1000;
-        const itemsPerSec = elapsed > 0 ? itemsDone / elapsed : 0;
+        const itemsPerSec = sweepItemsPerSec(itemsDone, resumeBaseline, elapsed);
 
         // Approximate wire size of this page by JSON-stringifying each item
         // and measuring its real UTF-8 byte length via TextEncoder.
