@@ -2,6 +2,7 @@ import { useEffect, useMemo } from 'react';
 import { Navigate, Outlet } from 'react-router';
 import { shallow } from 'zustand/shallow';
 
+import { SyncGate } from '/@/renderer/cache/sync-gate/sync-gate';
 import { isServerLock } from '/@/renderer/features/action-required/utils/window-properties';
 import { AppRoute } from '/@/renderer/router/routes';
 import { useAuthStore, useAuthStoreActions } from '/@/renderer/store';
@@ -45,5 +46,13 @@ export const AppOutlet = () => {
         return <Navigate replace to={AppRoute.ACTION_REQUIRED} />;
     }
 
-    return <Outlet />;
+    // SyncGate blocks the authenticated app behind the first-full-sync
+    // dashboard until the local library cache is built (sync-only
+    // architecture). When the first sync is complete (or escaped) it renders
+    // the normal routes via <Outlet />.
+    return (
+        <SyncGate>
+            <Outlet />
+        </SyncGate>
+    );
 };

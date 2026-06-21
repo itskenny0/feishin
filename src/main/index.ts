@@ -10,6 +10,7 @@ import {
     nativeImage,
     nativeTheme,
     net,
+    Notification,
     powerSaveBlocker,
     protocol,
     Rectangle,
@@ -109,6 +110,10 @@ if (isLinux() && !process.argv.some((a) => a.startsWith('--password-store='))) {
 
 let mainWindow: BrowserWindow | null = null;
 let tray: null | Tray = null;
+// [sync-only] The currently-shown background-sync notification (replaced as
+// progress advances) + a throttle timestamp so we don't re-post on every tick.
+let syncProgressNotification: Notification | null = null;
+let lastSyncNotificationAt = 0;
 let exitFromTray = false;
 let forceQuit = false;
 let powerSaveBlockerId: null | number = null;
@@ -444,6 +449,54 @@ async function createWindow(first = true): Promise<void> {
         return mainWindow?.webContents.session.clearCache();
     });
 
+    // [sync-only] First-sync / background-sync progress → taskbar/dock progress
+    // bar + a persistent OS notification while the window is hidden. The
+    // renderer pushes { fraction, title, body, active } updates as the library
+    // cache sweep advances; we mirror them onto the OS chrome so the user sees
+    // progress without the window in front. `fraction` is 0..1, or -1 for an
+    // indeterminate phase. `active: false` clears everything (sync done/idle).
+    ipcMain.on(
+        'sync-progress',
+        (
+            _event,
+            payload: { active: boolean; body?: string; fraction?: number; title?: string },
+        ) => {
+            if (!mainWindow) return;
+            const { active, body, fraction, title } = payload ?? {};
+            if (!active) {
+                mainWindow.setProgressBar(-1);
+                if (syncProgressNotification) {
+                    syncProgressNotification.close();
+                    syncProgressNotification = null;
+                }
+                return;
+            }
+            // -1 → indeterminate; otherwise clamp to [0,1].
+            const value = typeof fraction === 'number' && fraction >= 0 ? Math.min(1, fraction) : 2; // Electron treats >1 as "indeterminate" mode.
+            mainWindow.setProgressBar(value);
+
+            // Only surface a notification while the window is hidden/minimized
+            // — when it's visible the in-app dashboard already shows progress.
+            const hidden = !mainWindow.isVisible() || mainWindow.isMinimized();
+            if (hidden && Notification.isSupported()) {
+                const now = Date.now();
+                if (now - lastSyncNotificationAt >= 4000) {
+                    lastSyncNotificationAt = now;
+                    if (syncProgressNotification) syncProgressNotification.close();
+                    syncProgressNotification = new Notification({
+                        body: body ?? '',
+                        silent: true,
+                        title: title ?? 'Syncing library',
+                    });
+                    syncProgressNotification.show();
+                }
+            } else if (!hidden && syncProgressNotification) {
+                syncProgressNotification.close();
+                syncProgressNotification = null;
+            }
+        },
+    );
+
     ipcMain.handle(
         'app-check-for-updates',
         async (): Promise<{ error?: boolean; updateAvailable: boolean; version?: string }> => {
@@ -587,6 +640,7 @@ async function createWindow(first = true): Promise<void> {
             'global-media-keys-disable',
             'download-url',
             'window-dev-tools',
+            'sync-progress',
         ]) {
             ipcMain.removeAllListeners(channel);
         }

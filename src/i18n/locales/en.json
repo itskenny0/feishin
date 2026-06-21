@@ -604,6 +604,23 @@
             "enableButton": "Enable now",
             "declineButton": "Set up later"
         },
+        "syncGate": {
+            "eyebrow": "Local library",
+            "heading": "Building your offline library",
+            "subheading": "We are caching your library so everything loads instantly and works offline. This runs once — keep the app open until it finishes.",
+            "entitiesDone": "{{done}} / {{total}} done",
+            "statItems": "Items",
+            "statRate": "Rate",
+            "statData": "Data",
+            "statEta": "ETA",
+            "entityCount": "{{count}} cached",
+            "entityWaiting": "Waiting",
+            "preparing": "Preparing…",
+            "syncingEntity": "Caching {{entity}}…",
+            "retryScheduled": "Sync was interrupted (attempt {{count}}). Retrying automatically{{when}}…",
+            "continueAnyway": "Continue anyway",
+            "continueHint": "Sync keeps failing. You can enter the app now — caching will resume in the background, but some screens may be incomplete until it finishes."
+        },
         "albumArtistDetail": {
             "about": "About {{artist}}",
             "appearsOn": "Appears on",

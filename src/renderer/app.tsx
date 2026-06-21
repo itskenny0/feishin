@@ -11,7 +11,8 @@ import isElectron from 'is-electron';
 import { lazy, memo, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 
 import i18n, { loadLanguage } from '/@/i18n/i18n';
-import { EnableCacheModal, StorageFirstStartModalHost, useCacheLifecycle } from '/@/renderer/cache';
+import { StorageFirstStartModalHost, useCacheLifecycle } from '/@/renderer/cache';
+import { useSyncNotification } from '/@/renderer/cache/sync-gate/use-sync-notification';
 import { WebAudioContext } from '/@/renderer/features/player/context/webaudio-context';
 import { useDocumentTitle } from '/@/renderer/features/shared/hooks/use-document-title';
 import {
@@ -108,7 +109,6 @@ const AppShell = memo(function AppShell() {
     return (
         <>
             <AppEffects />
-            <EnableCacheModal />
             <StorageFirstStartModalHost />
             <Notifications
                 containerWidth="300px"
@@ -143,6 +143,7 @@ const AppEffects = () => (
         <LanguageEffect />
         <DocumentTitleEffect />
         <CacheLifecycleEffect />
+        <SyncNotificationEffect />
         <InputFocusEffect />
         <DeferredAppEffects />
     </>
@@ -187,6 +188,12 @@ const DeferredAppEffects = () => {
 
 const CacheLifecycleEffect = () => {
     useCacheLifecycle();
+
+    return null;
+};
+
+const SyncNotificationEffect = () => {
+    useSyncNotification();
 
     return null;
 };

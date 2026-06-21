@@ -1027,6 +1027,13 @@ const LocalCacheSettingsSchema = z.object({
     capacityBytes: z.number().optional(),
     enabled: z.boolean().optional(),
     entities: LocalCacheEntitiesSchema.optional(),
+    // Per-server first-full-sync completion. Keyed by serverId. `partial`
+    // is true when the user took the "Continue anyway" escape hatch before
+    // every entity reached `full`. The sync gate consults this to decide
+    // whether to block the app behind the dashboard (see sync-gate/).
+    firstSyncComplete: z
+        .record(z.string(), z.object({ at: z.number(), partial: z.boolean() }))
+        .optional(),
     imageVariants: LocalCacheImageVariantsSchema.optional(),
     offlineMedia: OfflineMediaSettingsSchema.optional(),
     sweepProgressSmoothing: z.boolean().default(true),
@@ -1464,6 +1471,7 @@ export interface SettingsSlice extends z.infer<typeof SettingsStateSchema> {
         resetSampleRate: () => void;
         setArtistItems: (item: SortableItem<ArtistItem>[]) => void;
         setArtistReleaseTypeItems: (item: SortableItem<ArtistReleaseTypeItem>[]) => void;
+        setFirstSyncComplete: (serverId: string, partial: boolean) => void;
         setGenreBehavior: (target: GenreTarget) => void;
         setHomeItems: (item: SortableItem<HomeItem>[]) => void;
         setList: (type: ItemListKey, data: DeepPartial<ItemListSettings>) => void;
@@ -2471,7 +2479,11 @@ const initialState: SettingsState = {
             storageVolumeId: null,
         },
         capacityBytes: undefined,
-        enabled: undefined,
+        // Cache is now MANDATORY for all installs (sync-only architecture):
+        // the app is blocked behind a first-sync dashboard until the library
+        // is cached. Default ON for fresh installs; the v67→68 migration
+        // force-enables existing installs.
+        enabled: true,
         entities: {
             albums: true,
             artists: true,
@@ -2481,6 +2493,7 @@ const initialState: SettingsState = {
             playlists: true,
             songs: true,
         },
+        firstSyncComplete: {},
         imageVariants: DEFAULT_IMAGE_VARIANTS,
         offlineMedia: {
             downloadOriginal: true,
@@ -2716,6 +2729,20 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                         ) => {
                             set((state) => {
                                 state.general.artistReleaseTypeItems = items;
+                            });
+                        },
+                        setFirstSyncComplete: (serverId, partial) => {
+                            set((state) => {
+                                if (
+                                    !state.localCache.firstSyncComplete ||
+                                    typeof state.localCache.firstSyncComplete !== 'object'
+                                ) {
+                                    state.localCache.firstSyncComplete = {};
+                                }
+                                state.localCache.firstSyncComplete[serverId] = {
+                                    at: Date.now(),
+                                    partial,
+                                };
                             });
                         },
                         setGenreBehavior: (target: GenreTarget) => {
@@ -3760,10 +3787,27 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
+                if (version <= 67) {
+                    // Sync-only architecture: the local cache is now mandatory
+                    // for all installs. Force-enable it for existing installs
+                    // (whether they previously opted out or were never asked).
+                    // Guarded: a sparse blob may lack the localCache slice, and
+                    // a throwing migrate discards ALL persisted settings.
+                    if (state.localCache && typeof state.localCache === 'object') {
+                        state.localCache.enabled = true;
+                        if (
+                            state.localCache.firstSyncComplete === undefined ||
+                            typeof state.localCache.firstSyncComplete !== 'object'
+                        ) {
+                            state.localCache.firstSyncComplete = {};
+                        }
+                    }
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 67,
+            version: 68,
         },
     ),
 );

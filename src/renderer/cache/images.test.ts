@@ -19,6 +19,9 @@ const mocks = vi.hoisted(() => {
 });
 
 vi.mock('/@/renderer/cache/db', () => ({
+    // Cache is mandatory now (sync-only): images.ts resolves the db via
+    // awaitActiveCacheDb() on the enabled path, so the mock must provide it.
+    awaitActiveCacheDb: async () => mocks.db,
     getActiveCacheDb: () => mocks.db,
 }));
 
