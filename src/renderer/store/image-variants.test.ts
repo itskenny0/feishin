@@ -14,7 +14,7 @@ describe('localCache.imageVariants settings slice', () => {
                 fullScreen: { enabled: false, px: 0 },
                 header: { enabled: true, px: 300 },
                 itemCard: { enabled: true, px: 300 },
-                sidebar: { enabled: false, px: 400 },
+                sidebar: { enabled: true, px: 400 },
                 table: { enabled: true, px: 80 },
             },
         });
