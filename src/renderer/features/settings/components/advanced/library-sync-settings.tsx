@@ -48,6 +48,7 @@ const ENTITY_LABEL_KEYS: Record<EntityType, string> = {
     artists: 'page.setting.librarySyncDashboard.entityArtists',
     favorites: 'page.setting.librarySyncDashboard.entityFavorites',
     genres: 'page.setting.librarySyncDashboard.entityGenres',
+    lyrics: 'page.setting.librarySyncDashboard.entityLyrics',
     playlists: 'page.setting.librarySyncDashboard.entityPlaylists',
     songs: 'page.setting.librarySyncDashboard.entitySongs',
     thumbnails: 'page.setting.librarySyncDashboard.entityThumbnails',
@@ -58,6 +59,7 @@ const ENTITY_DISPLAY_ORDER: EntityType[] = [
     'genres',
     'albums',
     'songs',
+    'lyrics',
     'playlists',
     'favorites',
 ];
@@ -312,6 +314,7 @@ export const LibrarySyncSettings = () => {
             'artists',
             'favorites',
             'genres',
+            'lyrics',
             'playlists',
             'songs',
             'thumbnails',
@@ -651,6 +654,7 @@ export const LibrarySyncSettings = () => {
                                             artists: entities?.artists ?? true,
                                             favorites: entities?.favorites ?? true,
                                             genres: entities?.genres ?? true,
+                                            lyrics: entities?.lyrics ?? true,
                                             playlists: entities?.playlists ?? true,
                                             songs: entities?.songs ?? true,
                                         };

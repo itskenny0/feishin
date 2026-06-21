@@ -216,6 +216,7 @@ export type EntityType =
     | 'artists'
     | 'favorites'
     | 'genres'
+    | 'lyrics'
     | 'playlists'
     | 'songs'
     | 'thumbnails';

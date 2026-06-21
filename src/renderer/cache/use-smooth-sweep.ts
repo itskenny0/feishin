@@ -13,6 +13,7 @@ export interface SmoothSweepView {
         | 'artists'
         | 'favorites'
         | 'genres'
+        | 'lyrics'
         | 'playlists'
         | 'songs'
         | 'thumbnails'

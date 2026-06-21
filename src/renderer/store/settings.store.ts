@@ -938,6 +938,7 @@ const LocalCacheEntitiesSchema = z.object({
     artists: z.boolean().default(true),
     favorites: z.boolean().default(true),
     genres: z.boolean().default(true),
+    lyrics: z.boolean().default(true),
     playlists: z.boolean().default(true),
     songs: z.boolean().default(true),
 });
@@ -2476,6 +2477,7 @@ const initialState: SettingsState = {
             artists: true,
             favorites: true,
             genres: true,
+            lyrics: true,
             playlists: true,
             songs: true,
         },
@@ -3433,6 +3435,7 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                                 artists: true,
                                 favorites: true,
                                 genres: true,
+                                lyrics: true,
                                 playlists: true,
                                 songs: true,
                             };
@@ -3743,10 +3746,24 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
+                if (version <= 66) {
+                    // Lyrics cache entity. Guarded: a sparse blob may lack the
+                    // localCache.entities slice, and a throwing migrate discards
+                    // ALL persisted settings. Default ON so the lyrics sweep runs
+                    // for existing cache users alongside the other entities.
+                    if (
+                        state.localCache?.entities &&
+                        typeof state.localCache.entities === 'object' &&
+                        state.localCache.entities.lyrics === undefined
+                    ) {
+                        state.localCache.entities.lyrics = true;
+                    }
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 66,
+            version: 67,
         },
     ),
 );

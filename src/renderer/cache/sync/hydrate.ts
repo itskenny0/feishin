@@ -9,6 +9,7 @@ import { runArtistsSweep } from './artists';
 import { runFavoritesSweep } from './favorites';
 import { runGenresSweep } from './genres';
 import { startSyncHeartbeat, stopSyncHeartbeat } from './heartbeat';
+import { runLyricsSweep } from './lyrics';
 import { runPlaylistSongsSweep, runPlaylistsSweep } from './playlists';
 import { runSongsSweep } from './songs';
 import { runThumbnailsSweep } from './thumbnails';
@@ -17,7 +18,7 @@ import { useAuthStore, useSettingsStore } from '/@/renderer/store';
 
 // Per-entity opt-out flags. Default to ON when the settings slice predates
 // the toggle UI so existing installs behave identically.
-type EntityKey = 'albums' | 'artists' | 'favorites' | 'genres' | 'playlists' | 'songs';
+type EntityKey = 'albums' | 'artists' | 'favorites' | 'genres' | 'lyrics' | 'playlists' | 'songs';
 const entityEnabled = (kind: EntityKey): boolean => {
     const e = useSettingsStore.getState().localCache?.entities;
     if (!e) return true;
@@ -170,6 +171,18 @@ export const hydrate = async (server: ServerListItem, kind: 'full' | 'lazy'): Pr
             }
         } else {
             console.info('[cache] hydrate: skipping songs (disabled in settings)');
+        }
+
+        // Lyrics sweep runs AFTER songs — it walks the cached song rows to
+        // fetch server/local lyrics into db.lyrics for offline use.
+        if (entityEnabled('lyrics')) {
+            await runLyricsSweep({ db, entity: 'lyrics', signal }, server);
+            if (signal.aborted) {
+                console.warn('[cache] hydrate: aborted between steps', { after: 'lyrics' });
+                return;
+            }
+        } else {
+            console.info('[cache] hydrate: skipping lyrics (disabled in settings)');
         }
 
         // Thumbnail pre-cache always runs last, after every entity has

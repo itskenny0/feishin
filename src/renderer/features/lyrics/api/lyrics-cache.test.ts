@@ -44,6 +44,32 @@ vi.mock('/@/renderer/cache', () => ({
     readSnapshot: () => undefined,
     snapshotSwr: async <T>(args: { ctx: unknown; remote: (ctx: unknown) => Promise<T> }) =>
         args.remote(args.ctx),
+    // Faithful stand-in for the real cache helper (which has its own unit tests
+    // in cache/sync/lyrics-row.test.ts). Importing the real one would pull the
+    // api controller into this isolated wiring test.
+    toLyricsRow: (songId: string, result: unknown, nowMs: number) => {
+        const meta = (Array.isArray(result) ? result[0] : result) as
+            | null
+            | undefined
+            | { lyrics?: unknown };
+        if (!meta || meta.lyrics == null) {
+            return {
+                __cachedAt: nowMs,
+                Lyrics: '',
+                Payload: undefined,
+                SongId: songId,
+                Synced: false,
+            };
+        }
+        const synced = Array.isArray(meta.lyrics);
+        return {
+            __cachedAt: nowMs,
+            Lyrics: synced ? JSON.stringify(meta.lyrics) : (meta.lyrics as string),
+            Payload: meta,
+            SongId: songId,
+            Synced: synced,
+        };
+    },
 }));
 
 vi.mock('/@/renderer/store', () => ({

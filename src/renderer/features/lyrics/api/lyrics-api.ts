@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 
 import { api } from '/@/renderer/api';
 import { queryKeys } from '/@/renderer/api/query-keys';
-import { cachedSwr, readSnapshot, snapshotSwr } from '/@/renderer/cache';
+import { cachedSwr, readSnapshot, snapshotSwr, toLyricsRow } from '/@/renderer/cache';
 import { queryClient, QueryHookArgs } from '/@/renderer/lib/react-query';
 import { getServerById, useSettingsStore } from '/@/renderer/store';
 import { hasFeature } from '/@/shared/api/utils';
@@ -399,24 +399,18 @@ export const lyricsQueries = {
             queryFn: (ctx): Promise<LyricsQueryResult> =>
                 cachedSwr<LyricsQueryResult>({
                     // Persist the lyrics payload to Dexie keyed by SongId so
-                    // future loads (including across app restarts) can paint
-                    // instantly. We only persist the `local` flavour because
-                    // the remote-auto / override branches depend on third-
-                    // party state that may change independently.
+                    // future loads (including across app restarts and offline)
+                    // can paint instantly. We persist the SELECTED flavour —
+                    // local OR a successful remote/internet fetch — so lyrics
+                    // sourced from the internet are also available offline next
+                    // time (per the lyrics-sync design). A null selection (no
+                    // lyrics found) is left unwritten so the sweep's negative
+                    // marker / on-demand retry path still applies. Reuses the
+                    // same row builder as the lyrics sweep for consistency.
                     apply: async (db, fresh) => {
-                        const local = fresh?.local;
-                        if (!song?.id || !local || Array.isArray(local)) return;
-                        const lyricsText =
-                            typeof local.lyrics === 'string'
-                                ? local.lyrics
-                                : JSON.stringify(local.lyrics);
-                        await db.lyrics.put({
-                            __cachedAt: Date.now(),
-                            Lyrics: lyricsText,
-                            Payload: local,
-                            SongId: song.id,
-                            Synced: Array.isArray(local.lyrics),
-                        });
+                        const selected = fresh?.selected;
+                        if (!song?.id || !selected) return;
+                        await db.lyrics.put(toLyricsRow(song.id, selected, Date.now()));
                     },
                     ctx,
                     // Dexie read-through. If the lyrics for this track were

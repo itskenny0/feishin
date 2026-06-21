@@ -949,6 +949,7 @@
                 "entityArtists": "Artists",
                 "entityAlbums": "Albums",
                 "entitySongs": "Songs",
+                "entityLyrics": "Lyrics",
                 "entityPlaylists": "Playlists",
                 "entityFavorites": "Favourites",
                 "entityGenres": "Genres",

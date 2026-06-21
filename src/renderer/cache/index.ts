@@ -124,8 +124,10 @@ export {
     runArtistsSweep,
     runFavoritesSweep,
     runGenresSweep,
+    runLyricsSweep,
     runPlaylistsSweep,
     runSongsSweep,
+    toLyricsRow,
 } from './sync';
 export { SyncChip } from './sync-chip';
 export type { ExplicitRefreshEntity } from './sync-first';
