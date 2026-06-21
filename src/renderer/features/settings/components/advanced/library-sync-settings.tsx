@@ -131,7 +131,7 @@ export const LibrarySyncSettings = () => {
     const setSettings = useSettingsStore((s) => s.actions.setSettings);
     const localCacheCap = useSettingsStore((s) => s.localCache?.capacityBytes);
     const setLocalCache = useSettingsStore((s) => s.actions.setLocalCache);
-    const entities = useSettingsStore((s) => s.localCache?.entities);
+    const resyncOnStartup = useSettingsStore((s) => s.localCache?.resyncOnStartup ?? true);
     const thumbnailConcurrency = useSettingsStore((s) => s.localCache?.thumbnailConcurrency);
     const sweepProgressSmoothing = useSettingsStore(
         (s) => s.localCache?.sweepProgressSmoothing ?? false,
@@ -593,60 +593,26 @@ export const LibrarySyncSettings = () => {
                 })}
             </Alert>
 
-            {/* Per-entity toggles */}
+            {/* Background re-sync. There is intentionally NO per-entity opt-out
+                — the whole library is always synced (local-first). The only
+                switch is whether to auto re-check the server on startup. */}
             <Stack gap="xs">
                 <Title order={6}>
-                    {t('page.setting.librarySyncDashboard.entityTogglesTitle', {
-                        defaultValue: 'What to sync',
+                    {t('page.setting.librarySyncDashboard.backgroundSyncTitle', {
+                        defaultValue: 'Background sync',
                     })}
                 </Title>
-                <Text c="dimmed" size="sm">
-                    {t('page.setting.librarySyncDashboard.entityTogglesHint', {
+                <Switch
+                    checked={resyncOnStartup}
+                    description={t('page.setting.librarySyncDashboard.resyncHint', {
                         defaultValue:
-                            'Pick which library types the sync downloads to local storage. Disabled entries are skipped on the next sync.',
+                            'Re-check the server for changes when the app starts so the local copy stays fresh. Everything is always synced — this only controls the automatic refresh.',
                     })}
-                </Text>
-                <Stack gap={4}>
-                    {ENTITY_DISPLAY_ORDER.map((entity) => {
-                        const checked = entities?.[entity as keyof typeof entities] !== false;
-                        return (
-                            <Switch
-                                checked={checked}
-                                key={`entity-toggle-${entity}`}
-                                label={t(ENTITY_LABEL_KEYS[entity])}
-                                onChange={(e) => {
-                                    const next = e.currentTarget.checked;
-                                    // Build the next entities object
-                                    // imperatively. The previous
-                                    // implementation used a single
-                                    // literal with `[entity]: next`
-                                    // alongside explicit per-entity
-                                    // keys; the perfectionist lint
-                                    // rule re-sorted them alpha-
-                                    // betically, which dropped the
-                                    // computed key into the middle
-                                    // of the literal — so toggling
-                                    // any entity sorted after
-                                    // `artists` (favorites / genres
-                                    // / playlists / songs) was
-                                    // silently a no-op because the
-                                    // later explicit key won.
-                                    const updated = {
-                                        albums: entities?.albums ?? true,
-                                        artists: entities?.artists ?? true,
-                                        favorites: entities?.favorites ?? true,
-                                        genres: entities?.genres ?? true,
-                                        lyrics: entities?.lyrics ?? true,
-                                        playlists: entities?.playlists ?? true,
-                                        songs: entities?.songs ?? true,
-                                    };
-                                    updated[entity as keyof typeof updated] = next;
-                                    setLocalCache({ entities: updated });
-                                }}
-                            />
-                        );
+                    label={t('page.setting.librarySyncDashboard.resyncLabel', {
+                        defaultValue: 'Re-sync the library on startup',
                     })}
-                </Stack>
+                    onChange={(e) => setLocalCache({ resyncOnStartup: e.currentTarget.checked })}
+                />
 
                 <Title mt="sm" order={6}>
                     {t('page.setting.librarySyncDashboard.thumbnailsTitle', {

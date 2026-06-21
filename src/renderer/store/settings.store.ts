@@ -1031,6 +1031,10 @@ const LocalCacheSettingsSchema = z.object({
         .optional(),
     imageVariants: LocalCacheImageVariantsSchema.optional(),
     offlineMedia: OfflineMediaSettingsSchema.optional(),
+    // Re-check the server for changes on startup (the only sync behaviour the
+    // user can turn off — WHAT is synced is mandatory/local-first). Gates the
+    // lifecycle's auto re-hydrate. Default on.
+    resyncOnStartup: z.boolean().default(true),
     sweepProgressSmoothing: z.boolean().default(true),
     // Worker count for the thumbnail pre-cache sweep. Higher = faster but
     // more concurrent fetches / IndexedDB writes. 24 is the default on
@@ -2495,6 +2499,7 @@ const initialState: SettingsState = {
             downloadOriginal: true,
             maxBytes: 2 * 1024 * 1024 * 1024,
         },
+        resyncOnStartup: true,
         sweepProgressSmoothing: true,
     },
     lyrics: {
@@ -3438,6 +3443,7 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                             android: { ...initialState.localCache.android },
                             capacityBytes: undefined,
                             enabled: undefined,
+                            resyncOnStartup: true,
                             sweepProgressSmoothing: true,
                         };
                     }
@@ -3813,10 +3819,32 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
+                if (version <= 69) {
+                    // Sync is now mandatory/local-first — no per-entity opt-out.
+                    // Force every entity ON for existing installs that had some
+                    // disabled. Guarded: a sparse blob may lack the entities
+                    // slice, and a throwing migrate discards ALL persisted
+                    // settings.
+                    const entities = state.localCache?.entities;
+                    if (entities && typeof entities === 'object') {
+                        for (const key of [
+                            'albums',
+                            'artists',
+                            'favorites',
+                            'genres',
+                            'lyrics',
+                            'playlists',
+                            'songs',
+                        ]) {
+                            entities[key] = true;
+                        }
+                    }
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 69,
+            version: 70,
         },
     ),
 );

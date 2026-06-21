@@ -313,7 +313,13 @@ export const useCacheLifecycle = (): void => {
                 const oldest = Math.min(...fullRows.map((r) => r.lastFullSyncAt ?? 0));
                 const ageMs = Date.now() - oldest;
                 const oneDayMs = 24 * 60 * 60 * 1000;
-                if (ageMs > oneDayMs) {
+                // User can turn off the on-startup re-sync (WHAT is synced is
+                // mandatory; only this automatic refresh is optional).
+                const resyncOnStartup =
+                    useSettingsStore.getState().localCache?.resyncOnStartup !== false;
+                if (!resyncOnStartup) {
+                    console.info('[cache] lifecycle: startup re-sync disabled by setting');
+                } else if (ageMs > oneDayMs) {
                     console.info('[cache] lifecycle: oldest full sync stale, auto re-hydrating', {
                         ageHours: Math.round(ageMs / (60 * 60 * 1000)),
                         oldestAt: oldest,
