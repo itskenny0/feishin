@@ -152,6 +152,25 @@ describe('ImageVariantsSettings', () => {
         expect(after?.variants.header.enabled).toBe(true);
     });
 
+    it('defaults to Auto; picking an explicit preset pins it, and Auto re-enables', () => {
+        renderSettings();
+        // Default seeds autoPreset:true → an "Auto (…)" segment is shown.
+        expect(screen.getByText(/^Auto/)).toBeInTheDocument();
+
+        // An explicit pick disables auto-tune + applies the preset.
+        fireEvent.click(screen.getByText('Speed'));
+        expect(useSettingsStore.getState().localCache.imageVariants?.autoPreset).toBe(false);
+        expect(useSettingsStore.getState().localCache.imageVariants?.variants.sidebar.enabled).toBe(
+            false,
+        );
+
+        // Re-render against the pinned state; selecting Auto turns it back on.
+        cleanup();
+        renderSettings();
+        fireEvent.click(screen.getByText(/^Auto/));
+        expect(useSettingsStore.getState().localCache.imageVariants?.autoPreset).toBe(true);
+    });
+
     it('disables the format/quality controls in download mode', () => {
         seedImageVariants('download');
         renderSettings();

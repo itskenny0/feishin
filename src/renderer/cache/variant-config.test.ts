@@ -13,6 +13,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
     applyThumbnailPreset,
+    autoSelectPreset,
     detectThumbnailPreset,
     enabledVariants,
     nearestLargerVariant,
@@ -212,6 +213,43 @@ describe('thumbnail presets', () => {
         for (const preset of ['speed', 'balanced', 'full'] as const) {
             const variants = applyThumbnailPreset(clone(), preset);
             expect(detectThumbnailPreset({ ...clone(), variants })).toBe(preset);
+        }
+    });
+});
+
+describe('autoSelectPreset', () => {
+    it('picks speed for a large library (>= 5000 items)', () => {
+        expect(autoSelectPreset(5000, 8, 8)).toBe('speed');
+        expect(autoSelectPreset(20000, 16, 16)).toBe('speed');
+    });
+
+    it('picks speed for a weak CPU (<= 4 cores)', () => {
+        expect(autoSelectPreset(100, 4, 8)).toBe('speed');
+        expect(autoSelectPreset(100, 2, undefined)).toBe('speed');
+    });
+
+    it('picks speed for low device memory (<= 4 GB)', () => {
+        expect(autoSelectPreset(100, 8, 4)).toBe('speed');
+        expect(autoSelectPreset(100, 8, 2)).toBe('speed');
+    });
+
+    it('picks balanced for a strong device + small library', () => {
+        expect(autoSelectPreset(1000, 8, 8)).toBe('balanced');
+        expect(autoSelectPreset(4999, 16, 16)).toBe('balanced');
+    });
+
+    it('treats unknown cores (0) and undefined memory as NOT weak', () => {
+        expect(autoSelectPreset(100, 0, undefined)).toBe('balanced');
+    });
+
+    it('never returns full', () => {
+        const cases: [number, number, number | undefined][] = [
+            [1, 8, 8],
+            [99999, 1, 1],
+            [5000, 8, undefined],
+        ];
+        for (const [n, c, m] of cases) {
+            expect(autoSelectPreset(n, c, m)).not.toBe('full');
         }
     });
 });

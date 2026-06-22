@@ -217,6 +217,43 @@ describe('settings migrations', { timeout: 20_000 }, () => {
         expect(vs?.table.enabled).toBe(true);
     });
 
+    // v72→73: auto-tune ships ON for new installs; existing installs get it OFF
+    // so a later sync never silently re-tunes their chosen preset.
+    it('turns autoPreset OFF for existing installs (v72→73)', async () => {
+        seed(
+            {
+                localCache: {
+                    enabled: true,
+                    imageVariants: {
+                        format: 'webp',
+                        mode: 'download',
+                        quality: 82,
+                        variants: {
+                            fullScreen: { enabled: false, px: 0 },
+                            header: { enabled: false, px: 300 },
+                            itemCard: { enabled: true, px: 300 },
+                            sidebar: { enabled: true, px: 400 },
+                            table: { enabled: true, px: 80 },
+                        },
+                    },
+                },
+            },
+            72,
+        );
+
+        const store = await loadStore();
+        expect(store.getState().localCache.imageVariants?.autoPreset).toBe(false);
+        // Their variant set is untouched.
+        expect(store.getState().localCache.imageVariants?.variants.itemCard.enabled).toBe(true);
+    });
+
+    it('survives a sparse blob without imageVariants (v72→73)', async () => {
+        seed({ localCache: { enabled: true } }, 72);
+        const store = await loadStore();
+        // Migration must not throw; default applies (autoPreset on for new state).
+        expect(store.getState().localCache.imageVariants?.autoPreset).toBe(true);
+    });
+
     it('KEEPS a header bucket the user set to a DISTINCT px (v71→72)', async () => {
         seed(
             {

@@ -7,6 +7,7 @@ describe('localCache.imageVariants settings slice', () => {
         const { imageVariants } = useSettingsStore.getState().localCache;
 
         expect(imageVariants).toEqual({
+            autoPreset: true,
             format: 'webp',
             mode: 'download',
             quality: 82,

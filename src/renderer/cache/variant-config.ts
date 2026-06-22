@@ -198,6 +198,31 @@ export const applyThumbnailPreset = (
     return variants;
 };
 
+// A library at/above this many thumbnail-bearing items (albums+artists+
+// playlists) is "large" — auto-tune drops to Speed so the first sync isn't a
+// marathon of redundant size fetches.
+export const AUTO_LARGE_LIBRARY_ITEMS = 5000;
+
+/**
+ * Pick a preset automatically from device class + library size. Returns 'speed'
+ * for a large library OR a weak device (so the first sync stays bearable),
+ * 'balanced' otherwise. NEVER 'full' — its extra `header` bucket is the
+ * redundant 300px sibling of itemCard, so auto-tune never opts into it. A
+ * `cores` of 0 (unknown) is treated as not-weak; an undefined deviceMemory is
+ * treated as not-weak.
+ */
+export const autoSelectPreset = (
+    itemCount: number,
+    cores: number,
+    deviceMemoryGB: number | undefined,
+): Exclude<ThumbnailPreset, 'custom' | 'full'> => {
+    const weakCpu = cores > 0 && cores <= 4;
+    const weakMem = deviceMemoryGB !== undefined && deviceMemoryGB <= 4;
+    const largeLib = itemCount >= AUTO_LARGE_LIBRARY_ITEMS;
+    if (weakCpu || weakMem || largeLib) return 'speed';
+    return 'balanced';
+};
+
 const parseConfigHash = (
     hash: string,
 ): null | { format: string; mode: string; quality: number; variantPx: Record<string, number> } => {

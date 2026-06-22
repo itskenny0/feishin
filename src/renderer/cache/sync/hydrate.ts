@@ -4,6 +4,7 @@ import type { EntityType } from '../types';
 
 import { getActiveCacheDb } from '../db';
 import { useCacheStore } from '../store';
+import { applyThumbnailPreset, autoSelectPreset, detectThumbnailPreset } from '../variant-config';
 import { runAlbumsSweep } from './albums';
 import { runArtistsSweep } from './artists';
 import { runFavoritesSweep } from './favorites';
@@ -14,7 +15,7 @@ import { runPlaylistSongsSweep, runPlaylistsSweep } from './playlists';
 import { runSongsSweep } from './songs';
 import { runThumbnailsSweep } from './thumbnails';
 
-import { useAuthStore, useSettingsStore } from '/@/renderer/store';
+import { DEFAULT_IMAGE_VARIANTS, useAuthStore, useSettingsStore } from '/@/renderer/store';
 
 // Per-entity opt-out flags. Default to ON when the settings slice predates
 // the toggle UI so existing installs behave identically.
@@ -185,6 +186,44 @@ export const hydrate = async (server: ServerListItem, kind: 'full' | 'lazy'): Pr
             }
         } else {
             console.info('[cache] hydrate: skipping lyrics (disabled in settings)');
+        }
+
+        // Auto-tune the thumbnail preset by device + library size BEFORE the
+        // sweep reads its config — only when the user hasn't pinned a preset
+        // (autoPreset). The metadata sweeps above have written every
+        // thumbnail-bearing row, so the counts are accurate here.
+        const autoIv = useSettingsStore.getState().localCache?.imageVariants;
+        if (db && autoIv?.autoPreset) {
+            const [albumN, artistN, playlistN] = await Promise.all([
+                db.albums.count(),
+                db.artists.count(),
+                db.playlists.count(),
+            ]);
+            const itemCount = albumN + artistN + playlistN;
+            const cores = (typeof navigator !== 'undefined' && navigator.hardwareConcurrency) || 0;
+            const mem =
+                typeof navigator !== 'undefined'
+                    ? (navigator as { deviceMemory?: number }).deviceMemory
+                    : undefined;
+            const picked = autoSelectPreset(itemCount, cores, mem);
+            console.info('[cache] auto-preset', { cores, itemCount, mem, picked });
+            // Only write when it actually changes the enabled set (avoid store
+            // churn); the full 3-way spread mirrors the settings patch helper so
+            // sibling keys (mode/format/quality/autoPreset) survive the shallow
+            // setLocalCache merge.
+            if (detectThumbnailPreset(autoIv) !== picked) {
+                useSettingsStore.getState().actions.setLocalCache({
+                    imageVariants: {
+                        ...DEFAULT_IMAGE_VARIANTS,
+                        ...autoIv,
+                        variants: applyThumbnailPreset(autoIv, picked),
+                    },
+                });
+            }
+            if (signal.aborted) {
+                console.warn('[cache] hydrate: aborted between steps', { after: 'auto-preset' });
+                return;
+            }
         }
 
         // Thumbnail pre-cache always runs last, after every entity has

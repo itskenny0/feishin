@@ -999,6 +999,11 @@ const LocalCacheImageVariantSchema = z.object({
  * mapping needs no call-site plumbing.
  */
 const LocalCacheImageVariantsSchema = z.object({
+    // When true, the thumbnail preset is auto-selected by device + library size
+    // at sync time (new installs). A throwing migrate wipes all settings, so the
+    // v72->73 migration sets this false for existing installs (preserve their
+    // chosen config). NOT part of variantConfigHash → can't invalidate rows.
+    autoPreset: z.boolean().default(true),
     format: z.enum(['webp', 'jpeg']).default('webp'),
     mode: z.enum(['download', 'downscale']).default('downscale'),
     quality: z.number().int().min(1).max(100).default(82),
@@ -1048,6 +1053,7 @@ const LocalCacheSettingsSchema = z.object({
  * migration so they can't drift.
  */
 export const DEFAULT_IMAGE_VARIANTS: z.infer<typeof LocalCacheImageVariantsSchema> = {
+    autoPreset: true,
     format: 'webp',
     // 'download' = fetch each size pre-resized by the server (zero client
     // decode/encode), the dominant mobile-sync win and what the fast competing
@@ -3887,10 +3893,22 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
+                if (version <= 72) {
+                    // Auto-tune ships ON for new installs only. Existing installs
+                    // keep the preset they already have (default or hand-tuned) —
+                    // turn auto OFF so a later sync never silently re-tunes them.
+                    // Guarded: a sparse blob may lack the imageVariants slice, and
+                    // a throwing migrate discards ALL persisted settings.
+                    const iv = state.localCache?.imageVariants;
+                    if (iv && typeof iv === 'object') {
+                        iv.autoPreset = false;
+                    }
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 72,
+            version: 73,
         },
     ),
 );

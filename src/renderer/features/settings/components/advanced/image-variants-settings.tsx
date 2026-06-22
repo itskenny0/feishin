@@ -81,12 +81,26 @@ export const ImageVariantsSettings = memo(({ server }: ImageVariantsSettingsProp
 
     // The active speed/quality preset, derived from which bounded sizes are
     // enabled. 'custom' means the per-size toggles below don't match any preset.
+    // When autoPreset is on, the control shows 'auto' (the derived preset is the
+    // live, already-applied one).
     const preset = detectThumbnailPreset(imageVariants);
+    const auto = imageVariants.autoPreset === true;
+    const displayPreset = auto ? 'auto' : preset;
     const handlePresetChange = useCallback(
         (value: string) => {
+            if (value === 'auto') {
+                console.info('[image-variants] preset changed', { preset: 'auto' });
+                // Re-tunes on the next sync; turn the explicit pin off.
+                patchImageVariants({ autoPreset: true });
+                return;
+            }
             if (value !== 'speed' && value !== 'balanced' && value !== 'full') return;
             console.info('[image-variants] preset changed', { preset: value });
-            patchImageVariants({ variants: applyThumbnailPreset(imageVariants, value) });
+            // An explicit pick disables auto-tune so a later sync won't override it.
+            patchImageVariants({
+                autoPreset: false,
+                variants: applyThumbnailPreset(imageVariants, value),
+            });
         },
         [imageVariants, patchImageVariants],
     );
@@ -178,6 +192,20 @@ export const ImageVariantsSettings = memo(({ server }: ImageVariantsSettingsProp
                         })}
                         data={[
                             {
+                                label: t('page.setting.imageVariants.presetAuto', {
+                                    defaultValue: 'Auto ({{resolved}})',
+                                    resolved:
+                                        preset === 'speed'
+                                            ? t('page.setting.imageVariants.presetSpeed', {
+                                                  defaultValue: 'Speed',
+                                              })
+                                            : t('page.setting.imageVariants.presetBalanced', {
+                                                  defaultValue: 'Balanced',
+                                              }),
+                                }),
+                                value: 'auto',
+                            },
+                            {
                                 label: t('page.setting.imageVariants.presetSpeed', {
                                     defaultValue: 'Speed',
                                 }),
@@ -207,7 +235,7 @@ export const ImageVariantsSettings = memo(({ server }: ImageVariantsSettingsProp
                                 : []),
                         ]}
                         onChange={handlePresetChange}
-                        value={preset}
+                        value={displayPreset}
                     />
                 }
                 description={t('page.setting.imageVariants.presetHelp', {
