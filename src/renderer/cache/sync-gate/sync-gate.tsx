@@ -20,6 +20,7 @@ import { SyncDashboard } from './sync-dashboard';
 import { useSyncRunner } from './use-sync-runner';
 
 import { isAndroidNative } from '/@/renderer/cache/backends/volumes';
+import { useKeepAwakeWhile } from '/@/renderer/hooks/use-android-native';
 import { useCurrentServerWithCredential } from '/@/renderer/store/auth.store';
 import { useSettingsStore } from '/@/renderer/store/settings.store';
 
@@ -127,5 +128,9 @@ const BlockingDashboard = ({
     server: Parameters<typeof useSyncRunner>[0];
 }) => {
     const runner = useSyncRunner(server);
+    // Keep the screen on for the whole blocking first sync so Doze can't freeze
+    // the WebView (and the sweep) if the screen times out — the first sync then
+    // completes unattended instead of stalling until the user wakes the device.
+    useKeepAwakeWhile(true);
     return <SyncDashboard onContinueAnyway={onEscape} runner={runner} />;
 };

@@ -451,6 +451,35 @@ export const useAndroidForceFullVolume = () => {
  * that don't auto-revoke wake locks for paused apps. On resume we re-arm
  * if playback is still active.
  */
+/**
+ * Hold the screen-on KeepAwake lock while `active` is true (release otherwise
+ * and on unmount). The blocking first-sync gate uses this so a long first sync
+ * isn't frozen by Android Doze when the screen times out: a PARTIAL_WAKE_LOCK
+ * keeps the CPU on but Chromium still throttles/suspends WebView JS (and thus
+ * the sweep) when the Activity isn't visible — keeping the screen on is what
+ * actually keeps the JS running. Foreground-only by nature, so background
+ * resyncs are unaffected. KeepAwake is a global (non-ref-counted) toggle, but
+ * the gate blocks playback, so it never contends with the player's lock.
+ */
+export const useKeepAwakeWhile = (active: boolean) => {
+    useEffect(() => {
+        const set = async (on: boolean) => {
+            try {
+                if (!(await isNative())) return;
+                const { KeepAwake } = await import('@capacitor-community/keep-awake');
+                if (on) await KeepAwake.keepAwake();
+                else await KeepAwake.allowSleep();
+            } catch (error) {
+                console.warn('[android] sync keep-awake transition failed:', error);
+            }
+        };
+        void set(active);
+        return () => {
+            void set(false);
+        };
+    }, [active]);
+};
+
 export const useAndroidKeepAwake = () => {
     const status = usePlayerStatus();
 
