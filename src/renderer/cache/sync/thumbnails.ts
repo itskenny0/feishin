@@ -31,6 +31,12 @@ import {
 import { useCacheStore } from '/@/renderer/cache/store';
 import { createBackoffController } from '/@/renderer/cache/sync/backoff';
 import {
+    getCooldownUntil,
+    noteOk,
+    noteRateLimit,
+    resetCooldown,
+} from '/@/renderer/cache/sync/rate-limit-cooldown';
+import {
     type EnabledVariant,
     enabledVariants,
     variantConfigHash,
@@ -330,14 +336,19 @@ const fetchDownscaleUnit = async (
                 );
                 // Authoritative 404 — a negative marker now exists for every
                 // variant. Safe to mark the unit done.
+                noteOk();
                 return { bytes: 0, outcome: 'missing' };
             }
             // Any other non-OK status (5xx, 429, proxy error) is NOT
             // authoritative — the artwork may well exist. Do not write a
-            // negative marker; retry later.
+            // negative marker; retry later. 429/503 arm the pool-wide cooldown.
+            if (res.status === 429 || res.status === 503) {
+                noteRateLimit(res.status, res.headers.get('retry-after'));
+            }
             return { bytes: 0, outcome: 'transient' };
         }
         srcBlob = await res.blob();
+        noteOk();
     } catch (err) {
         if (timedOut) {
             console.warn('[image-variants] sweep: downscale source fetch timed out', {
@@ -706,6 +717,9 @@ export const runThumbnailsSweep = async (
     // Capped at the configured concurrency so a user who deliberately sets a
     // low concurrency is honoured.
     const BACKOFF_FLOOR = Math.min(4, concurrency);
+    // Fresh pool-wide rate-limit cooldown for this sweep — a previous server's
+    // 429 must never gate this one (mirrors the per-sweep backoff controller).
+    resetCooldown();
     const backoff = createBackoffController({
         ceiling: concurrency,
         // Bound each sample so one doze-inflated reading can't dominate the
@@ -801,6 +815,25 @@ export const runThumbnailsSweep = async (
                     status: 'paused (offline)',
                 };
                 await waitUntilOnline();
+                if (signal.aborted) return;
+                continue;
+            }
+            // Rate-limit gate: a 429/503 from the server arms a pool-wide
+            // cooldown. Park here (cursor not advanced, unit stays pending)
+            // until it expires, polling so a shortened/cleared cooldown or an
+            // abort wakes us promptly. Keys on real responses → doze-safe.
+            const cooldownUntil = getCooldownUntil();
+            if (cooldownUntil > Date.now()) {
+                workerStates[workerId] = {
+                    itemId: undefined,
+                    startedAt: Date.now(),
+                    status: 'paused (rate-limit)',
+                };
+                const waitMs = Math.min(
+                    OVER_CAP_RECHECK_MS,
+                    Math.max(0, cooldownUntil - Date.now()),
+                );
+                await new Promise((r) => setTimeout(r, waitMs));
                 if (signal.aborted) return;
                 continue;
             }

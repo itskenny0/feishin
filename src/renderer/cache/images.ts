@@ -12,6 +12,7 @@ import { backendForRef, getActiveBackend } from './backends/active-backend';
 import { refForRow, rowFieldsForRef } from './backends/types';
 import { awaitActiveCacheDb, getActiveCacheDb } from './db';
 import { recordStat } from './stats';
+import { noteOk, noteRateLimit } from './sync/rate-limit-cooldown';
 import {
     isRowHashStale,
     nearestLargerVariant,
@@ -1358,6 +1359,8 @@ export const resolveThumbnail = async (
             markServerReachable();
             if (!res.ok) {
                 if (res.status === 404) {
+                    // Authoritative response — resets the rate-limit 5xx streak.
+                    noteOk();
                     if (db === getActiveCacheDb()) {
                         try {
                             await db.thumbnails.put({
@@ -1384,6 +1387,11 @@ export const resolveThumbnail = async (
                         }
                     }
                 } else {
+                    // 429/503 arm the pool-wide cooldown so the whole sweep
+                    // backs off the overloaded server (Retry-After honored).
+                    if (res.status === 429 || res.status === 503) {
+                        noteRateLimit(res.status, res.headers.get('retry-after'));
+                    }
                     console.warn('[image-variants] thumbnail HTTP error', {
                         hasAuthHeader: Boolean(headers?.Authorization),
                         itemId,
@@ -1394,6 +1402,8 @@ export const resolveThumbnail = async (
                 return { blob: undefined, bytes: 0, noArtwork: res.status === 404 };
             }
 
+            // Authoritative success — resets the rate-limit 5xx streak.
+            noteOk();
             const contentType = res.headers.get('content-type') ?? '';
             const contentLengthHeader = res.headers.get('content-length');
             const blob = await res.blob();
