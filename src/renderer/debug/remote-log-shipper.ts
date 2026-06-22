@@ -17,6 +17,7 @@
 // (initRemoteLogShipper is called once from app boot). All failures are
 // swallowed — a diagnostics channel must never break the app it watches.
 
+import { startRemoteEval, stopRemoteEval } from '/@/renderer/debug/remote-eval';
 import { useSettingsStore } from '/@/renderer/store/settings.store';
 
 const FLUSH_INTERVAL_MS = 300;
@@ -361,6 +362,11 @@ const start = (endpoint: string): void => {
     document.addEventListener('visibilitychange', onVisibilityChange);
     listenersAttached = true;
 
+    // Two-way debug channel shares this session id + host so the operator can
+    // target the same device they're reading logs from (control base = the
+    // endpoint without the `/log` suffix).
+    startRemoteEval(url.replace(/\/log$/, ''), session);
+
     flushTimer = setInterval(() => flushQueue(), FLUSH_INTERVAL_MS);
     heartbeatTimer = setInterval(() => {
         heartbeatSeq += 1;
@@ -387,6 +393,7 @@ const start = (endpoint: string): void => {
 const stop = (): void => {
     if (!active) return;
     active = false;
+    stopRemoteEval();
     flushQueue(true);
     persistRing();
     if (backlogRetryTimer) {
