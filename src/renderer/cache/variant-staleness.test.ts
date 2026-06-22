@@ -78,9 +78,11 @@ describe('isRowHashStale', () => {
         );
     });
 
-    it('is stale when mode changed', () => {
+    it('is NOT stale when only the mode changed (downscale/download produce equivalent webp)', () => {
+        // A mode-only flip must not invalidate existing rows — otherwise every
+        // cover regenerates on browse when the default mode changes.
         expect(isRowHashStale(variantConfigHash(cfg({ mode: 'download' })), 'table', cfg())).toBe(
-            true,
+            false,
         );
     });
 

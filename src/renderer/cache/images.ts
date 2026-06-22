@@ -987,8 +987,12 @@ const resolveFallbackPick = async (
         if (!sufficient || stale) {
             recordDegradedServe(itemId, requestedVariant, request);
         }
-        // Kick off the exact-size variant in the background (debounced) so
-        // the substitute is replaced by the real bucket on the next render.
+        // Kick off the exact-size variant in the background (debounced) so the
+        // substitute is replaced by the real bucket on the next render. This is
+        // intentionally UNCONDITIONAL for enabled variants: filling in the exact
+        // (often smaller) size is the whole point of the multi-variant cache —
+        // a dense table that fell back to a 300px cover should still get its
+        // 80px row so it decodes a small bitmap next paint.
         if (getIsOnline()) {
             imageVariantsInternals.scheduleVariantGenerate(itemId, requestedVariant, request);
         }

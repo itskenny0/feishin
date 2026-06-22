@@ -135,8 +135,13 @@ export const isRowHashStale = (
 ): boolean => {
     const parsed = parseConfigHash(storedHash);
     if (!parsed) return true;
-    if (parsed.format !== cfg.format || parsed.mode !== cfg.mode || parsed.quality !== cfg.quality)
-        return true;
+    // Mode (downscale vs download) is intentionally NOT compared: both produce
+    // an equivalent {format, quality, px} webp for a given variant, so flipping
+    // the default mode must not invalidate every existing row. Treating a
+    // mode-only change as stale caused a full regenerate-on-browse churn — and
+    // an estimateBytes O(N) scan per regenerated cover — the moment the default
+    // flipped. Only the params that actually change the row's bytes gate it.
+    if (parsed.format !== cfg.format || parsed.quality !== cfg.quality) return true;
     const storedPx = parsed.variantPx[variant];
     if (storedPx === undefined) return true;
     const live = cfg.variants[variant as VariantName];
