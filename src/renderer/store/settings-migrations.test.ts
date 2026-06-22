@@ -183,4 +183,64 @@ describe('settings migrations', { timeout: 20_000 }, () => {
         // Falls back to the shipped default, which is download.
         expect(store.getState().localCache.imageVariants?.mode).toBe('download');
     });
+
+    // v71→72: disable the redundant `header` bucket (same px as itemCard) to cut
+    // ~25% of thumbnail-sync work; header surfaces serve from the cached itemCard.
+    it('disables the redundant header bucket when it matches itemCard px (v71→72)', async () => {
+        seed(
+            {
+                localCache: {
+                    enabled: true,
+                    imageVariants: {
+                        format: 'webp',
+                        mode: 'download',
+                        quality: 82,
+                        variants: {
+                            fullScreen: { enabled: false, px: 0 },
+                            header: { enabled: true, px: 300 },
+                            itemCard: { enabled: true, px: 300 },
+                            sidebar: { enabled: true, px: 400 },
+                            table: { enabled: true, px: 80 },
+                        },
+                    },
+                },
+            },
+            71,
+        );
+
+        const store = await loadStore();
+        const vs = store.getState().localCache.imageVariants?.variants;
+        expect(vs?.header.enabled).toBe(false);
+        // The others are untouched.
+        expect(vs?.itemCard.enabled).toBe(true);
+        expect(vs?.sidebar.enabled).toBe(true);
+        expect(vs?.table.enabled).toBe(true);
+    });
+
+    it('KEEPS a header bucket the user set to a DISTINCT px (v71→72)', async () => {
+        seed(
+            {
+                localCache: {
+                    enabled: true,
+                    imageVariants: {
+                        format: 'webp',
+                        mode: 'download',
+                        quality: 82,
+                        variants: {
+                            fullScreen: { enabled: false, px: 0 },
+                            header: { enabled: true, px: 600 }, // distinct from itemCard
+                            itemCard: { enabled: true, px: 300 },
+                            sidebar: { enabled: true, px: 400 },
+                            table: { enabled: true, px: 80 },
+                        },
+                    },
+                },
+            },
+            71,
+        );
+
+        const store = await loadStore();
+        // A header at a distinct size is a real bucket — left enabled.
+        expect(store.getState().localCache.imageVariants?.variants.header.enabled).toBe(true);
+    });
 });

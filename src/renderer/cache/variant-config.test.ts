@@ -21,13 +21,14 @@ import { DEFAULT_IMAGE_VARIANTS } from '/@/renderer/store/settings.store';
 const clone = (): LocalCacheImageVariants =>
     JSON.parse(JSON.stringify(DEFAULT_IMAGE_VARIANTS)) as LocalCacheImageVariants;
 
-// The shipping default has fullScreen (original) disabled. These helper tests
-// exercise the "original sorts last / is included when enabled" behavior, so
-// they use a config with fullScreen explicitly enabled, independent of the
-// app default.
+// The shipping default has fullScreen (original) AND header (redundant 300px)
+// disabled. These helper tests exercise the full bucket set — "original sorts
+// last" and the 300px header/itemCard name-tiebreak — so they enable both
+// explicitly, independent of the app default.
 const withFullScreen = (): LocalCacheImageVariants => {
     const cfg = clone();
     cfg.variants.fullScreen.enabled = true;
+    cfg.variants.header.enabled = true;
     return cfg;
 };
 

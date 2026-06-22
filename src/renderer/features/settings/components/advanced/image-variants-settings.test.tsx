@@ -161,9 +161,10 @@ describe('ImageVariantsRow (drill-down nav row)', () => {
         const onOpen = vi.fn();
         renderRow(onOpen);
 
-        // Default config: downscale mode, four buckets enabled (header,
-        // itemCard, table, sidebar — only fullScreen is off by default).
-        const trigger = screen.getByText('Downscale locally · 4 sizes enabled');
+        // Default config: three buckets enabled (itemCard, table, sidebar) —
+        // header (redundant 300px) and fullScreen are off by default. Seeded to
+        // downscale mode by beforeEach.
+        const trigger = screen.getByText('Downscale locally · 3 sizes enabled');
         expect(trigger).toBeInTheDocument();
 
         fireEvent.click(trigger);

@@ -790,6 +790,18 @@ const getImageVariantsConfig = (): LocalCacheImageVariants => {
     }
 };
 
+// A "fallback-only" variant is intentionally NOT pre-cached and must be served
+// from a nearest-larger cached sibling rather than fetched on its own (e.g. a
+// disabled `header`/`sidebar` served from the cached `itemCard`). It's any
+// DISABLED bounded variant. `fullScreen` is exempt: it's `enabled:false` by
+// default yet must keep its lazy, on-demand fetch (the now-playing hi-res
+// cover) — disabling it only means "don't bulk-sweep it", not "never fetch".
+const isFallbackOnlyVariant = (variant: string): boolean => {
+    if (variant === 'fullScreen') return false;
+    const cfg = getImageVariantsConfig();
+    return cfg.variants[variant as keyof typeof cfg.variants]?.enabled === false;
+};
+
 // Fingerprint of the live variant config. Stamped on every blob row at write
 // time (`__cfgHash`) so the resolver can detect rows produced under an older
 // config (a px / format / quality / mode change) and regenerate them lazily.
@@ -847,6 +859,11 @@ export const scheduleVariantGenerate = (
     variant: string,
     request: ImageRequest | string,
 ): void => {
+    // A fallback-only (disabled) variant is served from a larger cached sibling
+    // and must NEVER be fetched on its own — skip the background regenerate that
+    // would otherwise re-create it on browse (covers all three callers: the
+    // fallback serve, the stale-serve revalidate, and the reconnect flush).
+    if (isFallbackOnlyVariant(variant)) return;
     const key = variantKey(itemId, variant);
     const existing = pendingGenerate.get(key);
     if (existing) clearTimeout(existing);
@@ -1244,6 +1261,22 @@ export const resolveThumbnail = async (
                 // combination.) Recorded as degraded so the bucket fetches
                 // once connectivity returns and the surface repaints.
                 if (!getIsOnline()) {
+                    recordDegradedServe(itemId, resolvedVariant, request);
+                    return { blob: undefined, bytes: 0 };
+                }
+                // Fallback-only variant (a render size intentionally NOT
+                // pre-cached — e.g. a disabled header/sidebar served from the
+                // cached itemCard): never fetch it on its own. Serve whatever
+                // nearest-larger/equal cover we have — the larger ENABLED
+                // sibling IS the intended source, so serve it even if it's
+                // technically under-sized (there's no enabled larger bucket to
+                // upgrade to). If nothing is cached yet, record a degraded serve
+                // and bail WITHOUT a network round-trip.
+                if (isFallbackOnlyVariant(resolvedVariant)) {
+                    if (fallback) {
+                        recordStat('blobHit');
+                        return { blob: fallback.blob, bytes: 0 };
+                    }
                     recordDegradedServe(itemId, resolvedVariant, request);
                     return { blob: undefined, bytes: 0 };
                 }

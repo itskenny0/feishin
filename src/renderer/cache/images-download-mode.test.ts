@@ -127,11 +127,29 @@ describe('resolveThumbnail — download-mode per-variant sizing', () => {
     it('honours an explicit targetPx option (sweep path)', async () => {
         globalThis.fetch = vi.fn(async () => okResponse()) as unknown as typeof fetch;
 
-        await resolveThumbnail('abc', 'sidebar', RAW_URL, { targetPx: 400 });
+        // The real sweep resolves with `_skipBlobUrl` (resolveThumbnailWithBytes).
+        // That bypasses the display-path "fallback-only variant → serve cached
+        // sibling, never fetch" guard, so the sweep can fetch ANY variant it's
+        // told to at the explicit px — here `sidebar` (disabled for display in
+        // this mock cfg) at 400px.
+        await resolveThumbnail('abc', 'sidebar', RAW_URL, { _skipBlobUrl: true, targetPx: 400 });
 
         expect(fetchedWidth()).toBe('400');
         const row = mocks.store.get(JSON.stringify(['abc', 'sidebar']));
         expect(row.Size).toBe(400);
+    });
+
+    it('does NOT fetch a fallback-only (disabled) variant on the display path', async () => {
+        // sidebar is disabled in the mock cfg → fallback-only on the display
+        // path: a request serves from a cached sibling (or bails) but must NEVER
+        // hit the network or write a row for the disabled variant. (Contrast the
+        // sweep-path test above, which DOES fetch it via `_skipBlobUrl`.)
+        globalThis.fetch = vi.fn(async () => okResponse()) as unknown as typeof fetch;
+
+        await resolveThumbnail('abc', 'sidebar', RAW_URL);
+
+        expect(globalThis.fetch).not.toHaveBeenCalled();
+        expect(mocks.store.get(JSON.stringify(['abc', 'sidebar']))).toBeUndefined();
     });
 
     it('strips size params for a px-0 (original) variant in download mode', async () => {

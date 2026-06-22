@@ -1056,13 +1056,16 @@ export const DEFAULT_IMAGE_VARIANTS: z.infer<typeof LocalCacheImageVariantsSchem
     mode: 'download',
     quality: 82,
     variants: {
-        // Every bounded THUMBNAIL size is pre-cached by default so artwork is
-        // fully available offline (sync-only). Only the full-resolution
-        // `fullScreen` original stays OFF: a bulk sweep of multi-megabyte
-        // originals is gigabytes/hours — originals load lazily on demand, and
-        // users who want them pre-cached can enable that one explicitly.
+        // Bounded THUMBNAIL sizes pre-cached by default so artwork is fully
+        // available offline (sync-only). `header` is OFF: it ships at the SAME
+        // 300px as `itemCard`, so a separate header bucket is a redundant
+        // per-item fetch with zero visual difference — header surfaces serve
+        // from the cached itemCard via nearest-larger fallback (cuts ~25% of
+        // sync work). `fullScreen` (px:0 original) stays OFF too: a bulk sweep
+        // of multi-megabyte originals is gigabytes/hours — it loads lazily on
+        // demand. Both can be enabled explicitly.
         fullScreen: { enabled: false, px: 0 },
-        header: { enabled: true, px: 300 },
+        header: { enabled: false, px: 300 },
         itemCard: { enabled: true, px: 300 },
         sidebar: { enabled: true, px: 400 },
         table: { enabled: true, px: 80 },
@@ -3862,10 +3865,32 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
+                if (version <= 71) {
+                    // `header` ships at the same 300px as `itemCard`, so a
+                    // separate header bucket is a redundant per-item fetch/encode
+                    // with zero visual difference — header surfaces serve from
+                    // the cached itemCard via nearest-larger fallback. Disable it
+                    // when it matches itemCard's px (the shipped default) to cut
+                    // ~25% of thumbnail-sync work; a user who set header to a
+                    // DISTINCT size keeps it. Guarded: a sparse blob may lack the
+                    // variants slice, and a throwing migrate discards ALL
+                    // persisted settings.
+                    const vs = state.localCache?.imageVariants?.variants;
+                    if (
+                        vs &&
+                        typeof vs === 'object' &&
+                        vs.header &&
+                        vs.itemCard &&
+                        vs.header.px === vs.itemCard.px
+                    ) {
+                        vs.header.enabled = false;
+                    }
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 71,
+            version: 72,
         },
     ),
 );

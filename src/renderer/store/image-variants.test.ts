@@ -12,7 +12,7 @@ describe('localCache.imageVariants settings slice', () => {
             quality: 82,
             variants: {
                 fullScreen: { enabled: false, px: 0 },
-                header: { enabled: true, px: 300 },
+                header: { enabled: false, px: 300 },
                 itemCard: { enabled: true, px: 300 },
                 sidebar: { enabled: true, px: 400 },
                 table: { enabled: true, px: 80 },
