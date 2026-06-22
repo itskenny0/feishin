@@ -158,6 +158,19 @@ export const useCachedItemImageUrl = (args: UseItemImageUrlProps): string | unde
     return displaySrc;
 };
 
+// Recover the entity id from a resolved cover URL so a surface that passes only
+// `imageUrl` (no explicit id) still routes through the local cache. Matches the
+// item id the thumbnail sweep keys on: Jellyfin `/Items/<id>/Images/...` and
+// Subsonic/Navidrome `?id=<id>` / `?coverArt=<id>`. Returns undefined for an
+// unrecognised URL (genuinely external art → fetched as before).
+const cacheIdFromImageUrl = (url: string): string | undefined => {
+    const jf = /\/Items\/([^/?]+)\/Images/i.exec(url);
+    if (jf) return jf[1];
+    const sub = /[?&](?:id|coverArt)=([^&]+)/i.exec(url);
+    if (sub) return decodeURIComponent(sub[1]);
+    return undefined;
+};
+
 export const useItemImageRequest = (args: UseItemImageUrlProps) => {
     const { id, imageUrl, itemType, size, type, useRemoteUrl } = args;
     const serverId = useCurrentServerId();
@@ -176,8 +189,12 @@ export const useItemImageRequest = (args: UseItemImageUrlProps) => {
                 // the fetch. The `imageUrl` branch is used by callers that
                 // already have a resolved URL (e.g. a remote provider) so
                 // we still want the same blob to land in Dexie keyed by
-                // the same id.
-                cacheItemId: id ?? undefined,
+                // the same id. When the caller has no explicit id (e.g.
+                // artist rows carry only `Id`, no `imageId`), derive it from
+                // the URL — otherwise the cover bypasses the cache and
+                // re-downloads from the server even though the sweep cached
+                // it keyed by that id.
+                cacheItemId: id ?? cacheIdFromImageUrl(imageUrl),
                 cacheKey: imageUrl,
                 cacheSize: effectiveSize,
                 url: imageUrl,
