@@ -39,7 +39,7 @@ vi.mock('/@/renderer/cache/sync', () => ({
     cancelHydration: cancelHydrationMock,
 }));
 
-import { startSyncForegroundController } from './sync-foreground-controller';
+import { startSyncForegroundController, STOP_DEBOUNCE_MS } from './sync-foreground-controller';
 
 import { useCacheStore } from '/@/renderer/cache/store';
 
@@ -127,13 +127,35 @@ describe('sync-foreground-controller', () => {
         vi.useRealTimers();
     });
 
-    it('stops a kind when its pipeline goes idle', () => {
+    it('stops a kind when its pipeline goes idle (after the debounce)', () => {
+        vi.useFakeTimers();
         const c = startSyncForegroundController();
         actions().setSweep({ entity: 'albums', progress: sweepProgress() as never });
         expect(startMock).toHaveBeenCalledWith('images');
         actions().setSweep(undefined);
+        // Debounced: not torn down immediately.
+        expect(stopMock).not.toHaveBeenCalledWith('images');
+        vi.advanceTimersByTime(STOP_DEBOUNCE_MS);
         expect(stopMock).toHaveBeenCalledWith('images');
         c.stop();
+        vi.useRealTimers();
+    });
+
+    it('does NOT churn the service across an entity transition', () => {
+        // albums done → sweep cleared → artists starts, all within the debounce
+        // window: the service must stay up (one start, no stop) rather than
+        // restart every entity (the ~4s FGS restart loop).
+        vi.useFakeTimers();
+        const c = startSyncForegroundController();
+        actions().setSweep({ entity: 'albums', progress: sweepProgress() as never });
+        actions().setSweep(undefined); // albums done — schedules a debounced stop
+        vi.advanceTimersByTime(1000); // shorter than STOP_DEBOUNCE_MS
+        actions().setSweep({ entity: 'artists', progress: sweepProgress() as never }); // cancels it
+        vi.advanceTimersByTime(STOP_DEBOUNCE_MS + 1000);
+        expect(startMock).toHaveBeenCalledTimes(1);
+        expect(stopMock).not.toHaveBeenCalledWith('images');
+        c.stop();
+        vi.useRealTimers();
     });
 
     it('reports indeterminate progress when total is unknown', () => {

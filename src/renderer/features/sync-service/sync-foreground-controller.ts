@@ -42,6 +42,15 @@ const TAG = '[sync-service]';
 // wasteful and can drop frames on the system UI.
 const UPDATE_THROTTLE_MS = 1000;
 
+// Debounce the pipeline-idle → stop transition. The hydration clears its
+// `sweep` state between entities (albums done → undefined → artists starts),
+// so without a debounce the native foreground service is torn down and
+// restarted every few seconds across an 8-entity hydration — battery drain,
+// notification flicker, log spam, and a system "Stop FGS timeout". One service
+// should span the whole hydration; a brief idle gap between phases must not end
+// it.
+export const STOP_DEBOUNCE_MS = 5000;
+
 export interface SyncForegroundController {
     /** True if `downloads` was paused via its notification (resumable). */
     isDownloadsPaused(): boolean;
@@ -54,6 +63,9 @@ export interface SyncForegroundController {
 interface KindState {
     active: boolean;
     lastUpdateAt: number;
+    // Pending debounced stop (set while the pipeline is briefly idle between
+    // phases); cleared if the pipeline becomes active again before it fires.
+    stopTimer?: ReturnType<typeof setTimeout>;
 }
 
 const buildImagesUpdate = (progress: SweepProgress, entity: string): SyncUpdateArgs => {
@@ -115,6 +127,13 @@ export const startSyncForegroundController = (): SyncForegroundController => {
     ): void => {
         const state = kinds[kind];
         if (present && update) {
+            // The pipeline is active again — cancel any pending debounced stop
+            // (e.g. the next entity sweep started right after the previous one
+            // cleared its state) so the one running service is kept alive.
+            if (state.stopTimer !== undefined) {
+                clearTimeout(state.stopTimer);
+                state.stopTimer = undefined;
+            }
             if (!state.active) {
                 state.active = true;
                 state.lastUpdateAt = Date.now();
@@ -129,10 +148,15 @@ export const startSyncForegroundController = (): SyncForegroundController => {
                 state.lastUpdateAt = now;
                 void updateSyncService(update());
             }
-        } else if (state.active) {
-            state.active = false;
-            console.info(`${TAG} pipeline idle`, { kind });
-            void stopSyncService(kind);
+        } else if (state.active && state.stopTimer === undefined) {
+            // Debounce the stop so a brief idle gap between entity phases
+            // doesn't churn the native service (see STOP_DEBOUNCE_MS).
+            state.stopTimer = setTimeout(() => {
+                state.stopTimer = undefined;
+                state.active = false;
+                console.info(`${TAG} pipeline idle`, { kind });
+                void stopSyncService(kind);
+            }, STOP_DEBOUNCE_MS);
         }
     };
 
@@ -188,8 +212,13 @@ export const startSyncForegroundController = (): SyncForegroundController => {
             unsubscribeStore();
             removeActionListener?.();
             for (const kind of Object.keys(kinds) as SyncKind[]) {
-                if (kinds[kind].active) {
-                    kinds[kind].active = false;
+                const state = kinds[kind];
+                if (state.stopTimer !== undefined) {
+                    clearTimeout(state.stopTimer);
+                    state.stopTimer = undefined;
+                }
+                if (state.active) {
+                    state.active = false;
                     void stopSyncService(kind);
                 }
             }
