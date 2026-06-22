@@ -1,3 +1,4 @@
+import { Stack } from '@mantine/core';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -18,6 +19,7 @@ import { PageErrorBoundary } from '/@/renderer/features/shared/components/page-e
 import { usePlayerSong } from '/@/renderer/store';
 import { useSettingsStore } from '/@/renderer/store/settings.store';
 import { Badge } from '/@/shared/components/badge/badge';
+import { Skeleton } from '/@/shared/components/skeleton/skeleton';
 import { SpinnerIcon } from '/@/shared/components/spinner/spinner';
 import { LibraryItem, Song } from '/@/shared/types/domain-types';
 import { ItemListKey } from '/@/shared/types/types';
@@ -110,6 +112,24 @@ const OfflineSongListRoute = () => {
                             defaultValue: 'Nothing available offline',
                         })}
                     />
+                </ListContext.Provider>
+            </AnimatedPage>
+        );
+    }
+
+    // First-load skeleton: the offline join (one chunked bulkGet of thousands
+    // of Song payloads) used to leave the body blank for ~10s. Paint placeholder
+    // rows immediately so the page feels instant while the rows stream in.
+    if (offlineQuery.isLoading) {
+        return (
+            <AnimatedPage>
+                <ListContext.Provider value={providerValue}>
+                    {header}
+                    <Stack gap="xs" p="md">
+                        {Array.from({ length: 14 }).map((_, i) => (
+                            <Skeleton height={40} key={i} radius="sm" />
+                        ))}
+                    </Stack>
                 </ListContext.Provider>
             </AnimatedPage>
         );

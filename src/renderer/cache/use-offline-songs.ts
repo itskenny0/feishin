@@ -56,10 +56,21 @@ export const loadOfflineSongs = async (): Promise<Song[]> => {
         .filter(Boolean);
     if (songIds.length === 0) return [];
 
-    const rows = await db.songs.bulkGet(songIds);
+    // Chunk the bulkGet + yield between batches. A single bulkGet of thousands
+    // of ids does ONE atomic main-thread structured-clone of every large nested
+    // Song Payload — that was the ~10s freeze before the list could paint.
+    // Batching with a macrotask yield lets the route's skeleton paint and keeps
+    // the UI responsive while the rows stream in.
+    const BATCH = 300;
     const songs: Song[] = [];
-    for (const row of rows) {
-        if (row?.Payload) songs.push(row.Payload);
+    for (let i = 0; i < songIds.length; i += BATCH) {
+        const rows = await db.songs.bulkGet(songIds.slice(i, i + BATCH));
+        for (const row of rows) {
+            if (row?.Payload) songs.push(row.Payload);
+        }
+        if (i + BATCH < songIds.length) {
+            await new Promise((resolve) => setTimeout(resolve, 0));
+        }
     }
     console.info(`${TAG} loaded offline songs`, { blobs: blobKeys.length, resolved: songs.length });
     return songs;
