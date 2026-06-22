@@ -8,16 +8,23 @@ import { MediaVolumes } from './volumes';
 const TAG = '[media-backend]';
 const ROOT_DIR = 'feishin-cache';
 
-export const blobToBase64 = async (blob: Blob): Promise<string> => {
-    const buf = await blob.arrayBuffer();
-    const bytes = new Uint8Array(buf);
-    let binary = '';
-    const chunk = 0x8000;
-    for (let i = 0; i < bytes.length; i += chunk) {
-        binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
-    }
-    return btoa(binary);
-};
+// Base64-encode a blob for the native writeFile bridge. Uses
+// FileReader.readAsDataURL, which runs the encode in native (Chromium) code OFF
+// the JS main thread. The previous `String.fromCharCode(...) + btoa` loop
+// encoded every multi-megabyte audio file synchronously on the main thread —
+// hundreds of ms per file — which froze the UI (ANR on low-end devices) and
+// slowed downloads on every device. We strip the `data:<mime>;base64,` prefix.
+export const blobToBase64 = (blob: Blob): Promise<string> =>
+    new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+            const result = typeof reader.result === 'string' ? reader.result : '';
+            const comma = result.indexOf(',');
+            resolve(comma >= 0 ? result.slice(comma + 1) : result);
+        };
+        reader.onerror = () => reject(reader.error ?? new Error('FileReader read failed'));
+        reader.readAsDataURL(blob);
+    });
 
 export const base64ToBlob = (b64: string): Blob => {
     const binary = atob(b64);

@@ -23,6 +23,7 @@ import { useTranslation } from 'react-i18next';
 import { RiAddLine, RiDeleteBinLine, RiRefreshLine } from 'react-icons/ri';
 
 import { api } from '/@/renderer/api';
+import { getActiveVolume, refreshVolumes } from '/@/renderer/cache/backends/active-backend';
 import { isAndroidNative } from '/@/renderer/cache/backends/volumes';
 import { formatBytes } from '/@/renderer/cache/format';
 import { localMediaStore, requestPersistentStorage } from '/@/renderer/cache/media-store';
@@ -89,6 +90,10 @@ export const OfflineMediaSettings = () => {
     const [targets, setTargets] = useState<OfflineTargetRow[]>([]);
     const [loadingTargets, setLoadingTargets] = useState(false);
     const [sliderValue, setSliderValue] = useState<number>(offlineCfg?.maxBytes ?? 2 * GIB);
+    // Free space on the active storage volume (SD card). The cap should scale to
+    // it instead of a hardcoded 32 GiB ceiling — a 1 TB card was uselessly
+    // capped at ~34 GB before. Undefined on internal storage / IDB.
+    const [volumeFreeBytes, setVolumeFreeBytes] = useState<number | undefined>(undefined);
 
     // Add affordance state.
     const [searchTerm, setSearchTerm] = useState('');
@@ -98,6 +103,29 @@ export const OfflineMediaSettings = () => {
 
     const maxBytes = offlineCfg?.maxBytes ?? 2 * GIB;
     const isSyncing = Boolean(smoothSync);
+
+    // Refresh the active volume's free space so the cap slider can scale to a
+    // big SD card. Re-runs when the chosen volume changes.
+    useEffect(() => {
+        if (!isAndroidNative()) return undefined;
+        let cancelled = false;
+        void refreshVolumes().then(() => {
+            if (!cancelled) setVolumeFreeBytes(getActiveVolume()?.freeBytes);
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [androidCfg?.storageVolumeId]);
+
+    // Slider ceiling: the volume's free space + what's already used (so the
+    // current cap is always reachable), rounded up to a GiB; never below the
+    // fixed 32 GiB default (internal storage / IDB).
+    const sliderMax = useMemo(() => {
+        if (volumeFreeBytes && volumeFreeBytes > 0) {
+            return Math.max(SLIDER_MAX, Math.ceil((volumeFreeBytes + stats.bytesUsed) / GIB) * GIB);
+        }
+        return SLIDER_MAX;
+    }, [volumeFreeBytes, stats.bytesUsed]);
 
     const refreshTargets = useCallback(async () => {
         setLoadingTargets(true);
@@ -417,7 +445,7 @@ export const OfflineMediaSettings = () => {
                 </Group>
                 <Slider
                     label={(v) => formatBytes(v)}
-                    max={SLIDER_MAX}
+                    max={sliderMax}
                     min={SLIDER_MIN}
                     onChange={setSliderValue}
                     onChangeEnd={handleCommitCap}
