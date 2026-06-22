@@ -499,7 +499,15 @@ export const runThumbnailsSweep = async (
 
     const actions = useCacheStore.getState().actions;
     const startedAt = Date.now();
+    // DISPLAYED progress = cache completeness (already-cached units + units
+    // this sweep transitions uncached→cached), seeded below from the
+    // existing-keys intersection. So a warm resync shows ~950/1000 from the
+    // first paint instead of racing 0→1000 through the instant skip burst.
     let done = 0;
+    // Units actually processed this sweep (skipped or fetched) — drives the
+    // throughput rate, decoupled from `done` so the post-seed counter doesn't
+    // spike itemsPerSec after the instant skip burst.
+    let processed = 0;
     let bytesDownloaded = 0;
     // Verbose-mode counters. Split between "fetched fresh" / "skipped
     // already cached" / "failed" so the final summary tells the user
@@ -590,6 +598,12 @@ export const runThumbnailsSweep = async (
         }
     };
 
+    // Seed displayed progress with the units already satisfied by the cache
+    // (uses the per-mode isUnitCached rule, so downscale's all-variants
+    // requirement is honoured — counting existingKeys.size would over-count).
+    // First sync: empty cache → 0. Warm resync: ~the whole library.
+    done = pending.reduce((n, u) => n + (isUnitCached(u) ? 1 : 0), 0);
+
     // Connectivity gate. While offline the worker pool parks (no fetches, no
     // failure recording, no queue burn) and resumes from the SAME cursor once
     // connectivity returns. `paused` is surfaced in the sweep progress so the
@@ -609,8 +623,14 @@ export const runThumbnailsSweep = async (
         if (!force && now - lastUpdateAt < SWEEP_UPDATE_MS) return;
         lastUpdateAt = now;
         const elapsed = Math.max(1, (now - startedAt) / 1000);
+        // Project remaining bytes from the avg size of units fetched THIS sweep
+        // (× the still-uncached remainder), not from the seeded `done` — a warm
+        // resync downloads ~nothing, so an empty `fetched` means no estimate.
+        const remaining = Math.max(0, total - done);
         const estimatedTotalBytes =
-            done > 0 ? Math.round(bytesDownloaded * (total / done)) : undefined;
+            fetched > 0
+                ? Math.round(bytesDownloaded + (bytesDownloaded / fetched) * remaining)
+                : undefined;
         actions.setSweep({
             entity: 'thumbnails',
             progress: {
@@ -618,7 +638,9 @@ export const runThumbnailsSweep = async (
                 bytesPerSec: bytesDownloaded / elapsed,
                 done,
                 estimatedTotalBytes,
-                itemsPerSec: done / elapsed,
+                // Rate from units processed this sweep, not `done` (which starts
+                // pre-seeded), so it reflects real throughput.
+                itemsPerSec: processed / elapsed,
                 paused: paused ? 'offline' : undefined,
                 startedAt,
                 total,
@@ -856,15 +878,18 @@ export const runThumbnailsSweep = async (
             const next = pending[idx];
             const template = templates[next.itemType];
             if (!template) {
-                done += 1;
+                // No template for this itemType — can't fetch/cache it. Counts
+                // as processed (rate) + skipped, but NOT done (never a cached unit).
+                processed += 1;
                 skipped += 1;
                 continue;
             }
             const wasCached = isUnitCached(next);
             if (wasCached) {
                 // Every variant this unit would produce is already cached —
-                // skip without a Dexie round-trip or a network request.
-                done += 1;
+                // skip without a Dexie round-trip or a network request. Already
+                // counted in the seeded `done`; just record it as processed.
+                processed += 1;
                 skipped += 1;
                 flushProgress();
                 continue;
@@ -891,11 +916,13 @@ export const runThumbnailsSweep = async (
                 if (outcome === 'fetched') {
                     fetched += 1;
                     markUnitCached(next);
+                    done += 1; // uncached → cached this sweep
                 } else if (outcome === 'missing') {
                     // Authoritative 404 — a negative marker was written. Mark
                     // the unit cached so a re-scan honors the miss TTL.
                     markUnitCached(next);
                     skipped += 1;
+                    done += 1; // a fresh negative marker satisfies the unit
                 } else {
                     // TRANSIENT failure (timeout / unreachable / non-404 HTTP /
                     // decode error). NOTHING authoritative was written — do NOT
@@ -936,7 +963,9 @@ export const runThumbnailsSweep = async (
                     status: 'between-items',
                 };
             }
-            done += 1;
+            // `done` advanced only in the fetched/missing success paths above; a
+            // transient failure leaves the unit as remaining work.
+            processed += 1;
             flushProgress();
 
             // Adaptive concurrency. The controller halves the cap on overload

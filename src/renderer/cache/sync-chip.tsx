@@ -34,8 +34,11 @@ export const SyncChip = () => {
 
     const label = t(`page.home.syncChip.${v.entity}`, { defaultValue: `Syncing ${v.entity}` });
 
+    // Clamp to total: `done` is now cache-completeness, which can transiently
+    // exceed a shrunk server total — never show 1010/1000.
+    const shownDone = v.total ? Math.min(v.done, v.total) : v.done;
     const itemsText = v.total
-        ? `${formatCount(v.done)}/${formatCount(v.total)}`
+        ? `${formatCount(shownDone)}/${formatCount(v.total)}`
         : formatCount(v.done);
     const bytesText = v.estimatedTotalBytes
         ? `${formatBytes(v.bytesDownloaded)} / ${formatBytes(v.estimatedTotalBytes)}`

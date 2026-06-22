@@ -165,6 +165,16 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
     // Items already synced before this session started (the resume cursor).
     // Excluded from the items/sec rate so a resumed sweep's ETA isn't inflated.
     const resumeBaseline = itemsDone;
+    // DISPLAYED progress = cache completeness, NOT items-processed-this-sweep.
+    // Seeded from the live row count and recomputed per page (idempotent
+    // bulkPut means it only climbs when genuinely-new rows land). So a resync
+    // shows 950/1000 from the first paint instead of racing 0→1000 (which read
+    // as a full re-download). `itemsDone` stays the throughput accumulator that
+    // feeds the rate — the two are intentionally decoupled.
+    let cachedDone = await db
+        .table(entity)
+        .count()
+        .catch(() => itemsDone);
     let bytesDownloaded = 0;
     const initialTotal = total;
     // Per-page rate is used to detect throughput drops; the page log
@@ -188,7 +198,7 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
         progress: {
             bytesDownloaded: 0,
             bytesPerSec: 0,
-            done: itemsDone,
+            done: cachedDone,
             estimatedTotalBytes: undefined,
             itemsPerSec: 0,
             pageIndex: 1,
@@ -211,7 +221,7 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
                     progress: {
                         bytesDownloaded,
                         bytesPerSec: 0,
-                        done: itemsDone,
+                        done: cachedDone,
                         estimatedTotalBytes: undefined,
                         itemsPerSec: 0,
                         pageIndex: pageIndex + 1,
@@ -228,7 +238,7 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
                     progress: {
                         bytesDownloaded,
                         bytesPerSec: 0,
-                        done: itemsDone,
+                        done: cachedDone,
                         estimatedTotalBytes: undefined,
                         itemsPerSec: 0,
                         pageIndex: pageIndex + 1,
@@ -257,7 +267,7 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
                 progress: {
                     bytesDownloaded,
                     bytesPerSec: bytesDownloaded / elapsedSec,
-                    done: itemsDone,
+                    done: cachedDone,
                     estimatedTotalBytes:
                         total !== undefined && itemsDone > 0
                             ? bytesDownloaded * (total / itemsDone)
@@ -499,13 +509,22 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
         }
         actions.setHydrationState(entity, 'partial');
 
+        // Recompute cache completeness after this page's rows committed (one
+        // cheap indexed count per page — never per item). Only climbs when
+        // genuinely-new rows landed (idempotent bulkPut on the stable Id), so a
+        // no-op delta resync sits at ~full instead of racing up from 0.
+        cachedDone = await db
+            .table(entity)
+            .count()
+            .catch(() => cachedDone);
+
         const updatedPageTotal = total !== undefined ? Math.ceil(total / pageSize) : undefined;
         actions.setSweep({
             entity,
             progress: {
                 bytesDownloaded,
                 bytesPerSec,
-                done: itemsDone,
+                done: cachedDone,
                 estimatedTotalBytes,
                 itemsPerSec,
                 pageIndex,
