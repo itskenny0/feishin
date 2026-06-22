@@ -1040,7 +1040,6 @@ const LocalCacheSettingsSchema = z.object({
     // user can turn off — WHAT is synced is mandatory/local-first). Gates the
     // lifecycle's auto re-hydrate. Default on.
     resyncOnStartup: z.boolean().default(true),
-    sweepProgressSmoothing: z.boolean().default(true),
     // Worker count for the thumbnail pre-cache sweep. Higher = faster but
     // more concurrent fetches / IndexedDB writes. 24 is the default on
     // modern HTTP/2 servers. Range enforced at sweep start.
@@ -2513,7 +2512,6 @@ const initialState: SettingsState = {
             maxBytes: 2 * 1024 * 1024 * 1024,
         },
         resyncOnStartup: true,
-        sweepProgressSmoothing: true,
     },
     lyrics: {
         alignment: 'center',
@@ -3457,7 +3455,6 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                             capacityBytes: undefined,
                             enabled: undefined,
                             resyncOnStartup: true,
-                            sweepProgressSmoothing: true,
                         };
                     }
                 }

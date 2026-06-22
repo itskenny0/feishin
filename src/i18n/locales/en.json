@@ -988,8 +988,6 @@
                 "thumbnailsHint": "Cover art is pre-cached during sync so grids render instantly. Choose which sizes to store and how fast to fetch them below.",
                 "thumbnailConcurrency": "Parallel downloads",
                 "thumbnailConcurrencyHelp": "Number of cover-art fetches the sweep runs in parallel. Raise it to saturate a fast LAN; lower it if the server gets unhappy.",
-                "smoothProgressLabel": "Animate sync progress bar",
-                "smoothProgressHelp": "Interpolates the counter and progress bar between page updates at 20 fps. Smoother visuals but uses slightly more CPU while this page is open.",
                 "statusFetchingPage": "fetching next page…",
                 "lastSynced": "last sync {{when}}",
                 "diagnosticsTitle": "Diagnostics",

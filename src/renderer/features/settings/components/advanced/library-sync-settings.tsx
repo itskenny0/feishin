@@ -112,6 +112,87 @@ const confirmAction = (params: {
     });
 };
 
+/**
+ * Isolated live-progress subtree. This is the ONLY thing that subscribes to the
+ * fast-ticking sweep state (~20×/sec), so the heavy parent settings page (variant
+ * table, sliders, diagnostics) doesn't re-render on every tick — opening the page
+ * during a sync no longer starves the sync workers.
+ */
+const SweepProgressBlock = () => {
+    const { t } = useTranslation();
+    const smoothSweep = useSmoothSweep();
+    const syncActive = useCacheStore((s) => s.syncActive);
+
+    const entity = smoothSweep.entity;
+    const sweepProgress =
+        entity && smoothSweep.total
+            ? Math.min(100, (100 * smoothSweep.done) / smoothSweep.total)
+            : 0;
+    const itemsPerSecLabel = entity ? smoothSweep.itemsPerSec.toFixed(1) : '0';
+    const sweepProgressLabel = entity
+        ? `${formatCount(smoothSweep.done)}/${smoothSweep.total ? formatCount(smoothSweep.total) : '?'} · ${itemsPerSecLabel} items/sec`
+        : '';
+    // "downloaded" + "remaining" (not "downloaded / total") — the projected total
+    // only counts bytes downloaded THIS run, which read as total cache size.
+    const sweepBytesLabel = (() => {
+        if (!entity) return '';
+        const downloaded = formatBytesSI(smoothSweep.bytesDownloaded);
+        const rate = `${formatBytesSI(smoothSweep.bytesPerSec)}/s`;
+        const remaining =
+            smoothSweep.estimatedTotalBytes !== undefined &&
+            smoothSweep.estimatedTotalBytes > smoothSweep.bytesDownloaded
+                ? formatBytesSI(smoothSweep.estimatedTotalBytes - smoothSweep.bytesDownloaded)
+                : undefined;
+        return remaining
+            ? `${downloaded} downloaded · ~${remaining} remaining · ${rate}`
+            : `${downloaded} downloaded · ${rate}`;
+    })();
+
+    return (
+        <Stack gap="xs">
+            {entity ? (
+                <>
+                    <Text>
+                        {t('page.setting.librarySyncDashboard.statusSweeping', {
+                            entity: t(ENTITY_LABEL_KEYS[entity]),
+                        })}
+                        {smoothSweep.pageIndex !== undefined && smoothSweep.pageTotal !== undefined
+                            ? ` · page ${smoothSweep.pageIndex}/${smoothSweep.pageTotal}`
+                            : ''}
+                        {smoothSweep.phase === 'fetching'
+                            ? ' · ' +
+                              t('page.setting.librarySyncDashboard.statusFetchingPage', {
+                                  defaultValue: 'fetching next page…',
+                              })
+                            : ''}
+                    </Text>
+                    <Progress value={sweepProgress} />
+                    <Text c="dimmed" size="sm">
+                        {sweepProgressLabel}
+                    </Text>
+                    <Text c="dimmed" size="sm">
+                        {sweepBytesLabel}
+                    </Text>
+                </>
+            ) : syncActive ? (
+                // Between entity sweeps the per-entity sweep is momentarily
+                // undefined; the overall hydration is still running, so show a
+                // live "preparing" state instead of "Idle" (which read as stalled).
+                <>
+                    <Text>
+                        {t('page.setting.librarySyncDashboard.statusPreparing', {
+                            defaultValue: 'Syncing…',
+                        })}
+                    </Text>
+                    <Progress animated value={100} />
+                </>
+            ) : (
+                <Text>{t('page.setting.librarySyncDashboard.statusIdle')}</Text>
+            )}
+        </Stack>
+    );
+};
+
 export const LibrarySyncSettings = () => {
     const { t } = useTranslation();
     const currentServer = useAuthStore((s) => s.currentServer);
@@ -120,9 +201,12 @@ export const LibrarySyncSettings = () => {
     // toggle behind "unavailable on this platform" for every opted-out
     // install; Windows portable, 2026-06-10).
     const platformCapable = usePlatformCacheCapability();
-    const sweep = useCacheStore((s) => s.sweep);
+    // Subscribe ONLY to the coarse sweep entity, not the whole `sweep` object
+    // (the engine rewrites it ~20×/sec). The live per-tick progress lives in the
+    // isolated <SweepProgressBlock/> so this heavy page re-renders only on entity
+    // transitions — opening it no longer starves the running sync.
+    const sweepEntity = useCacheStore((s) => s.sweep?.entity);
     const syncActive = useCacheStore((s) => s.syncActive);
-    const smoothSweep = useSmoothSweep();
     const entityCounts = useCacheStore((s) => s.entityCounts);
     const hydrationStates = useCacheStore((s) => s.hydrationStates);
     const pendingMutations = useCacheStore((s) => s.pendingMutations);
@@ -134,9 +218,6 @@ export const LibrarySyncSettings = () => {
     const setLocalCache = useSettingsStore((s) => s.actions.setLocalCache);
     const resyncOnStartup = useSettingsStore((s) => s.localCache?.resyncOnStartup ?? true);
     const thumbnailConcurrency = useSettingsStore((s) => s.localCache?.thumbnailConcurrency);
-    const sweepProgressSmoothing = useSettingsStore(
-        (s) => s.localCache?.sweepProgressSmoothing ?? false,
-    );
 
     const [thumbnailCount, setThumbnailCount] = useState<number | undefined>(undefined);
     const [thumbnailBytes, setThumbnailBytes] = useState<number | undefined>(undefined);
@@ -177,8 +258,8 @@ export const LibrarySyncSettings = () => {
     // so the dashboard's Storage used / Thumbnails bytes display never
     // moved past the post-clear zero state. Now the effect's identity
     // only changes on coarse transitions and a self-managed interval
-    // drives the in-sweep refresh cadence.
-    const sweepEntity = sweep?.entity;
+    // drives the in-sweep refresh cadence. (`sweepEntity` is the narrow
+    // store selector declared above.)
     useEffect(() => {
         let cancelled = false;
         const db = getActiveCacheDb();
@@ -192,21 +273,28 @@ export const LibrarySyncSettings = () => {
         }
         const refresh = async (): Promise<void> => {
             try {
-                const [count, bytes, metaRows, totalUsed] = await Promise.all([
+                // Cheap always: an indexed count + the tiny syncMeta table.
+                const [count, metaRows] = await Promise.all([
                     db.thumbnails.count(),
-                    cachedBytes(),
                     db.syncMeta.toArray(),
-                    estimateBytes(),
                 ]);
                 if (cancelled) return;
                 setThumbnailCount(count);
-                setThumbnailBytes(bytes);
-                // Bypass the lifecycle tick's throttle so the
-                // "Storage used" line moves at the same cadence as
-                // the per-entity counts above it. Without this the
-                // user saw "Storage used: 0 MiB" while the sweep had
-                // already landed hundreds of MB in Dexie.
-                useCacheStore.getState().actions.setBytesUsed(totalUsed);
+                // The byte totals require O(N) thumbnail-ByteSize scans
+                // (cachedBytes + estimateBytes both walk ~50k rows). Running
+                // them every 2s DURING a sweep serializes against the sweep's
+                // own IndexedDB writes on the single worker and slows it to a
+                // crawl (the lifecycle tick + eviction listener already gate
+                // this same cost behind an active sweep). So skip them while
+                // sweeping — Storage used / thumbnail bytes refresh the moment
+                // the sweep ends (this effect re-runs on the sweepEntity→
+                // undefined transition).
+                if (!sweepEntity) {
+                    const [bytes, totalUsed] = await Promise.all([cachedBytes(), estimateBytes()]);
+                    if (cancelled) return;
+                    setThumbnailBytes(bytes);
+                    useCacheStore.getState().actions.setBytesUsed(totalUsed);
+                }
                 const meta: typeof syncMeta = {};
                 for (const r of metaRows) {
                     meta[r.EntityType] = {
@@ -545,35 +633,10 @@ export const LibrarySyncSettings = () => {
         );
     }
 
-    const sweepProgress =
-        smoothSweep.entity && smoothSweep.total
-            ? Math.min(100, (100 * smoothSweep.done) / smoothSweep.total)
-            : 0;
-    const sweeping = Boolean(sweep);
-    const itemsPerSecLabel = smoothSweep.entity ? smoothSweep.itemsPerSec.toFixed(1) : '0';
-    const sweepProgressLabel = smoothSweep.entity
-        ? `${formatCount(smoothSweep.done)}/${smoothSweep.total ? formatCount(smoothSweep.total) : '?'} · ${itemsPerSecLabel} items/sec`
-        : '';
-    // Build the sweep bytes label. The previous "downloaded / total"
-    // format was misleading when most remaining items were cache hits
-    // or miss markers — the projected total reflected only the
-    // bytes that will be downloaded THIS RUN, but the user parsed it
-    // as total cache size. New format shows "downloaded" + "remaining"
-    // explicitly so it's clear what the second number means. The
-    // Storage used line below covers actual on-disk size.
-    const sweepBytesLabel = (() => {
-        if (!smoothSweep.entity) return '';
-        const downloaded = formatBytesSI(smoothSweep.bytesDownloaded);
-        const rate = `${formatBytesSI(smoothSweep.bytesPerSec)}/s`;
-        const remaining =
-            smoothSweep.estimatedTotalBytes !== undefined &&
-            smoothSweep.estimatedTotalBytes > smoothSweep.bytesDownloaded
-                ? formatBytesSI(smoothSweep.estimatedTotalBytes - smoothSweep.bytesDownloaded)
-                : undefined;
-        return remaining
-            ? `${downloaded} downloaded · ~${remaining} remaining · ${rate}`
-            : `${downloaded} downloaded · ${rate}`;
-    })();
+    // Disable destructive actions (regenerate / clear cache) while any sync is
+    // running. The live per-tick sweep progress is rendered by the isolated
+    // <SweepProgressBlock/> so it doesn't re-render this heavy page.
+    const sweeping = syncActive;
 
     return (
         <Stack gap="lg">
@@ -657,25 +720,6 @@ export const LibrarySyncSettings = () => {
                     </Text>
                 </Stack>
 
-                {/* Progress bar animation toggle */}
-                <Stack gap={4} mt="sm">
-                    <Switch
-                        checked={sweepProgressSmoothing}
-                        label={t('page.setting.librarySyncDashboard.smoothProgressLabel', {
-                            defaultValue: 'Animate sync progress bar',
-                        })}
-                        onChange={(e) =>
-                            setLocalCache({ sweepProgressSmoothing: e.currentTarget.checked })
-                        }
-                    />
-                    <Text c="dimmed" size="xs">
-                        {t('page.setting.librarySyncDashboard.smoothProgressHelp', {
-                            defaultValue:
-                                'Interpolates the counter and progress bar between page updates at 20 fps. Smoother visuals but uses slightly more CPU while this page is open.',
-                        })}
-                    </Text>
-                </Stack>
-
                 {/* Multi-resolution artwork variant cache. Caches several
                         cover sizes per item so dense lists/grids load without
                         decoding full-res JPEGs. The editor lives in its own
@@ -683,49 +727,9 @@ export const LibrarySyncSettings = () => {
                 <ImageVariantsRow onOpen={() => setSettings({ tabSubpage: 'image-variants' })} />
             </Stack>
 
-            {/* Status + current sweep */}
-            <Stack gap="xs">
-                {sweep ? (
-                    <>
-                        <Text>
-                            {t('page.setting.librarySyncDashboard.statusSweeping', {
-                                entity: t(ENTITY_LABEL_KEYS[sweep.entity]),
-                            })}
-                            {smoothSweep.pageIndex !== undefined &&
-                            smoothSweep.pageTotal !== undefined
-                                ? ` · page ${smoothSweep.pageIndex}/${smoothSweep.pageTotal}`
-                                : ''}
-                            {smoothSweep.phase === 'fetching'
-                                ? ' · ' +
-                                  t('page.setting.librarySyncDashboard.statusFetchingPage', {
-                                      defaultValue: 'fetching next page…',
-                                  })
-                                : ''}
-                        </Text>
-                        <Progress value={sweepProgress} />
-                        <Text c="dimmed" size="sm">
-                            {sweepProgressLabel}
-                        </Text>
-                        <Text c="dimmed" size="sm">
-                            {sweepBytesLabel}
-                        </Text>
-                    </>
-                ) : syncActive ? (
-                    // Between entity sweeps `sweep` is momentarily undefined; the
-                    // overall hydration is still running, so show a live
-                    // "preparing" state instead of "Idle" (which read as stalled).
-                    <>
-                        <Text>
-                            {t('page.setting.librarySyncDashboard.statusPreparing', {
-                                defaultValue: 'Syncing…',
-                            })}
-                        </Text>
-                        <Progress animated value={100} />
-                    </>
-                ) : (
-                    <Text>{t('page.setting.librarySyncDashboard.statusIdle')}</Text>
-                )}
-            </Stack>
+            {/* Status + current sweep — isolated so its 20fps updates don't
+                re-render this whole page (which slowed the sync). */}
+            <SweepProgressBlock />
 
             {/* Entity counts + per-entity diagnostics */}
             <Stack gap={4}>
