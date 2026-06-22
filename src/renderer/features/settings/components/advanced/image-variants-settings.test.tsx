@@ -127,6 +127,31 @@ describe('ImageVariantsSettings', () => {
         expect(after?.variants.fullScreen.px).toBe(DEFAULT_IMAGE_VARIANTS.variants.fullScreen.px);
     });
 
+    it('selecting the Speed preset enables only the dense sizes (itemCard + table)', () => {
+        renderSettings();
+
+        fireEvent.click(screen.getByText('Speed'));
+
+        const after = useSettingsStore.getState().localCache.imageVariants;
+        expect(after?.variants.table.enabled).toBe(true);
+        expect(after?.variants.itemCard.enabled).toBe(true);
+        // Speed drops the larger bounded sizes — they serve from itemCard.
+        expect(after?.variants.sidebar.enabled).toBe(false);
+        expect(after?.variants.header.enabled).toBe(false);
+    });
+
+    it('selecting Full enables every bounded size', () => {
+        renderSettings();
+
+        fireEvent.click(screen.getByText('Full'));
+
+        const after = useSettingsStore.getState().localCache.imageVariants;
+        expect(after?.variants.table.enabled).toBe(true);
+        expect(after?.variants.itemCard.enabled).toBe(true);
+        expect(after?.variants.sidebar.enabled).toBe(true);
+        expect(after?.variants.header.enabled).toBe(true);
+    });
+
     it('disables the format/quality controls in download mode', () => {
         seedImageVariants('download');
         renderSettings();

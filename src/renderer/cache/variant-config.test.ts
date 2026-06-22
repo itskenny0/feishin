@@ -12,6 +12,8 @@ import type { LocalCacheImageVariants } from '/@/renderer/store/settings.store';
 import { describe, expect, it } from 'vitest';
 
 import {
+    applyThumbnailPreset,
+    detectThumbnailPreset,
     enabledVariants,
     nearestLargerVariant,
     variantConfigHash,
@@ -148,5 +150,68 @@ describe('variantConfigHash', () => {
         // must change the hash.
         cfg.variants.fullScreen.enabled = true;
         expect(variantConfigHash(cfg)).not.toBe(variantConfigHash(DEFAULT_IMAGE_VARIANTS));
+    });
+});
+
+describe('thumbnail presets', () => {
+    const withBuckets = (names: string[]): LocalCacheImageVariants => {
+        const cfg = clone();
+        for (const k of ['header', 'itemCard', 'sidebar', 'table'] as const) {
+            cfg.variants[k].enabled = names.includes(k);
+        }
+        return cfg;
+    };
+
+    it('detects the shipped default (itemCard + sidebar + table) as balanced', () => {
+        expect(detectThumbnailPreset(DEFAULT_IMAGE_VARIANTS)).toBe('balanced');
+    });
+
+    it('detects speed (itemCard + table only)', () => {
+        expect(detectThumbnailPreset(withBuckets(['itemCard', 'table']))).toBe('speed');
+    });
+
+    it('detects full (all four bounded buckets)', () => {
+        expect(
+            detectThumbnailPreset(withBuckets(['header', 'itemCard', 'sidebar', 'table'])),
+        ).toBe('full');
+    });
+
+    it('detects custom for any non-preset combination', () => {
+        expect(detectThumbnailPreset(withBuckets(['table']))).toBe('custom');
+        expect(detectThumbnailPreset(withBuckets(['header', 'table']))).toBe('custom');
+    });
+
+    it('ignores fullScreen when detecting the preset (it is an independent opt-in)', () => {
+        const cfg = withBuckets(['itemCard', 'table']);
+        cfg.variants.fullScreen.enabled = true;
+        expect(detectThumbnailPreset(cfg)).toBe('speed');
+    });
+
+    it('applyThumbnailPreset(speed) enables only itemCard + table, disables the rest', () => {
+        const variants = applyThumbnailPreset(
+            withBuckets(['header', 'itemCard', 'sidebar', 'table']),
+            'speed',
+        );
+        expect(variants.table.enabled).toBe(true);
+        expect(variants.itemCard.enabled).toBe(true);
+        expect(variants.sidebar.enabled).toBe(false);
+        expect(variants.header.enabled).toBe(false);
+    });
+
+    it('applyThumbnailPreset preserves px values and the fullScreen opt-in', () => {
+        const cfg = withBuckets(['itemCard', 'table']);
+        cfg.variants.fullScreen.enabled = true;
+        cfg.variants.sidebar.px = 512;
+        const variants = applyThumbnailPreset(cfg, 'full');
+        expect(variants.sidebar.px).toBe(512); // px untouched
+        expect(variants.fullScreen.enabled).toBe(true); // independent opt-in untouched
+        expect(variants.sidebar.enabled).toBe(true);
+    });
+
+    it('round-trips: detect(apply(preset)) === preset', () => {
+        for (const preset of ['speed', 'balanced', 'full'] as const) {
+            const variants = applyThumbnailPreset(clone(), preset);
+            expect(detectThumbnailPreset({ ...clone(), variants })).toBe(preset);
+        }
     });
 });

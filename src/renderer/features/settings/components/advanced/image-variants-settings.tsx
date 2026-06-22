@@ -7,6 +7,7 @@ import { RiArrowRightSLine } from 'react-icons/ri';
 import styles from './image-variants-settings.module.css';
 
 import { clearThumbnails, hydrate } from '/@/renderer/cache';
+import { applyThumbnailPreset, detectThumbnailPreset } from '/@/renderer/cache/variant-config';
 import { SettingsOptions } from '/@/renderer/features/settings/components/settings-option';
 import { useAuthStore } from '/@/renderer/store';
 import { DEFAULT_IMAGE_VARIANTS, useImageVariants, useSettingsStore } from '/@/renderer/store';
@@ -76,6 +77,18 @@ export const ImageVariantsSettings = memo(({ server }: ImageVariantsSettingsProp
             patchImageVariants({ mode: value === 'download' ? 'download' : 'downscale' });
         },
         [patchImageVariants],
+    );
+
+    // The active speed/quality preset, derived from which bounded sizes are
+    // enabled. 'custom' means the per-size toggles below don't match any preset.
+    const preset = detectThumbnailPreset(imageVariants);
+    const handlePresetChange = useCallback(
+        (value: string) => {
+            if (value !== 'speed' && value !== 'balanced' && value !== 'full') return;
+            console.info('[image-variants] preset changed', { preset: value });
+            patchImageVariants({ variants: applyThumbnailPreset(imageVariants, value) });
+        },
+        [imageVariants, patchImageVariants],
     );
 
     const handleFormatChange = useCallback(
@@ -155,6 +168,58 @@ export const ImageVariantsSettings = memo(({ server }: ImageVariantsSettingsProp
 
     return (
         <Stack gap="sm">
+            {/* Speed / quality preset — the primary control. Maps to which
+                bounded sizes are pre-cached; fewer = faster first sync. */}
+            <SettingsOptions
+                control={
+                    <SegmentedControl
+                        aria-label={t('page.setting.imageVariants.presetLabel', {
+                            defaultValue: 'Thumbnail detail',
+                        })}
+                        data={[
+                            {
+                                label: t('page.setting.imageVariants.presetSpeed', {
+                                    defaultValue: 'Speed',
+                                }),
+                                value: 'speed',
+                            },
+                            {
+                                label: t('page.setting.imageVariants.presetBalanced', {
+                                    defaultValue: 'Balanced',
+                                }),
+                                value: 'balanced',
+                            },
+                            {
+                                label: t('page.setting.imageVariants.presetFull', {
+                                    defaultValue: 'Full',
+                                }),
+                                value: 'full',
+                            },
+                            ...(preset === 'custom'
+                                ? [
+                                      {
+                                          label: t('page.setting.imageVariants.presetCustom', {
+                                              defaultValue: 'Custom',
+                                          }),
+                                          value: 'custom',
+                                      },
+                                  ]
+                                : []),
+                        ]}
+                        onChange={handlePresetChange}
+                        value={preset}
+                    />
+                }
+                description={t('page.setting.imageVariants.presetHelp', {
+                    defaultValue:
+                        'Fewer sizes = faster first sync. Speed pre-caches just list + grid sizes (larger surfaces upscale from the grid size); Balanced adds a larger size; Full caches every size. Tune individual sizes below for Custom.',
+                })}
+                indent
+                title={t('page.setting.imageVariants.presetLabel', {
+                    defaultValue: 'Thumbnail detail',
+                })}
+            />
+
             {/* Global generation mode */}
             <SettingsOptions
                 control={

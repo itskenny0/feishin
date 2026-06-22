@@ -149,6 +149,55 @@ export const isRowHashStale = (
     return storedPx !== live.px;
 };
 
+// ---------------------------------------------------------------------------
+// Thumbnail-detail presets. A user-facing "speed vs quality" shorthand over the
+// per-variant enabled flags: fewer pre-cached bounded sizes = faster first sync
+// (a disabled bounded bucket serves from a cached larger sibling via the
+// resolver's fallback-only path). fullScreen (the px:0 original) is an
+// independent opt-in and is never part of a preset.
+export type ThumbnailPreset = 'balanced' | 'custom' | 'full' | 'speed';
+
+// The bounded surface buckets the presets toggle (everything except the px:0
+// original). Sorted for stable set comparison.
+const BOUNDED_BUCKETS: VariantName[] = ['header', 'itemCard', 'sidebar', 'table'];
+
+// Each preset = the bounded buckets it pre-caches. 'speed' keeps only the
+// dense-surface sizes (table rows + grid cards); 'balanced' adds the larger
+// sidebar size; 'full' caches every bounded size (incl. the redundant header).
+const PRESET_BUCKETS: Record<Exclude<ThumbnailPreset, 'custom'>, VariantName[]> = {
+    balanced: ['itemCard', 'sidebar', 'table'],
+    full: ['header', 'itemCard', 'sidebar', 'table'],
+    speed: ['itemCard', 'table'],
+};
+
+const sameBucketSet = (a: VariantName[], b: VariantName[]): boolean =>
+    a.length === b.length && [...a].sort().join(',') === [...b].sort().join(',');
+
+/** Which preset the config's enabled bounded-bucket set matches, or 'custom'. */
+export const detectThumbnailPreset = (cfg: LocalCacheImageVariants): ThumbnailPreset => {
+    const enabled = BOUNDED_BUCKETS.filter((v) => cfg.variants[v]?.enabled);
+    for (const preset of ['speed', 'balanced', 'full'] as const) {
+        if (sameBucketSet(enabled, PRESET_BUCKETS[preset])) return preset;
+    }
+    return 'custom';
+};
+
+/**
+ * Apply a preset to a config's variants: enable exactly the preset's bounded
+ * buckets, disable the rest. fullScreen and every px value are preserved.
+ */
+export const applyThumbnailPreset = (
+    cfg: LocalCacheImageVariants,
+    preset: Exclude<ThumbnailPreset, 'custom'>,
+): LocalCacheImageVariants['variants'] => {
+    const wanted = new Set(PRESET_BUCKETS[preset]);
+    const variants = { ...cfg.variants };
+    for (const v of BOUNDED_BUCKETS) {
+        variants[v] = { ...variants[v], enabled: wanted.has(v) };
+    }
+    return variants;
+};
+
 const parseConfigHash = (
     hash: string,
 ): null | { format: string; mode: string; quality: number; variantPx: Record<string, number> } => {
