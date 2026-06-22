@@ -140,4 +140,47 @@ describe('settings migrations', { timeout: 20_000 }, () => {
         expect(store.getState().peerSync.onboarded).toBe(false);
         expect(store.getState().peerSync.enabled).toBe(false);
     });
+
+    // v70→71: server-resize ("download") becomes the default thumbnail mode.
+    // Existing installs persisted at the legacy client-side "downscale" mode
+    // are flipped so their resync uses the fast no-client-encode path.
+    it('flips an existing downscale install to download mode (v70→71)', async () => {
+        seed(
+            {
+                localCache: {
+                    enabled: true,
+                    imageVariants: {
+                        format: 'webp',
+                        mode: 'downscale',
+                        quality: 82,
+                        variants: {
+                            fullScreen: { enabled: false, px: 0 },
+                            header: { enabled: true, px: 300 },
+                            itemCard: { enabled: true, px: 300 },
+                            sidebar: { enabled: true, px: 400 },
+                            table: { enabled: true, px: 80 },
+                        },
+                    },
+                },
+            },
+            70,
+        );
+
+        const store = await loadStore();
+        expect(store.getState().localCache.imageVariants?.mode).toBe('download');
+        // The rest of the user's variant config is preserved (only mode flips).
+        expect(store.getState().localCache.imageVariants?.variants.table).toEqual({
+            enabled: true,
+            px: 80,
+        });
+    });
+
+    it('survives a sparse blob without the imageVariants slice (v70→71)', async () => {
+        seed({ localCache: { enabled: true } }, 70);
+
+        // Migration must not throw (a throwing migrate wipes ALL settings).
+        const store = await loadStore();
+        // Falls back to the shipped default, which is download.
+        expect(store.getState().localCache.imageVariants?.mode).toBe('download');
+    });
 });

@@ -1049,7 +1049,11 @@ const LocalCacheSettingsSchema = z.object({
  */
 export const DEFAULT_IMAGE_VARIANTS: z.infer<typeof LocalCacheImageVariantsSchema> = {
     format: 'webp',
-    mode: 'downscale',
+    // 'download' = fetch each size pre-resized by the server (zero client
+    // decode/encode), the dominant mobile-sync win and what the fast competing
+    // Jellyfin clients do. 'downscale' (client re-encode from one source) stays
+    // available for weak servers / Subsonic via Settings.
+    mode: 'download',
     quality: 82,
     variants: {
         // Every bounded THUMBNAIL size is pre-cached by default so artwork is
@@ -3841,10 +3845,27 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
+                if (version <= 70) {
+                    // Server-resize ("download") is now the default thumbnail
+                    // mode: the client no longer decodes + re-encodes covers
+                    // (the dominant mobile sync cost + the ANR source) — it
+                    // fetches each size pre-resized by the server, like the fast
+                    // competing clients. Flip existing installs off the legacy
+                    // client-side "downscale" mode so their resync uses the fast
+                    // path. A user who later needs downscale (weak server) can
+                    // switch it back in Settings. Guarded: a sparse blob may
+                    // lack the imageVariants slice, and a throwing migrate
+                    // discards ALL persisted settings.
+                    const iv = state.localCache?.imageVariants;
+                    if (iv && typeof iv === 'object' && iv.mode === 'downscale') {
+                        iv.mode = 'download';
+                    }
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 70,
+            version: 71,
         },
     ),
 );

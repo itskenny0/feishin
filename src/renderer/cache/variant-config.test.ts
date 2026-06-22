@@ -135,7 +135,9 @@ describe('variantConfigHash', () => {
 
     it('changes when mode changes', () => {
         const cfg = clone();
-        cfg.mode = 'download';
+        // 'download' is the default, so toggle to the non-default 'downscale'
+        // to prove the mode participates in the hash.
+        cfg.mode = 'downscale';
         expect(variantConfigHash(cfg)).not.toBe(variantConfigHash(DEFAULT_IMAGE_VARIANTS));
     });
 

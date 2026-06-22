@@ -8,7 +8,7 @@ describe('localCache.imageVariants settings slice', () => {
 
         expect(imageVariants).toEqual({
             format: 'webp',
-            mode: 'downscale',
+            mode: 'download',
             quality: 82,
             variants: {
                 fullScreen: { enabled: false, px: 0 },
@@ -30,7 +30,7 @@ describe('localCache.imageVariants settings slice', () => {
         const next = useSettingsStore.getState().localCache.imageVariants!;
         expect(next.quality).toBe(70);
         // Everything else is untouched.
-        expect(next.mode).toBe('downscale');
+        expect(next.mode).toBe('download');
         expect(next.format).toBe('webp');
         expect(next.variants).toEqual(prev.variants);
     });
@@ -38,6 +38,6 @@ describe('localCache.imageVariants settings slice', () => {
     it('exposes a useImageVariants selector hook', () => {
         // The selector is a hook reading localCache.imageVariants.
         expect(typeof useImageVariants).toBe('function');
-        expect(useSettingsStore.getState().localCache.imageVariants?.mode).toBe('downscale');
+        expect(useSettingsStore.getState().localCache.imageVariants?.mode).toBe('download');
     });
 });

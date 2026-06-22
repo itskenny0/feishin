@@ -68,7 +68,12 @@ const getJellyfinImageRequest = ({
         // quality=90 (was 96): visually indistinguishable for cover art but
         // ~35% fewer bytes and less server-side re-encode work, which cuts
         // thumbnail-sync time substantially on large libraries.
-        url: `${url}/Items/${id}/Images/Primary?quality=90${imageSize ? `&width=${imageSize}` : ''}`,
+        // format=webp: ask Jellyfin to emit WebP directly (smaller than JPEG at
+        // equal quality) so the client never re-encodes — the sweep stores the
+        // server-resized bytes verbatim. Servers that don't support the param
+        // return their default encoding; getImageContentType byte-sniffs the
+        // response, so storage stays correct either way.
+        url: `${url}/Items/${id}/Images/Primary?quality=90&format=webp${imageSize ? `&width=${imageSize}` : ''}`,
     };
 };
 

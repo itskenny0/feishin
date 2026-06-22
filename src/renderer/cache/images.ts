@@ -147,6 +147,16 @@ export interface ResolverResult {
 }
 const inFlight = new Map<string, Promise<ResolverResult>>();
 
+// Consecutive image-fetch transport timeouts across the whole resolver. A
+// SINGLE slow cover (one 20s stall) used to flip the global offline latch and
+// park every cache sweep "offline" — far too trigger-happy when tens of
+// thousands of covers sweep a phone-hosted server. Require a short STREAK of
+// timeouts with no intervening HTTP response (a genuinely dead host, not one
+// slow item) before latching offline. Reset on ANY response (even an error
+// status — that still proves the server is reachable).
+const IMAGE_TIMEOUT_LATCH_THRESHOLD = 3;
+let consecutiveImageTimeouts = 0;
+
 // ---------------------------------------------------------------------------
 // Bounded concurrency for DISPLAY-path resolves.
 //
@@ -1266,16 +1276,22 @@ export const resolveThumbnail = async (
                 });
             } catch (err) {
                 if (timedOut) {
+                    consecutiveImageTimeouts += 1;
                     console.warn('[image-variants] thumbnail fetch timed out', {
+                        consecutiveTimeouts: consecutiveImageTimeouts,
                         itemId,
                         variant: resolvedVariant,
                     });
                     // A 20s stall is a transport-level hang (LAN host gone,
-                    // VPN dropped), not an HTTP error. Flip the combined
-                    // connectivity signal so every subsequent display
-                    // resolve serves straight from Dexie instead of each
-                    // burning its own 20s against the same dead host.
-                    markServerUnreachable();
+                    // VPN dropped), not an HTTP error. But ONE slow cover isn't
+                    // proof the server is gone — only flip the combined
+                    // connectivity signal after a streak of consecutive
+                    // timeouts with no intervening response. Below the
+                    // threshold we just fail this item and move on; the streak
+                    // resets the moment any cover responds.
+                    if (consecutiveImageTimeouts >= IMAGE_TIMEOUT_LATCH_THRESHOLD) {
+                        markServerUnreachable();
+                    }
                     recordStat('failed');
                     return { blob: undefined, bytes: 0 };
                 }
@@ -1299,7 +1315,9 @@ export const resolveThumbnail = async (
             // Any HTTP response (even an error status) means the server is
             // reachable again — image stalls flip the shared connectivity
             // signal to "unreachable", so image SUCCESSES must flip it back
-            // (axios traffic alone may be sparse while covers sweep).
+            // (axios traffic alone may be sparse while covers sweep). A
+            // response also breaks any timeout streak.
+            consecutiveImageTimeouts = 0;
             markServerReachable();
             if (!res.ok) {
                 if (res.status === 404) {

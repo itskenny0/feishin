@@ -18,6 +18,7 @@ import { clearAllSnapshots, dropSnapshotsForServer } from './snapshot';
 import { useCacheActions, useCacheStore } from './store';
 import { cancelHydration, hydrate } from './sync';
 
+import { registerReachabilityProbe } from '/@/renderer/lib/network-status';
 import { useAuthStore, useSettingsStore } from '/@/renderer/store';
 import { registerThumbnailResolver } from '/@/shared/components/image/use-native-image';
 import { toast } from '/@/shared/components/toast/toast';
@@ -30,6 +31,32 @@ let lastToastedErrorKey: string | undefined;
 // hook. Registered eagerly at module load so even the first `<ItemImage>`
 // mount during boot has a chance to hit Dexie.
 registerThumbnailResolver(resolveThumbnail);
+
+// Self-healing reachability probe for the offline latch (see
+// network-status.markServerUnreachable). When a streak of image timeouts (or an
+// axios transport error) latches the combined signal "offline", every cache
+// sweep parks and stops issuing requests — so nothing would ever clear the
+// latch. This probe pings the current server's liveness endpoint on an interval
+// while latched and clears it on the first response. ANY HTTP response (even
+// 401/404/500) proves reachability; only a transport throw means still-down.
+// Registered here (not in network-status) so that leaf module stays free of
+// api/auth imports. The closure reads the live currentServer each tick.
+registerReachabilityProbe(async () => {
+    const server = useAuthStore.getState().currentServer;
+    if (!server?.url) return false;
+    const base = server.url.replace(/\/+$/, '');
+    const url = server.type === 'jellyfin' ? `${base}/System/Ping` : `${base}/rest/ping.view`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 4_000);
+    try {
+        await fetch(url, { method: 'GET', signal: controller.signal });
+        return true;
+    } catch {
+        return false;
+    } finally {
+        clearTimeout(timer);
+    }
+});
 
 /**
  * Mount-once renderer hook that wires the Dexie-backed cache to the
@@ -385,6 +412,18 @@ export const useCacheLifecycle = (): void => {
 
         const tick = async () => {
             if (cancelled) return;
+            // While ANY sweep is running, skip the cache-size estimate: it does
+            // an O(N) `db.thumbnails.orderBy('ByteSize').keys()` scan (see
+            // eviction.estimateBytes) that grows with the table and serializes
+            // on the single IndexedDB worker against the sweep's own writes —
+            // the dominant cause of the sweep slowing to a crawl "after a few
+            // thousand" items (worst in download mode, where every thumbnail
+            // write fires `feishin:thumbnail-written` → this tick). The readout
+            // refreshes when the sweep clears (the store subscription below
+            // fires `tick()` on the sweep→undefined transition) and the
+            // post-sweep eviction pass recomputes it. Mirrors the eviction
+            // listener's own sweep gate (eviction.ts).
+            if (useCacheStore.getState().sweep) return;
             const now = Date.now();
             if (now - lastAt < MIN_INTERVAL_MS) {
                 if (!pending) {

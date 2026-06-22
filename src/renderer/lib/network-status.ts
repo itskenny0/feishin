@@ -88,6 +88,59 @@ if (hasWindow) {
  */
 export const getIsOnline = (): boolean => computeOnline();
 
+// ---------------------------------------------------------------------------
+// Self-healing reachability probe.
+//
+// `markServerUnreachable` latches the offline state until a *successful
+// response* clears it. During the blocking first-sync the only traffic is the
+// cache sweeps — and they PARK while offline, so they issue no request that
+// could ever clear the latch. One slow cover (a 20s image timeout) therefore
+// parks every sweep "offline" indefinitely while the device is foreground and
+// the link is up (observed on-device: "starting paused — offline"). The probe
+// is the missing recovery path: while latched unreachable it pings the server
+// on an interval and clears the latch on the first response.
+//
+// The actual ping is REGISTERED by app init (cache/lifecycle.ts) rather than
+// imported here, so this leaf module stays free of api/auth dependencies (which
+// import it, back). With no probe registered (unit tests, SSR) nothing is
+// scheduled — markServerUnreachable behaves exactly as before.
+let reachabilityProbe: (() => Promise<boolean>) | null = null;
+let probeTimer: null | ReturnType<typeof setInterval> = null;
+let probeInFlight = false;
+const PROBE_INTERVAL_MS = 6_000;
+
+export const registerReachabilityProbe = (probe: () => Promise<boolean>): void => {
+    reachabilityProbe = probe;
+};
+
+const stopReachabilityProbe = (): void => {
+    if (probeTimer !== null) {
+        clearInterval(probeTimer);
+        probeTimer = null;
+    }
+};
+
+const startReachabilityProbe = (): void => {
+    if (probeTimer !== null || !reachabilityProbe || !hasWindow) return;
+    probeTimer = setInterval(() => {
+        // Single in-flight probe only — never stack requests on a recovering
+        // server.
+        if (probeInFlight || !reachabilityProbe) return;
+        probeInFlight = true;
+        reachabilityProbe()
+            .then((reachable) => {
+                if (reachable) {
+                    console.info('[net] reachability probe succeeded — clearing offline latch');
+                    markServerReachable();
+                }
+            })
+            .catch(() => undefined)
+            .finally(() => {
+                probeInFlight = false;
+            });
+    }, PROBE_INTERVAL_MS);
+};
+
 /**
  * Called by the axios clients when a request fails with a transport-level
  * error (ERR_NETWORK / ECONNABORTED / ETIMEDOUT) — NOT for HTTP status errors
@@ -98,6 +151,9 @@ export const markServerUnreachable = (): void => {
         console.info('[net] server marked unreachable');
     }
     serverReachable = false;
+    // Start the self-healing probe so the latch can clear even if no other
+    // traffic runs (the first-sync sweep-park deadlock).
+    startReachabilityProbe();
     emitIfChanged();
 };
 
@@ -107,6 +163,7 @@ export const markServerUnreachable = (): void => {
  */
 export const markServerReachable = (): void => {
     serverReachable = true;
+    stopReachabilityProbe();
     emitIfChanged();
 };
 

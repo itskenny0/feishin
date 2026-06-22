@@ -692,13 +692,33 @@ export const runThumbnailsSweep = async (
     const BACKOFF_WINDOW = 8;
     const BACKOFF_THRESHOLD_MS = 5_000;
     const BACKOFF_PAUSE_MS = 2_000;
+    // Re-check interval for workers parked above the current cap. Kept short so
+    // a transient floor doesn't strand N-1 workers for a full BACKOFF_PAUSE_MS
+    // after the cap recovers.
+    const OVER_CAP_RECHECK_MS = 500;
+    // Any item whose measured wall-clock exceeds this is a background/doze
+    // FREEZE artifact, not a real latency — the fetch itself times out at 20s,
+    // so >30s means the JS context was frozen while the clock ran. We neither
+    // feed it to the backoff controller (below) nor let it poison throughput.
+    const FREEZE_SAMPLE_MS = 30_000;
+    // Never strand the sweep below this many concurrent fetches: a single slow
+    // window used to floor the cap at 1 and (pre-time-ramp) never recover.
+    // Capped at the configured concurrency so a user who deliberately sets a
+    // low concurrency is honoured.
+    const BACKOFF_FLOOR = Math.min(4, concurrency);
     const backoff = createBackoffController({
         ceiling: concurrency,
+        // Bound each sample so one doze-inflated reading can't dominate the
+        // window average (belt to the freeze-skip suspenders below).
+        clampMs: FREEZE_SAMPLE_MS,
         fastItemMs: BACKOFF_THRESHOLD_MS / 2,
-        floor: MIN_CONCURRENCY,
+        floor: BACKOFF_FLOOR,
         pauseMs: BACKOFF_PAUSE_MS,
         recoverStreak: 3,
         thresholdMs: BACKOFF_THRESHOLD_MS,
+        // Unconditional time-based ramp-up so the cap escapes the floor even
+        // when steady-state items are slow-but-healthy (never under fastItemMs).
+        timeRampMs: 8_000,
         window: BACKOFF_WINDOW,
     });
     // `cappedConcurrency` mirrors the controller's cap for the diagnostics
@@ -794,7 +814,7 @@ export const runThumbnailsSweep = async (
                 // Adaptive cap: this worker is over the current cap;
                 // sleep briefly and re-check. If latency recovers we
                 // come back online.
-                await new Promise((r) => setTimeout(r, BACKOFF_PAUSE_MS));
+                await new Promise((r) => setTimeout(r, OVER_CAP_RECHECK_MS));
                 continue;
             }
             const idx = cursor;
@@ -887,11 +907,21 @@ export const runThumbnailsSweep = async (
             flushProgress();
 
             // Adaptive concurrency. The controller halves the cap on overload
-            // and doubles it after a streak of fast items (symmetric, so a
-            // recovered server ramps back to the ceiling in a handful of items
-            // instead of the old +1-per-fast crawl that floored near 1 forever).
+            // and ramps it back up on a streak of fast items OR on the
+            // unconditional time-ramp (so a slow-but-healthy server escapes the
+            // floor even when no item is ever under fastItemMs).
             const nowTs = Date.now();
-            const action = backoff.record(nowTs - itemStart, itemOutcome === 'transient', nowTs);
+            const itemElapsedMs = nowTs - itemStart;
+            // Freeze-skip: a backgrounded/dozed WebView freezes this worker's
+            // awaits while the wall clock keeps running, so `itemElapsedMs` can
+            // be minutes. Feeding that to the controller is what floored the cap
+            // at 1 for the entire run (observed 22-min "items"). A real item
+            // tops out near the 20s fetch timeout, so anything past
+            // FREEZE_SAMPLE_MS is a freeze artifact — don't record it at all.
+            let action: 'backoff' | 'none' | 'rampup' = 'none';
+            if (itemElapsedMs <= FREEZE_SAMPLE_MS) {
+                action = backoff.record(itemElapsedMs, itemOutcome === 'transient', nowTs);
+            }
             cappedConcurrency = backoff.cap;
             if (action === 'backoff') {
                 console.warn('[cache] thumbnails sweep: backing off', {
