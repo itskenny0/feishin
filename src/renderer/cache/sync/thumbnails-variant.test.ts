@@ -77,37 +77,29 @@ afterEach(() => {
 });
 
 describe('collectPending — variant fan-out', () => {
-    it('opt-in: download mode sweeps the original when fullScreen is enabled', async () => {
+    it('download mode NEVER sweeps the original, even when fullScreen is enabled', async () => {
         mocks.albums.push({ Id: 'a1' });
 
         const pending = await collectPending(withMode(WITH_ORIGINAL, 'download'));
 
-        // 4 enabled variants (table, itemCard, header, fullScreen — sidebar off).
-        expect(pending).toHaveLength(4);
-        expect(pending.map((p) => p.variant).sort()).toEqual([
-            'fullScreen',
-            'header',
-            'itemCard',
-            'table',
-        ]);
-        const byVariant = Object.fromEntries(pending.map((p) => [p.variant, p.px]));
-        expect(byVariant.table).toBe(80);
-        expect(byVariant.itemCard).toBe(300);
-        expect(byVariant.header).toBe(300);
-        expect(byVariant.fullScreen).toBe(0);
+        // fullScreen (px:0) is excluded from the bulk sweep — only the bounded
+        // surface variants (table, itemCard, header — sidebar off) are pre-cached.
+        expect(pending).toHaveLength(3);
+        expect(pending.map((p) => p.variant).sort()).toEqual(['header', 'itemCard', 'table']);
+        expect(pending.some((p) => p.variant === 'fullScreen')).toBe(false);
+        expect(pending.some((p) => p.px === 0)).toBe(false);
     });
 
-    it('opt-in: downscale mode fetches once at the original px when fullScreen is enabled', async () => {
+    it('downscale mode caps the source at the largest BOUNDED px even when fullScreen is enabled', async () => {
         mocks.albums.push({ Id: 'a1' }, { Id: 'a2' });
 
         const pending = await collectPending(withMode(WITH_ORIGINAL, 'downscale'));
 
         expect(pending).toHaveLength(2);
         for (const unit of pending) {
-            // Original (0) sorts largest, so the single fetch is at the original.
-            expect(unit.px).toBe(0);
+            // Source fetch is the largest bounded variant (300), NOT the original (0).
+            expect(unit.px).toBe(300);
             expect((unit.downscaleVariants ?? []).map((v) => v.variant).sort()).toEqual([
-                'fullScreen',
                 'header',
                 'itemCard',
                 'table',

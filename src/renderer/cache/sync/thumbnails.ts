@@ -98,19 +98,20 @@ export const collectPending = async (cfg: LocalCacheImageVariants): Promise<Pend
     const db = getActiveCacheDb();
     if (!db) return [];
 
-    const enabled = enabledVariants(cfg);
+    // The bulk sweep pre-caches BOUNDED thumbnail sizes only — never the
+    // full-resolution original (`px === 0`, the fullScreen variant), even when
+    // it's enabled in settings. Originals are multi-megabyte; pre-fetching one
+    // per library item is gigabytes, and on a slow/phone-hosted Jellyfin the
+    // adaptive backoff floors the sweep to a crawl so even the small thumbnails
+    // never finish. The fullScreen original still loads (and caches) lazily on
+    // demand via `resolveThumbnail` when the now-playing view is opened — it's
+    // just not bulk-prefetched.
+    const enabled = enabledVariants(cfg).filter((v) => v.px > 0);
     if (enabled.length === 0) return [];
 
-    // The sweep honors whatever variants are enabled. Pre-caching the
-    // full-resolution original (`px === 0`, the fullScreen variant) is OPT-IN
-    // and OFF by default — originals are multi-megabyte and a full sweep of
-    // them takes hours. When fullScreen is disabled (the default) originals
-    // load lazily on demand via `resolveThumbnail`; when a user enables it the
-    // sweep pre-caches them too.
-    //
     // Downscale source fetch must be at least the largest enabled variant so
-    // nothing upscales. `enabled` is sorted ascending with original (px 0)
-    // sorting last, so the final entry is the largest (original, if enabled).
+    // nothing upscales. `enabled` is sorted ascending, so the final entry is the
+    // largest bounded variant.
     const largestPx = enabled[enabled.length - 1].px;
 
     const items: { itemId: string; itemType: LibraryItem; kind: EntityKind }[] = [];
