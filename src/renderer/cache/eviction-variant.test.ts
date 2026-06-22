@@ -162,7 +162,9 @@ describe('resolveThumbnail — config-hash staleness', () => {
     it('stamps the current config hash on a freshly-written row', async () => {
         globalThis.fetch = vi.fn(async () => jpegResponse()) as unknown as typeof fetch;
 
-        await resolveThumbnail('abc', 'table', RAW_URL);
+        // Rows are written by the sweep (`_skipBlobUrl`); the display path is
+        // now cache-only and never fetches/populates on demand.
+        await resolveThumbnail('abc', 'table', RAW_URL, { _skipBlobUrl: true });
 
         const row = await getActiveCacheDb()!.thumbnails.get(['abc', 'table']);
         expect(row).toBeTruthy();

@@ -33,6 +33,7 @@ import {
 } from '/@/renderer/store/settings.store';
 import {
     NO_ARTWORK_URL,
+    PENDING_SYNC_URL,
     registerThumbnailDegradedProbe,
     registerThumbnailUrlCache,
 } from '/@/shared/components/image/use-native-image';
@@ -429,6 +430,9 @@ interface AcquireResult {
     // The shared blob: URL when the resolve produced a cached blob, or
     // undefined on miss/failure (caller falls back to the raw URL).
     objectUrl: string | undefined;
+    // True when the cover isn't cached yet (sync-only) — awaiters return
+    // PENDING_SYNC_URL so the consumer paints a placeholder, never the network.
+    pending?: boolean;
 }
 const acquireInFlight = new Map<string, Promise<AcquireResult>>();
 
@@ -449,6 +453,12 @@ const takeResolvedBlob = (key: string): Blob | undefined => {
 // placeholder instead of re-fetching the raw URL.
 const lastResolvedNoArt = new Set<string>();
 const takeResolvedNoArt = (key: string): boolean => lastResolvedNoArt.delete(key);
+
+// Stashed by the _wantBlob resolve path when the cover isn't cached yet
+// (sync-only, sweep hasn't reached it) — so the shared-refcount acquire can
+// surface PENDING_SYNC_URL instead of the raw URL. Mirrors lastResolvedNoArt.
+const lastResolvedPending = new Set<string>();
+const takeResolvedPending = (key: string): boolean => lastResolvedPending.delete(key);
 
 /**
  * Acquire a stable, shared `blob:` URL for an item's cached thumbnail at a
@@ -503,7 +513,11 @@ export const acquireThumbnailUrl = async (
                 });
                 const blob = takeResolvedBlob(key);
                 if (!blob) {
-                    return { noArtwork: takeResolvedNoArt(key), objectUrl: undefined };
+                    return {
+                        noArtwork: takeResolvedNoArt(key),
+                        objectUrl: undefined,
+                        pending: takeResolvedPending(key),
+                    };
                 }
                 // Seed the shared entry with refCount 0; every awaiter
                 // (including this one) bumps it to its final value after
@@ -523,6 +537,9 @@ export const acquireThumbnailUrl = async (
         // Authoritative no-artwork: surface the sentinel so the consumer
         // shows its placeholder instead of re-fetching the raw URL.
         if (result.noArtwork) return NO_ARTWORK_URL;
+        // Not cached yet (sync-only): placeholder, never the network — it
+        // repaints when the sweep writes the row.
+        if (result.pending) return PENDING_SYNC_URL;
         // Cache miss / failure — fall back to the raw URL (un-refcounted).
         return url;
     }
@@ -1117,6 +1134,13 @@ export const resolveThumbnail = async (
                 return NO_ARTWORK_URL;
             }
         }
+        // Not cached yet (sync-only): placeholder for a display resolve, stash
+        // for the shared-acquire path; the sweep populates it. _skipBlobUrl
+        // (sweep) and cache-disabled installs keep the raw URL.
+        if (!options?._skipBlobUrl && isLocalCacheEnabled()) {
+            if (options?._wantBlob) lastResolvedPending.add(dedupKey);
+            else return PENDING_SYNC_URL;
+        }
         return url;
     }
 
@@ -1278,6 +1302,20 @@ export const resolveThumbnail = async (
                         recordStat('blobHit');
                         return { blob: fallback.blob, bytes: 0 };
                     }
+                    recordDegradedServe(itemId, resolvedVariant, request);
+                    return { blob: undefined, bytes: 0 };
+                }
+                // Cache-only display path: an enabled bounded variant with
+                // nothing usable cached. Do NOT fetch the remote on demand —
+                // that's the "covers feel remote-downloaded even when cached"
+                // bug. In a sync-only app the sweep populates every bounded
+                // cover; record a degraded serve so finishUpgrade() repaints
+                // this cell when its row lands, and return no blob → the
+                // consumer paints a placeholder (PENDING_SYNC_URL), never the
+                // network. `fullScreen` is exempt: the lazy on-demand hi-res
+                // now-playing cover is never bulk-swept, so it keeps fetching
+                // below. Cache disabled → fall through to the legacy fetch.
+                if (isLocalCacheEnabled() && resolvedVariant !== 'fullScreen') {
                     recordDegradedServe(itemId, resolvedVariant, request);
                     return { blob: undefined, bytes: 0 };
                 }
@@ -1504,6 +1542,9 @@ export const resolveThumbnail = async (
         // acquire path keys off the stashed Blob, not this return value.
         if (displayBlob) lastResolvedBlob.set(dedupKey, displayBlob);
         else if (result.noArtwork) lastResolvedNoArt.add(dedupKey);
+        // Not cached yet (sync-only): stash so the acquire path surfaces
+        // PENDING_SYNC_URL instead of the raw URL.
+        else if (isLocalCacheEnabled()) lastResolvedPending.add(dedupKey);
         return url;
     }
     if (options?._skipBlobUrl) return url;
@@ -1511,7 +1552,10 @@ export const resolveThumbnail = async (
     // Authoritative no-artwork (404 / negative cache) with nothing usable
     // cached: tell the consumer NOT to retry the raw URL.
     if (result.noArtwork) return NO_ARTWORK_URL;
-    return url;
+    // Cache enabled but nothing cached yet (sync-only): a placeholder, never
+    // the network. The sweep populates it and finishUpgrade() repaints. Only a
+    // cache-disabled install falls back to the raw remote URL.
+    return isLocalCacheEnabled() ? PENDING_SYNC_URL : url;
 };
 
 /**

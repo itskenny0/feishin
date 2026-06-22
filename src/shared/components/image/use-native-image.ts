@@ -68,6 +68,17 @@ const DEFAULT_VARIANT = 'fullScreen';
  */
 export const NO_ARTWORK_URL = 'feishin://no-artwork';
 
+/**
+ * Sentinel: the cover isn't in the local cache YET (sync-only app, sweep hasn't
+ * reached it). Distinct from NO_ARTWORK_URL (which is terminal/error): a pending
+ * cover stays in a recoverable loading state and must NOT fall through to a
+ * network fetch of the raw URL — that's the "covers feel remote-downloaded even
+ * when cached" bug. It repaints when the sweep writes the row (the resolver
+ * records a degraded serve, so finishUpgrade fires THUMBNAIL_UPGRADED_EVENT and
+ * the degraded-adoption effect below re-resolves to the blob). Never routable.
+ */
+export const PENDING_SYNC_URL = 'feishin://pending-sync';
+
 let resolveThumbnailRef: null | ThumbnailResolver = null;
 let acquireThumbnailUrlRef: null | ThumbnailUrlAcquirer = null;
 let releaseThumbnailUrlRef: null | ThumbnailUrlReleaser = null;
@@ -400,6 +411,20 @@ export function useNativeImage({
                         degradedRef.current = null;
                         setState({ status: 'error' });
                         onFetchErrorRef.current?.();
+                        return;
+                    }
+                    if (cached === PENDING_SYNC_URL) {
+                        // Not in the local cache yet (sync-only). Stay in a
+                        // recoverable loading state and DON'T fetch the raw URL —
+                        // the resolver recorded a degraded serve, so when the
+                        // sweep writes this row finishUpgrade fires
+                        // THUMBNAIL_UPGRADED_EVENT and the effect below
+                        // re-resolves to the blob. Keep any already-painted src.
+                        loadedRequestSignatureRef.current = requestSignature;
+                        degradedRef.current = { itemId: cacheItemId, variant: cacheVariant };
+                        if (!objectUrlRef.current) {
+                            setState({ status: 'loading' });
+                        }
                         return;
                     }
                     if (cached) {

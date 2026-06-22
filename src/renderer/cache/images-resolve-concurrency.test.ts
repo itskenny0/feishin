@@ -42,6 +42,7 @@ vi.mock('/@/renderer/cache/stats', () => ({
 
 vi.mock('/@/shared/components/image/use-native-image', () => ({
     NO_ARTWORK_URL: 'feishin://no-artwork',
+    PENDING_SYNC_URL: 'feishin://pending-sync',
     registerThumbnailDegradedProbe: vi.fn(),
     registerThumbnailUrlCache: vi.fn(),
 }));
@@ -64,50 +65,40 @@ afterEach(() => {
     vi.clearAllMocks();
 });
 
-const flushMicrotasks = async (rounds = 20) => {
-    for (let i = 0; i < rounds; i += 1) {
-        await Promise.resolve();
-    }
-};
+describe('resolveThumbnail — cache-only display path', () => {
+    // The original burst problem (a grid mounting 50 cells → 50 concurrent
+    // upstream fetches) is now solved at the source: in a sync-only app the
+    // display path NEVER fetches the remote on demand. A grid of un-cached
+    // covers does zero network work and paints placeholders; the sweep
+    // populates them. This is the regression guard for "covers feel
+    // remote-downloaded even when cached".
+    it('never fetches the remote on the display path; returns PENDING for un-cached covers', async () => {
+        globalThis.fetch = vi.fn() as unknown as typeof fetch;
 
-describe('resolveThumbnail — bounded display-path concurrency', () => {
-    it('starts at most 8 upstream fetches at once and hands slots over as they finish', async () => {
-        const deferreds: Array<(r: Response) => void> = [];
+        const results = await Promise.all(
+            Array.from({ length: 20 }, (_, i) =>
+                resolveThumbnail(`item-${i}`, 'itemCard', RAW_URL),
+            ),
+        );
+
+        // Zero upstream fetches — every cover came back as a pending placeholder.
+        expect((globalThis.fetch as any).mock.calls.length).toBe(0);
+        expect(results.every((r) => r === 'feishin://pending-sync')).toBe(true);
+    });
+
+    it('still fetches on the sweep/population path (_skipBlobUrl)', async () => {
         globalThis.fetch = vi.fn(
-            () =>
-                new Promise<Response>((resolve) => {
-                    deferreds.push(resolve);
-                }),
+            async () =>
+                ({
+                    blob: async () => new Blob([new Uint8Array(64)]),
+                    headers: { get: () => 'image/jpeg' },
+                    ok: true,
+                    status: 200,
+                }) as unknown as Response,
         ) as unknown as typeof fetch;
 
-        const ok = () =>
-            ({
-                blob: async () => new Blob([new Uint8Array(64)]),
-                headers: { get: () => 'image/jpeg' },
-                ok: true,
-                status: 200,
-            }) as unknown as Response;
+        await resolveThumbnail('sweep-item', 'itemCard', RAW_URL, { _skipBlobUrl: true });
 
-        const all = Array.from({ length: 20 }, (_, i) =>
-            resolveThumbnail(`item-${i}`, 'itemCard', RAW_URL),
-        );
-        await flushMicrotasks();
-
-        // Only the first window of fetches may be in flight.
-        expect((globalThis.fetch as any).mock.calls.length).toBe(8);
-
-        // Completing one resolve frees its slot for the next queued task.
-        deferreds[0](ok());
-        await flushMicrotasks();
-        expect((globalThis.fetch as any).mock.calls.length).toBe(9);
-
-        // Drain the rest so nothing leaks into other tests.
-        for (let i = 1; i < deferreds.length; i += 1) deferreds[i](ok());
-        await flushMicrotasks(60);
-        while (deferreds.length < 20) {
-            await flushMicrotasks(10);
-            for (let i = 0; i < deferreds.length; i += 1) deferreds[i]?.(ok());
-        }
-        await Promise.all(all);
+        expect((globalThis.fetch as any).mock.calls.length).toBe(1);
     });
 });
