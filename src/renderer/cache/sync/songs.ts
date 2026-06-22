@@ -13,6 +13,15 @@ import { ServerListItem, SongListSort, SortOrder } from '/@/shared/types/domain-
 // otherwise be skipped on this one.
 const DELTA_SAFETY_MS = 60_000;
 
+// Lean Jellyfin Fields for the SWEEP path only (overrides the heavier
+// JF_FIELDS.SONG via _custom — note that constant is shared by EVERY song path
+// incl. playback queue building, so it must NOT be edited directly). Drops
+// People, Tags, ProviderIds, ParentId, Genres(name-only) — none read by the
+// cache/search/filter/sort/index path. KEEPS: DateCreated (drives the delta
+// short-circuit), MediaSources (the `channels` offline sort), SortName (name
+// sort). Detail / queue / playlist / download fetches keep the full fields.
+const LEAN_SONG_SWEEP_FIELDS = ['DateCreated', 'MediaSources', 'SortName'];
+
 const fetchSongsPage =
     (server: ServerListItem, deltaMode: boolean) =>
     async (
@@ -23,6 +32,10 @@ const fetchSongsPage =
         const result = await controller.getSongList({
             apiClientProps: { serverId: server.id, signal },
             query: {
+                _custom: {
+                    EnableTotalRecordCount: startIndex === 0,
+                    Fields: LEAN_SONG_SWEEP_FIELDS,
+                },
                 limit,
                 sortBy: deltaMode ? SongListSort.RECENTLY_ADDED : SongListSort.NAME,
                 sortOrder: deltaMode ? SortOrder.DESC : SortOrder.ASC,

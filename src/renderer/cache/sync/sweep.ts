@@ -298,7 +298,12 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
 
         if (signal.aborted) break;
 
-        total = result.total;
+        // Pages 2..N may suppress EnableTotalRecordCount (a per-page server
+        // COUNT(*) cost), returning total:0. NEVER overwrite the page-1 total
+        // with a suppressed 0 — that would make `itemsDone >= total` true and
+        // silently truncate the sweep. Page 1 (and any page that does report a
+        // real total) updates it.
+        if (result.total > 0) total = result.total;
         let pageItems = result.items;
 
         // Delta-sync short-circuit. The page is in newest-first order;
@@ -356,7 +361,7 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
         // Anomaly: server total changed between calls. Jellyfin shouldn't
         // do this for stable libraries; if it does, our totalCount/done
         // accounting goes off and the progress UI lies. Worth flagging.
-        if (initialTotal !== undefined && result.total !== initialTotal) {
+        if (initialTotal !== undefined && result.total > 0 && result.total !== initialTotal) {
             console.warn(`[cache] sweep:${entity} ANOMALY: server total changed`, {
                 from: initialTotal,
                 startIndex,

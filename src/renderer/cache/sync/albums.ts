@@ -10,6 +10,18 @@ import { AlbumListSort, ServerListItem, SortOrder } from '/@/shared/types/domain
 
 const DELTA_SAFETY_MS = 60_000;
 
+// Lean Jellyfin Fields for the SWEEP path only (overrides the heavier
+// JF_FIELDS.ALBUM_LIST via _custom). Drops the fields nothing in the
+// cache/search/filter/sort/index path reads — People, Tags, Studios, Path,
+// ProviderIds (People + Path are the heaviest) — and keeps the load-bearing
+// ones: SortName (name sort + Dexie index), ChildCount (songCount sort), and
+// BOTH Genres + GenreItems. `Genres` looks redundant (genres[] is built from
+// GenreItems) BUT Jellyfin only returns GenreItems when Genres is co-requested
+// — verified on-device: `GenreItems` alone → 0/60 albums carry genres, dropping
+// the genre filter entirely. So Genres must stay. Detail/home/queue fetches keep
+// the full fields (they don't set _custom.Fields).
+const LEAN_ALBUM_SWEEP_FIELDS = ['ChildCount', 'Genres', 'GenreItems', 'SortName'];
+
 const fetchAlbumsPage =
     (server: ServerListItem, deltaMode: boolean) =>
     async (
@@ -20,6 +32,13 @@ const fetchAlbumsPage =
         const result = await controller.getAlbumList({
             apiClientProps: { serverId: server.id, signal },
             query: {
+                _custom: {
+                    // Suppress the per-page COUNT(*) on pages 2..N — page 1
+                    // seeds the total; runSweep's "don't overwrite total with 0"
+                    // guard keeps the suppressed 0s from truncating the loop.
+                    EnableTotalRecordCount: startIndex === 0,
+                    Fields: LEAN_ALBUM_SWEEP_FIELDS,
+                },
                 limit,
                 sortBy: deltaMode ? AlbumListSort.RECENTLY_ADDED : AlbumListSort.NAME,
                 sortOrder: deltaMode ? SortOrder.DESC : SortOrder.ASC,

@@ -100,19 +100,21 @@ export const hydrate = async (server: ServerListItem, kind: 'full' | 'lazy'): Pr
     startSyncHeartbeat(`full/${server.id}`);
 
     try {
-        if (entityEnabled('artists')) {
-            await runArtistsSweep({ db, entity: 'artists', signal }, server);
+        // Albums first: the home grid + album list are the most-visible
+        // surfaces, so syncing them ahead of the slower artists sweep (2 RTT per
+        // page) lets the user see their library soonest.
+        if (entityEnabled('albums')) {
+            await runAlbumsSweep({ db, entity: 'albums', signal }, server);
             if (signal.aborted) {
-                console.warn('[cache] hydrate: aborted between steps', { after: 'artists' });
+                console.warn('[cache] hydrate: aborted between steps', { after: 'albums' });
                 return;
             }
         } else {
-            console.info('[cache] hydrate: skipping artists (disabled in settings)');
+            console.info('[cache] hydrate: skipping albums (disabled in settings)');
         }
 
-        // Genres are tiny and live between artists and albums so the filter
-        // panels (which depend on them) are warm before the heavier sweeps
-        // dominate the network.
+        // Genres are tiny; sync them next so the album/song filter panels (which
+        // depend on them) are warm right after the albums grid appears.
         if (entityEnabled('genres')) {
             await runGenresSweep({ db, entity: 'genres', signal }, server);
             if (signal.aborted) {
@@ -123,14 +125,14 @@ export const hydrate = async (server: ServerListItem, kind: 'full' | 'lazy'): Pr
             console.info('[cache] hydrate: skipping genres (disabled in settings)');
         }
 
-        if (entityEnabled('albums')) {
-            await runAlbumsSweep({ db, entity: 'albums', signal }, server);
+        if (entityEnabled('artists')) {
+            await runArtistsSweep({ db, entity: 'artists', signal }, server);
             if (signal.aborted) {
-                console.warn('[cache] hydrate: aborted between steps', { after: 'albums' });
+                console.warn('[cache] hydrate: aborted between steps', { after: 'artists' });
                 return;
             }
         } else {
-            console.info('[cache] hydrate: skipping albums (disabled in settings)');
+            console.info('[cache] hydrate: skipping artists (disabled in settings)');
         }
 
         if (entityEnabled('playlists')) {

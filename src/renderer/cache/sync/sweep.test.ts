@@ -99,4 +99,35 @@ describe('runSweep lock-yield', () => {
         expect(txScopes.length).toBe(1);
         expect(writePage).toHaveBeenCalledTimes(1);
     });
+
+    it('does NOT truncate when later pages suppress the total (return total:0)', async () => {
+        const { db } = makeDb();
+        const written: { id: string }[] = [];
+        const writePage = vi.fn(async (_db: LibraryCacheDb, chunk: unknown[]) => {
+            written.push(...(chunk as { id: string }[]));
+        });
+
+        // Page 1 reports the real total; pages 2-3 suppress it (total:0, the
+        // EnableTotalRecordCount=false optimization). The sweep must keep going
+        // until the genuinely short last page — NOT exit early because
+        // `itemsDone >= 0`.
+        const pages = [
+            { items: Array.from({ length: 500 }, (_, i) => ({ id: `p0-${i}` })), total: 1200 },
+            { items: Array.from({ length: 500 }, (_, i) => ({ id: `p1-${i}` })), total: 0 },
+            { items: Array.from({ length: 200 }, (_, i) => ({ id: `p2-${i}` })), total: 0 },
+        ];
+        let call = 0;
+
+        const ctrl = new AbortController();
+        await runSweep<{ id: string }>({
+            ctx: { db, entity: 'albums', signal: ctrl.signal },
+            fetchPage: async () => pages[call++] ?? { items: [], total: 0 },
+            pageSize: 500,
+            writePage,
+        });
+
+        // All 1200 items across the three pages were written — a suppressed
+        // total:0 did not collapse the loop after page 2 (which would write 1000).
+        expect(written.length).toBe(1200);
+    });
 });
