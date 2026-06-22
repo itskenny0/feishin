@@ -121,6 +121,7 @@ export const LibrarySyncSettings = () => {
     // install; Windows portable, 2026-06-10).
     const platformCapable = usePlatformCacheCapability();
     const sweep = useCacheStore((s) => s.sweep);
+    const syncActive = useCacheStore((s) => s.syncActive);
     const smoothSweep = useSmoothSweep();
     const entityCounts = useCacheStore((s) => s.entityCounts);
     const hydrationStates = useCacheStore((s) => s.hydrationStates);
@@ -708,6 +709,18 @@ export const LibrarySyncSettings = () => {
                         <Text c="dimmed" size="sm">
                             {sweepBytesLabel}
                         </Text>
+                    </>
+                ) : syncActive ? (
+                    // Between entity sweeps `sweep` is momentarily undefined; the
+                    // overall hydration is still running, so show a live
+                    // "preparing" state instead of "Idle" (which read as stalled).
+                    <>
+                        <Text>
+                            {t('page.setting.librarySyncDashboard.statusPreparing', {
+                                defaultValue: 'Syncing…',
+                            })}
+                        </Text>
+                        <Progress animated value={100} />
                     </>
                 ) : (
                     <Text>{t('page.setting.librarySyncDashboard.statusIdle')}</Text>

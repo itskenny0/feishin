@@ -139,8 +139,10 @@ export const SyncDashboard = ({ onContinueAnyway, runner }: SyncDashboardProps) 
                     })}
                 </p>
 
-                {/* Central progress ring */}
-                <div className={styles.ringWrap} data-active={sweeping}>
+                {/* Central progress ring — stays active across the brief gaps
+                    between entity sweeps (runner is still syncing) so it doesn't
+                    flicker idle when `smooth.entity` is momentarily undefined. */}
+                <div className={styles.ringWrap} data-active={runner.phase === 'syncing'}>
                     <div className={styles.ring} style={ringStyle} />
                     <div className={styles.ringSweep} />
                     <div className={styles.ringInner}>

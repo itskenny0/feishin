@@ -45,6 +45,9 @@ export const startSyncHeartbeat = (label: string): void => {
     startedAt = Date.now();
     tickCount = 0;
     activeLabel = label;
+    // Mark the whole hydration active so the sync chip / dashboard stay visible
+    // across the gaps between entity sweeps (where `sweep` is momentarily undefined).
+    useCacheStore.getState().actions.setSyncActive(true);
     console.info('[cache] heartbeat: starting', { label, tickMs: TICK_MS });
     timer = setInterval(() => {
         tickCount += 1;
@@ -56,6 +59,7 @@ export const stopSyncHeartbeat = (label: string): void => {
     if (!timer) return;
     clearInterval(timer);
     timer = undefined;
+    useCacheStore.getState().actions.setSyncActive(false);
     console.info('[cache] heartbeat: stopped', {
         ...snapshot(),
         finalLabel: label,

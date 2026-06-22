@@ -19,6 +19,7 @@ export interface CacheStoreActions {
         setOfflineTargetStatuses: (statuses: Record<string, OfflineTargetStatus>) => void;
         setPendingMutations: (n: number) => void;
         setSweep: (s: CacheStoreState['sweep']) => void;
+        setSyncActive: (v: boolean) => void;
         setVolumeAvailable: (v: boolean) => void;
     };
 }
@@ -49,6 +50,11 @@ export interface CacheStoreState {
     offlineTargetStatuses: Record<string, OfflineTargetStatus>;
     pendingMutations: number;
     sweep: undefined | { entity: EntityType; progress: SweepProgress };
+    // True for the whole hydration run (set on heartbeat start, cleared on
+    // stop), INCLUDING the brief gaps between entity sweeps where `sweep` is
+    // momentarily undefined. Lets the sync chip / dashboard show a "Syncing…"
+    // state in those gaps instead of flashing empty (looking stalled/idle).
+    syncActive: boolean;
     // Android filesystem backend health: false while the configured storage
     // volume (e.g. an SD card) is absent/unmounted, so offline reads fail and
     // the UI surfaces a "reinsert card" banner. Always true on the idb backend
@@ -179,6 +185,10 @@ export const useCacheStore = createWithEqualityFn<CacheStoreActions & CacheStore
                     set((st) => {
                         st.sweep = s;
                     }),
+                setSyncActive: (v) =>
+                    set((st) => {
+                        st.syncActive = v;
+                    }),
                 setVolumeAvailable: (v) =>
                     set((st) => {
                         st.volumeAvailable = v;
@@ -195,6 +205,7 @@ export const useCacheStore = createWithEqualityFn<CacheStoreActions & CacheStore
             offlineTargetStatuses: {},
             pendingMutations: 0,
             sweep: undefined,
+            syncActive: false,
             volumeAvailable: true,
         })),
         { name: 'cache-store' },
