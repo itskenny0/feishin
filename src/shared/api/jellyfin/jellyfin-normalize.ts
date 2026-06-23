@@ -93,12 +93,18 @@ const getTags = (item: AlbumOrSong): null | Record<string, string[]> => {
 };
 
 const getSongImageId = (item: z.infer<typeof jfType._response.song>): null | string => {
-    if (item.ImageTags?.Primary) {
-        return item.Id;
-    }
-
+    // Prefer the ALBUM cover. The thumbnail sweep only caches album/artist
+    // covers (keyed by albumId), so a song referencing its OWN id never
+    // resolves from the local cache → blank cover in every track list (the
+    // cache-only render path no longer falls back to the network). The album
+    // cover is the standard track cover anyway; the song's own embedded art is
+    // a rare fallback.
     if (item.AlbumPrimaryImageTag && item.AlbumId) {
         return item.AlbumId;
+    }
+
+    if (item.ImageTags?.Primary) {
+        return item.Id;
     }
 
     return null;

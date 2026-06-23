@@ -188,7 +188,9 @@ export const LeftControls = () => {
                                             enableViewport={false}
                                             explicitStatus={currentSong?.explicitStatus}
                                             fetchPriority="high"
-                                            id={currentSong?.imageId}
+                                            // Album cover (cached by albumId); the
+                                            // song's own imageId isn't swept.
+                                            id={currentSong?.albumId ?? currentSong?.imageId}
                                             itemType={LibraryItem.SONG}
                                             key={currentSong?.id ?? 'playerbar-empty'}
                                             serverId={currentSong?._serverId}

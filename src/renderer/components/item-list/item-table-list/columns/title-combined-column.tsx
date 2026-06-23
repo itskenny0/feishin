@@ -128,7 +128,7 @@ export const DefaultTitleCombinedColumn = (props: ItemTableListInnerColumn) => {
                             enableDebounce={true}
                             enableViewport={true}
                             explicitStatus={item?.explicitStatus}
-                            id={item?.imageId}
+                            id={item?.albumId ?? item?.imageId}
                             itemType={item?._itemType}
                             src={item?.imageUrl}
                             type="table"
@@ -279,7 +279,7 @@ export const QueueSongTitleCombinedColumn = (props: ItemTableListInnerColumn) =>
                         <ItemImage
                             containerClassName={styles.image}
                             explicitStatus={item?.explicitStatus}
-                            id={item?.imageId}
+                            id={item?.albumId ?? item?.imageId}
                             itemType={item?._itemType}
                             serverId={item?._serverId}
                             src={item?.imageUrl}

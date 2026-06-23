@@ -92,7 +92,11 @@ const ImageColumnBase = (props: ItemTableListInnerColumn) => {
                         enableDebounce={true}
                         enableViewport={true}
                         explicitStatus={item?.explicitStatus}
-                        id={item?.imageId}
+                        // Songs cover = the album cover (cached by albumId). The
+                        // already-cached library still has songs keyed to their
+                        // own imageId, so fall back to albumId to resolve the
+                        // sweep-cached album cover without a full re-sync.
+                        id={item?.albumId ?? item?.imageId}
                         itemType={item?._itemType}
                         src={item?.imageUrl}
                         type="table"
