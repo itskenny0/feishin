@@ -40,6 +40,7 @@ import { collectPending } from '/@/renderer/cache/sync/thumbnails';
 // opt-in path. The shipping default has fullScreen DISABLED (see the
 // "default (fullScreen off)" cases below).
 const WITH_ORIGINAL: LocalCacheImageVariants = {
+    autoPreset: false,
     format: 'webp',
     mode: 'downscale',
     quality: 82,

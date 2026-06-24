@@ -127,7 +127,7 @@ const OfflineSongListRoute = () => {
                     {header}
                     <Stack gap="xs" p="md">
                         {Array.from({ length: 14 }).map((_, i) => (
-                            <Skeleton height={40} key={i} radius="sm" />
+                            <Skeleton height={40} key={i} />
                         ))}
                     </Stack>
                 </ListContext.Provider>

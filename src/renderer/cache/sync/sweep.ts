@@ -544,7 +544,7 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
             });
             break;
         }
-        if (pageItems.length < pageSize || itemsDone >= total) {
+        if (pageItems.length < pageSize || (total !== undefined && itemsDone >= total)) {
             break;
         }
 
