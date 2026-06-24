@@ -199,13 +199,13 @@ const BackgroundImage = memo(({ dynamicBackground, dynamicIsImage }: BackgroundI
     const { nextSong } = usePlayerData();
 
     const currentImageUrl = useCachedItemImageUrl({
-        id: currentSong?.imageId || undefined,
+        id: currentSong?.albumId ?? currentSong?.imageId ?? undefined,
         itemType: LibraryItem.SONG,
         type: 'itemCard',
     });
 
     const nextImageUrl = useCachedItemImageUrl({
-        id: nextSong?.imageId || undefined,
+        id: nextSong?.albumId ?? nextSong?.imageId ?? undefined,
         itemType: LibraryItem.SONG,
         type: 'itemCard',
     });
@@ -419,7 +419,7 @@ const MobilePlayerContainer = memo(
     }: DismissibleMobilePlayerContainerProps) => {
         const currentSong = usePlayerSong();
         const imageUrl = useCachedItemImageUrl({
-            id: currentSong?.imageId || undefined,
+            id: currentSong?.albumId ?? currentSong?.imageId ?? undefined,
             imageUrl: currentSong?.imageUrl,
             itemType: LibraryItem.SONG,
             type: 'itemCard',

@@ -27,7 +27,7 @@ export const useMPRIS = () => {
     const { isPlaying: isRadioPlaying, metadata: radioMetadata, stationName } = useRadioPlayer();
 
     const imageUrl = useItemImageUrl({
-        id: currentSong?.imageId || undefined,
+        id: currentSong?.albumId ?? currentSong?.imageId ?? undefined,
         imageUrl: currentSong?.imageUrl,
         itemType: LibraryItem.SONG,
         type: 'itemCard',

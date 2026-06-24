@@ -178,11 +178,15 @@ export const useGithubReleasesUpdater = () => {
 
         toast.info({
             autoClose: false,
+            // Stable id → a newer release REPLACES the existing toast instead of
+            // stacking a second persistent one (the wrapper hides-before-show
+            // for id'd toasts). Short message so the toast stays small — the long
+            // version tag used to wrap to half the screen.
+            id: 'github-update-available',
             message: t('common.updateAvailableBody', {
                 defaultValue: target.isApk
-                    ? 'Version {{tag}} is available. Tap to download — the OS installer will take over.'
-                    : 'Version {{tag}} is available. Tap to open the release page.',
-                tag: latestTag,
+                    ? 'A new version is available. Tap to install.'
+                    : 'A new version is available. Tap to open the release page.',
             }),
             onClick: () => {
                 triggerDownload(target.url, target.filename);

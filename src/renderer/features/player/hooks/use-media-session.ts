@@ -237,7 +237,7 @@ export const useMediaSession = () => {
             }
 
             const imageUrl = getItemImageUrl({
-                id: song?.imageId || undefined,
+                id: song?.albumId ?? song?.imageId ?? undefined,
                 imageUrl: song?.imageUrl,
                 itemType: LibraryItem.SONG,
                 type: 'itemCard',

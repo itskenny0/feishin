@@ -119,14 +119,14 @@ export const FullScreenPlayerImage = () => {
     const isPlayingRadio = isRadioActive && isRadioPlaying;
 
     const currentImageUrl = useCachedItemImageUrl({
-        id: currentSong?.imageId || undefined,
+        id: currentSong?.albumId ?? currentSong?.imageId ?? undefined,
         itemType: LibraryItem.SONG,
         serverId: currentSong?._serverId,
         type: 'fullScreenPlayer',
     });
 
     const nextImageUrl = useCachedItemImageUrl({
-        id: nextSong?.imageId || undefined,
+        id: nextSong?.albumId ?? nextSong?.imageId ?? undefined,
         itemType: LibraryItem.SONG,
         serverId: nextSong?._serverId,
         type: 'fullScreenPlayer',

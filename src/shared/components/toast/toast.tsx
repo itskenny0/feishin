@@ -48,6 +48,10 @@ const isDuplicate = (key: string): boolean => {
 
 const showToast = ({ message, onClose, type, ...props }: NotificationProps) => {
     if (message && isDuplicate(`${type ?? 'info'}::${message}`)) return undefined;
+    // An explicit `id` makes the toast a singleton: re-showing REPLACES the
+    // existing one instead of stacking. Used by the update-available toast,
+    // which otherwise stacked a fresh persistent toast per newer release.
+    if (props.id) hideNotification(props.id);
     return notifications.show({
         // Errors stick around until dismissed; everything else auto-closes
         // a little quicker than Mantine's default 5s so the playerbar isn't

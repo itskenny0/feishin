@@ -60,7 +60,7 @@ export const usePrefetchUpcomingCovers = (): void => {
 
             let started = 0;
             for (const song of upcoming) {
-                const imageId = song?.imageId;
+                const imageId = song?.albumId ?? song?.imageId ?? undefined;
                 if (!imageId || !song._serverId) continue;
                 const key = `${song._serverId}:${imageId}`;
                 if (inflightRef.current.has(key) || prefetchedRef.current.has(key)) continue;

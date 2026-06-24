@@ -103,7 +103,7 @@ const buildMetadata = async (song: QueueSong) => {
     // won't do: they're renderer-scoped and the native side can't read them.
     let imageUrl: null | string = null;
     let source: 'cache' | 'none' | 'remote' = 'none';
-    const coverItemId = song.imageId || song.id;
+    const coverItemId = (song?.albumId ?? song?.imageId) || song.id;
     const cached = coverItemId ? await getCachedThumbnailDataUrl(coverItemId) : null;
     if (cached) {
         imageUrl = cached;
@@ -111,7 +111,7 @@ const buildMetadata = async (song: QueueSong) => {
     } else if (getIsOnline()) {
         imageUrl =
             getItemImageUrl({
-                id: song.imageId || undefined,
+                id: song?.albumId ?? song?.imageId ?? undefined,
                 imageUrl: song.imageUrl,
                 itemType: LibraryItem.SONG,
                 type: 'itemCard',

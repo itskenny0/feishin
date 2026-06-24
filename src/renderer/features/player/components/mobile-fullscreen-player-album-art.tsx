@@ -126,7 +126,7 @@ export const MobileFullscreenPlayerAlbumArt = () => {
     const isRemote = useRemoteTargetStore((s) => s.targetDeviceId !== null);
     const remoteSong = useActiveNowPlayingItem();
     const remoteImageUrl = useCachedItemImageUrl({
-        id: remoteSong?.imageId || undefined,
+        id: remoteSong?.albumId ?? remoteSong?.imageId ?? undefined,
         // The MQTT-lane mirror builds a stub Song that carries `imageUrl` (from
         // the wire `track.art`) but no `imageId`, so resolving by id alone
         // returns nothing → placeholder disc. Forward imageUrl too (same pattern
@@ -143,7 +143,7 @@ export const MobileFullscreenPlayerAlbumArt = () => {
     // the target doesn't report `nxt`.
     const remoteNextSong = useActiveNextItem();
     const remoteNextImageUrl = useCachedItemImageUrl({
-        id: remoteNextSong?.imageId || undefined,
+        id: remoteNextSong?.albumId ?? remoteNextSong?.imageId ?? undefined,
         imageUrl: remoteNextSong?.imageUrl,
         itemType: LibraryItem.SONG,
         size: mainImageDimensions.idealSize,
@@ -169,21 +169,21 @@ export const MobileFullscreenPlayerAlbumArt = () => {
     const isPlayingRadio = isRadioActive && isRadioPlaying;
 
     const currentImageUrl = useCachedItemImageUrl({
-        id: currentSong?.imageId || undefined,
+        id: currentSong?.albumId ?? currentSong?.imageId ?? undefined,
         itemType: LibraryItem.SONG,
         size: mainImageDimensions.idealSize,
         type: 'fullScreenPlayer',
     });
 
     const nextImageUrl = useCachedItemImageUrl({
-        id: nextSong?.imageId || undefined,
+        id: nextSong?.albumId ?? nextSong?.imageId ?? undefined,
         itemType: LibraryItem.SONG,
         size: mainImageDimensions.idealSize,
         type: 'fullScreenPlayer',
     });
 
     const previousImageUrl = useCachedItemImageUrl({
-        id: previousSong?.imageId || undefined,
+        id: previousSong?.albumId ?? previousSong?.imageId ?? undefined,
         itemType: LibraryItem.SONG,
         size: mainImageDimensions.idealSize,
         type: 'fullScreenPlayer',

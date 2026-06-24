@@ -61,7 +61,7 @@ const SongTile = ({
     song: Song;
 }) => {
     const imageUrl = useCachedItemImageUrl({
-        id: song.imageId || undefined,
+        id: song?.albumId ?? song?.imageId ?? undefined,
         imageUrl: song.imageUrl || undefined,
         itemType: LibraryItem.SONG,
         type: 'itemCard',
@@ -118,7 +118,7 @@ export const FeatureCardShell = ({
 
     const backgroundSong = data.backgroundSong ?? data.songs[0] ?? null;
     const backgroundImageUrl = useCachedItemImageUrl({
-        id: backgroundSong?.imageId || undefined,
+        id: backgroundSong?.albumId ?? backgroundSong?.imageId ?? undefined,
         imageUrl: backgroundSong?.imageUrl || undefined,
         itemType: LibraryItem.SONG,
         type: 'fullScreenPlayer',
