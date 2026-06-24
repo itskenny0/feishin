@@ -1,3 +1,4 @@
+import { openConfirmModal } from '@mantine/modals';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import isElectron from 'is-electron';
 import { useCallback, useEffect, useRef } from 'react';
@@ -189,8 +190,27 @@ export const useGithubReleasesUpdater = () => {
                     : 'A new version is available. Tap to open the release page.',
             }),
             onClick: () => {
-                triggerDownload(target.url, target.filename);
-                dismissTag(latestTag);
+                // Confirm before downloading: tapping the toast body used to
+                // launch the OS installer immediately, so a mis-tap (aiming for
+                // the ✕) yanked the user out of the app. Gate it behind an
+                // explicit Install/Later choice.
+                openConfirmModal({
+                    children: t('common.updateConfirmBody', {
+                        defaultValue: target.isApk
+                            ? 'Download {{tag}} and install it now? The system installer will take over.'
+                            : 'Open the release page for {{tag}} in your browser?',
+                        tag: latestTag,
+                    }),
+                    labels: {
+                        cancel: t('common.later', { defaultValue: 'Later' }),
+                        confirm: t('common.install', { defaultValue: 'Install' }),
+                    },
+                    onConfirm: () => {
+                        triggerDownload(target.url, target.filename);
+                        dismissTag(latestTag);
+                    },
+                    title: t('common.updateAvailable', { defaultValue: 'Update available' }),
+                });
             },
             onClose: () => dismissTag(latestTag),
             title: t('common.updateAvailable', { defaultValue: 'Update available' }),
