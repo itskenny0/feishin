@@ -1053,6 +1053,38 @@ const resolveFallbackBlob = async (
     return pick?.blob;
 };
 
+// The largest cached cover blob for an item, across every NON-fullScreen
+// variant. `fullScreen` (the on-demand hi-res now-playing cover) is never
+// bulk-swept and is the largest variant, so `nearestLargerVariant` finds no
+// substitute and the player used to block on a cold server fetch (the >10s
+// "fullscreen cover loads slowly" report). This lets the player paint the
+// already-cached itemCard/table cover INSTANTLY (upscaled) while the real
+// fullScreen bucket fetches in the background — what upstream's bare <img>
+// effectively does, but served from Dexie. Excludes negative-cache markers.
+const largestCachedSubVariantBlob = async (itemId: string): Promise<Blob | undefined> => {
+    const db = getActiveCacheDb();
+    if (!db) return undefined;
+    try {
+        const rows = await rehydrateRows(
+            await db.thumbnails.where('ItemId').equals(itemId).toArray(),
+        );
+        const cfg = getImageVariantsConfig();
+        let best: Blob | undefined;
+        let bestPx = -1;
+        for (const row of rows) {
+            if (!row?.Blob || !row.Variant || row.Variant === 'fullScreen') continue;
+            const px = effectivePx(cfg.variants[row.Variant as VariantName]?.px ?? 0);
+            if (px > bestPx) {
+                bestPx = px;
+                best = row.Blob;
+            }
+        }
+        return best;
+    } catch {
+        return undefined;
+    }
+};
+
 /**
  * Resolve a thumbnail to a `blob:` URL backed by the local cache. Accepts
  * either a bare URL (legacy callers) or a full `ImageRequest` so the
@@ -1276,6 +1308,28 @@ export const resolveThumbnail = async (
                 if (fallback && ((fallback.sufficient && !fallback.stale) || !getIsOnline())) {
                     recordStat('blobHit');
                     return { blob: fallback.blob, bytes: 0 };
+                }
+                // `fullScreen` is the largest variant AND is never bulk-swept,
+                // so `resolveFallbackPick` (nearest-LARGER only) finds nothing
+                // and the now-playing cover blocked on a cold server round-trip
+                // through the resolve pipeline — the >10s "fullscreen cover loads
+                // slowly" report. Paint the already-cached itemCard/table cover
+                // INSTANTLY (upscaled) and let scheduleVariantGenerate fetch the
+                // real hi-res bucket in the background, then repaint via the
+                // upgrade event. This is what upstream's bare <img> achieves —
+                // an immediate paint — but served from Dexie.
+                if (resolvedVariant === 'fullScreen' && getIsOnline()) {
+                    const placeholder = await largestCachedSubVariantBlob(itemId);
+                    if (placeholder) {
+                        recordDegradedServe(itemId, resolvedVariant, request);
+                        imageVariantsInternals.scheduleVariantGenerate(
+                            itemId,
+                            resolvedVariant,
+                            request,
+                        );
+                        recordStat('blobHit');
+                        return { blob: placeholder, bytes: 0 };
+                    }
                 }
                 // Nothing cached and the server is known-unreachable: don't
                 // start a doomed fetch (on a hung LAN host each attempt
