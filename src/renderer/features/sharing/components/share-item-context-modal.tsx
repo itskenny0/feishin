@@ -53,39 +53,46 @@ export const ShareItemContextModal = ({
         },
     });
 
-    // Hand the link off to the platform: native share sheet on mobile when
-    // available, otherwise copy to clipboard. Returns whether the link ended up
-    // on the clipboard so the success toast can tell the user where to look.
-    const deliverShareUrl = async (shareUrl: string): Promise<boolean> => {
+    // Hand the link off to the platform via the native share sheet (mobile).
+    // Returns true if the sheet successfully accepted the link. Clipboard
+    // delivery on desktop is handled separately below so it can run inside the
+    // click's user activation (see the activation comment in handleSubmit).
+    const shareViaNativeSheet = async (shareUrl: string): Promise<boolean> => {
         const canUseNativeShare =
             isMobile && typeof navigator.share === 'function' && window.isSecureContext;
 
         if (canUseNativeShare) {
             try {
                 await navigator.share({ url: shareUrl });
-                return false;
-            } catch {
-                // User dismissed the sheet or the browser refused; fall through
-                // to clipboard so they still walk away with the link.
-            }
-        }
-
-        const canUseClipboard = Boolean(navigator.clipboard) && window.isSecureContext;
-        if (canUseClipboard) {
-            try {
-                await navigator.clipboard.writeText(shareUrl);
                 return true;
             } catch {
-                return false;
+                // User dismissed the sheet or the browser refused; fall through
+                // so they still walk away with the link via the toast/clipboard.
             }
         }
 
         return false;
     };
 
-    const handleSubmit = form.onSubmit((values) => {
-        shareItemMutation.mutate(
-            {
+    const handleSubmit = form.onSubmit(async (values) => {
+        // Prefer the native share sheet on mobile; only fall back to the
+        // clipboard path when native share isn't available. Computed
+        // synchronously so the clipboard write below stays inside the gesture.
+        const preferNativeShare =
+            isMobile && typeof navigator.share === 'function' && window.isSecureContext;
+        const canUseClipboard =
+            !preferNativeShare && Boolean(navigator.clipboard) && window.isSecureContext;
+
+        // The share URL only exists once the create request resolves. Calling
+        // navigator.clipboard.writeText() from that async callback runs outside
+        // the click's user activation, so Firefox/Safari reject it ("Clipboard
+        // write was blocked due to lack of user activation") and nothing is
+        // copied. Instead, call clipboard.write() synchronously within this
+        // gesture with a ClipboardItem whose value is a promise that resolves to
+        // the URL — this preserves the activation while the share is created.
+        // Falls back to writeText, then to the "click to open" toast.
+        const shareUrlPromise = shareItemMutation
+            .mutateAsync({
                 apiClientProps: { serverId: server?.id || '' },
                 body: {
                     description: values.description,
@@ -96,54 +103,73 @@ export const ShareItemContextModal = ({
                     resourceIds: itemIds.join(),
                     resourceType,
                 },
+            })
+            .then((data) => {
+                if (!server) throw new Error('Server not found');
+                if (!data?.id) throw new Error('Failed to share item');
+
+                const serverUrl = getServerUrl(server, true);
+                if (!serverUrl) throw new Error('Server URL not found');
+                return `${serverUrl}/share/${data.id}`;
+            });
+
+        let copied = false;
+        if (canUseClipboard) {
+            try {
+                if (typeof ClipboardItem !== 'undefined') {
+                    await navigator.clipboard.write([
+                        new ClipboardItem({
+                            'text/plain': shareUrlPromise.then(
+                                (url) => new Blob([url], { type: 'text/plain' }),
+                            ),
+                        }),
+                    ]);
+                } else {
+                    await navigator.clipboard.writeText(await shareUrlPromise);
+                }
+                copied = true;
+            } catch {
+                copied = false;
+            }
+        }
+
+        let shareUrl: string;
+        try {
+            shareUrl = await shareUrlPromise;
+        } catch {
+            // Keep the modal open so the user can adjust and retry instead of
+            // losing everything they typed.
+            toast.error({
+                message: t('form.shareItem.createFailed'),
+            });
+            return;
+        }
+
+        // On mobile, hand the resolved link to the native share sheet. If the
+        // user accepts it there the link is delivered just like a clipboard
+        // copy, so reuse the "success" (not "must click") toast.
+        const sharedViaSheet = preferNativeShare ? await shareViaNativeSheet(shareUrl) : false;
+        const delivered = copied || sharedViaSheet;
+
+        toast.success({
+            autoClose: delivered ? 5000 : 15000,
+            id: 'share-item-toast',
+            message: t(
+                delivered ? 'form.shareItem.success' : 'form.shareItem.successMustClick',
+                {},
+            ),
+            onClick: (a) => {
+                if (!(a.target instanceof HTMLElement)) return;
+
+                // Make sure we weren't clicking close (otherwise clicking close /also/ opens the url)
+                if (a.target.nodeName !== 'svg') {
+                    window.open(shareUrl);
+                    toast.hide('share-item-toast');
+                }
             },
-            {
-                onError: () => {
-                    // Keep the modal open so the user can adjust and retry
-                    // instead of losing everything they typed.
-                    toast.error({
-                        message: t('form.shareItem.createFailed'),
-                    });
-                },
-                onSuccess: async (_data) => {
-                    if (!server || !_data?.id) {
-                        toast.error({ message: t('form.shareItem.createFailed') });
-                        return;
-                    }
+        });
 
-                    const serverUrl = getServerUrl(server, true);
-                    if (!serverUrl) {
-                        toast.error({ message: t('form.shareItem.createFailed') });
-                        return;
-                    }
-
-                    const shareUrl = `${serverUrl}/share/${_data.id}`;
-                    const copiedToClipboard = await deliverShareUrl(shareUrl);
-
-                    closeModal(id);
-
-                    toast.success({
-                        autoClose: copiedToClipboard ? 5000 : 15000,
-                        id: 'share-item-toast',
-                        message: t(
-                            copiedToClipboard
-                                ? 'form.shareItem.success'
-                                : 'form.shareItem.successMustClick',
-                            {},
-                        ),
-                        onClick: (a) => {
-                            if (!(a.target instanceof HTMLElement)) return;
-
-                            // Make sure we weren't clicking close (otherwise clicking close /also/ opens the url)
-                            if (a.target.nodeName !== 'svg') {
-                                window.open(shareUrl, '_blank', 'noopener,noreferrer');
-                                toast.hide('share-item-toast');
-                            }
-                        },
-                    });
-                },
-            },
-        );
+        closeModal(id);
     });
 
     return (

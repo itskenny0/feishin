@@ -372,7 +372,7 @@ const normalizeAlbum = (
         releaseYear,
         size: null,
         songCount: item?.ChildCount || null,
-        songs: item.Songs?.map((song) => normalizeSong(song, server, pathReplace, pathReplaceWith)),
+        songs: item.Songs?.map((song) => normalizeSong(song, server)),
         sortName: item.SortName || item.Name,
         tags: getTags(item),
         updatedAt: item?.DateLastMediaAdded || item.DateCreated,

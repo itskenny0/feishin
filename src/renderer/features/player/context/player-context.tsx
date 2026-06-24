@@ -59,7 +59,12 @@ import {
 import { Play, PlayerRepeat, PlayerShuffle } from '/@/shared/types/types';
 
 export interface PlayerContext {
-    addToQueueByData: (data: Song[], type: AddToQueueType, playSongId?: string) => void;
+    addToQueueByData: (
+        data: Song[],
+        type: AddToQueueType,
+        playSongId?: string,
+        contextPlaylistId?: null | string,
+    ) => void;
     addToQueueByFetch: (
         serverId: string,
         id: string[],
@@ -156,6 +161,23 @@ const getRootQueryKey = (itemType: LibraryItem, serverId: string) => {
             return queryKeys.songs.root(serverId);
     }
 };
+
+const isReplaceQueueType = (type: AddToQueueType): boolean => {
+    if (typeof type === 'object') return false;
+    return type === Play.NOW || type === Play.SHUFFLE;
+};
+
+// HashRouter puts the route in location.hash, not pathname.
+const inferPlaylistContextFromUrl = (): null | string => {
+    const route = window.location.hash.replace(/^#/, '');
+    const match = route.match(/^\/playlists\/([^/]+)/);
+    return match ? match[1] : null;
+};
+
+// Stamps each song with the playlist it was queued from, so the sidebar highlight
+// can be derived from whichever song is currently playing (see useCurrentPlaylistContextId).
+const tagPlaylistContext = (songs: Song[], contextPlaylistId: string): Song[] =>
+    songs.map((song) => ({ ...song, _contextPlaylistId: contextPlaylistId }));
 
 export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
     const { t } = useTranslation();
@@ -289,7 +311,12 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
     }, [doNotShowAgain, setDoNotShowAgain, t]);
 
     const addToQueueByData = useCallback(
-        (data: Song[], type: AddToQueueType, playSongId?: string) => {
+        (
+            data: Song[],
+            type: AddToQueueType,
+            playSongId?: string,
+            contextPlaylistId?: null | string,
+        ) => {
             if (tryRemotePlay(data, type, playSongId)) return;
 
             // Offline guard: while offline only downloaded songs can actually
@@ -317,7 +344,13 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
             const playableData = guard.playable;
 
             const filters = useSettingsStore.getState().playback.filters;
-            const filteredData = filterSongsByPlayerFilters(playableData, filters);
+            let filteredData = filterSongsByPlayerFilters(playableData, filters);
+            const resolvedContextId =
+                contextPlaylistId ??
+                (isReplaceQueueType(type) ? inferPlaylistContextFromUrl() : null);
+            if (resolvedContextId) {
+                filteredData = tagPlaylistContext(filteredData, resolvedContextId);
+            }
 
             if (typeof type === 'object' && 'edge' in type && type.edge !== null) {
                 const edge = type.edge === 'top' ? 'top' : 'bottom';
@@ -477,7 +510,21 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
                 }
 
                 const filters = useSettingsStore.getState().playback.filters;
-                const filteredSongs = filterSongsByPlayerFilters(sortedSongs, filters);
+                let filteredSongs = filterSongsByPlayerFilters(sortedSongs, filters);
+
+                // Songs from multiple playlists are merged together, so there is no single
+                // playlist to attribute them to: skip tagging (and URL inference) entirely.
+                const isMultiPlaylist = itemType === LibraryItem.PLAYLIST && id.length > 1;
+                const explicitId =
+                    itemType === LibraryItem.PLAYLIST && id.length === 1 ? id[0] : null;
+                const resolvedContextId =
+                    explicitId ??
+                    (!isMultiPlaylist && isReplaceQueueType(type)
+                        ? inferPlaylistContextFromUrl()
+                        : null);
+                if (resolvedContextId) {
+                    filteredSongs = tagPlaylistContext(filteredSongs, resolvedContextId);
+                }
 
                 if (tryRemotePlay(filteredSongs, type)) return;
 

@@ -10,6 +10,7 @@ import { songsQueries } from '/@/renderer/features/songs/api/songs-api';
 import { PlayerFilter, useSettingsStore } from '/@/renderer/store';
 import { LogCategory, logFn } from '/@/renderer/utils/logger';
 import { logMsg } from '/@/renderer/utils/logger-message';
+import { resolveSongPath } from '/@/renderer/utils/resolve-song-path';
 import { sortSongList } from '/@/shared/api/utils';
 import {
     PlaylistSongListQuery,
@@ -412,7 +413,7 @@ const getSongFieldValue = (song: Song, field: string): boolean | null | number |
         case 'note':
             return song.comment || '';
         case 'path':
-            return song.path || '';
+            return resolveSongPath(song.path) || '';
         case 'playCount':
             return song.playCount;
         case 'rating':

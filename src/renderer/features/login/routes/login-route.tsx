@@ -9,6 +9,10 @@ import styles from './login-route.module.css';
 import { api } from '/@/renderer/api';
 import { PageHeader } from '/@/renderer/components/page-header/page-header';
 import {
+    findExistingServerLockServer,
+    normalizeServerUrl,
+} from '/@/renderer/features/action-required/utils/server-lock';
+import {
     isLegacyAuth,
     isServerLock,
 } from '/@/renderer/features/action-required/utils/window-properties';
@@ -22,6 +26,7 @@ import { useIsMobileShell } from '/@/renderer/hooks/use-breakpoint';
 import { AppRoute } from '/@/renderer/router/routes';
 import {
     getServerById,
+    useAuthStore,
     useAuthStoreActions,
     useCurrentServer,
     useServerList,
@@ -54,12 +59,10 @@ const SERVER_NAMES: Record<ServerType, string> = {
     [ServerType.SUBSONIC]: 'OpenSubsonic',
 };
 
-const normalizeUrl = (url: string) => url.replace(/\/$/, '');
-
 const LoginRoute = () => {
     const { t } = useTranslation();
     const [isLoading, setIsLoading] = useState(false);
-    const { addServer, setCurrentServer, updateServer } = useAuthStoreActions();
+    const { addServer, deleteServer, setCurrentServer, updateServer } = useAuthStoreActions();
     const currentServer = useCurrentServer();
     const serverList = useServerList();
     const isMobileShell = useIsMobileShell();
@@ -165,15 +168,16 @@ const LoginRoute = () => {
                 });
             }
 
-            const normalizedUrl = normalizeUrl(serverUrl);
-            const normalizedRemoteURL = normalizeUrl(remoteUrl);
-            const existingServer =
-                serverLock &&
-                Object.values(serverList).find((s) => normalizeUrl(s.url) === normalizedUrl);
+            const normalizedUrl = normalizeServerUrl(serverUrl);
+            const normalizedRemoteURL = normalizeServerUrl(remoteUrl);
+            const existingServer = serverLock
+                ? findExistingServerLockServer(serverList, normalizedUrl, serverType)
+                : undefined;
 
+            const serverId = existingServer?.id ?? nanoid();
             const serverItem: ServerListItemWithCredential = {
                 credential: data.credential,
-                id: nanoid(),
+                id: serverId,
                 isAdmin: data.isAdmin,
                 name: serverName,
                 remoteUrl: normalizedRemoteURL,
@@ -187,6 +191,9 @@ const LoginRoute = () => {
                 const updates: Partial<ServerListItemWithCredential> = {
                     credential: data.credential,
                     isAdmin: data.isAdmin,
+                    name: serverName,
+                    remoteUrl: normalizedRemoteURL,
+                    url: normalizedUrl,
                     userId: data.userId,
                     username: data.username,
                 };
@@ -204,12 +211,20 @@ const LoginRoute = () => {
                 setCurrentServer(serverItem);
             }
 
+            if (serverLock) {
+                Object.values(useAuthStore.getState().serverList).forEach((server) => {
+                    if (server.id !== serverId) {
+                        deleteServer(server.id);
+                    }
+                });
+            }
+
             toast.success({
                 message: t('form.addServer.success'),
             });
 
             if (localSettings && values.password) {
-                const saved = await localSettings.passwordSet(values.password, serverItem.id);
+                const saved = await localSettings.passwordSet(values.password, serverId);
                 if (!saved) {
                     toast.error({
                         message: t('form.addServer.error', {

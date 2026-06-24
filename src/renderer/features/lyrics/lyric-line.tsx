@@ -3,6 +3,8 @@ import { ComponentPropsWithoutRef, CSSProperties, memo, useMemo } from 'react';
 
 import styles from './lyric-line.module.css';
 
+import { sanitize } from '/@/renderer/utils/sanitize';
+
 interface LyricLineProps extends ComponentPropsWithoutRef<'div'> {
     alignment: 'center' | 'left' | 'right';
     fontSize: number;
@@ -35,7 +37,7 @@ export const LyricLine = memo(
             <div className={clsx(styles.lyricLine, className)} style={style} {...props}>
                 <div style={INNER_STYLE}>
                     {lines.map((line, index) => (
-                        <span key={index}>{line}</span>
+                        <span dangerouslySetInnerHTML={{ __html: sanitize(line) }} key={index} />
                     ))}
                 </div>
             </div>

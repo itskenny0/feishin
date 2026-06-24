@@ -587,12 +587,7 @@ export const JellyfinController: InternalControllerEndpoint = {
             return true;
         });
 
-        return jfNormalize.album(
-            { ...res.body, Songs: songs },
-            apiClientProps.server,
-            args.context?.pathReplace,
-            args.context?.pathReplaceWith,
-        );
+        return jfNormalize.album({ ...res.body, Songs: songs }, apiClientProps.server);
     },
     getAlbumList: async (args) => {
         const { apiClientProps, query } = args;
@@ -686,14 +681,7 @@ export const JellyfinController: InternalControllerEndpoint = {
             throw new Error('Failed to get album radio songs');
         }
 
-        return res.body.Items.map((song) =>
-            jfNormalize.song(
-                song,
-                apiClientProps.server,
-                args.context?.pathReplace,
-                args.context?.pathReplaceWith,
-            ),
-        );
+        return res.body.Items.map((song) => jfNormalize.song(song, apiClientProps.server));
     },
     getArtistList: async (args) => {
         const { apiClientProps, query } = args;
@@ -749,14 +737,7 @@ export const JellyfinController: InternalControllerEndpoint = {
             throw new Error('Failed to get artist radio songs');
         }
 
-        return res.body.Items.map((song) =>
-            jfNormalize.song(
-                song,
-                apiClientProps.server,
-                args.context?.pathReplace,
-                args.context?.pathReplaceWith,
-            ),
-        );
+        return res.body.Items.map((song) => jfNormalize.song(song, apiClientProps.server));
     },
     getDownloadUrl: (args) => {
         const { apiClientProps, query } = args;
@@ -942,8 +923,6 @@ export const JellyfinController: InternalControllerEndpoint = {
                 jfNormalize.song(
                     item as unknown as z.infer<typeof jfType._response.song>,
                     apiClientProps.server,
-                    args.context?.pathReplace,
-                    args.context?.pathReplaceWith,
                 ),
             );
 
@@ -1228,14 +1207,7 @@ export const JellyfinController: InternalControllerEndpoint = {
         }
 
         return {
-            items: res.body.Items.map((item) =>
-                jfNormalize.song(
-                    item,
-                    apiClientProps.server,
-                    args.context?.pathReplace,
-                    args.context?.pathReplaceWith,
-                ),
-            ),
+            items: res.body.Items.map((item) => jfNormalize.song(item, apiClientProps.server)),
             startIndex: 0,
             totalRecordCount: res.body.TotalRecordCount,
         };
@@ -1288,14 +1260,7 @@ export const JellyfinController: InternalControllerEndpoint = {
         }
 
         return {
-            items: res.body.Items.map((item) =>
-                jfNormalize.song(
-                    item,
-                    apiClientProps.server,
-                    args.context?.pathReplace,
-                    args.context?.pathReplaceWith,
-                ),
-            ),
+            items: res.body.Items.map((item) => jfNormalize.song(item, apiClientProps.server)),
             startIndex: 0,
             totalRecordCount: res.body.Items.length || 0,
         };
@@ -1347,14 +1312,7 @@ export const JellyfinController: InternalControllerEndpoint = {
             if (res.status === 200 && res.body.Items.length) {
                 const results = res.body.Items.reduce<Song[]>((acc, song) => {
                     if (song.Id !== query.songId) {
-                        acc.push(
-                            jfNormalize.song(
-                                song,
-                                apiClientProps.server,
-                                args.context?.pathReplace,
-                                args.context?.pathReplaceWith,
-                            ),
-                        );
+                        acc.push(jfNormalize.song(song, apiClientProps.server));
                     }
 
                     return acc;
@@ -1383,14 +1341,7 @@ export const JellyfinController: InternalControllerEndpoint = {
 
         return mix.body.Items.reduce<Song[]>((acc, song) => {
             if (song.Id !== query.songId) {
-                acc.push(
-                    jfNormalize.song(
-                        song,
-                        apiClientProps.server,
-                        args.context?.pathReplace,
-                        args.context?.pathReplaceWith,
-                    ),
-                );
+                acc.push(jfNormalize.song(song, apiClientProps.server));
             }
 
             return acc;
@@ -1410,12 +1361,7 @@ export const JellyfinController: InternalControllerEndpoint = {
             throw new Error('Failed to get song detail');
         }
 
-        return jfNormalize.song(
-            res.body,
-            apiClientProps.server,
-            args.context?.pathReplace,
-            args.context?.pathReplaceWith,
-        );
+        return jfNormalize.song(res.body, apiClientProps.server);
     },
     getSongList: async (args) => {
         const { apiClientProps, query } = args;
@@ -1527,14 +1473,7 @@ export const JellyfinController: InternalControllerEndpoint = {
         }
 
         return {
-            items: items.map((item) =>
-                jfNormalize.song(
-                    item,
-                    apiClientProps.server,
-                    args.context?.pathReplace,
-                    args.context?.pathReplaceWith,
-                ),
-            ),
+            items: items.map((item) => jfNormalize.song(item, apiClientProps.server)),
             startIndex: query.startIndex,
             totalRecordCount,
         };
@@ -1666,14 +1605,7 @@ export const JellyfinController: InternalControllerEndpoint = {
             throw new Error('Failed to get top song list');
         }
 
-        const items = res.body.Items.map((item) =>
-            jfNormalize.song(
-                item,
-                apiClientProps.server,
-                args.context?.pathReplace,
-                args.context?.pathReplaceWith,
-            ),
-        );
+        const items = res.body.Items.map((item) => jfNormalize.song(item, apiClientProps.server));
 
         if (type === 'personal') {
             const sorted = orderBy(
@@ -1775,12 +1707,7 @@ export const JellyfinController: InternalControllerEndpoint = {
         }
 
         const existingSongs = existingSongsRes.body.Items.map((item) =>
-            jfNormalize.song(
-                item,
-                apiClientProps.server,
-                args.context?.pathReplace,
-                args.context?.pathReplaceWith,
-            ),
+            jfNormalize.song(item, apiClientProps.server),
         );
 
         // 2. Get playlist detail to get the name
@@ -2088,14 +2015,7 @@ export const JellyfinController: InternalControllerEndpoint = {
                 jfNormalize.albumArtist(item, apiClientProps.server),
             ),
             albums: albums.map((item) => jfNormalize.album(item, apiClientProps.server)),
-            songs: songs.map((item) =>
-                jfNormalize.song(
-                    item,
-                    apiClientProps.server,
-                    args.context?.pathReplace,
-                    args.context?.pathReplaceWith,
-                ),
-            ),
+            songs: songs.map((item) => jfNormalize.song(item, apiClientProps.server)),
         };
     },
     setPlaylistSongs: async (args) => {

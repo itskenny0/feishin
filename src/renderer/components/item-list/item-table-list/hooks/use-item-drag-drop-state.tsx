@@ -118,6 +118,11 @@ export const useItemDragDropState = <TElement extends HTMLElement = HTMLDivEleme
                       getId,
                       getItem,
                       itemType,
+                      // Tag the drag source with its playlist context so a SONG
+                      // dropped onto the queue can carry the originating
+                      // playlist id (consumed in the drop onDrop SONG case →
+                      // addToQueueByData's contextPlaylistId arg).
+                      metadata: { playlistId },
                       onDragStart,
                       onDrop,
                       operation: dragOperation,
@@ -129,6 +134,7 @@ export const useItemDragDropState = <TElement extends HTMLElement = HTMLDivEleme
             getId,
             getItem,
             itemType,
+            playlistId,
             onDragStart,
             onDrop,
             dragOperation,
@@ -304,10 +310,17 @@ export const useItemDragDropState = <TElement extends HTMLElement = HTMLDivEleme
                                   case DragTarget.SONG: {
                                       const sourceItems = (args.source.item || []) as Song[];
                                       if (sourceItems.length > 0) {
-                                          playerContext.addToQueueByData(sourceItems, {
-                                              edge: args.edge,
-                                              uniqueId: droppedOnUniqueId,
-                                          });
+                                          // Carry the originating playlist context (tagged on
+                                          // the drag source's metadata) through to the queue
+                                          // so playlist-context features apply to the drop.
+                                          const sourcePlaylistId = args.source.metadata
+                                              ?.playlistId as string | undefined;
+                                          playerContext.addToQueueByData(
+                                              sourceItems,
+                                              { edge: args.edge, uniqueId: droppedOnUniqueId },
+                                              undefined,
+                                              sourcePlaylistId ?? null,
+                                          );
                                       }
                                       break;
                                   }

@@ -477,15 +477,18 @@ export function WebPlayer() {
     }, [playback.replayGainMode, webAudio]);
 
     useEffect(() => {
-        if (!webAudio) return;
+        if (!webAudio || !player1 || !player1Source) return;
 
         if (player1 && player1Source && num === 1) {
             const newGain = computeGain(player1);
 
-            // This error SHOULD never happen, as calculateReplayGain is expected to
-            // always return a real value. However, to prevent app crash, check this just in case
+            // Apply per player slot whenever its song/source is ready so pre-started
+            // inactive players have correct gain before gapless/crossfade transitions.
             try {
-                webAudio.gains[0].gain.setValueAtTime(Math.max(0, newGain), 0);
+                webAudio.gains[0].gain.setValueAtTime(
+                    Math.max(0, newGain),
+                    webAudio.context.currentTime,
+                );
             } catch (error) {
                 console.error('Error setting gain', error);
             }
@@ -493,12 +496,15 @@ export function WebPlayer() {
     }, [computeGain, num, player1, player1Source, volume, webAudio]);
 
     useEffect(() => {
-        if (!webAudio) return;
+        if (!webAudio || !player2 || !player2Source) return;
 
         if (player2 && player2Source && num === 2) {
             const newGain = computeGain(player2);
             try {
-                webAudio.gains[1].gain.setValueAtTime(Math.max(0, newGain), 0);
+                webAudio.gains[1].gain.setValueAtTime(
+                    Math.max(0, newGain),
+                    webAudio.context.currentTime,
+                );
             } catch (error) {
                 console.error('Error setting gain', error);
             }
