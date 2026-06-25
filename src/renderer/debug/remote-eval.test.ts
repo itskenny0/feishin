@@ -1,8 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 // The settings store reads window.api.utils at module-init; stub before the
 // import graph (remote-eval → stores) pulls it in.
-import { vi } from 'vitest';
 
 vi.hoisted(() => {
     const g = globalThis as unknown as { window?: { api?: unknown } };

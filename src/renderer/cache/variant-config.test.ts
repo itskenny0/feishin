@@ -172,9 +172,9 @@ describe('thumbnail presets', () => {
     });
 
     it('detects full (all four bounded buckets)', () => {
-        expect(
-            detectThumbnailPreset(withBuckets(['header', 'itemCard', 'sidebar', 'table'])),
-        ).toBe('full');
+        expect(detectThumbnailPreset(withBuckets(['header', 'itemCard', 'sidebar', 'table']))).toBe(
+            'full',
+        );
     });
 
     it('detects custom for any non-preset combination', () => {
