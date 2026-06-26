@@ -114,18 +114,50 @@ const songFuseOptions: IFuseOptions<SongSearchEntry> = {
     useExtendedSearch: false,
 };
 
+// Load an entire (possibly very large) table/collection in chunks, yielding to
+// the event loop between chunks. A 14k-artist library used to build its Fuse
+// index from a single `toArray()` that structured-cloned every row's full
+// Payload in one synchronous burst — a 1-7s main-thread FREEZE on the first
+// search (the cost is the deserialization, not Fuse). Chunking the read and
+// yielding between chunks keeps input + paint responsive; the background
+// prewarm (see schedulePrewarm) then moves the work off the search path
+// entirely. Returns null if the active cache DB switched mid-load — the rows
+// would belong to the previous server, so the caller must discard and let the
+// next caller rebuild against the new DB.
+type ActiveCacheDb = NonNullable<ReturnType<typeof getActiveCacheDb>>;
+const INDEX_BUILD_CHUNK = 1000;
+const loadAllChunked = async <T>(
+    db: ActiveCacheDb,
+    queryChunk: (offset: number, limit: number) => Promise<T[]>,
+): Promise<null | T[]> => {
+    const rows: T[] = [];
+    for (let offset = 0; ; offset += INDEX_BUILD_CHUNK) {
+        if (db !== getActiveCacheDb()) return null;
+        const batch = await queryChunk(offset, INDEX_BUILD_CHUNK);
+        for (let i = 0; i < batch.length; i += 1) rows.push(batch[i]);
+        if (batch.length < INDEX_BUILD_CHUNK) break;
+        // Yield so a queued search keystroke / paint can interleave between
+        // chunk deserializations instead of waiting for the whole table.
+        await new Promise<void>((resolve) => {
+            setTimeout(resolve, 0);
+        });
+    }
+    return rows;
+};
+
 const ensureAlbumsIndex = async (): Promise<Fuse<AlbumSearchEntry> | undefined> => {
     if (albumsIndex && !albumsDirty) return albumsIndex;
     const db = isCacheAvailableSync() ? getActiveCacheDb() : undefined;
     if (!db) return undefined;
     const start = performance.now();
-    const rows = await db.albums.toArray();
-    // Identity check: if the active DB switched while toArray() was in
-    // flight, the rows we just read belong to the previous server.
-    // Caching them under `albumsIndex` would let a search served from
-    // the new server return stale results from the old one. Bail and
-    // let the next caller (running against the new active DB) rebuild.
-    if (db !== getActiveCacheDb()) {
+    // Chunked + yielding load (see loadAllChunked) — a single toArray() over a
+    // large table froze the UI for seconds. The mid-load DB-switch identity
+    // check (rows would belong to the previous server) is folded into the
+    // helper, which returns null on a switch.
+    const rows = await loadAllChunked(db, (offset, limit) =>
+        db.albums.offset(offset).limit(limit).toArray(),
+    );
+    if (!rows) {
         console.info('[cache] search: albums index discarded, active db changed mid-build');
         return undefined;
     }
@@ -153,8 +185,10 @@ const ensureArtistsIndex = async (): Promise<Fuse<ArtistSearchEntry> | undefined
     const db = isCacheAvailableSync() ? getActiveCacheDb() : undefined;
     if (!db) return undefined;
     const start = performance.now();
-    const rows = await db.artists.where('Kind').equals('AlbumArtist').toArray();
-    if (db !== getActiveCacheDb()) {
+    const rows = await loadAllChunked(db, (offset, limit) =>
+        db.artists.where('Kind').equals('AlbumArtist').offset(offset).limit(limit).toArray(),
+    );
+    if (!rows) {
         console.info('[cache] search: artists index discarded, active db changed mid-build');
         return undefined;
     }
@@ -181,8 +215,10 @@ const ensurePlaylistsIndex = async (): Promise<Fuse<PlaylistSearchEntry> | undef
     const db = isCacheAvailableSync() ? getActiveCacheDb() : undefined;
     if (!db) return undefined;
     const start = performance.now();
-    const rows = await db.playlists.toArray();
-    if (db !== getActiveCacheDb()) {
+    const rows = await loadAllChunked(db, (offset, limit) =>
+        db.playlists.offset(offset).limit(limit).toArray(),
+    );
+    if (!rows) {
         console.info('[cache] search: playlists index discarded, active db changed mid-build');
         return undefined;
     }
@@ -209,8 +245,10 @@ const ensureSongsIndex = async (): Promise<Fuse<SongSearchEntry> | undefined> =>
     const db = isCacheAvailableSync() ? getActiveCacheDb() : undefined;
     if (!db) return undefined;
     const start = performance.now();
-    const rows = await db.songs.toArray();
-    if (db !== getActiveCacheDb()) {
+    const rows = await loadAllChunked(db, (offset, limit) =>
+        db.songs.offset(offset).limit(limit).toArray(),
+    );
+    if (!rows) {
         console.info('[cache] search: songs index discarded, active db changed mid-build');
         return undefined;
     }
@@ -231,6 +269,33 @@ const ensureSongsIndex = async (): Promise<Fuse<SongSearchEntry> | undefined> =>
         rows: rows.length,
     });
     return songsIndex;
+};
+
+// Background prewarm: after rows are marked dirty (a sync/apply/sweep landed
+// fresh data) rebuild the indexes OFF the search path so the user's first
+// search is instant rather than paying the (now-chunked, but still non-zero)
+// build cost inline. Debounced so a burst of per-entity markSearchDirty calls
+// during a sweep coalesces into ONE rebuild, and run on idle so it never
+// competes with foreground work. ensureXIndex() is a no-op when its index is
+// already clean, so a redundant schedule is cheap.
+let prewarmTimer: ReturnType<typeof setTimeout> | undefined;
+const runPrewarm = (): void => {
+    void ensureAlbumsIndex();
+    void ensureArtistsIndex();
+    void ensurePlaylistsIndex();
+    void ensureSongsIndex();
+};
+const schedulePrewarm = (): void => {
+    if (!isCacheAvailableSync()) return;
+    if (prewarmTimer) clearTimeout(prewarmTimer);
+    prewarmTimer = setTimeout(() => {
+        prewarmTimer = undefined;
+        if (typeof requestIdleCallback === 'function') {
+            requestIdleCallback(runPrewarm, { timeout: 5000 });
+        } else {
+            runPrewarm();
+        }
+    }, 3000);
 };
 
 /**
@@ -256,12 +321,14 @@ export const markSearchDirty = (entity: 'all' | Entity): void => {
         artistsDirty = true;
         playlistsDirty = true;
         songsDirty = true;
+        schedulePrewarm();
         return;
     }
     if (entity === 'albums') albumsDirty = true;
     if (entity === 'artists') artistsDirty = true;
     if (entity === 'playlists') playlistsDirty = true;
     if (entity === 'songs') songsDirty = true;
+    schedulePrewarm();
 };
 
 /**
@@ -270,6 +337,10 @@ export const markSearchDirty = (entity: 'all' | Entity): void => {
  * next search.
  */
 export const resetSearchIndexes = (): void => {
+    if (prewarmTimer) {
+        clearTimeout(prewarmTimer);
+        prewarmTimer = undefined;
+    }
     albumsIndex = undefined;
     artistsIndex = undefined;
     playlistsIndex = undefined;

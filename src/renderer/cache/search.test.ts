@@ -78,13 +78,26 @@ const ROWS = {
     ],
 };
 
-const tableShim = <T>(rows: T[]) => ({
+// The chunked index build pages through `.offset(o).limit(l).toArray()`, so the
+// shim exposes a chainable collection (offset/limit return a sliced collection)
+// alongside the where('Kind').equals() hop the artist index uses.
+interface CollectionShim<T> {
+    limit: (l: number) => CollectionShim<T>;
+    offset: (o: number) => CollectionShim<T>;
+    toArray: () => Promise<T[]>;
+}
+const collectionShim = <T>(rows: T[]): CollectionShim<T> => ({
+    limit: (l: number) => collectionShim(rows.slice(0, l)),
+    offset: (o: number) => collectionShim(rows.slice(o)),
     toArray: async () => rows,
+});
+const tableShim = <T>(rows: T[]) => ({
+    ...collectionShim(rows),
     where: (_k: string) => ({
-        equals: (_v: string) => ({
-            toArray: async () =>
+        equals: (_v: string) =>
+            collectionShim(
                 rows.filter((r) => (r as { Kind?: string }).Kind === _v || _k !== 'Kind'),
-        }),
+            ),
     }),
 });
 
