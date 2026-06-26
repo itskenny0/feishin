@@ -25,6 +25,23 @@ const byAlbumOrder = (a: Song, b: Song): number => {
     return (a.name ?? '').localeCompare(b.name ?? '');
 };
 
+/**
+ * Resolve a cached song's ALBUM id. A song's cover lives on its album — the
+ * thumbnail sweep caches album/artist covers, never per-song — so any surface
+ * that wants a song's artwork must key on the album id, not the song id.
+ * Returns null when the song isn't cached or the cache is unavailable.
+ */
+export const getCachedSongAlbumId = async (songId: string): Promise<null | string> => {
+    const db = getActiveCacheDb();
+    if (!db) return null;
+    try {
+        const row = await db.songs.get(songId);
+        return row?.AlbumId ?? row?.Payload?.albumId ?? null;
+    } catch {
+        return null;
+    }
+};
+
 export const resolveSongsByItemTypeLocal = async (args: {
     id: string[];
     itemType: LibraryItem;

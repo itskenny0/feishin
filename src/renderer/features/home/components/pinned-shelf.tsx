@@ -1,10 +1,11 @@
-import { memo, useCallback, useMemo } from 'react';
+import { memo, useCallback, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router';
 
 import styles from './pinned-shelf.module.css';
 import qpStyles from './spotify-home/quick-picks.module.css';
 
+import { getCachedSongAlbumId } from '/@/renderer/cache/local-songs-by-item';
 import { ItemImage } from '/@/renderer/components/item-image/item-image';
 import { getTitlePath } from '/@/renderer/components/item-list/helpers/get-title-path';
 import { ContextMenuController } from '/@/renderer/features/context-menu/context-menu-controller';
@@ -184,6 +185,30 @@ export const PinnedShelf = memo(() => {
     const { t } = useTranslation();
     const serverId = useCurrentServerId();
     const pins = usePins(serverId);
+    const { updatePinImage } = usePinsActions();
+
+    // Heal stale SONG pins. A song's cover lives on its ALBUM (the thumbnail
+    // sweep caches album/artist covers, never per-song), so the cover key must
+    // be the album id. A pin created before the album-id normalization stored
+    // the song's OWN id as imageId — which has no cached thumbnail, so the tile
+    // renders blank. Resolve the album id from the cache once and rewrite the
+    // pin so the cover (and the context-menu preview) work. Idempotent: a
+    // correct pin already has imageId === albumId, so it never re-writes.
+    useEffect(() => {
+        const songPins = pins.filter((pin) => pin.itemType === LibraryItem.SONG);
+        if (songPins.length === 0) return undefined;
+        let cancelled = false;
+        void Promise.all(
+            songPins.map(async (pin) => {
+                const albumId = await getCachedSongAlbumId(pin.id);
+                if (cancelled || !albumId || albumId === pin.imageId) return;
+                updatePinImage(pin.serverId, pin.itemType, pin.id, albumId);
+            }),
+        );
+        return () => {
+            cancelled = true;
+        };
+    }, [pins, updatePinImage]);
 
     if (pins.length === 0) {
         return null;

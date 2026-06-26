@@ -28,6 +28,12 @@ export interface PinsActions {
     clearPins: (serverId?: string) => void;
     removePin: (serverId: string, itemType: PinItemType, id: string) => void;
     togglePin: (pin: Omit<Pin, 'pinnedAt'>) => void;
+    updatePinImage: (
+        serverId: string,
+        itemType: PinItemType,
+        id: string,
+        imageId: null | string,
+    ) => void;
 }
 
 export interface PinsSlice extends PinsState {
@@ -95,6 +101,17 @@ export const usePinsStore = createWithEqualityFn<PinsSlice>()(
                         } else {
                             get().actions.addPin(pin);
                         }
+                    },
+                    updatePinImage: (serverId, itemType, id, imageId) => {
+                        set((state) => {
+                            const pin = state.pins.find((p) => samePin(p, serverId, itemType, id));
+                            if (pin && pin.imageId !== imageId) {
+                                console.info(
+                                    `[home-pins] heal pin image ${itemType}:${id} -> ${imageId}`,
+                                );
+                                pin.imageId = imageId;
+                            }
+                        });
                     },
                 },
                 pins: [],

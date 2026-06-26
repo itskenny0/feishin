@@ -52,6 +52,18 @@ describe('pins.store', () => {
         expect(usePinsStore.getState().pins).toHaveLength(0);
     });
 
+    it('updatePinImage heals a pin imageId (matching pin only, idempotent)', () => {
+        actions().addPin(pin('song1', 'srv1', LibraryItem.SONG));
+        actions().addPin(pin('a', 'srv1', LibraryItem.ALBUM));
+        // A stale song pin stored the song's own id as its cover key; heal it to
+        // the album id so the tile keys on the cached album cover.
+        actions().updatePinImage('srv1', LibraryItem.SONG, 'song1', 'album1');
+        actions().updatePinImage('srv1', LibraryItem.SONG, 'song1', 'album1'); // idempotent
+        const pins = usePinsStore.getState().pins;
+        expect(pins.find((p) => p.id === 'song1')?.imageId).toBe('album1');
+        expect(pins.find((p) => p.id === 'a')?.imageId).toBe(null); // untouched
+    });
+
     it('clearPins scopes to a server when given one, else wipes everything', () => {
         actions().addPin(pin('a'));
         actions().addPin(pin('b', 'srv2'));
