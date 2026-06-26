@@ -13,7 +13,15 @@ const TAG = '[media-backend]';
 // Bumped whenever the Android default byte storage changes in a way that needs
 // existing IndexedDB-cached installs to migrate. The first-startup migration
 // modal fires while localCache.android.blobBackendVersion < this.
-export const FS_BACKEND_VERSION = 1;
+//   v1: offline-audio bytes movable to an SD-card volume.
+//   v2: cover-art bytes move off IndexedDB onto the filesystem so covers render
+//       from a native file URL (convertFileSrc) with no IndexedDB blob read.
+//   v3: re-migrate covers that landed back in IndexedDB. The active backend
+//       only chose the filesystem when `storageVolumeId` was explicitly set;
+//       with it null (the default), every write fell through to the slow idb
+//       backend, so covers cached after v2 (e.g. a new/large server) were blob
+//       rows again. v3 defaults Android to the internal volume + re-migrates.
+export const FS_BACKEND_VERSION = 3;
 
 // Last enumerated volume list. Refreshed on boot / app resume / when the
 // settings picker opens; getActiveVolume resolves the configured id against it.
@@ -30,10 +38,21 @@ const androidSlice = () => useSettingsStore.getState().localCache?.android;
 
 const configuredVolumeId = (): null | string => androidSlice()?.storageVolumeId ?? null;
 
+// The internal (non-removable) volume — Android's app/private storage, always
+// present. Used as the default target so cover/byte writes go to the fast
+// filesystem backend instead of falling back to IndexedDB blobs.
+const getInternalVolume = (): undefined | VolumeInfo =>
+    volumes.find((v) => !v.removable) ?? volumes[0];
+
 export const getActiveVolume = (): undefined | VolumeInfo => {
     const id = configuredVolumeId();
-    if (!id) return undefined;
-    return volumes.find((v) => v.id === id);
+    if (id) return volumes.find((v) => v.id === id);
+    // No volume explicitly configured: on Android default to the internal
+    // volume so the filesystem backend (file-URL covers) is used rather than
+    // the slow IndexedDB-blob fallback. (The on-device benchmark put fs ~5-6x
+    // faster than idb for cover reads.)
+    if (isAndroidNative()) return getInternalVolume();
+    return undefined;
 };
 
 const fsBackend = new CapacitorFsBackend(getActiveVolume);
@@ -47,7 +66,11 @@ const fsBackend = new CapacitorFsBackend(getActiveVolume);
  * IndexedDB backend is used.
  */
 export const getActiveBackend = (): MediaBlobBackend => {
-    if (isAndroidNative() && configuredVolumeId()) return fsBackend;
+    // Android native always uses the filesystem backend (defaulting to the
+    // internal volume via getActiveVolume) so covers/bytes are stored as files
+    // and read back as instant file URLs. Only when no volume can be resolved
+    // at all (volumes not yet enumerated) do we fall back to idb.
+    if (isAndroidNative() && getActiveVolume()) return fsBackend;
     return idbBackend;
 };
 

@@ -38,9 +38,9 @@ const withFullScreen = (): LocalCacheImageVariants => {
 describe('enabledVariants', () => {
     it('returns only the enabled buckets with their resolved px', () => {
         const result = enabledVariants(withFullScreen());
-        // All four bounded thumbnail buckets — table(80), itemCard(300),
-        // header(300), sidebar(400) — are enabled by default, plus fullScreen
-        // (0=orig) enabled by this fixture.
+        // table(80), itemCard(300), sidebar(400) are enabled by default;
+        // header(300) and fullScreen (1080, capped hi-res) are enabled by this
+        // fixture.
         const names = result.map((v) => v.variant);
         expect(names).toContain('table');
         expect(names).toContain('itemCard');
@@ -54,7 +54,7 @@ describe('enabledVariants', () => {
         expect(byName.itemCard).toBe(300);
         expect(byName.header).toBe(300);
         expect(byName.sidebar).toBe(400);
-        expect(byName.fullScreen).toBe(0);
+        expect(byName.fullScreen).toBe(1080);
     });
 
     it('orders results by effective px ascending (original/0 last), name tiebreak', () => {
@@ -147,9 +147,9 @@ describe('variantConfigHash', () => {
 
     it('changes when a variant is toggled', () => {
         const cfg = clone();
-        // fullScreen is the one bucket still disabled by default — enabling it
-        // must change the hash.
-        cfg.variants.fullScreen.enabled = true;
+        // header is the one bucket disabled by default (it duplicates itemCard's
+        // px) — enabling it must change the hash.
+        cfg.variants.header.enabled = true;
         expect(variantConfigHash(cfg)).not.toBe(variantConfigHash(DEFAULT_IMAGE_VARIANTS));
     });
 });

@@ -23,7 +23,6 @@ import {
     RiFolderLine,
     RiGamepadLine,
     RiHomeLine,
-    RiImageLine,
     RiKey2Line,
     RiLayoutLeftLine,
     RiMagicLine,
@@ -254,10 +253,6 @@ const LibrarySyncSubpage = lazyDefault(
     () => import('/@/renderer/features/settings/components/advanced/library-sync-settings'),
     'LibrarySyncSettings',
 );
-const ImageVariantsSubpage = lazyDefault(
-    () => import('/@/renderer/features/settings/components/advanced/image-variants-settings'),
-    'ImageVariantsSubpage',
-);
 const StylesSubpage = lazyDefault(
     () => import('/@/renderer/features/settings/components/advanced/styles-settings'),
     'StylesSettings',
@@ -398,20 +393,6 @@ export const SETTINGS_SUBPAGES: Record<string, SubpageDef[]> = {
             Icon: RiDatabase2Line,
             id: 'library-sync',
             label: (t) => t('page.setting.librarySync', { defaultValue: 'Library sync' }),
-            visible: (server) => server?.type === 'jellyfin',
-        },
-        {
-            Component: ImageVariantsSubpage,
-            description: (t) =>
-                t('page.setting.imageVariants.description', {
-                    defaultValue:
-                        'Cache several cover sizes per item so dense lists and grids load without decoding full-resolution artwork.',
-                }),
-            Icon: RiImageLine,
-            id: 'image-variants',
-            label: (t) =>
-                t('page.setting.imageVariants.title', { defaultValue: 'Artwork variants' }),
-            parent: 'library-sync',
             visible: (server) => server?.type === 'jellyfin',
         },
         {

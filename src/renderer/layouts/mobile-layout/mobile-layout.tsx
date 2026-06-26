@@ -25,6 +25,7 @@ import { useSoftKeyboardVisible } from '/@/renderer/hooks/use-soft-keyboard-visi
 import { isTouchOrNative, PlayerBar } from '/@/renderer/layouts/default-layout/player-bar';
 import { BottomTabBar } from '/@/renderer/layouts/mobile-layout/bottom-tab-bar';
 import { WindowBar } from '/@/renderer/layouts/window-bar';
+import { perfMarkNav } from '/@/renderer/lib/perf-log';
 import {
     useFullScreenPlayerOverlayState,
     useMobileDrawer,
@@ -126,6 +127,9 @@ export const MobileLayout = ({ shell }: MobileLayoutProps) => {
     // tapped a playlist or sidebar item and want to see it.
     const location = useLocation();
     useEffect(() => {
+        // Perf: mark each route change so route components can log their settle
+        // time relative to it (and emit a `[perf] nav` line).
+        perfMarkNav(location.pathname);
         if (sidebarOpened) closeSidebar();
         // closeSidebar identity is stable from useDisclosure; sidebarOpened
         // is intentionally not included so a manual open from anywhere

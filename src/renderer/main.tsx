@@ -54,11 +54,65 @@ if (Capacitor.getPlatform() === 'android') {
 }
 
 function createIDBPersister(idbValidKey: IDBValidKey = 'reactQuery') {
+    // Persisting react-query's cache hands idb-keyval the whole dehydrated
+    // client, which it structured-clones SYNCHRONOUSLY. The lyric cache grows
+    // to thousands of entries / several MB over the 30-day maxAge, so that
+    // clone blocks the main thread ~1.5s — and react-query calls persistClient
+    // on every cache change, so it fired in the middle of starting playback
+    // (a play touches several queries). Two guards keep it off the critical
+    // path: (1) DEBOUNCE so a burst of changes collapses into a single write
+    // that lands when the UI is idle; (2) CAP the persisted set to the most
+    // recently-used entries so the clone stays small. The store is read back
+    // only once at startup, so deferring + trimming can't affect correctness.
+    const PERSIST_DEBOUNCE_MS = 5000;
+    const MAX_PERSISTED_QUERIES = 300;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let pendingClient: null | PersistedClient = null;
+
+    const flush = () => {
+        timer = undefined;
+        const client = pendingClient;
+        pendingClient = null;
+        if (!client) return;
+        const queries = client.clientState?.queries;
+        const capped =
+            queries && queries.length > MAX_PERSISTED_QUERIES
+                ? {
+                      ...client,
+                      clientState: {
+                          ...client.clientState,
+                          queries: [...queries]
+                              .sort(
+                                  (a, b) =>
+                                      (b.state?.dataUpdatedAt ?? 0) - (a.state?.dataUpdatedAt ?? 0),
+                              )
+                              .slice(0, MAX_PERSISTED_QUERIES),
+                      },
+                  }
+                : client;
+        void set(idbValidKey, capped);
+    };
+
+    // The app can be backgrounded (and killed) before the debounce fires, so
+    // flush any pending client the moment the page is hidden.
+    if (typeof document !== 'undefined') {
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'hidden' && pendingClient) flush();
+        });
+    }
+
     return {
         persistClient: async (client: PersistedClient) => {
-            set(idbValidKey, client);
+            pendingClient = client;
+            if (timer) clearTimeout(timer);
+            timer = setTimeout(flush, PERSIST_DEBOUNCE_MS);
         },
         removeClient: async () => {
+            pendingClient = null;
+            if (timer) {
+                clearTimeout(timer);
+                timer = undefined;
+            }
             await del(idbValidKey);
         },
         restoreClient: async () => {

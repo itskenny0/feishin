@@ -317,7 +317,13 @@ const ExpandedAlbumListItemContent = ({ albumData }: ExpandedAlbumListItemConten
                         className={styles.backgroundImage}
                         style={{
                             ['--bg-color' as string]: color?.background,
-                            backgroundImage: `url(${imageUrl})`,
+                            // Sync-only: imageUrl is undefined for an un-cached
+                            // cover (we never download on demand). Guard it so we
+                            // never emit `url(undefined)` — invalid CSS plus a
+                            // junk request for a path named "undefined". The
+                            // gradient (--bg-color) is the un-cached presentation
+                            // for this decorative blurred backdrop.
+                            ...(imageUrl ? { backgroundImage: `url(${imageUrl})` } : {}),
                         }}
                     />
                     {songs && songs.length > 0 && (

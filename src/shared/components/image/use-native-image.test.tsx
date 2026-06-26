@@ -30,7 +30,7 @@ describe('useNativeImage — synchronous peek fast path', () => {
     it('adopts a memory-cached shared URL without a loading state or async resolve', async () => {
         const acquire = vi.fn(() => new Promise<string>(() => {})); // never resolves
         const release = vi.fn();
-        const peek = vi.fn(() => 'blob:shared/abc-itemCard');
+        const peek = vi.fn(() => ({ url: 'blob:shared/abc-itemCard', variant: 'itemCard' }));
         registerThumbnailUrlCache(acquire, release, peek);
 
         const { result, unmount } = renderHook(() => useNativeImage({ enabled: true, request }));
@@ -40,7 +40,7 @@ describe('useNativeImage — synchronous peek fast path', () => {
         expect(result.current.displaySrc).toBe('blob:shared/abc-itemCard');
         expect(result.current.isLoaded).toBe(true);
         expect(result.current.isLoading).toBe(false);
-        expect(peek).toHaveBeenCalledWith('abc', 'itemCard');
+        expect(peek).toHaveBeenCalledWith('abc', 'itemCard', request);
         expect(acquire).not.toHaveBeenCalled();
 
         // The peeked reference is owned by the hook — unmount releases it
@@ -67,6 +67,49 @@ describe('useNativeImage — synchronous peek fast path', () => {
         expect(peek).toHaveBeenCalled();
         expect(acquire).toHaveBeenCalled();
         expect(result.current.displaySrc).toBe('blob:resolved/abc-itemCard');
+    });
+
+    it('releases a CROSS-VARIANT peek by the SERVED sibling variant, not the requested one', async () => {
+        // The fullScreen cover is never bulk-swept → exact miss; the peek
+        // serves the album's in-memory itemCard sibling. The hook must release
+        // by the SERVED variant (itemCard), or it would decrement the wrong
+        // shared entry's refcount.
+        const acquire = vi.fn(() => new Promise<string>(() => {}));
+        const release = vi.fn();
+        const peek = vi.fn(() => ({ url: 'blob:shared/abc-itemCard', variant: 'itemCard' }));
+        registerThumbnailUrlCache(acquire, release, peek);
+        const fsRequest = { ...request, variant: 'fullScreen' };
+
+        const { result, unmount } = renderHook(() =>
+            useNativeImage({ enabled: true, request: fsRequest }),
+        );
+
+        expect(result.current.displaySrc).toBe('blob:shared/abc-itemCard');
+        expect(result.current.isLoaded).toBe(true);
+        expect(peek).toHaveBeenCalledWith('abc', 'fullScreen', fsRequest);
+        expect(acquire).not.toHaveBeenCalled();
+
+        await act(async () => {
+            unmount();
+        });
+        expect(release).toHaveBeenCalledWith('abc', 'itemCard', 'blob:shared/abc-itemCard');
+    });
+
+    it('paints synchronously from the non-acquiring init-probe (no async resolve)', () => {
+        // The init-probe seeds displaySrc during render so the <img> mounts
+        // already pointing at the cover — no skeleton frame on the first paint.
+        const acquire = vi.fn(() => new Promise<string>(() => {}));
+        const release = vi.fn();
+        const peek = vi.fn(() => ({ url: 'blob:seed/abc-itemCard', variant: 'itemCard' }));
+        const initProbe = vi.fn(() => ({ url: 'blob:seed/abc-itemCard', variant: 'itemCard' }));
+        registerThumbnailUrlCache(acquire, release, peek, null, initProbe);
+
+        const { result } = renderHook(() => useNativeImage({ enabled: true, request }));
+
+        expect(initProbe).toHaveBeenCalledWith('abc', 'itemCard');
+        expect(result.current.displaySrc).toBe('blob:seed/abc-itemCard');
+        expect(result.current.isLoaded).toBe(true);
+        expect(acquire).not.toHaveBeenCalled();
     });
 });
 

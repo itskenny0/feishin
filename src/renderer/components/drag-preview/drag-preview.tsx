@@ -45,20 +45,21 @@ export const DragPreview = memo(({ data }: DragPreviewProps) => {
         <div className={styles.container}>
             <div className={styles.preview}>
                 <div className={styles.content}>
-                    {itemImage ? (
+                    {itemImage && data.id[0] ? (
                         <div className={styles['image-container']}>
-                            {data.id[0] ? (
-                                <CachedImage
-                                    alt={itemName}
-                                    className={styles.image}
-                                    itemId={data.id[0]}
-                                    size={96}
-                                    src={itemImage}
-                                    variant="itemCard"
-                                />
-                            ) : (
-                                <img alt={itemName} className={styles.image} src={itemImage} />
-                            )}
+                            {/* Sync-only: render the cover through the cache
+                                (CachedImage) ONLY — never a plain <img> of the
+                                raw server URL, which downloads on demand. Without
+                                an entity id we can't key the cache, so fall
+                                through to the icon placeholder below. */}
+                            <CachedImage
+                                alt={itemName}
+                                className={styles.image}
+                                itemId={data.id[0]}
+                                size={96}
+                                src={itemImage}
+                                variant="itemCard"
+                            />
                             <div className={styles['image-overlay']} />
                         </div>
                     ) : (

@@ -30,8 +30,11 @@ import {
 } from '/@/renderer/cache/images';
 import { useCacheStore } from '/@/renderer/cache/store';
 import { createBackoffController } from '/@/renderer/cache/sync/backoff';
+import { missTtlMs } from '/@/renderer/cache/sync/miss-ttl';
 import {
     getCooldownUntil,
+    isServerStressed,
+    note404,
     noteOk,
     noteRateLimit,
     resetCooldown,
@@ -283,9 +286,12 @@ const fetchDownscaleUnit = async (
     if (!db) return { bytes: 0, outcome: 'transient' };
 
     const variants = pending.downscaleVariants ?? [];
-    // No variants to produce is a config no-op, not a fetch failure — treat it
-    // as authoritative so we don't spin retrying a unit that can never produce.
-    if (variants.length === 0) return { bytes: 0, outcome: 'missing' };
+    // An empty variant set is a config/race no-op to retry, NEVER an
+    // authoritative "no artwork". Marking it `missing` would falsely satisfy
+    // the unit (and, in download mode upstream, persist nothing while claiming
+    // success). Return transient so a later pass re-evaluates once the config
+    // settles.
+    if (variants.length === 0) return { bytes: 0, outcome: 'transient' };
 
     const baseUrl = template.urlBefore + pending.itemId + template.urlAfter;
     const url = rewriteUrlToVariantSize(baseUrl, pending.px);
@@ -310,41 +316,83 @@ const fetchDownscaleUnit = async (
             signal: controller.signal,
         });
         if (!res.ok) {
-            // Persist a per-variant miss marker so the sweep doesn't re-attempt
-            // a 404 every pass (mirrors the resolver's negative cache). Like
-            // the resolver's markers these intentionally omit __cfgHash — a
-            // 404 at one px is a 404 at every px, so a config change need not
-            // retry them before MISS_TTL expiry.
             if (res.status === 404 && db === getActiveCacheDb()) {
+                // A 404 is NOT necessarily authoritative — a load-shedding
+                // Jellyfin SILENTLY 404s covers that exist (zero 5xx in its
+                // logs). Mirror the resolver's soft-miss model: suppress the
+                // marker entirely when the server is stressed (or a sibling
+                // variant proves the art exists), otherwise write a SOFT marker
+                // that only promotes to a hard one on a repeat 404. Like the
+                // resolver's markers these intentionally omit __cfgHash — a 404
+                // at one px is a 404 at every px. Deliberately NOT noteOk()
+                // here — a 404 must not reset the 5xx streak isServerStressed()
+                // reads.
+                const stressed = isServerStressed();
+                // Sibling-contradiction guard, only worth the query under
+                // stress (keeps the healthy artless-item path query-free).
+                const siblingHasBytes = stressed
+                    ? await db.thumbnails
+                          .where('ItemId')
+                          .equals(pending.itemId)
+                          .toArray()
+                          .then((rows) => rows.some((r) => Boolean(r?.Blob || r?.Path)))
+                          .catch(() => false)
+                    : false;
+                if (stressed || siblingHasBytes) {
+                    // SUPPRESS: no marker, treat as transient so the unit is
+                    // retried once the server recovers.
+                    console.info('[image-variants] 404 suppressed under server stress', {
+                        itemId: pending.itemId,
+                        variants: variants.map((v) => v.variant),
+                    });
+                    return { bytes: 0, outcome: 'transient' };
+                }
                 const now = Date.now();
-                await Promise.all(
-                    variants.map((v) =>
-                        db.thumbnails
-                            .put({
-                                __cachedAt: now,
-                                Blob: undefined,
-                                ByteSize: 0,
-                                Etag: undefined,
-                                ItemId: pending.itemId,
-                                LastUsed: now,
-                                MissAt: now,
-                                Size: v.px,
-                                Variant: v.variant,
-                            })
-                            .catch(() => undefined),
-                    ),
-                );
-                // Authoritative 404 — a negative marker now exists for every
-                // variant. Safe to mark the unit done.
-                noteOk();
+                // Atomic read-modify-write (Change 2): MissCount is a get-then-put
+                // increment, and a concurrent 404 for the SAME item (another sweep
+                // worker, or a racing lazy <BaseImage> resolve) could otherwise
+                // both read MissCount=1 and both write MissCount=2 — losing the
+                // promotion to the 7-day hard marker. One rw transaction over the
+                // whole per-variant fan-out serializes the increments so a repeat
+                // 404 always advances the count. Behaviour is otherwise identical.
+                await db
+                    .transaction('rw', db.thumbnails, async () => {
+                        await Promise.all(
+                            variants.map(async (v) => {
+                                // Promote on repeat per variant: a soft miss
+                                // (MissCount 1) ages out in 30 min; a second 404
+                                // (>= 2) holds for 7 days.
+                                const existing = await db.thumbnails.get([
+                                    pending.itemId,
+                                    v.variant,
+                                ]);
+                                const missCount = (existing?.MissCount ?? 0) + 1;
+                                await db.thumbnails.put({
+                                    __cachedAt: now,
+                                    Blob: undefined,
+                                    ByteSize: 0,
+                                    Etag: undefined,
+                                    ItemId: pending.itemId,
+                                    LastUsed: now,
+                                    MissAt: now,
+                                    MissCount: missCount,
+                                    Size: v.px,
+                                    Variant: v.variant,
+                                });
+                            }),
+                        );
+                    })
+                    .catch(() => undefined);
+                // A soft/hard negative marker now exists for every variant. The
+                // short soft TTL re-checks it on the next sweep.
                 return { bytes: 0, outcome: 'missing' };
             }
             // Any other non-OK status (5xx, 429, proxy error) is NOT
             // authoritative — the artwork may well exist. Do not write a
-            // negative marker; retry later. 429/503 arm the pool-wide cooldown.
-            if (res.status === 429 || res.status === 503) {
-                noteRateLimit(res.status, res.headers.get('retry-after'));
-            }
+            // negative marker; retry later. noteRateLimit now self-filters:
+            // 429/5xx feed the server-health streak and may arm the pool-wide
+            // cooldown, everything else no-ops.
+            noteRateLimit(res.status, res.headers.get('retry-after'));
             return { bytes: 0, outcome: 'transient' };
         }
         srcBlob = await res.blob();
@@ -524,10 +572,11 @@ export const runThumbnailsSweep = async (
     //
     // Negative-cache markers (Blob === undefined) are honoured per-variant as
     // long as they're still fresh — the server already told us 404 for THAT
-    // variant, no point re-asking on every sweep. Once a marker is older than
-    // MISS_TTL_MS we let it through so the sweep retries (newly-added artwork
-    // should eventually populate). The TTL matches `resolveThumbnail`.
-    const MISS_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+    // variant, no point re-asking on every sweep. Freshness is per-row via
+    // missTtlMs(MissCount): a SOFT miss (first 404, MissCount 1) ages out in
+    // 30 min so a load-shed false 404 is re-checked almost immediately, while a
+    // promoted HARD miss (>= 2) holds for 7 days. The TTL matches
+    // `resolveThumbnail`.
     const db = getActiveCacheDb();
     // Keyed `${itemId}::${variant}` — one entry per cached (item, variant).
     const existingKeys = new Set<string>();
@@ -550,7 +599,9 @@ export const runThumbnailsSweep = async (
             const staleMissKeys = new Set<string>();
             for (const row of missRows) {
                 const missAt = row.MissAt ?? 0;
-                if (now - missAt >= MISS_TTL_MS) {
+                // Per-row TTL: a soft miss (MissCount 1) goes stale after 30
+                // min and is re-fetched; a hard miss (>= 2) holds 7 days.
+                if (now - missAt >= missTtlMs(row.MissCount)) {
                     staleMissKeys.add(skipKey(row.ItemId, row.Variant));
                     staleMissCount += 1;
                 } else {
@@ -914,12 +965,40 @@ export const runThumbnailsSweep = async (
                 itemOutcome = outcome;
                 bytesDownloaded += bytes;
                 if (outcome === 'fetched') {
+                    // Genuine 2xx blob: the server IS serving covers. Reset the
+                    // load-shed detector (the consecutive-404 run + its
+                    // escalation) so an INTERLEAVED artless-item 404 never
+                    // accumulates toward the storm threshold — only a long
+                    // UNbroken run of 404s (a real load-shed) trips the throttle.
+                    noteOk();
                     fetched += 1;
                     markUnitCached(next);
                     done += 1; // uncached → cached this sweep
                 } else if (outcome === 'missing') {
-                    // Authoritative 404 — a negative marker was written. Mark
-                    // the unit cached so a re-scan honors the miss TTL.
+                    // Authoritative soft-404 — a negative marker was written.
+                    // Feed the load-shed detector: a long UNbroken run of 404s
+                    // with NO intervening success is a silently load-shedding
+                    // server dropping covers that EXIST, not artless items
+                    // (those interleave with 200s, reset above via noteOk).
+                    const shed = note404();
+                    if (shed.armed) {
+                        // 404-STORM throttle. The pool-wide cooldown alone isn't
+                        // enough: after it expires the pool resumes at FULL
+                        // concurrency and re-overloads the slow server, which
+                        // sheds again — the covers never fill. So ALSO halve the
+                        // concurrency cap (the same overload/halving path the
+                        // latency backoff uses, honouring the floor) for a gentle
+                        // resume; the normal recovery/time-ramp climbs it back up
+                        // once the server starts serving real covers again.
+                        backoff.forceBackoff(Date.now());
+                        cappedConcurrency = backoff.cap;
+                        console.warn('[image-variants] sweep: 404 load-shed throttle', {
+                            cappedConcurrency,
+                            consecutive404: shed.consecutive404,
+                            cooldownMs: shed.cooldownMs,
+                        });
+                    }
+                    // Mark the unit cached so a re-scan honors the miss TTL.
                     markUnitCached(next);
                     skipped += 1;
                     done += 1; // a fresh negative marker satisfies the unit
@@ -982,7 +1061,15 @@ export const runThumbnailsSweep = async (
             // FREEZE_SAMPLE_MS is a freeze artifact — don't record it at all.
             let action: 'backoff' | 'none' | 'rampup' = 'none';
             if (itemElapsedMs <= FREEZE_SAMPLE_MS) {
-                action = backoff.record(itemElapsedMs, itemOutcome === 'transient', nowTs);
+                // Only a genuine 'fetched' blob is healthy throughput for the
+                // latency controller. A 'missing' (instant 404) must be treated
+                // like a transient here: a silently load-shedding server returns
+                // 404s in milliseconds, and letting those fast samples drive the
+                // latency ramp-up would re-inflate the cap the moment the
+                // 404-storm throttle (forceBackoff above) halved it. Both
+                // 'missing' and 'transient' stay out of the rolling window AND
+                // the fast-recovery streak.
+                action = backoff.record(itemElapsedMs, itemOutcome !== 'fetched', nowTs);
             }
             cappedConcurrency = backoff.cap;
             if (action === 'backoff') {

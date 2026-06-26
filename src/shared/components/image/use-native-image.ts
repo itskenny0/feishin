@@ -27,10 +27,26 @@ type ThumbnailUrlAcquirer = (
     variant: string,
     request: ImageRequest | string,
 ) => Promise<string>;
+// Non-acquiring synchronous probe for the initial render-time paint. Returns
+// the URL (and the variant it would be served under — exact or a cross-variant
+// sibling) WITHOUT taking a reference, so a cached cover can paint on the VERY
+// FIRST render, before the resolve effect runs and acquires the real ref.
+type ThumbnailUrlInitProbe = (
+    itemId: string,
+    variant: string,
+) => undefined | { url: string; variant: string };
 // Synchronous peek: returns a live shared blob: URL (taking a reference the
 // caller must release) when the cover is already held in memory, undefined
 // otherwise. Lets an already-cached cover paint with NO loading state.
-type ThumbnailUrlPeeker = (itemId: string, variant: string) => string | undefined;
+// Cross-variant: when the exact variant isn't held but a sibling is (e.g. the
+// never-swept fullScreen cover, served from the album's in-memory itemCard),
+// it returns the sibling's URL and the variant it was actually taken under —
+// the caller MUST release by that returned variant, not the requested one.
+type ThumbnailUrlPeeker = (
+    itemId: string,
+    variant: string,
+    request: ImageRequest | string,
+) => undefined | { url: string; variant: string };
 // Non-acquiring membership probe: true when a live shared URL exists for the
 // (item, variant). Takes NO reference — purely a hint for consumers (e.g.
 // `<BaseImage>` skipping its load debounce / viewport wait when the cover
@@ -79,11 +95,34 @@ export const NO_ARTWORK_URL = 'feishin://no-artwork';
  */
 export const PENDING_SYNC_URL = 'feishin://pending-sync';
 
+// Cover-resolution perf logging. The shared bundle can't import the renderer's
+// perf-log module, so this emits `[perf] cover` console lines (captured by the
+// debug-log receiver) directly. Only the ASYNC outcomes are logged (the
+// synchronous peek fast-path isn't), so it never floods. Honors the same
+// `localStorage.perfLog='off'` switch as the renderer perf-log.
+let coverPerfEnabled: boolean | undefined;
+const logCoverResolve = (data: Record<string, unknown>): void => {
+    if (coverPerfEnabled === undefined) {
+        try {
+            coverPerfEnabled = localStorage.getItem('perfLog') !== 'off';
+        } catch {
+            coverPerfEnabled = true;
+        }
+    }
+    if (!coverPerfEnabled) return;
+    try {
+        console.info('[perf] cover', data);
+    } catch {
+        /* logging must never throw */
+    }
+};
+
 let resolveThumbnailRef: null | ThumbnailResolver = null;
 let acquireThumbnailUrlRef: null | ThumbnailUrlAcquirer = null;
 let releaseThumbnailUrlRef: null | ThumbnailUrlReleaser = null;
 let peekThumbnailUrlRef: null | ThumbnailUrlPeeker = null;
 let probeThumbnailUrlRef: null | ThumbnailUrlProber = null;
+let initProbeThumbnailUrlRef: null | ThumbnailUrlInitProbe = null;
 let probeDegradedRef: null | ThumbnailDegradedProbe = null;
 
 export const registerThumbnailResolver = (fn: null | ThumbnailResolver): void => {
@@ -99,11 +138,13 @@ export const registerThumbnailUrlCache = (
     release: null | ThumbnailUrlReleaser,
     peek: null | ThumbnailUrlPeeker = null,
     probe: null | ThumbnailUrlProber = null,
+    initProbe: null | ThumbnailUrlInitProbe = null,
 ): void => {
     acquireThumbnailUrlRef = acquire;
     releaseThumbnailUrlRef = release;
     peekThumbnailUrlRef = peek;
     probeThumbnailUrlRef = probe;
+    initProbeThumbnailUrlRef = initProbe;
 };
 
 /**
@@ -156,7 +197,11 @@ type FetchPriority = 'auto' | 'high' | 'low';
 
 interface NativeImageState {
     displaySrc?: string;
-    status: 'error' | 'idle' | 'loaded' | 'loading';
+    // 'notcached' (sync-only): the cover is not in the local cache and we will
+    // NOT download it on demand — the component shows a "not cached" placeholder
+    // (distinct from 'loading'). It repaints to 'loaded' when the sweep writes
+    // the row (THUMBNAIL_UPGRADED_EVENT).
+    status: 'error' | 'idle' | 'loaded' | 'loading' | 'notcached';
 }
 
 interface UseNativeImageArgs {
@@ -184,7 +229,24 @@ export function useNativeImage({
     // acquired with so we release the correct shared entry.
     const sharedUrlRef = useRef<null | { itemId: string; variant: string }>(null);
     const onFetchErrorRef = useRef(onFetchError);
-    const [state, setState] = useState<NativeImageState>({ status: 'idle' });
+    const [state, setState] = useState<NativeImageState>(() => {
+        // Synchronous initial paint. If a cover (the exact variant OR a
+        // cross-variant sibling — e.g. the never-swept fullScreen cover served
+        // from the album's in-memory itemCard) is already held in memory, seed
+        // `displaySrc` on the VERY FIRST render so the <img> mounts with the
+        // cover already set: no skeleton frame, and (under the fullscreen
+        // player's `AnimatePresence initial={false}`) no fade-in either. The
+        // resolve effect below acquires the real refcount; this seed takes
+        // none (a shared entry can't be revoked within a single frame).
+        if (enabled && request?.cacheItemId && request?.cacheSize && initProbeThumbnailUrlRef) {
+            const probed = initProbeThumbnailUrlRef(
+                request.cacheItemId,
+                request.variant ?? DEFAULT_VARIANT,
+            );
+            if (probed) return { displaySrc: probed.url, status: 'loaded' };
+        }
+        return { status: 'idle' };
+    });
     // Armed when the CURRENT adoption was served degraded (stale row /
     // under-sized substitute) — a matching `feishin:thumbnail-upgraded`
     // event then forces a re-resolve to pick up the fresh blob.
@@ -287,20 +349,41 @@ export function useNativeImage({
         revokeObjectUrl();
 
         // Synchronous fast path: a cover already held in the shared memory
-        // cache (including the zero-ref grace window) paints immediately —
-        // no skeleton state, no async hop, no Dexie roundtrip. The peek
-        // takes a reference that revokeObjectUrl/unmount releases.
-        if (request.cacheItemId && request.cacheSize && peekThumbnailUrlRef) {
+        // cache (the exact variant OR a cross-variant sibling, including the
+        // zero-ref grace window) paints immediately — no skeleton state, no
+        // async hop, no Dexie roundtrip. The peek takes a reference that
+        // revokeObjectUrl/unmount releases. SKIPPED on an upgrade re-resolve
+        // (`keepSrcOnNextResolveRef`): there we WANT the async path so the
+        // freshly-written exact bucket replaces the sibling — a sync peek
+        // would just re-serve the same sibling and never upgrade.
+        if (
+            !keepSrcOnNextResolveRef.current &&
+            request.cacheItemId &&
+            request.cacheSize &&
+            peekThumbnailUrlRef
+        ) {
             const cacheVariant = request.variant ?? DEFAULT_VARIANT;
-            const peeked = peekThumbnailUrlRef(request.cacheItemId, cacheVariant);
+            const peeked = peekThumbnailUrlRef(request.cacheItemId, cacheVariant, request);
             if (peeked) {
-                objectUrlRef.current = peeked;
-                sharedUrlRef.current = { itemId: request.cacheItemId, variant: cacheVariant };
+                objectUrlRef.current = peeked.url;
+                // Release by the variant the URL was ACTUALLY taken under — a
+                // cross-variant sibling differs from the requested variant, and
+                // releasing by the request would decrement the wrong entry.
+                sharedUrlRef.current = {
+                    itemId: request.cacheItemId,
+                    variant: peeked.variant,
+                };
                 loadedRequestSignatureRef.current = requestSignature;
-                setState({ displaySrc: peeked, status: 'loaded' });
-                degradedRef.current = probeDegradedRef?.(request.cacheItemId, cacheVariant)
-                    ? { itemId: request.cacheItemId, variant: cacheVariant }
-                    : null;
+                setState({ displaySrc: peeked.url, status: 'loaded' });
+                // A cross-variant serve is degraded (the peek already recorded
+                // it + scheduled the exact-bucket generate); arm the upgrade on
+                // the REQUESTED variant so finishUpgrade()'s event swaps in the
+                // real size. An exact serve consults the degraded probe.
+                const crossVariant = peeked.variant !== cacheVariant;
+                degradedRef.current =
+                    crossVariant || probeDegradedRef?.(request.cacheItemId, cacheVariant)
+                        ? { itemId: request.cacheItemId, variant: cacheVariant }
+                        : null;
                 return;
             }
         }
@@ -320,6 +403,7 @@ export function useNativeImage({
         abortControllerRef.current = abortController;
 
         void (async () => {
+            const coverT0 = performance.now();
             try {
                 // Dexie thumbnail cache first when the request carries an
                 // explicit `cacheItemId`. resolveThumbnail returns a blob:
@@ -380,6 +464,12 @@ export function useNativeImage({
                                 degradedRef.current = probeDegradedRef?.(cacheItemId, cacheVariant)
                                     ? { itemId: cacheItemId, variant: cacheVariant }
                                     : null;
+                                logCoverResolve({
+                                    id: cacheItemId,
+                                    kind: 'late-adopt',
+                                    ms: Math.round(performance.now() - coverT0),
+                                    variant: cacheVariant,
+                                });
                                 setState({ displaySrc: late, status: 'loaded' });
                                 return;
                             }
@@ -414,17 +504,24 @@ export function useNativeImage({
                         return;
                     }
                     if (cached === PENDING_SYNC_URL) {
-                        // Not in the local cache yet (sync-only). Stay in a
-                        // recoverable loading state and DON'T fetch the raw URL —
-                        // the resolver recorded a degraded serve, so when the
-                        // sweep writes this row finishUpgrade fires
-                        // THUMBNAIL_UPGRADED_EVENT and the effect below
-                        // re-resolves to the blob. Keep any already-painted src.
+                        // Not in the local cache yet (sync-only). Show the
+                        // "not cached" placeholder (NOT a forever-spinning
+                        // loader) and DON'T fetch the raw URL — the resolver
+                        // recorded a degraded serve, so when the sweep writes
+                        // this row finishUpgrade fires THUMBNAIL_UPGRADED_EVENT
+                        // and the effect below re-resolves to the cached image.
+                        // Keep any already-painted src.
                         loadedRequestSignatureRef.current = requestSignature;
                         degradedRef.current = { itemId: cacheItemId, variant: cacheVariant };
                         if (!objectUrlRef.current) {
-                            setState({ status: 'loading' });
+                            setState({ status: 'notcached' });
                         }
+                        logCoverResolve({
+                            id: cacheItemId,
+                            kind: 'pending',
+                            ms: Math.round(performance.now() - coverT0),
+                            variant: cacheVariant,
+                        });
                         return;
                     }
                     if (cached) {
@@ -440,6 +537,20 @@ export function useNativeImage({
                         degradedRef.current = probeDegradedRef?.(cacheItemId, cacheVariant)
                             ? { itemId: cacheItemId, variant: cacheVariant }
                             : null;
+                        {
+                            const ms = Math.round(performance.now() - coverT0);
+                            const kind = cached.startsWith('blob:') ? 'blob' : 'file';
+                            // Log slow resolves + any blob (a blob means this
+                            // cover ISN'T on the fast file-URL path).
+                            if (ms > 120 || kind === 'blob') {
+                                logCoverResolve({
+                                    id: cacheItemId,
+                                    kind,
+                                    ms,
+                                    variant: cacheVariant,
+                                });
+                            }
+                        }
                         return;
                     }
                     // Cache lookup lost the 5s race (timedOut) but the
@@ -450,9 +561,34 @@ export function useNativeImage({
                     // above reconcile. Only fall through to a direct network
                     // fetch when nothing is currently displayed.
                     if (timedOut && objectUrlRef.current) {
+                        logCoverResolve({
+                            id: cacheItemId,
+                            kind: 'cap-keep-old',
+                            ms: Math.round(performance.now() - coverT0),
+                            variant: cacheVariant,
+                        });
                         setState({ displaySrc: objectUrlRef.current, status: 'loaded' });
                         return;
                     }
+                    // Sync-only: a cache request that resolved to nothing usable
+                    // (miss / 5s-cap timeout) is NOT in the local cache. Never
+                    // fall through to a raw-URL download — show the "not cached"
+                    // placeholder. The degraded-ref arms the upgrade so it
+                    // repaints the instant the sweep writes this row
+                    // (THUMBNAIL_UPGRADED_EVENT); the late-adopt above still
+                    // swaps in a blob that lands after the cap.
+                    loadedRequestSignatureRef.current = requestSignature;
+                    degradedRef.current = { itemId: cacheItemId, variant: cacheVariant };
+                    if (!objectUrlRef.current) {
+                        setState({ status: 'notcached' });
+                    }
+                    logCoverResolve({
+                        id: cacheItemId,
+                        kind: 'notcached',
+                        ms: Math.round(performance.now() - coverT0),
+                        variant: cacheVariant,
+                    });
+                    return;
                 }
 
                 const init = {
@@ -490,6 +626,12 @@ export function useNativeImage({
                 // A direct fetch of the raw URL is full quality — never
                 // degraded.
                 degradedRef.current = null;
+                logCoverResolve({
+                    id: request.cacheItemId,
+                    kind: 'network-fetch',
+                    ms: Math.round(performance.now() - coverT0),
+                    variant: request.variant ?? DEFAULT_VARIANT,
+                });
                 setState({ displaySrc: objectUrl, status: 'loaded' });
             } catch {
                 if (abortController.signal.aborted) {
@@ -567,5 +709,6 @@ export function useNativeImage({
         isError: state.status === 'error',
         isLoaded: state.status === 'loaded',
         isLoading: state.status === 'loading',
+        isNotCached: state.status === 'notcached',
     };
 }

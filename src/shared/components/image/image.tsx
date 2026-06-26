@@ -169,7 +169,13 @@ export function BaseImage({
             {nativeImage.displaySrc && !hasImgError ? (
                 <img
                     className={clsx(styles.image, className, {
-                        [styles.animated]: enableAnimation,
+                        // The fade-in is a "this just loaded" cue. A cover that
+                        // was already in memory (peekable, incl. a cross-variant
+                        // sibling) or seen earlier this session paints from the
+                        // cache synchronously — fading it in would only ADD a
+                        // visible 0.2s delay to a free, instant paint. Animate
+                        // ONLY genuinely-new (first network/Dexie) loads.
+                        [styles.animated]: enableAnimation && !isPeekable && !isInSessionCache,
                     })}
                     decoding="async"
                     fetchPriority={fetchPriority}
@@ -186,6 +192,14 @@ export function BaseImage({
             ) : nativeImage.isError || hasImgError ? (
                 includeUnloader ? (
                     <ImageUnloader className={className} icon={unloaderIcon} />
+                ) : null
+            ) : nativeImage.isNotCached ? (
+                // Sync-only: the cover isn't in the local cache and we don't
+                // download on demand. Show a distinct "not cached" placeholder
+                // (cloud icon) instead of the loading Skeleton — it repaints to
+                // the real cover the instant the sweep writes it.
+                includeUnloader ? (
+                    <ImageUnloader className={className} icon="cache" />
                 ) : null
             ) : includeLoader ? (
                 <ImageLoader className={className} />

@@ -15,6 +15,7 @@ import {
     refreshVolumes,
 } from './backends/active-backend';
 import { isAndroidNative } from './backends/volumes';
+import { awaitActiveCacheDb } from './db';
 import { refreshOfflineStats } from './offline-media';
 import { StorageMigrationModal } from './storage-migration-modal';
 import { useCacheStore } from './store';
@@ -39,13 +40,48 @@ export const StorageFirstStartModalHost = () => {
             await refreshOfflineStats();
             const volumes = await refreshVolumes();
             if (cancelled) return;
-            const sd = volumes.find((v) => v.removable);
-            const downloaded = useCacheStore.getState().offlineMedia.itemsDownloaded;
-            if (sd && downloaded > 0) {
-                setTarget(sd);
+            // Migrate to INTERNAL storage (always present). The win is moving the
+            // cover-art bytes OFF IndexedDB into files — covers then render from a
+            // native file URL with no IndexedDB blob read, so they paint instantly
+            // even while the cache is busy at launch. (SD-card offline audio stays
+            // a separate Settings choice.)
+            const internal = volumes.find((v) => !v.removable) ?? volumes[0];
+            // WAIT for the cache DB to actually open before probing. This host
+            // mounts during the boot race; a bare getActiveCacheDb() returns
+            // undefined too early, which false-negatives and stamps the version —
+            // permanently suppressing the prompt. awaitActiveCacheDb resolves the
+            // moment the DB opens (or after the timeout).
+            const db = await awaitActiveCacheDb(15000);
+            if (cancelled) return;
+            if (!db) {
+                // DB never opened this launch — leave the version UNstamped so a
+                // future launch re-evaluates rather than suppressing forever.
+                console.warn('[thumbs-migrate] cache DB not ready; deferring prompt');
+                return;
+            }
+            // Any OLD-STYLE (inline-Blob) rows still in IndexedDB — cover art
+            // (usually the bulk) or audio? The first match short-circuits the
+            // scan. We deliberately do NOT trigger on "audio downloaded" alone —
+            // an SD-card user is already on fs and must not be pulled to internal.
+            let hasIdbBlob = false;
+            try {
+                hasIdbBlob =
+                    Boolean(await db.thumbnails.filter((r) => Boolean(r.Blob)).first()) ||
+                    Boolean(await db.mediaBlobs.filter((r) => Boolean(r.Blob)).first());
+            } catch (err) {
+                console.warn('[thumbs-migrate] idb probe failed', err);
+            }
+            if (cancelled) return;
+            console.info('[thumbs-migrate] eligibility', {
+                hasIdbBlob,
+                internal: internal?.id,
+                volumeCount: volumes.length,
+            });
+            if (internal && hasIdbBlob) {
+                setTarget(internal);
             } else {
-                // Nothing to migrate (or no SD card) — stamp so we don't re-check
-                // on every launch.
+                // Nothing old-style to migrate (fresh install / already on fs) —
+                // stamp so we don't re-check on every launch.
                 markBlobBackendMigrated();
                 setDecided(true);
             }

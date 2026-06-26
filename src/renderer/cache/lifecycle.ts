@@ -1,12 +1,16 @@
 import { useEffect } from 'react';
 
+import type { EntityType } from './types';
+
 import { reconcileVolumeHealth } from './backends/active-backend';
 import { isCacheAvailable } from './capability';
 import {
+    awaitActiveCacheDb,
     closeCacheDb,
     deleteCacheDb,
     getActiveCacheDb,
     getLastOpenError,
+    type LibraryCacheDb,
     setActiveCacheDb,
 } from './db';
 import { estimateBytes, evict } from './eviction';
@@ -57,6 +61,91 @@ registerReachabilityProbe(async () => {
         clearTimeout(timer);
     }
 });
+
+// One-shot cleanup flag, stored per-DB in the syncMeta table. NOT a real
+// EntityType — cast at the two call sites below so the union stays honest
+// everywhere else.
+const MISS_PURGE_FLAG = 'thumbnailsMissPurge_v1';
+
+/**
+ * One-shot purge of FALSE negative-cache markers left by the old resolver.
+ *
+ * Background: against a load-shedding Jellyfin the resolver wrote ~46k hard
+ * "no artwork" markers from SILENT 404s for covers that actually exist, each
+ * with a flat 7-day TTL — so the UI showed placeholders for a week. The
+ * soft-miss model (cache/sync/miss-ttl + the isServerStressed gate) fixes
+ * FUTURE 404s, but the markers already on disk must be deleted so the next
+ * sweep / lazy load re-fetches them under the new gate.
+ *
+ * Deliberately NOT a Dexie version migration (that would block DB-open and
+ * risk a whole-store drop if it threw). Instead a syncMeta-flagged one-shot
+ * that runs once per DB at lifecycle startup, in chunked SEPARATE
+ * transactions so it never stalls boot. Deletes ONLY pure negative markers
+ * (MissAt set, zero bytes, no Blob/Path) — a successful cover write clears
+ * MissAt, so no real cover carries a live MissAt and nothing real is at risk.
+ */
+const runThumbnailMissPurgeOnce = async (db: LibraryCacheDb): Promise<void> => {
+    try {
+        const already = await db.syncMeta.get(MISS_PURGE_FLAG as EntityType);
+        if (already) return;
+        // Collect candidate keys via the MissAt index (skips the row store /
+        // blobs entirely), then read the small marker rows in chunks to verify
+        // each is a PURE negative marker before deleting.
+        const candidateKeys = (await db.thumbnails.where('MissAt').above(0).primaryKeys()) as [
+            string,
+            string,
+        ][];
+        let deleted = 0;
+        const CHUNK = 500;
+        // The boot sequence re-opens the SAME-server DB (a fresh Dexie instance
+        // with the same name), so an identity check (db !== getActiveCacheDb())
+        // aborts the purge after a single chunk once the re-open lands during a
+        // yield. Key on the db NAME instead: re-fetch the active instance each
+        // chunk and bail only on a genuine server switch (name change) or a
+        // closed DB.
+        const targetName = db.name;
+        for (let i = 0; i < candidateKeys.length; i += CHUNK) {
+            const active = getActiveCacheDb();
+            if (!active || active.name !== targetName) return;
+            const slice = candidateKeys.slice(i, i + CHUNK);
+            const rows = await active.thumbnails.bulkGet(slice);
+            const toDelete: [string, string][] = [];
+            for (let j = 0; j < rows.length; j += 1) {
+                const r = rows[j];
+                // Pure negative marker only: MissAt set, no bytes, no blob, no
+                // file path. (A real cover never carries a live MissAt.)
+                if (r && (r.MissAt ?? 0) > 0 && r.ByteSize === 0 && !r.Blob && !r.Path) {
+                    toDelete.push(slice[j]);
+                }
+            }
+            if (toDelete.length > 0) {
+                await active.thumbnails.bulkDelete(toDelete);
+                deleted += toDelete.length;
+            }
+            // Yield between chunks so the purge never monopolises the single
+            // IndexedDB worker / main thread during boot.
+            await new Promise((resolve) => setTimeout(resolve, 0));
+        }
+        const finalDb = getActiveCacheDb();
+        if (!finalDb || finalDb.name !== targetName) return;
+        console.info('[cache] thumbnail miss-purge: cleared false 404 markers', {
+            candidates: candidateKeys.length,
+            deleted,
+        });
+        // Set the flag last so a crash mid-purge re-runs the (idempotent) pass.
+        await finalDb.syncMeta.put({
+            EntityType: MISS_PURGE_FLAG as EntityType,
+            hydrationState: 'none',
+            lastFullSyncAt: undefined,
+            lastSweepAt: undefined,
+            nextStartIndex: undefined,
+            pausedUntil: undefined,
+            totalCount: undefined,
+        });
+    } catch (err) {
+        console.warn('[cache] thumbnail miss-purge failed', err);
+    }
+};
 
 /**
  * Mount-once renderer hook that wires the Dexie-backed cache to the
@@ -224,6 +313,11 @@ export const useCacheLifecycle = (): void => {
                 // already on disk immediately after a cold start.
                 void refreshOfflineStats();
                 void refreshOfflineAvailability();
+                // One-shot: clear the ~46k false 404 markers the old resolver
+                // wrote against a load-shedding server, so the next sweep
+                // re-fetches them under the new soft-miss + stress gate.
+                // syncMeta-flagged → runs once per DB, never blocks boot.
+                void runThumbnailMissPurgeOnce(db);
                 // Restore the cache store from the persistent layer so the
                 // dashboard shows accurate counts + hydration states after
                 // a cold start. Both fields live in memory only; without
@@ -267,6 +361,9 @@ export const useCacheLifecycle = (): void => {
                         actions.setEntityCount('thumbnails', thumbnails);
                         const metas = await db.syncMeta.toArray();
                         for (const meta of metas) {
+                            // Skip non-entity one-shot flag rows (e.g. the
+                            // miss-purge marker) — they aren't hydration state.
+                            if ((meta.EntityType as string) === MISS_PURGE_FLAG) continue;
                             actions.setHydrationState(meta.EntityType, meta.hydrationState);
                         }
                         console.info('[cache] lifecycle: restored counts + hydration', {
@@ -320,12 +417,17 @@ export const useCacheLifecycle = (): void => {
             return;
         }
         if (!currentServer || currentServer.type !== 'jellyfin') return;
-        const db = getActiveCacheDb();
-        if (!db) return;
 
         let cancelled = false;
         void (async () => {
             try {
+                // Await the DB so the daily auto-resync isn't silently skipped
+                // by the boot race: at mount getActiveCacheDb() can be null
+                // before the DB finishes opening, and this effect (deps:
+                // [currentServer, enabled]) never re-runs to retry — so the
+                // resync would never fire.
+                const db = await awaitActiveCacheDb(15_000);
+                if (!db || cancelled) return;
                 const rows = await db.syncMeta.toArray();
                 if (cancelled) return;
                 const fullRows = rows.filter(

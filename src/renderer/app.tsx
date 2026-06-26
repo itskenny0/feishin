@@ -28,6 +28,7 @@ import { useCheckForUpdates } from '/@/renderer/hooks/use-check-for-updates';
 import { useGithubReleasesUpdater } from '/@/renderer/hooks/use-github-releases-updater';
 import { useNativeMenuSync } from '/@/renderer/hooks/use-native-menu-sync';
 import { useSyncSettingsToMain } from '/@/renderer/hooks/use-sync-settings-to-main';
+import { perfLog, perfNow } from '/@/renderer/lib/perf-log';
 import { AppRouter } from '/@/renderer/router/app-router';
 import {
     useCssSettings,
@@ -74,6 +75,10 @@ const AppShell = memo(function AppShell() {
     // entries are tagged at steady-state. Cheap, idempotent, runs once.
     useEffect(() => {
         markConsoleCaptureMounted();
+        // Perf: AppShell's first commit = React has flushed past createRoot.
+        // `perfNow()` is relative to navigation start, so this is the cold
+        // boot-to-interactive time.
+        perfLog('boot:app-mount', { ms: Math.round(perfNow()) });
     }, []);
 
     const webAudioProvider = useMemo(() => {

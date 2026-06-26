@@ -542,6 +542,25 @@ export const MobileFullscreenPlayer = () => {
     const setRating = useSetRating();
 
     const [isPageHovered, setIsPageHovered] = useState(false);
+    // The below-the-fold scroll cards (artist + lyrics-preview + album +
+    // visualizer) are the heaviest part of this mount: the lyrics fetch/parse,
+    // two react-query detail fetches, and the visualizer card. They sit
+    // OFF-SCREEN on open (revealed by scrolling), so blocking the first paint —
+    // the cover + playback controls — on them made opening the player feel
+    // sluggish on mobile. Mount them ONE painted frame later instead; the face
+    // is interactive immediately and the cards stream in underneath. Two rAFs =
+    // after the browser has committed AND painted the player face.
+    const [deferredCardsReady, setDeferredCardsReady] = useState(false);
+    useEffect(() => {
+        let raf2 = 0;
+        const raf1 = requestAnimationFrame(() => {
+            raf2 = requestAnimationFrame(() => setDeferredCardsReady(true));
+        });
+        return () => {
+            cancelAnimationFrame(raf1);
+            cancelAnimationFrame(raf2);
+        };
+    }, []);
     /*
      * `null` while the lyrics query is still loading (keep the card
      * shown so we don't flash hide → show); `false` once we know there
@@ -967,7 +986,7 @@ export const MobileFullscreenPlayer = () => {
                  * immersive view; this is the inline preview that
                  * matches Spotify's scrollable card stack.
                  */}
-                {isSongDefined && (
+                {isSongDefined && deferredCardsReady && (
                     <>
                         {!isPlayingRadio && (
                             <MobileFullscreenArtistCard

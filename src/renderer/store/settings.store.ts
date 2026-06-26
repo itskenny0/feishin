@@ -1075,7 +1075,10 @@ const LocalCacheSettingsSchema = z.object({
  * migration so they can't drift.
  */
 export const DEFAULT_IMAGE_VARIANTS: z.infer<typeof LocalCacheImageVariantsSchema> = {
-    autoPreset: true,
+    // Sync-only: every client caches ALL thumbnail sizes; there is no UI to
+    // deselect sizes. autoPreset stays OFF so a sync never silently tunes the
+    // set down.
+    autoPreset: false,
     format: 'webp',
     // 'download' = fetch each size pre-resized by the server (zero client
     // decode/encode), the dominant mobile-sync win and what the fast competing
@@ -1084,15 +1087,15 @@ export const DEFAULT_IMAGE_VARIANTS: z.infer<typeof LocalCacheImageVariantsSchem
     mode: 'download',
     quality: 82,
     variants: {
-        // Bounded THUMBNAIL sizes pre-cached by default so artwork is fully
-        // available offline (sync-only). `header` is OFF: it ships at the SAME
-        // 300px as `itemCard`, so a separate header bucket is a redundant
-        // per-item fetch with zero visual difference — header surfaces serve
-        // from the cached itemCard via nearest-larger fallback (cuts ~25% of
-        // sync work). `fullScreen` (px:0 original) stays OFF too: a bulk sweep
-        // of multi-megabyte originals is gigabytes/hours — it loads lazily on
-        // demand. Both can be enabled explicitly.
-        fullScreen: { enabled: false, px: 0 },
+        // Sync-only: EVERY distinct thumbnail size is pre-cached so artwork is
+        // fully available offline and never downloaded on demand. `fullScreen`
+        // is capped to a bounded hi-res (1080px) instead of the multi-MB
+        // original so a bulk sweep stays feasible while the fullscreen player
+        // still gets a sharp cover. `header` is the lone exception: it is
+        // pixel-identical to `itemCard` (300px) and is served from it via
+        // nearest-larger, so a separate header bucket would just double the
+        // 300px work for zero visual gain.
+        fullScreen: { enabled: true, px: 1080 },
         header: { enabled: false, px: 300 },
         itemCard: { enabled: true, px: 300 },
         sidebar: { enabled: true, px: 400 },
@@ -3953,10 +3956,27 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
+                if (version <= 73) {
+                    // All thumbnail sizes are now always cached (sync-only): there
+                    // is no longer a UI to deselect sizes and covers are never
+                    // downloaded on demand. Force the canonical full set onto
+                    // existing installs so every size lands locally — including
+                    // `fullScreen`, now capped to a bounded hi-res (1080px) instead
+                    // of multi-MB originals. Resetting the whole slice (vs patching)
+                    // guarantees no variant is missing and the config hash matches a
+                    // fresh install. Guarded: a throwing migrate discards ALL
+                    // persisted settings.
+                    if (state.localCache && typeof state.localCache === 'object') {
+                        state.localCache.imageVariants = JSON.parse(
+                            JSON.stringify(DEFAULT_IMAGE_VARIANTS),
+                        );
+                    }
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 73,
+            version: 74,
         },
     ),
 );

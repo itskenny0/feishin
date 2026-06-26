@@ -1,7 +1,9 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
     getCooldownUntil,
+    isServerStressed,
+    note404,
     noteOk,
     noteRateLimit,
     parseRetryAfterMs,
@@ -102,5 +104,87 @@ describe('noteOk', () => {
         noteRateLimit(429, '10');
         noteOk();
         expect(remaining()).toBeGreaterThanOrEqual(9900);
+    });
+});
+
+// note404 is the THROUGHPUT layer for a server that load-sheds with SILENT
+// 404s (never 429/503): a long UNBROKEN run of authoritative 404s arms the
+// same exponential cooldown a 503 would. It must NOT trip on legitimately
+// artless items, which interleave with 200s (those reset the run via noteOk).
+describe('note404 — load-shed 404 throttle', () => {
+    it('does NOT arm below the consecutive-404 threshold', () => {
+        // 11 < the 12 threshold: a handful of artless items must never throttle.
+        for (let i = 0; i < 11; i += 1) {
+            expect(note404().armed).toBe(false);
+        }
+        expect(remaining()).toBe(0);
+    });
+
+    it('does NOT arm on a pure-404 storm (genuine artless artists, no 5xx)', () => {
+        // The decisive fix: a 14k-artist library 404s in long UNBROKEN runs on a
+        // perfectly HEALTHY server. With no 429/5xx corroboration, a pure-404
+        // storm must NOT arm — otherwise it parks the pool AND (via
+        // isServerStressed → cooldownUntil>now) suppresses the artless markers
+        // into an infinite re-fetch loop.
+        let last = { armed: false, consecutive404: 0, cooldownMs: 0 };
+        for (let i = 0; i < 50; i += 1) last = note404();
+        expect(last.armed).toBe(false);
+        expect(remaining()).toBe(0);
+    });
+
+    it('a pure-404 storm does NOT mark the server stressed', () => {
+        for (let i = 0; i < 50; i += 1) note404();
+        expect(isServerStressed()).toBe(false);
+    });
+
+    it('a genuine 2xx (noteOk) resets the run — interleaved artless 404s never trip it', () => {
+        // 11 consecutive 404s, a single success, then 11 more: the success
+        // breaks the run, so neither half ever reaches the threshold.
+        for (let i = 0; i < 11; i += 1) note404();
+        noteOk();
+        for (let i = 0; i < 11; i += 1) {
+            expect(note404().armed).toBe(false);
+        }
+        expect(remaining()).toBe(0);
+    });
+
+    it('arms only when a 404 storm is corroborated by a real 5xx/cooldown', () => {
+        // A genuine load-shed presents as 429/5xx; that corroboration (an active
+        // cooldown) lets the concurrent 404 storm escalate the park. Without it
+        // (the pure-404 cases above) it never arms.
+        noteRateLimit(503, null); // real 5xx → arms the cooldown (corroboration)
+        let last = { armed: false, consecutive404: 0, cooldownMs: 0 };
+        for (let i = 0; i < 12; i += 1) last = note404();
+        expect(last.armed).toBe(true);
+    });
+
+    it('Change 3: a 404 with a CLEAR cooldown decays the 5xx stress streak', () => {
+        vi.useFakeTimers();
+        try {
+            resetCooldown();
+            // Two 500s build the streak to 2 (isServerStressed true) and the
+            // second arms a ~4s cooldown.
+            noteRateLimit(500, null); // streak 1, no arm
+            noteRateLimit(500, null); // streak 2, arms ~4s
+            expect(isServerStressed()).toBe(true);
+            // The server now serves ZERO covers (only 404s) but stops 5xx-ing.
+            // Once the cooldown fully expires, a single authoritative 404 decays
+            // the 5xx streak so stress can clear — otherwise it would latch
+            // forever and suppress every 404 marker.
+            vi.advanceTimersByTime(31_000);
+            note404();
+            expect(isServerStressed()).toBe(false);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('Change 3: a 404 does NOT decay the streak while the cooldown is still active', () => {
+        noteRateLimit(500, null); // streak 1
+        noteRateLimit(500, null); // streak 2 + active cooldown
+        expect(isServerStressed()).toBe(true);
+        note404(); // cooldown still active → no decay
+        // Cooldown is still in flight, so stress stays true regardless.
+        expect(isServerStressed()).toBe(true);
     });
 });

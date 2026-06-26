@@ -47,7 +47,15 @@ export const useFullScreenPlayerStore = createWithEqualityFn<FullScreenPlayerSli
         ),
         {
             merge: (persistedState, currentState) => {
-                return merge(currentState, persistedState);
+                const merged = merge(currentState, persistedState);
+                // Overlay view-state must NEVER be restored on launch. The
+                // fullscreen player (and visualizer) are transient overlays on
+                // top of the underlying route; persisting `expanded:true` made
+                // the app boot straight into the fullscreen player instead of
+                // the route beneath it (home on mobile). Always start collapsed.
+                merged.expanded = false;
+                merged.visualizerExpanded = false;
+                return merged;
             },
             migrate: (persistedState, version) => {
                 if (version <= 2) {
@@ -57,6 +65,15 @@ export const useFullScreenPlayerStore = createWithEqualityFn<FullScreenPlayerSli
                 return persistedState;
             },
             name: 'store_full_screen_player',
+            partialize: (state) => {
+                // Don't persist the transient overlay flags at all — they're
+                // forced false on load anyway, and keeping them out of storage
+                // avoids a stale `expanded:true` lingering in localStorage.
+                const { expanded, visualizerExpanded, ...rest } = state;
+                void expanded;
+                void visualizerExpanded;
+                return rest as typeof state;
+            },
             version: 3,
         },
     ),

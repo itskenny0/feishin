@@ -192,17 +192,29 @@ describe('resolveThumbnail — cache-first display resolves', () => {
         scheduleSpy.mockRestore();
     });
 
-    it('ONLINE with only a SMALLER variant cached still fetches the exact variant', async () => {
-        // Only table (80px) cached; itemCard (300px) requested while online.
-        seedRow('abc', 'table', 80);
+    it('ONLINE with only a SMALLER variant cached serves it immediately and regenerates (no blocking fetch)', async () => {
+        // Only table (80px) cached; itemCard (300px) requested while online. A
+        // cached cover (the album art) beats a network round-trip: serve the
+        // smaller variant upscaled NOW and regenerate the exact bucket in the
+        // background (user directive: cover → album art → placeholder). The old
+        // behaviour fetched the exact size in the paint path, which made
+        // surfaces whose exact variant wasn't swept skeleton + refetch.
+        const smallBlob = seedRow('abc', 'table', 80);
         globalThis.fetch = vi.fn(async () => okResponse()) as unknown as typeof fetch;
+        const scheduleSpy = vi
+            .spyOn(imageVariantsInternals, 'scheduleVariantGenerate')
+            .mockImplementation(() => {});
 
         const out = await resolveThumbnail('abc', 'itemCard', RAW_URL);
 
         expect(out).toMatch(/^blob:mock\//);
-        // Sharp wins online: the network fetch ran and the row landed.
-        expect(globalThis.fetch).toHaveBeenCalledTimes(1);
-        expect(mocks.store.get(JSON.stringify(['abc', 'itemCard']))?.Blob).toBeInstanceOf(Blob);
+        expect(globalThis.URL.createObjectURL).toHaveBeenCalledWith(smallBlob);
+        // The paint path serves from cache — no synchronous network fetch.
+        expect(globalThis.fetch).not.toHaveBeenCalled();
+        // The exact bucket regenerates in the background.
+        expect(scheduleSpy).toHaveBeenCalledWith('abc', 'itemCard', RAW_URL);
+
+        scheduleSpy.mockRestore();
     });
 
     it('OFFLINE with only a SMALLER variant cached serves it immediately, no fetch', async () => {

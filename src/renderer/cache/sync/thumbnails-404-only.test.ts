@@ -29,7 +29,15 @@ const mocks = vi.hoisted(() => {
             equals: () => ({ toArray: async () => [] }),
         })),
     };
-    const db = { thumbnails: thumbnailsTable };
+    // Change 2: the downscale 404 miss-write now wraps its per-variant get+put
+    // in a Dexie rw transaction (atomic MissCount increment). The stub just runs
+    // the scope — a single-threaded test needs no real serialization.
+    const db = {
+        thumbnails: thumbnailsTable,
+        transaction: vi.fn(async (_mode: string, _table: unknown, scope: () => Promise<unknown>) =>
+            scope(),
+        ),
+    };
     // Resolver result the DOWNLOAD path's fetchDownloadUnit will receive. The
     // test swaps this per-case to simulate fetched / 404 / transient.
     const resolverResult = {

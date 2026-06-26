@@ -210,6 +210,19 @@ export const useItemListInfiniteLoader = ({
         [serverId, itemType, query],
     );
 
+    // Seed the "previous key" on the FIRST render of a remount whose shared
+    // maps ALREADY hold this query's data, so the reset effect below SKIPS its
+    // wipe + page-0 re-fetch. The per-index item maps persist in
+    // `sharedListMaps` across hook instances (see the registry note above) —
+    // the reset's stale comment ("maps die with the hook instance") predates
+    // that. Without this seed, every revisit ran data → wipe → empty →
+    // re-fetch → data: a visible double-draw of the whole list (within ms,
+    // since the page re-reads from the cache). A genuine query CHANGE still
+    // resets — its key differs from this seed, so the guard below won't match.
+    if (previousDataQueryKeyRef.current === '' && dataMapRef.current.size > 0) {
+        previousDataQueryKeyRef.current = JSON.stringify(dataQueryKey);
+    }
+
     // Push items into the loader's dataMap. Shared by the cache-prime and
     // network paths. When `markLoaded` is false (cache prime) we leave the
     // page-loaded flag unset so the network revalidation still runs and the

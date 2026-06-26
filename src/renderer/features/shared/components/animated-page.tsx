@@ -5,6 +5,7 @@ import { forwardRef } from 'react';
 
 import styles from './animated-page.module.css';
 
+import { usePerfRouteMount } from '/@/renderer/lib/perf-log';
 import { animationProps } from '/@/shared/components/animations/animation-props';
 
 interface AnimatedPageProps {
@@ -16,6 +17,11 @@ export const AnimatedPage = forwardRef(
         // Honor the OS-level reduced-motion preference. When set we skip the
         // fade-in entirely so users with vestibular sensitivity don't get a
         // page flash on every navigation.
+        // Perf: every route renders through AnimatedPage, so logging its mount
+        // here gives a `[perf] route` settle time (relative to the last nav) for
+        // every surface without per-route wiring. The `path` field identifies
+        // which route.
+        usePerfRouteMount('page');
         const reduced = useReducedMotion();
         const transitionProps = reduced
             ? { animate: { opacity: 1 }, initial: { opacity: 1 }, transition: { duration: 0 } }

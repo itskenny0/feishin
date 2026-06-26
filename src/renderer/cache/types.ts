@@ -157,6 +157,14 @@ export interface CachedThumbnail extends CachedBase {
     // Set when the row was written as a negative-cache marker (a 404
     // from the server). Undefined on real blob rows.
     MissAt: number | undefined;
+    // How many consecutive 404s have been observed for this (item, variant).
+    // Drives the soft→hard miss promotion (see cache/sync/miss-ttl): the first
+    // 404 (MissCount 1 / undefined) is a TENTATIVE marker with a short TTL so a
+    // load-shed false 404 is re-checked almost immediately; a second 404
+    // (>= 2) promotes it to an authoritative 7-day marker. NOT indexed —
+    // stored on the row only, read alongside MissAt. Undefined on real blob
+    // rows and on legacy markers written before the soft-miss model.
+    MissCount?: number;
     // Absolute file path of the bytes on the filesystem backend. Undefined on
     // the idb backend and on negative-cache markers.
     Path?: string;

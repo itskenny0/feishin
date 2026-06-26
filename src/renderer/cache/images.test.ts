@@ -14,7 +14,15 @@ const mocks = vi.hoisted(() => {
         put: vi.fn(async () => undefined),
         update: vi.fn(async () => undefined),
     };
-    const db = { thumbnails: thumbnailsTable };
+    // Change 2: the 404 miss-write now wraps its get+put in a Dexie rw
+    // transaction (atomic MissCount increment). The stub just runs the scope —
+    // a single-threaded test needs no real serialization.
+    const db = {
+        thumbnails: thumbnailsTable,
+        transaction: vi.fn(async (_mode: string, _table: unknown, scope: () => Promise<unknown>) =>
+            scope(),
+        ),
+    };
     return { db, thumbnailsTable };
 });
 

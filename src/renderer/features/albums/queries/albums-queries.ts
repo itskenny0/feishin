@@ -345,6 +345,22 @@ export const useAlbumDetailQuery = (args: AlbumDetailQueryArgs) => {
                             songs = snap.songs;
                         }
                     }
+                    // Don't serve a PARTIAL tracklist as an authoritative hit.
+                    // The album row often has no embedded songs, and when the
+                    // sweep has cached only some of the album's tracks,
+                    // `db.songs` returns fewer rows than the album's real
+                    // `songCount` (e.g. 4 of 131). Serving that pins the
+                    // truncated list forever because sync-first suppresses the
+                    // background revalidate. Treat it as a miss so cachedSwr
+                    // fetches the full album from the network.
+                    const expectedSongs = payload.songCount ?? 0;
+                    if (expectedSongs > 0 && songs.length < expectedSongs) {
+                        console.info(
+                            '[cache] albums: detail incomplete tracklist — fetching full',
+                            { have: songs.length, id: query.id, want: expectedSongs },
+                        );
+                        return undefined;
+                    }
                     console.info('[cache] albums: detail cache hit', {
                         id: query.id,
                         songs: songs.length,
@@ -434,6 +450,23 @@ export const useAlbumDetailSuspenseQuery = (args: AlbumDetailSuspenseQueryArgs) 
                         } else {
                             songsSource = 'empty';
                         }
+                    }
+                    // Incomplete-tracklist guard (see the non-suspense sibling):
+                    // when the cache holds fewer songs than the album's real
+                    // `songCount`, it's a partial sweep — return a miss so the
+                    // full album is fetched instead of pinning e.g. 4/131.
+                    const expectedSongs = payload.songCount ?? 0;
+                    if (expectedSongs > 0 && songs.length < expectedSongs) {
+                        console.info(
+                            '[cache] albums: detail-suspense incomplete tracklist — fetching full',
+                            {
+                                have: songs.length,
+                                id: query.id,
+                                source: songsSource,
+                                want: expectedSongs,
+                            },
+                        );
+                        return undefined;
                     }
                     console.info('[cache] albums: detail-suspense cache hit', {
                         id: query.id,

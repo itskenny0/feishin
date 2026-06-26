@@ -10,6 +10,7 @@ import { onlineManager, QueryCache, QueryClient } from '@tanstack/react-query';
 import i18n from 'i18next';
 
 import { getNavigatorOnline } from '/@/renderer/lib/network-status';
+import { perfLog, perfNow, perfQueryKey } from '/@/renderer/lib/perf-log';
 import { toast } from '/@/shared/components/toast/toast';
 
 type ErrorCategory = 'auth' | 'network' | 'server' | 'unknown';
@@ -192,6 +193,35 @@ onlineManager.setEventListener((setOnline) => {
 export const queryClient = new QueryClient({
     defaultOptions: queryConfig,
     queryCache,
+});
+
+// Global query timing (perf instrument). Logs EVERY fetch's duration, outcome,
+// and whether it was cancelled mid-flight (the fetch ended while the query was
+// still `pending` — an observer unmounted or a refetch superseded it). This is
+// the single highest-signal perf surface: it captures every data fetch (detail,
+// list, top-songs, search, …) without touching each query site. Disable with
+// `localStorage.setItem('perfLog','off')`.
+const queryFetchStart = new WeakMap<object, number>();
+queryCache.subscribe((event) => {
+    const query = (event as { query?: any })?.query;
+    if (!query?.state) return;
+    if (query.state.fetchStatus === 'fetching') {
+        if (!queryFetchStart.has(query)) queryFetchStart.set(query, perfNow());
+        return;
+    }
+    const start = queryFetchStart.get(query);
+    if (start === undefined) return;
+    queryFetchStart.delete(query);
+    const ms = Math.round(perfNow() - start);
+    // A fetch that ended while still `pending` (no data, no error) was
+    // cancelled, not completed.
+    const outcome = query.state.status === 'pending' ? 'cancelled' : query.state.status;
+    perfLog('query', {
+        key: perfQueryKey(query.queryKey),
+        ms,
+        observers: query.getObserversCount?.() ?? 0,
+        outcome,
+    });
 });
 
 export type InfiniteQueryHookArgs<T> = {

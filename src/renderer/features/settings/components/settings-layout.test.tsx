@@ -118,19 +118,4 @@ describe('SettingsLayout category structure', () => {
         expect(screen.getAllByText('Scrobble').length).toBeGreaterThanOrEqual(1);
         expect(screen.getAllByText('Library').length).toBeGreaterThanOrEqual(1);
     });
-
-    it('hides drill-down child subpages from search (e.g. Artwork variants)', () => {
-        renderLayout();
-
-        const input = screen.getByLabelText('Search settings');
-        fireEvent.change(input, { target: { value: 'artwork' } });
-
-        // image-variants has a `parent`, so it never surfaces as its own hit.
-        expect(screen.queryByText('Artwork variants')).not.toBeInTheDocument();
-    });
-
-    it('registers the Artwork variants editor as a child of Library sync', () => {
-        const child = SETTINGS_SUBPAGES.connect.find((s) => s.id === 'image-variants');
-        expect(child?.parent).toBe('library-sync');
-    });
 });

@@ -12,7 +12,8 @@ import { backendForRef, getActiveBackend } from './backends/active-backend';
 import { refForRow, rowFieldsForRef } from './backends/types';
 import { awaitActiveCacheDb, getActiveCacheDb } from './db';
 import { recordStat } from './stats';
-import { noteOk, noteRateLimit } from './sync/rate-limit-cooldown';
+import { missTtlMs } from './sync/miss-ttl';
+import { isServerStressed, noteOk, noteRateLimit } from './sync/rate-limit-cooldown';
 import {
     isRowHashStale,
     nearestLargerVariant,
@@ -140,6 +141,11 @@ export interface ResolverResult {
     // original URL.
     blob: Blob | undefined;
     bytes: number;
+    // A native file URL (Capacitor `convertFileSrc`) for a file-backed cover.
+    // Set INSTEAD of `blob` on the fs fast path: the <img> renders it directly,
+    // so there's no base64 file read, no `createObjectURL`, and no inline blob
+    // in the IndexedDB row — the cover paints without an IndexedDB blob read.
+    fileUrl?: string;
     // True when the miss is AUTHORITATIVE: the server already told us this
     // item has no artwork (a fresh 404 / negative-cache marker). Display
     // callers surface their placeholder immediately instead of re-fetching
@@ -376,10 +382,16 @@ export const preloadThumbnailUrls = async (
 
     let rows: (CachedThumbnail | undefined)[];
     try {
-        rows = await rehydrateRows(
-            await db.thumbnails.bulkGet(
-                wanted.map((id) => [id, resolvedVariant] as [string, string]),
-            ),
+        // RAW rows — do NOT rehydrate. A file-backed (fs) cover renders from a
+        // native file URL via the resolver's fast path, so it needs no
+        // pre-minted blob. Rehydrating here would base64-load EVERY grid cover
+        // off disk just to mint a shared blob: URL the cover never uses — and
+        // worse, that blob then shadowed the file URL through the synchronous
+        // seed/peek, so album/artist grids rendered base64 blobs instead of
+        // file URLs. Raw fs rows carry no inline Blob, so the guard below skips
+        // them; only idb (inline-Blob) rows fall through to the mint.
+        rows = await db.thumbnails.bulkGet(
+            wanted.map((id) => [id, resolvedVariant] as [string, string]),
         );
     } catch {
         return;
@@ -424,6 +436,9 @@ export const __resetSharedThumbnailUrls = (): void => {
 // Keyed by `variantKey` so a different variant of the same item resolves
 // on its own task and gets its own blob.
 interface AcquireResult {
+    // True when `objectUrl` is a native FILE URL (convertFileSrc), not a
+    // refcounted shared blob: URL — awaiters return it verbatim.
+    isFileUrl?: boolean;
     // True when the miss was authoritative (404 / negative cache) — the
     // awaiters return the NO_ARTWORK_URL sentinel instead of the raw URL.
     noArtwork?: boolean;
@@ -459,6 +474,17 @@ const takeResolvedNoArt = (key: string): boolean => lastResolvedNoArt.delete(key
 // surface PENDING_SYNC_URL instead of the raw URL. Mirrors lastResolvedNoArt.
 const lastResolvedPending = new Set<string>();
 const takeResolvedPending = (key: string): boolean => lastResolvedPending.delete(key);
+
+// Hand-off slot for the fs fast path: a `_wantBlob` resolve that found a
+// file-backed cover stashes its native file URL (Capacitor convertFileSrc)
+// here so the shared-acquire path returns it DIRECTLY — no blob, no
+// createObjectURL, no refcounted shared entry. Drained by acquireThumbnailUrl.
+const lastResolvedFileUrl = new Map<string, string>();
+const takeResolvedFileUrl = (key: string): string | undefined => {
+    const v = lastResolvedFileUrl.get(key);
+    if (v !== undefined) lastResolvedFileUrl.delete(key);
+    return v;
+};
 
 /**
  * Acquire a stable, shared `blob:` URL for an item's cached thumbnail at a
@@ -511,6 +537,11 @@ export const acquireThumbnailUrl = async (
                     // URL; we mint exactly one shared URL here instead.
                     _wantBlob: true,
                 });
+                // FS fast path: a file-backed cover stashed a native file URL
+                // (convertFileSrc). Return it verbatim — it's a stable string,
+                // not a refcounted blob: URL, so it skips the shared registry.
+                const fileUrl = takeResolvedFileUrl(key);
+                if (fileUrl) return { isFileUrl: true, objectUrl: fileUrl };
                 const blob = takeResolvedBlob(key);
                 if (!blob) {
                     return {
@@ -543,6 +574,9 @@ export const acquireThumbnailUrl = async (
         // Cache miss / failure — fall back to the raw URL (un-refcounted).
         return url;
     }
+    // FS file URL: a stable string, not a refcounted shared blob — return it
+    // as-is (no sharedObjectUrls entry, no refcount, nothing to release).
+    if (result.isFileUrl) return result.objectUrl;
     // The shared entry may already have been fully released + revoked
     // between the task settling and this awaiter resuming (rare: every
     // earlier awaiter mounted and unmounted before we got here). If so the
@@ -631,12 +665,6 @@ const HIT_LOG_SAMPLE = 50;
 // logging to avoid spam.
 let lookupAttempts = 0;
 const LOOKUP_LOG_LIMIT = 25;
-
-// Negative-cache TTL: how long a 404 marker is honored before we let
-// the resolver try again. Most Jellyfin libraries don't grow artwork
-// out of thin air, so a week between retries keeps the table small
-// without making the user manually clear it if they re-tag an album.
-const MISS_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 const emitWritten = (): void => {
     if (typeof window !== 'undefined') {
@@ -840,6 +868,24 @@ const isStaleRow = (row: CachedThumbnail | undefined): boolean => {
     return isRowHashStale(row.__cfgHash, row.Variant, getImageVariantsConfig());
 };
 
+// A DISPLAY url straight from a row's BACKING, without loading bytes into JS: a
+// file-backed row (fs — has Path, no inline Blob) returns its native file URL
+// (Capacitor convertFileSrc) PLUS whether the row is stale, so the <img> paints
+// with no base64 read, no createObjectURL, and no IndexedDB blob read. A STALE
+// fs row still serves its file URL (serve-stale-while-revalidate) — the caller
+// records a degraded serve + regenerates so it never base64-rehydrates a stale
+// cover. idb rows (inline Blob) and non-Capacitor (no resolveUrl) return
+// undefined — the caller uses the inline Blob path. Used by EVERY display
+// cache-hit branch (gated task AND the in-flight cache-first branch).
+const fsFileUrlForRow = (
+    rawRow: CachedThumbnail | undefined,
+): undefined | { fileUrl: string; stale: boolean } => {
+    if (!rawRow?.Path || rawRow.Blob) return undefined;
+    const ref = refForRow(rawRow);
+    const fileUrl = ref ? backendForRef(ref).resolveUrl?.(ref) : undefined;
+    return fileUrl ? { fileUrl, stale: isStaleRow(rawRow) } : undefined;
+};
+
 // The px a resolve should fetch + record for `resolvedVariant`. An explicit
 // `options.targetPx` (the sweep) wins; in download mode the lazy path derives
 // the per-variant px from the live config so an 80px table bucket isn't
@@ -905,7 +951,10 @@ export const imageVariantsInternals = {
 const effectivePx = (px: number): number => (px === 0 ? Number.POSITIVE_INFINITY : px);
 
 interface FallbackPick {
-    blob: Blob;
+    // Exactly one of `blob` (idb sibling) / `fileUrl` (fs sibling — a native
+    // convertFileSrc URL, never base64-loaded) is set.
+    blob?: Blob;
+    fileUrl?: string;
     // True when the picked row was produced under an older variant config.
     // The cache-first paint path refuses stale picks while ONLINE (the
     // staleness mechanic exists so config changes regenerate covers); when
@@ -982,32 +1031,33 @@ const resolveFallbackPick = async (
     const db = getActiveCacheDb();
     if (!db) return undefined;
     try {
-        const rows = await rehydrateRows(
-            await db.thumbnails.where('ItemId').equals(itemId).toArray(),
-        );
+        // RAW rows — do NOT rehydrate (that base64-loads EVERY variant of the
+        // item off disk). A file-backed sibling is served as a native file URL;
+        // only an idb sibling yields an inline Blob.
+        const rows = await db.thumbnails.where('ItemId').equals(itemId).toArray();
         const cached: Record<string, number> = {};
-        const blobByVariant = new Map<string, Blob>();
-        const staleByVariant = new Map<string, boolean>();
+        const rowByVariant = new Map<string, CachedThumbnail>();
         for (const row of rows) {
-            if (row?.Blob && row.Variant) {
+            // A sibling counts only if it has BYTES — an inline Blob (idb) or a
+            // file Path (fs). Negative-cache markers have neither, so they drop.
+            if (row?.Variant && (row.Blob || row.Path)) {
                 cached[row.Variant] = typeof row.Size === 'number' ? row.Size : 0;
-                blobByVariant.set(row.Variant, row.Blob);
-                staleByVariant.set(row.Variant, isStaleRow(row));
+                rowByVariant.set(row.Variant, row);
             }
         }
-        if (blobByVariant.size === 0) return undefined;
+        if (rowByVariant.size === 0) return undefined;
 
         const cfg = getImageVariantsConfig();
         const pick = nearestLargerVariant(requestedVariant as VariantName, cached, cfg);
         if (!pick) return undefined;
-        const blob = blobByVariant.get(pick);
-        if (!blob) return undefined;
+        const pickedRow = rowByVariant.get(pick);
+        if (!pickedRow) return undefined;
 
         const requestedPx = effectivePx(
             cfg.variants[requestedVariant as VariantName]?.px ?? MAX_CACHE_SIZE,
         );
         const sufficient = effectivePx(cached[pick] ?? 0) >= requestedPx;
-        const stale = staleByVariant.get(pick) ?? false;
+        const stale = isStaleRow(pickedRow);
 
         console.info('[image-variants] fallback served nearest-larger variant', {
             itemId,
@@ -1031,7 +1081,15 @@ const resolveFallbackPick = async (
         if (getIsOnline()) {
             imageVariantsInternals.scheduleVariantGenerate(itemId, requestedVariant, request);
         }
-        return { blob, stale, sufficient };
+        // fs sibling → native file URL (no base64 file read); idb → inline Blob.
+        const ref = refForRow(pickedRow);
+        const fileUrl =
+            pickedRow.Path && !pickedRow.Blob && ref
+                ? backendForRef(ref).resolveUrl?.(ref)
+                : undefined;
+        if (fileUrl) return { fileUrl, stale, sufficient };
+        if (pickedRow.Blob) return { blob: pickedRow.Blob, stale, sufficient };
+        return undefined;
     } catch (err) {
         console.warn('[image-variants] fallback lookup failed', {
             error: (err as Error)?.message ?? String(err),
@@ -1042,15 +1100,33 @@ const resolveFallbackPick = async (
     }
 };
 
-// Blob-only view of `resolveFallbackPick` for the post-failure paths that
-// serve ANY cached substitute (the network already had its chance).
-const resolveFallbackBlob = async (
-    itemId: string,
-    requestedVariant: string,
-    request: ImageRequest | string,
-): Promise<Blob | undefined> => {
-    const pick = await resolveFallbackPick(itemId, requestedVariant, request);
-    return pick?.blob;
+// Serve a fallback / substitute pick as a display result for resolveThumbnail's
+// display paths. fs picks → the native file URL (rendered directly, no base64);
+// idb picks → the inline Blob, stashed for the shared `acquireThumbnailUrl` path
+// on `_wantBlob`, else minted into a per-call object URL. Returns the string to
+// hand back (or the `rawUrl` sentinel for `_wantBlob`), or undefined when the
+// pick has nothing usable.
+const serveFallbackPick = (
+    pick: { blob?: Blob; fileUrl?: string },
+    dedupKey: string,
+    rawUrl: string,
+    wantBlob: boolean | undefined,
+): string | undefined => {
+    if (pick.fileUrl) {
+        if (wantBlob) {
+            lastResolvedFileUrl.set(dedupKey, pick.fileUrl);
+            return rawUrl;
+        }
+        return pick.fileUrl;
+    }
+    if (pick.blob) {
+        if (wantBlob) {
+            lastResolvedBlob.set(dedupKey, pick.blob);
+            return rawUrl;
+        }
+        return URL.createObjectURL(pick.blob);
+    }
+    return undefined;
 };
 
 // The largest cached cover blob for an item, across every NON-fullScreen
@@ -1061,25 +1137,32 @@ const resolveFallbackBlob = async (
 // already-cached itemCard/table cover INSTANTLY (upscaled) while the real
 // fullScreen bucket fetches in the background — what upstream's bare <img>
 // effectively does, but served from Dexie. Excludes negative-cache markers.
-const largestCachedSubVariantBlob = async (itemId: string): Promise<Blob | undefined> => {
+const largestCachedSubVariantPick = async (
+    itemId: string,
+): Promise<undefined | { blob?: Blob; fileUrl?: string }> => {
     const db = getActiveCacheDb();
     if (!db) return undefined;
     try {
-        const rows = await rehydrateRows(
-            await db.thumbnails.where('ItemId').equals(itemId).toArray(),
-        );
+        // RAW rows — see resolveFallbackPick: never base64-load fs rows here.
+        const rows = await db.thumbnails.where('ItemId').equals(itemId).toArray();
         const cfg = getImageVariantsConfig();
-        let best: Blob | undefined;
+        let bestRow: CachedThumbnail | undefined;
         let bestPx = -1;
         for (const row of rows) {
-            if (!row?.Blob || !row.Variant || row.Variant === 'fullScreen') continue;
+            if (!row?.Variant || row.Variant === 'fullScreen' || !(row.Blob || row.Path)) continue;
             const px = effectivePx(cfg.variants[row.Variant as VariantName]?.px ?? 0);
             if (px > bestPx) {
                 bestPx = px;
-                best = row.Blob;
+                bestRow = row;
             }
         }
-        return best;
+        if (!bestRow) return undefined;
+        const ref = refForRow(bestRow);
+        const fileUrl =
+            bestRow.Path && !bestRow.Blob && ref ? backendForRef(ref).resolveUrl?.(ref) : undefined;
+        if (fileUrl) return { fileUrl };
+        if (bestRow.Blob) return { blob: bestRow.Blob };
+        return undefined;
     } catch {
         return undefined;
     }
@@ -1108,6 +1191,15 @@ export const resolveThumbnail = async (
     options?: ResolveThumbnailOptions,
 ): Promise<string> => {
     const { credentials, headers, url } = normaliseRequest(request);
+    // PERF instrumentation: a display resolve that takes >1s is the
+    // "now-playing cover loads slowly at play-start" symptom. Time the
+    // DB-ready wait, the concurrency-slot wait, and the total so the slow
+    // phase shows up in device logs. (The JS sleep/rAF probes get starved by
+    // the same main-thread block they try to measure, so this in-app timing is
+    // the reliable signal.)
+    const tStart = typeof performance !== 'undefined' ? performance.now() : 0;
+    const wantsTiming = tStart > 0 && !options?._skipBlobUrl;
+    let gateWaitMs = 0;
     // Display resolves briefly wait out the boot race: on a cold start the
     // lifecycle opens the DB in a post-mount effect, so the first wave of
     // covers used to see "no active DB" and fall straight to the network
@@ -1119,6 +1211,7 @@ export const resolveThumbnail = async (
         options?._skipBlobUrl || !isLocalCacheEnabled()
             ? getActiveCacheDb()
             : await awaitActiveCacheDb();
+    const dbWaitMs = wantsTiming ? Math.round(performance.now() - tStart) : 0;
     if (!db) return url;
 
     const resolvedVariant = normaliseVariant(variant);
@@ -1132,7 +1225,80 @@ export const resolveThumbnail = async (
 
     const existing = inFlight.get(dedupKey);
     if (existing) {
+        // A DISPLAY resolve must NOT block on the in-flight task when the cache
+        // can paint now. That task may be a background GENERATE fetching the
+        // exact bucket over the network (up to the 20s timeout); `await
+        // existing` pinned the now-playing / miniplayer cover on a skeleton for
+        // those seconds even though the album art was already in Dexie — a
+        // collision with the table-bucket generate (the "miniplayer art loads
+        // slowly" report). Serve the cached cover (exact-fresh, else the
+        // nearest-larger fallback) IMMEDIATELY; the in-flight generate still
+        // completes and upgrades the surface. Sweep/generate callers
+        // (`_skipBlobUrl`) keep the original dedup — they WANT to share the
+        // in-flight fetch, not paint.
+        if (wantsDisplayBlob) {
+            const rawRow = await db.thumbnails.get(dbKey);
+            // FS fast path on the in-flight branch too: a file-backed cover
+            // renders from its native file URL with no base64 rehydrate / no
+            // createObjectURL. Without this the virtualized album/artist grids —
+            // which prefetch covers, so a display resolve collides with an
+            // in-flight resolve here — served every fs cover as a base64 blob.
+            const fileInfo = fsFileUrlForRow(rawRow);
+            if (fileInfo) {
+                if (fileInfo.stale) {
+                    // Serve-stale-while-revalidate (see the gated fast path).
+                    recordDegradedServe(itemId, resolvedVariant, request);
+                    if (getIsOnline()) {
+                        imageVariantsInternals.scheduleVariantGenerate(
+                            itemId,
+                            resolvedVariant,
+                            request,
+                        );
+                    }
+                }
+                if (options?._wantBlob) {
+                    lastResolvedFileUrl.set(dedupKey, fileInfo.fileUrl);
+                    return url;
+                }
+                return fileInfo.fileUrl;
+            }
+            const cachedRow = await rehydrateRow(rawRow);
+            if (cachedRow?.Blob && !isStaleRow(cachedRow)) {
+                if (options?._wantBlob) {
+                    lastResolvedBlob.set(dedupKey, cachedRow.Blob);
+                    return url;
+                }
+                return URL.createObjectURL(cachedRow.Blob);
+            }
+            const fallbackNow = await resolveFallbackPick(itemId, resolvedVariant, request);
+            if (fallbackNow) {
+                const served = serveFallbackPick(fallbackNow, dedupKey, url, options?._wantBlob);
+                if (served !== undefined) return served;
+            }
+        }
+        const inflightStart = typeof performance !== 'undefined' ? performance.now() : 0;
         const result = await existing;
+        if (wantsDisplayBlob && inflightStart) {
+            const inflightMs = Math.round(performance.now() - inflightStart);
+            if (inflightMs > 800) {
+                console.warn('[image-variants] display resolve awaited in-flight task', {
+                    itemId,
+                    ms: inflightMs,
+                    variant: resolvedVariant,
+                });
+            }
+        }
+        // The in-flight DISPLAY resolve may have settled to a file-backed cover
+        // (fs fast path) — serve that file URL rather than dropping to the
+        // fallback / raw URL below.
+        if (result.fileUrl) {
+            if (options?._wantBlob) {
+                lastResolvedFileUrl.set(dedupKey, result.fileUrl);
+                return url;
+            }
+            if (options?._skipBlobUrl) return url;
+            return result.fileUrl;
+        }
         if (result.blob) {
             // Honor the caller's blob-delivery mode here too. Previously a
             // `_wantBlob` acquire (or a `_skipBlobUrl` sweep/generate call)
@@ -1150,13 +1316,10 @@ export const resolveThumbnail = async (
         // Exact miss for a render path — try the nearest-larger cached variant
         // before giving up to the raw URL.
         if (wantsDisplayBlob) {
-            const fallback = await resolveFallbackBlob(itemId, resolvedVariant, request);
+            const fallback = await resolveFallbackPick(itemId, resolvedVariant, request);
             if (fallback) {
-                if (options?._wantBlob) {
-                    lastResolvedBlob.set(dedupKey, fallback);
-                    return url;
-                }
-                return URL.createObjectURL(fallback);
+                const served = serveFallbackPick(fallback, dedupKey, url, options?._wantBlob);
+                if (served !== undefined) return served;
             }
             if (result.noArtwork) {
                 if (options?._wantBlob) {
@@ -1178,9 +1341,44 @@ export const resolveThumbnail = async (
 
     const gated = wantsDisplayBlob;
     const task = (async (): Promise<ResolverResult> => {
+        if (signal?.aborted) return { blob: undefined, bytes: 0 };
+        // FS fast path — BEFORE the concurrency gate. A file-backed cache hit is
+        // a fast db.get + convertFileSrc (no network), so it must NOT queue
+        // behind the 8 network slots. Gating it meant a grid of fs covers — with
+        // the slots held by slow misses fetching/generating — blew past the
+        // consumer's 5s cache cap and fell back to a raw-URL fetch → blob URL
+        // instead of the native file URL. idb rows / web / electron fall through.
+        if (wantsDisplayBlob) {
+            const fastRow = await db.thumbnails.get(dbKey);
+            const fast = fsFileUrlForRow(fastRow);
+            if (fast) {
+                if (fast.stale) {
+                    // Serve-stale-while-revalidate for fs: paint the file URL now
+                    // (no base64 rehydrate) and regenerate the exact bucket in the
+                    // background, so a config change still refreshes the cover.
+                    recordDegradedServe(itemId, resolvedVariant, request);
+                    if (getIsOnline()) {
+                        imageVariantsInternals.scheduleVariantGenerate(
+                            itemId,
+                            resolvedVariant,
+                            request,
+                        );
+                    }
+                } else {
+                    const nowFs = Date.now();
+                    if (nowFs - (fastRow?.LastUsed ?? 0) > 3_600_000) {
+                        void db.thumbnails.update(dbKey, { LastUsed: nowFs });
+                    }
+                }
+                recordStat('blobHit');
+                return { blob: undefined, bytes: 0, fileUrl: fast.fileUrl };
+            }
+        }
         // Display-path resolves wait for a concurrency slot; the sweep
         // (_skipBlobUrl) bypasses the gate (it has its own worker pool).
+        const tSlot = wantsTiming ? performance.now() : 0;
         if (gated) await acquireResolveSlot();
+        if (wantsTiming) gateWaitMs = Math.round(performance.now() - tSlot);
         try {
             if (signal?.aborted) return { blob: undefined, bytes: 0 };
             const row = await rehydrateRow(await db.thumbnails.get(dbKey));
@@ -1257,7 +1455,10 @@ export const resolveThumbnail = async (
                 }
                 const missAt = row.MissAt ?? 0;
                 const nowMs = Date.now();
-                if (nowMs - missAt < MISS_TTL_MS) {
+                // Per-row freshness: a SOFT miss (first 404, MissCount 1) goes
+                // stale in 30 min and falls through to a refetch; a promoted
+                // HARD miss (>= 2) is authoritative for 7 days.
+                if (nowMs - missAt < missTtlMs(row.MissCount)) {
                     // CONTRADICTION GUARD: a 404 marker for THIS variant while
                     // a SIBLING variant of the same item holds a real blob is
                     // bogus (flaky proxy / load-shed 404 during a bad server
@@ -1302,25 +1503,39 @@ export const resolveThumbnail = async (
             // Sweep / background-generate resolves (`_skipBlobUrl`) are
             // excluded — their entire job is to persist the exact bucket.
             if (wantsDisplayBlob) {
+                // Cache-first paint (user directive: cover → album art →
+                // placeholder). A cover already in Dexie — in ANY variant —
+                // always beats a loading skeleton or an on-demand network
+                // round-trip. `resolveFallbackPick` returns the nearest-LARGER
+                // cached variant and ALREADY records a degraded serve +
+                // schedules regeneration of the exact bucket when its pick is
+                // stale or under-sized, so we serve it UNCONDITIONALLY and the
+                // exact size upgrades silently.
+                //
+                // The previous gate refused a stale-but-cached sibling while
+                // online (only `sufficient && !stale`, or anything offline) and
+                // fell through to a network fetch — so a now-playing cover whose
+                // `table` bucket wasn't swept but whose `itemCard` WAS (served
+                // stale) skeletoned and re-fetched: the "miniplayer album art
+                // doesn't load" report. A stale album cover is still the album
+                // cover; paint it now, refresh in the background.
                 const fallback = await resolveFallbackPick(itemId, resolvedVariant, request);
-                // Online, a pick must be both large enough AND produced under
-                // the live config; offline anything beats a doomed fetch.
-                if (fallback && ((fallback.sufficient && !fallback.stale) || !getIsOnline())) {
+                if (fallback) {
                     recordStat('blobHit');
-                    return { blob: fallback.blob, bytes: 0 };
+                    return fallback.fileUrl
+                        ? { blob: undefined, bytes: 0, fileUrl: fallback.fileUrl }
+                        : { blob: fallback.blob, bytes: 0 };
                 }
-                // `fullScreen` is the largest variant AND is never bulk-swept,
-                // so `resolveFallbackPick` (nearest-LARGER only) finds nothing
-                // and the now-playing cover blocked on a cold server round-trip
-                // through the resolve pipeline — the >10s "fullscreen cover loads
-                // slowly" report. Paint the already-cached itemCard/table cover
-                // INSTANTLY (upscaled) and let scheduleVariantGenerate fetch the
-                // real hi-res bucket in the background, then repaint via the
-                // upgrade event. This is what upstream's bare <img> achieves —
-                // an immediate paint — but served from Dexie.
-                if (resolvedVariant === 'fullScreen' && getIsOnline()) {
-                    const placeholder = await largestCachedSubVariantBlob(itemId);
-                    if (placeholder) {
+                // No nearest-LARGER variant cached. Serve the largest cached
+                // SMALLER sibling (upscaled) — still this item's album art,
+                // still instant — and regenerate the exact bucket in the
+                // background. `fullScreen` (the largest variant, never
+                // bulk-swept → the now-playing hi-res cover) is the canonical
+                // case, but this now applies to EVERY variant, so no surface
+                // skeletons while ANY cover for the item exists.
+                if (getIsOnline()) {
+                    const subVariant = await largestCachedSubVariantPick(itemId);
+                    if (subVariant) {
                         recordDegradedServe(itemId, resolvedVariant, request);
                         imageVariantsInternals.scheduleVariantGenerate(
                             itemId,
@@ -1328,47 +1543,36 @@ export const resolveThumbnail = async (
                             request,
                         );
                         recordStat('blobHit');
-                        return { blob: placeholder, bytes: 0 };
+                        return subVariant.fileUrl
+                            ? { blob: undefined, bytes: 0, fileUrl: subVariant.fileUrl }
+                            : { blob: subVariant.blob, bytes: 0 };
                     }
                 }
-                // Nothing cached and the server is known-unreachable: don't
-                // start a doomed fetch (on a hung LAN host each attempt
-                // burns the full 20s timeout). The caller falls back to the
-                // raw URL and the <img> errors out to the unloader quickly.
-                // (When `fallback` exists here it was insufficient AND we're
-                // online — the first branch handled every offline+fallback
-                // combination.) Recorded as degraded so the bucket fetches
-                // once connectivity returns and the surface repaints.
+                // Genuinely nothing cached for this item in any variant. Offline:
+                // bail without a doomed fetch (a hung LAN host burns the full 20s
+                // timeout per attempt); the surface shows a placeholder and
+                // repaints on reconnect. Recorded degraded so the bucket fetches
+                // when connectivity returns.
                 if (!getIsOnline()) {
                     recordDegradedServe(itemId, resolvedVariant, request);
                     return { blob: undefined, bytes: 0 };
                 }
-                // Fallback-only variant (a render size intentionally NOT
-                // pre-cached — e.g. a disabled header/sidebar served from the
-                // cached itemCard): never fetch it on its own. Serve whatever
-                // nearest-larger/equal cover we have — the larger ENABLED
-                // sibling IS the intended source, so serve it even if it's
-                // technically under-sized (there's no enabled larger bucket to
-                // upgrade to). If nothing is cached yet, record a degraded serve
-                // and bail WITHOUT a network round-trip.
+                // Fallback-only (disabled) variant with nothing cached: never
+                // fetch it on its own — record degraded and bail.
                 if (isFallbackOnlyVariant(resolvedVariant)) {
-                    if (fallback) {
-                        recordStat('blobHit');
-                        return { blob: fallback.blob, bytes: 0 };
-                    }
                     recordDegradedServe(itemId, resolvedVariant, request);
                     return { blob: undefined, bytes: 0 };
                 }
                 // Cache-only display path: an enabled bounded variant with
-                // nothing usable cached. Do NOT fetch the remote on demand —
-                // that's the "covers feel remote-downloaded even when cached"
-                // bug. In a sync-only app the sweep populates every bounded
-                // cover; record a degraded serve so finishUpgrade() repaints
-                // this cell when its row lands, and return no blob → the
+                // nothing cached for this item at all. Do NOT fetch the remote
+                // on demand — that's the "covers feel remote-downloaded even when
+                // cached" bug. In a sync-only app the sweep populates every
+                // bounded cover; record a degraded serve so finishUpgrade()
+                // repaints this cell when its row lands, and return no blob → the
                 // consumer paints a placeholder (PENDING_SYNC_URL), never the
-                // network. `fullScreen` is exempt: the lazy on-demand hi-res
-                // now-playing cover is never bulk-swept, so it keeps fetching
-                // below. Cache disabled → fall through to the legacy fetch.
+                // network. `fullScreen` is exempt (the lazy hi-res now-playing
+                // cover is never bulk-swept, so it keeps fetching below). Cache
+                // disabled → fall through to the legacy fetch.
                 if (isLocalCacheEnabled() && resolvedVariant !== 'fullScreen') {
                     recordDegradedServe(itemId, resolvedVariant, request);
                     return { blob: undefined, bytes: 0 };
@@ -1451,24 +1655,77 @@ export const resolveThumbnail = async (
             markServerReachable();
             if (!res.ok) {
                 if (res.status === 404) {
-                    // Authoritative response — resets the rate-limit 5xx streak.
-                    noteOk();
+                    // A 404 is NOT necessarily authoritative. A load-shedding /
+                    // overloaded Jellyfin SILENTLY 404s covers that exist (zero
+                    // 5xx in its logs); the old code wrote a hard 7-day "no
+                    // artwork" marker on every one (~46k false markers in an
+                    // hour, observed on-device). So a 404 is now a SOFT miss by
+                    // default (short TTL, re-checked next sweep) and only
+                    // PROMOTES to a hard marker on a repeat 404. Deliberately
+                    // NOT noteOk() here — a 404 must not reset the 5xx streak
+                    // that isServerStressed() reads.
+                    const stressed = isServerStressed();
+                    // Sibling-contradiction guard: if another variant of this
+                    // item already holds real bytes the artwork demonstrably
+                    // exists, so this 404 is a lie. Only worth the query when
+                    // the server is stressed — on a healthy server a 404 for a
+                    // genuinely artless item is the common case and stays
+                    // query-free.
+                    const siblingHasBytes =
+                        stressed && db === getActiveCacheDb()
+                            ? await db.thumbnails
+                                  .where('ItemId')
+                                  .equals(itemId)
+                                  .toArray()
+                                  .then((rows) => rows.some((r) => Boolean(r?.Blob || r?.Path)))
+                                  .catch(() => false)
+                            : false;
+                    if (stressed || siblingHasBytes) {
+                        // SUPPRESS: write no marker and report a TRANSIENT
+                        // result so the unit is retried once the server
+                        // recovers. A false 404 under stress must never become
+                        // a week-long placeholder.
+                        console.info('[image-variants] 404 suppressed under server stress', {
+                            itemId,
+                            variant: resolvedVariant,
+                        });
+                        recordStat('failed');
+                        return { blob: undefined, bytes: 0, noArtwork: false };
+                    }
                     if (db === getActiveCacheDb()) {
                         try {
-                            await db.thumbnails.put({
-                                __cachedAt: Date.now(),
-                                Blob: undefined,
-                                ByteSize: 0,
-                                Etag: undefined,
-                                ItemId: itemId,
-                                LastUsed: Date.now(),
-                                MissAt: Date.now(),
-                                Size: targetPx,
-                                Variant: resolvedVariant,
+                            // Promote on repeat: a soft miss (MissCount 1) ages
+                            // out in 30 min (missTtlMs); a second 404 bumps it
+                            // to >= 2 → the full 7-day hold.
+                            //
+                            // Atomic read-modify-write (Change 2): the MissCount
+                            // bump is a get-then-put increment. A concurrent 404
+                            // for the SAME (item, variant) — the sweep and this
+                            // lazy resolve racing each other — could otherwise
+                            // both read MissCount=1 and both write MissCount=2,
+                            // losing the promotion to the 7-day hard marker. One
+                            // rw transaction serializes the increment so a repeat
+                            // 404 always advances the count. Behaviour is
+                            // otherwise identical.
+                            await db.transaction('rw', db.thumbnails, async () => {
+                                const existing = await db.thumbnails.get(dbKey);
+                                const missCount = (existing?.MissCount ?? 0) + 1;
+                                await db.thumbnails.put({
+                                    __cachedAt: Date.now(),
+                                    Blob: undefined,
+                                    ByteSize: 0,
+                                    Etag: undefined,
+                                    ItemId: itemId,
+                                    LastUsed: Date.now(),
+                                    MissAt: Date.now(),
+                                    MissCount: missCount,
+                                    Size: targetPx,
+                                    Variant: resolvedVariant,
+                                });
                             });
                             recordStat('missWrite');
-                            // Authoritatively no artwork — the degraded serve
-                            // is as upgraded as it will ever get.
+                            // Marker written — the degraded serve is as upgraded
+                            // as it will get for now.
                             degradedServes.delete(variantKey(itemId, resolvedVariant));
                         } catch (err) {
                             console.warn('[image-variants] thumbnail miss-write failed', {
@@ -1478,20 +1735,22 @@ export const resolveThumbnail = async (
                             });
                         }
                     }
-                } else {
-                    // 429/503 arm the pool-wide cooldown so the whole sweep
-                    // backs off the overloaded server (Retry-After honored).
-                    if (res.status === 429 || res.status === 503) {
-                        noteRateLimit(res.status, res.headers.get('retry-after'));
-                    }
-                    console.warn('[image-variants] thumbnail HTTP error', {
-                        hasAuthHeader: Boolean(headers?.Authorization),
-                        itemId,
-                        status: res.status,
-                    });
-                    recordStat('failed');
+                    // SOFT/HARD marker now exists — surface the placeholder now;
+                    // the short TTL re-checks a soft miss on the next sweep.
+                    return { blob: undefined, bytes: 0, noArtwork: true };
                 }
-                return { blob: undefined, bytes: 0, noArtwork: res.status === 404 };
+                // Non-404 error. Feed the server-health signal (noteRateLimit
+                // now self-filters: 429/5xx build the streak and may arm the
+                // pool cooldown, everything else no-ops) and retry — the
+                // artwork may well exist.
+                noteRateLimit(res.status, res.headers.get('retry-after'));
+                console.warn('[image-variants] thumbnail HTTP error', {
+                    hasAuthHeader: Boolean(headers?.Authorization),
+                    itemId,
+                    status: res.status,
+                });
+                recordStat('failed');
+                return { blob: undefined, bytes: 0, noArtwork: false };
             }
 
             // Authoritative success — resets the rate-limit 5xx streak.
@@ -1574,11 +1833,35 @@ export const resolveThumbnail = async (
         } finally {
             if (gated) releaseResolveSlot();
             inFlight.delete(dedupKey);
+            if (wantsTiming) {
+                const totalMs = Math.round(performance.now() - tStart);
+                if (totalMs > 1000) {
+                    console.warn('[image-variants] slow display resolve', {
+                        dbWaitMs,
+                        gateWaitMs,
+                        itemId,
+                        totalMs,
+                        variant: resolvedVariant,
+                    });
+                }
+            }
         }
     })();
 
     inFlight.set(dedupKey, task);
     const result = await task;
+
+    // FS fast path: a native file URL (convertFileSrc) renders directly — no
+    // blob, no createObjectURL. `_wantBlob` (the shared-acquire path) stashes
+    // it so acquireThumbnailUrl returns it verbatim; a plain display caller
+    // returns it as the <img> src.
+    if (result.fileUrl && wantsDisplayBlob) {
+        if (options?._wantBlob) {
+            lastResolvedFileUrl.set(dedupKey, result.fileUrl);
+            return url;
+        }
+        return result.fileUrl;
+    }
 
     // On an exact-variant miss for a render path, serve the nearest-larger
     // cached variant (and schedule the exact one in the background) so the
@@ -1586,15 +1869,21 @@ export const resolveThumbnail = async (
     // The sweep / background-generate path (`_skipBlobUrl`) is excluded to
     // avoid pointless fallback work and re-scheduling loops.
     let displayBlob = result.blob;
+    let displayFileUrl: string | undefined;
     if (!displayBlob && wantsDisplayBlob) {
-        displayBlob = await resolveFallbackBlob(itemId, resolvedVariant, request);
+        const fbPick = await resolveFallbackPick(itemId, resolvedVariant, request);
+        if (fbPick) {
+            displayFileUrl = fbPick.fileUrl;
+            displayBlob = fbPick.blob;
+        }
     }
 
     if (options?._wantBlob) {
-        // Hand the Blob off to acquireThumbnailUrl, which mints exactly
-        // one shared object URL. Return the raw URL as a sentinel — the
-        // acquire path keys off the stashed Blob, not this return value.
-        if (displayBlob) lastResolvedBlob.set(dedupKey, displayBlob);
+        // Hand the Blob (or fs file URL) off to acquireThumbnailUrl, which mints
+        // exactly one shared object URL for a blob or returns a file URL as-is.
+        // Return the raw URL as a sentinel — the acquire path keys off the stash.
+        if (displayFileUrl) lastResolvedFileUrl.set(dedupKey, displayFileUrl);
+        else if (displayBlob) lastResolvedBlob.set(dedupKey, displayBlob);
         else if (result.noArtwork) lastResolvedNoArt.add(dedupKey);
         // Not cached yet (sync-only): stash so the acquire path surfaces
         // PENDING_SYNC_URL instead of the raw URL.
@@ -1602,6 +1891,7 @@ export const resolveThumbnail = async (
         return url;
     }
     if (options?._skipBlobUrl) return url;
+    if (displayFileUrl) return displayFileUrl;
     if (displayBlob) return URL.createObjectURL(displayBlob);
     // Authoritative no-artwork (404 / negative cache) with nothing usable
     // cached: tell the consumer NOT to retry the raw URL.
@@ -1682,16 +1972,116 @@ export const clearThumbnailsTable = async (): Promise<void> => {
 // one blob: URL per mount. The hook falls back to the per-call resolver
 // when this isn't registered (e.g. the shared bundle imported outside the
 // renderer), so registration is purely additive.
+// Pick the best IN-MEMORY sibling variant for a cross-variant peek: the
+// smallest cached variant that is at least as large as the requested one
+// (downscales cleanly), or — when nothing larger is held — the largest
+// smaller variant (an upscale, still far better than a blank placeholder).
+// Only considers variants currently live in `sharedObjectUrls`, so the result
+// can be served SYNCHRONOUSLY with no Dexie round-trip. This is what makes the
+// fullScreen now-playing cover (never bulk-swept → always an exact miss) paint
+// instantly from the album's already-in-memory itemCard cover.
+const pickInMemorySiblingVariant = (
+    itemId: string,
+    requestedVariant: string,
+): string | undefined => {
+    const prefix = `${itemId}::`;
+    const cfg = getImageVariantsConfig();
+    const reqPx = effectivePx(cfg.variants[requestedVariant as VariantName]?.px ?? MAX_CACHE_SIZE);
+    let largerName: string | undefined;
+    let largerPx = Number.POSITIVE_INFINITY;
+    let smallerName: string | undefined;
+    let smallerPx = -1;
+    for (const key of sharedObjectUrls.keys()) {
+        if (!key.startsWith(prefix)) continue;
+        const v = key.slice(prefix.length);
+        if (v === requestedVariant) continue;
+        const px = effectivePx(cfg.variants[v as VariantName]?.px ?? 0);
+        if (px >= reqPx) {
+            if (px < largerPx) {
+                largerPx = px;
+                largerName = v;
+            }
+        } else if (px > smallerPx) {
+            smallerPx = px;
+            smallerName = v;
+        }
+    }
+    return largerName ?? smallerName;
+};
+
+/**
+ * Acquiring cross-variant peek. Exact in-memory hit first; otherwise the best
+ * in-memory sibling (see `pickInMemorySiblingVariant`). On a sibling serve it
+ * records a degraded serve AND schedules the exact-variant background generate,
+ * so the surface upgrades to the real size when it lands (and the bucket is
+ * cached for next time — the user's "acquire + write the bigger one" ask).
+ * Returns the served URL plus the variant it was taken under; the consumer
+ * MUST release by THAT variant (a sibling, not necessarily the requested one).
+ */
+export const peekBestSharedThumbnailUrl = (
+    itemId: string,
+    variant: number | string | undefined,
+    request: ImageRequest | string,
+): undefined | { url: string; variant: string } => {
+    const want = normaliseVariant(variant);
+    const exactKey = variantKey(itemId, want);
+    const exact = sharedObjectUrls.get(exactKey);
+    if (exact) {
+        exact.refCount += 1;
+        cancelZeroRefEviction(exactKey);
+        return { url: exact.url, variant: want };
+    }
+    const sibling = pickInMemorySiblingVariant(itemId, want);
+    if (!sibling) return undefined;
+    const sibKey = variantKey(itemId, sibling);
+    const entry = sharedObjectUrls.get(sibKey);
+    if (!entry) return undefined;
+    entry.refCount += 1;
+    cancelZeroRefEviction(sibKey);
+    // A cross-variant serve is degraded: remember it and generate the exact
+    // bucket so the surface upgrades AND the bucket is cached for next time.
+    recordDegradedServe(itemId, want, request);
+    if (getIsOnline()) {
+        imageVariantsInternals.scheduleVariantGenerate(itemId, want, request);
+    }
+    return { url: entry.url, variant: sibling };
+};
+
+/**
+ * Non-acquiring twin of `peekBestSharedThumbnailUrl` for the synchronous
+ * render-time initial paint: returns the URL the acquiring peek WOULD serve,
+ * without touching refcounts or scheduling work. The resolve effect then
+ * acquires the proper reference. Undefined when nothing is in memory.
+ */
+export const probeBestSharedThumbnailUrl = (
+    itemId: string,
+    variant?: number | string,
+): undefined | { url: string; variant: string } => {
+    const want = normaliseVariant(variant);
+    const exact = sharedObjectUrls.get(variantKey(itemId, want));
+    if (exact) return { url: exact.url, variant: want };
+    const sibling = pickInMemorySiblingVariant(itemId, want);
+    if (!sibling) return undefined;
+    const entry = sharedObjectUrls.get(variantKey(itemId, sibling));
+    if (!entry) return undefined;
+    return { url: entry.url, variant: sibling };
+};
+
 // The probe is the non-acquiring membership check used by `<BaseImage>` to
 // skip its debounce/viewport gating when the cover would paint synchronously.
-const hasThumbnailUrl = (itemId: string, variant?: number | string): boolean =>
-    sharedObjectUrls.has(variantKey(itemId, normaliseVariant(variant)));
+// Cross-variant aware: an in-memory sibling makes the cover peekable too.
+const hasThumbnailUrl = (itemId: string, variant?: number | string): boolean => {
+    const want = normaliseVariant(variant);
+    if (sharedObjectUrls.has(variantKey(itemId, want))) return true;
+    return pickInMemorySiblingVariant(itemId, want) !== undefined;
+};
 
 registerThumbnailUrlCache(
     acquireThumbnailUrl,
     releaseThumbnailUrl,
-    peekThumbnailUrl,
+    peekBestSharedThumbnailUrl,
     hasThumbnailUrl,
+    probeBestSharedThumbnailUrl,
 );
 
 // Degraded-serve probe: lets `useNativeImage` arm its upgrade re-resolve

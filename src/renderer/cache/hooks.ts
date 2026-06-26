@@ -10,6 +10,7 @@ import { readSnapshot, writeSnapshot } from './snapshot';
 import { useCacheStore } from './store';
 import { consumeRevalidateThrottle, shouldRevalidateFromNetwork } from './sync-first';
 
+import { perfLog, perfNow, perfQueryKey } from '/@/renderer/lib/perf-log';
 import { queryClient } from '/@/renderer/lib/react-query';
 
 const activeDb = (): LibraryCacheDb | undefined =>
@@ -192,6 +193,14 @@ export const cachedSwr = async <TData>(args: {
     remote: (ctx: QueryFunctionContext) => Promise<TData>;
 }): Promise<TData> => {
     const { apply, ctx, fromCache, queryKey, remote } = args;
+    // Perf: time the cache-vs-network breakdown per query. `path` distinguishes
+    // a fast cache hit from a cold network read (and which fallback fired), so
+    // a slow surface's logs show WHERE the time went. Pairs with the global
+    // `[perf] query` total in react-query.ts.
+    const __perfT0 = perfNow();
+    const __perfKey = perfQueryKey(queryKey);
+    const __perfLog = (path: string, extra?: Record<string, unknown>): void =>
+        perfLog('cache', { key: __perfKey, ms: Math.round(perfNow() - __perfT0), path, ...extra });
     const db = fromCache ? await waitForActiveDb() : activeDb();
 
     // Lock-starvation guard (perf fix #2). If a concurrent IndexedDB write
@@ -238,6 +247,7 @@ export const cachedSwr = async <TData>(args: {
                         '[cache] fromCache timed out (cold key) — falling back to network',
                         queryKey,
                     );
+                    __perfLog('fromcache-timeout');
                 } else if (result !== undefined) {
                     cached = result as TData;
                     writeSnapshot(queryKey, cached);
@@ -329,6 +339,7 @@ export const cachedSwr = async <TData>(args: {
         const fresh = await Promise.race([remotePromise, timeoutPromise]);
         if (timedOut) {
             console.info('[cache] cold network timed out', queryKey);
+            __perfLog('cold-timeout');
             // LATE ADOPTION: the slow response still lands when it arrives —
             // persisted to Dexie + snapshot and pushed into the query cache
             // so the surface fills in instead of settling on empty forever.
@@ -360,6 +371,7 @@ export const cachedSwr = async <TData>(args: {
             }
         }
         writeSnapshot(queryKey, fresh);
+        __perfLog('cold-network');
         return fresh;
     } catch (err) {
         // Resilience: if we have a cached snapshot for this key, serve it on ANY
@@ -373,12 +385,14 @@ export const cachedSwr = async <TData>(args: {
             console.info('[cache] cold fetch errored; serving cached snapshot', queryKey, {
                 error: (err as Error)?.message,
             });
+            __perfLog('cold-error-snapshot');
             return snap;
         }
         if (isLikelyNetworkError(err)) {
             console.info('[cache] cold network failed', queryKey, {
                 error: (err as Error)?.message,
             });
+            __perfLog('cold-network-fail');
             return null as unknown as TData;
         }
         throw err;

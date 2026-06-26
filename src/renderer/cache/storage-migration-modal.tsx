@@ -102,31 +102,41 @@ export const StorageMigrationModal = ({
         await finalize();
     }, [finalize, targetVolumeId]);
 
-    const title =
-        mode === 'first-start'
-            ? t('page.setting.storageLocation.firstStartTitle', {
-                  defaultValue: 'Move your downloads to the new storage system',
-              })
-            : t('page.setting.storageLocation.moveTitle', {
-                  defaultValue: 'Move your downloads?',
-              });
+    // First-start is a one-time BLOCKING upgrade (like the first-sync gate):
+    // there's no "stay as you are" — the cover-art bytes must come off
+    // IndexedDB for covers to render instantly. The user picks Migrate (keep
+    // everything) or Start fresh (re-download); the dialog can't be dismissed.
+    const blocking = mode === 'first-start';
+    const title = blocking
+        ? t('page.setting.storageLocation.firstStartTitle', {
+              defaultValue: 'Optimize local storage for instant cover art',
+          })
+        : t('page.setting.storageLocation.moveTitle', {
+              defaultValue: 'Move your downloads?',
+          });
 
-    const body =
-        mode === 'first-start'
-            ? t('page.setting.storageLocation.firstStartBody', {
-                  defaultValue:
-                      'Your offline downloads need to move to the new storage system. Migrate them now, or start fresh and re-download.',
-              })
-            : t('page.setting.storageLocation.moveBody', {
-                  count: displayItems,
-                  defaultValue:
-                      'Move {{count}} items ({{size}}) to {{volume}}, or start fresh there?',
-                  size: formatBytes(displayBytes),
-                  volume: targetVolumeLabel,
-              });
+    const body = blocking
+        ? t('page.setting.storageLocation.firstStartBody', {
+              defaultValue:
+                  'Your cached cover art and downloads will move to a faster on-device storage format. Album art then loads instantly instead of stalling when the app opens. This runs once and keeps all your data.',
+          })
+        : t('page.setting.storageLocation.moveBody', {
+              count: displayItems,
+              defaultValue: 'Move {{count}} items ({{size}}) to {{volume}}, or start fresh there?',
+              size: formatBytes(displayBytes),
+              volume: targetVolumeLabel,
+          });
 
     return (
-        <Modal centered onClose={busy ? () => {} : onClose} opened={opened} title={title}>
+        <Modal
+            centered
+            closeOnClickOutside={!blocking}
+            closeOnEscape={!blocking}
+            onClose={busy || blocking ? () => {} : onClose}
+            opened={opened}
+            title={title}
+            withCloseButton={!blocking}
+        >
             <Stack gap="md">
                 <Text size="sm">{body}</Text>
 
@@ -150,9 +160,11 @@ export const StorageMigrationModal = ({
                 )}
 
                 <Group justify="flex-end">
-                    <Button disabled={Boolean(busy)} onClick={onClose} variant="default">
-                        {t('common.cancel', { defaultValue: 'Cancel' })}
-                    </Button>
+                    {!blocking && (
+                        <Button disabled={Boolean(busy)} onClick={onClose} variant="default">
+                            {t('common.cancel', { defaultValue: 'Cancel' })}
+                        </Button>
+                    )}
                     <Button
                         color="red"
                         disabled={Boolean(busy)}

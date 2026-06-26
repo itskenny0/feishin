@@ -42,6 +42,18 @@ export interface BackoffConfig {
 export interface BackoffController {
     /** Current effective concurrency cap. */
     cap: number;
+    /**
+     * Force an immediate halving of the cap (the SAME math as the latency
+     * overload branch) WITHOUT a latency sample. Used by the 404-storm
+     * load-shed throttle: a silently load-shedding server returns INSTANT
+     * 404s, so the latency-driven overload path never fires (the samples look
+     * "fast"), yet the pool must still shrink so the post-cooldown resume is
+     * gentle enough that the slow server serves 200s instead of re-shedding.
+     * Honors the configured floor and resets the recovery streak exactly like a
+     * latency back-off, so the normal recovery/time-ramp path climbs it back up
+     * once the server starts serving real covers again.
+     */
+    forceBackoff: (nowMs: number) => void;
     /** Rolling latency average over the current window (0 until the window fills). */
     recentAvgMs: () => number;
     /**
@@ -71,6 +83,19 @@ export const createBackoffController = (cfg: BackoffConfig): BackoffController =
     let lastWasTransient = false;
     const ctrl: BackoffController = {
         cap: cfg.ceiling,
+        forceBackoff(nowMs) {
+            // Identical to the overload branch in record() below — halve toward
+            // the floor, clear the recovery streak, and drop the latency window
+            // — but driven by an external signal (the 404-storm detector)
+            // rather than a measured rolling average. Stamp both timestamps so
+            // the time-ramp measures its interval from this action and the
+            // halving rate-limit applies as usual.
+            lastBackoffAt = nowMs;
+            lastActionAt = nowMs;
+            ctrl.cap = Math.max(cfg.floor, Math.floor(ctrl.cap / 2));
+            consecutiveFast = 0;
+            latency.length = 0;
+        },
         recentAvgMs() {
             if (latency.length === 0) return 0;
             return Math.round(latency.reduce((a, b) => a + b, 0) / latency.length);

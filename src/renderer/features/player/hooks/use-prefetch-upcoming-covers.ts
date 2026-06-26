@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 
-import { resolveThumbnail } from '/@/renderer/cache';
+import { preloadThumbnailUrls, resolveThumbnail } from '/@/renderer/cache';
 import { getItemImageRequest } from '/@/renderer/components/item-image/item-image';
 import { waitForPlaybackFlowing } from '/@/renderer/features/trackmap/analysis/defer-until-playing';
 import { getIsOnline } from '/@/renderer/lib/network-status';
@@ -42,6 +42,30 @@ export const usePrefetchUpcomingCovers = (): void => {
             if (index < 0 || index >= items.length) return;
             const current = items[index];
             const upcoming = items.slice(index + 1, index + 1 + PREFETCH_COUNT);
+
+            // Prime the CURRENT (+ upcoming) covers into the IN-MEMORY shared
+            // URL cache IMMEDIATELY — before the playback-flowing wait — keyed
+            // by albumId, the SAME key the fullscreen player art resolves
+            // against. This is what lets the fullscreen cover paint
+            // synchronously on its first render via the cross-variant peek
+            // (instead of an async Dexie hop + crossfade adoption): itemCard is
+            // always swept, and fullScreen lands here once it's been prefetched
+            // below, so the seed serves the best variant already in memory.
+            // Zero-ref + grace-windowed, so this can't pin blob memory.
+            const memIds = [current, ...upcoming]
+                .map((song) => song?.albumId ?? song?.imageId)
+                .filter((id): id is string => Boolean(id));
+            if (memIds.length > 0) {
+                // `table` (the player-bar / miniplayer cover), `itemCard` (the
+                // fullscreen cross-variant seed + cards), and `fullScreen` (the
+                // hi-res now-playing art). Priming all three keyed by albumId
+                // means every now-playing cover surface peeks a hit instead of
+                // racing an async resolve at play-start.
+                void preloadThumbnailUrls(memIds, 'table');
+                void preloadThumbnailUrls(memIds, 'itemCard');
+                void preloadThumbnailUrls(memIds, FULL_SCREEN_VARIANT);
+            }
+
             if (upcoming.length === 0) return;
 
             inflightWait?.abort();
