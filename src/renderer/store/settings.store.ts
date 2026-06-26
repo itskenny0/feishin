@@ -1183,6 +1183,13 @@ const PeerSyncSettingsSchema = z.object({
     peerId: z.string().default(''),
     /** Shared room key — auto-generated on first opt-in. */
     roomKey: z.string().default(''),
+    /** Optional user-set room override. When non-empty it REPLACES the room
+     *  identity for the MQTT lane — the topic namespace (normally the Jellyfin
+     *  user id) AND the broker auth password (normally the username) both use
+     *  this value, so devices set to the SAME override share a room even across
+     *  different Jellyfin accounts or servers. Empty = default to the signed-in
+     *  account's identity. */
+    roomKeyOverride: z.string().default(''),
     /** MQTT transport selection. 'auto' (default) uses WebSocket on
      *  web/Electron and upgrades to raw TCP on Android when the broker URL
      *  carries an mqtt://(s) scheme; 'ws' forces WebSocket; 'tcp' forces raw
@@ -2583,6 +2590,7 @@ const initialState: SettingsState = {
         onboarded: false,
         peerId: '',
         roomKey: '',
+        roomKeyOverride: '',
         transport: 'auto',
         ui: {
             connectButton: true,

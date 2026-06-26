@@ -73,6 +73,7 @@ const seedPeerSync = (over: Record<string, unknown> = {}) => {
             onboarded: true,
             peerId: 'peer-xyz',
             roomKey: 'stale-random-key',
+            roomKeyOverride: '',
             transport: 'auto',
             ui: {
                 connectButton: true,
@@ -102,6 +103,27 @@ describe('usePeerSync roomKey contract', () => {
         // It must NOT use the stale persisted random key.
         expect(args.roomKey).not.toBe('stale-random-key');
         expect(args.peerId).toBe('peer-xyz');
+    });
+
+    it('a roomKeyOverride REPLACES both the namespace (userId) and the auth (roomKey)', () => {
+        seedServer('carol');
+        seedPeerSync({ roomKeyOverride: 'family-room' });
+        render(<PeerSyncHook />);
+        expect(startPeerClient).toHaveBeenCalledTimes(1);
+        const args = startPeerClient.mock.calls[0][0] as { roomKey: string; userId: string };
+        // Both the topic namespace and the broker auth use the override, so
+        // devices set to the same key share a room across different accounts.
+        expect(args.roomKey).toBe('family-room');
+        expect(args.userId).toBe('family-room');
+    });
+
+    it('ignores a blank/whitespace roomKeyOverride (falls back to the account)', () => {
+        seedServer('carol');
+        seedPeerSync({ roomKeyOverride: '   ' });
+        render(<PeerSyncHook />);
+        const args = startPeerClient.mock.calls[0][0] as { roomKey: string; userId: string };
+        expect(args.roomKey).toBe('carol');
+        expect(args.userId).toBe('user-1');
     });
 
     it('does not boot the client when no username is present', () => {

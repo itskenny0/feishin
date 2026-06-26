@@ -69,6 +69,7 @@ const resetPeerSync = () => {
             onboarded: false,
             peerId: '',
             roomKey: '',
+            roomKeyOverride: '',
             transport: 'auto',
             ui: {
                 connectButton: true,

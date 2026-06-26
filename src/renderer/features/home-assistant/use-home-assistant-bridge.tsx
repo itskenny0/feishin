@@ -19,8 +19,13 @@ export const useHomeAssistantBridge = (): void => {
     const enabled = peerSync.homeAssistant?.enabled === true;
     const deviceName = peerSync.homeAssistant?.deviceName ?? '';
     const brokerUrl = peerSync.brokerUrl?.trim() ?? '';
-    const { brokerPassword, brokerUsername, peerId, roomKey, transport } = peerSync;
-    const userId = server?.userId ?? '';
+    const { brokerPassword, brokerUsername, peerId, transport } = peerSync;
+    // A peerSync.roomKeyOverride (when set) REPLACES the room identity — mirror
+    // the peer-sync hook so the HA bridge joins the SAME overridden room
+    // (namespace + broker auth) instead of the signed-in account's default.
+    const roomKeyOverride = peerSync.roomKeyOverride?.trim() || '';
+    const roomKey = roomKeyOverride || peerSync.roomKey;
+    const userId = roomKeyOverride || (server?.userId ?? '');
 
     useEffect(() => {
         if (!enabled || !brokerUrl || !userId) {

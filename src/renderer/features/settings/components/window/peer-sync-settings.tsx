@@ -7,9 +7,9 @@
  *  - Advanced collapsible exposes broker URL, transport, broker
  *    username/password, embedded broker on/off (desktop only), embedded
  *    host/port, and TLS cert paths. Hidden until the master is on.
- *  - The room (broker auth) is the Jellyfin username, shown read-only — not
- *    user-editable — so a user's own devices auto-authenticate to each
- *    other's broker.
+ *  - The room defaults to the Jellyfin username (so a user's own devices
+ *    auto-authenticate to each other's broker), but an optional override field
+ *    lets devices share a custom room across different accounts/servers.
  *  - A non-private broker URL triggers an undismissable Alert warning that
  *    public brokers can see playback state and commands.
  *  - peerId is auto-generated on first opt-in if missing.
@@ -75,10 +75,12 @@ export const PeerSyncSettings = memo(() => {
     const { setSettings } = useSettingsStoreActions();
     const [advancedOpen, advancedHandlers] = useDisclosure(false);
 
-    // The room key is the Jellyfin username (shared automatically across the
-    // same account's devices). It is the broker auth password the embedded
-    // broker must be started with so the live client can authenticate.
-    const roomKey = currentServer?.username ?? '';
+    // The effective room key: the user-set override when present, else the
+    // Jellyfin username (shared automatically across the same account's
+    // devices). It is the broker auth password the embedded broker is started
+    // with so the live client can authenticate.
+    const serverUsername = currentServer?.username ?? '';
+    const roomKey = settings.roomKeyOverride?.trim() || serverUsername;
 
     // Mirror controlled inputs locally so typing in the URL field doesn't
     // round-trip through the persisted store on every keystroke (and so
@@ -89,6 +91,8 @@ export const PeerSyncSettings = memo(() => {
     useEffect(() => setBrokerUrlDraft(settings.brokerUrl), [settings.brokerUrl]);
     useEffect(() => setBrokerUsernameDraft(settings.brokerUsername), [settings.brokerUsername]);
     useEffect(() => setBrokerPasswordDraft(settings.brokerPassword), [settings.brokerPassword]);
+    const [roomKeyOverrideDraft, setRoomKeyOverrideDraft] = useState(settings.roomKeyOverride);
+    useEffect(() => setRoomKeyOverrideDraft(settings.roomKeyOverride), [settings.roomKeyOverride]);
 
     const isPublicBroker = useMemo(() => isPublicBrokerUrl(brokerUrlDraft), [brokerUrlDraft]);
 
@@ -434,20 +438,35 @@ export const PeerSyncSettings = memo(() => {
                 : []),
             {
                 control: (
-                    <Text isNoSelect size="sm">
-                        {roomKey ||
-                            t('setting.peerSyncRoomKey', {
-                                context: 'empty',
-                                defaultValue: 'Sign in to a Jellyfin server',
-                            })}
-                    </Text>
+                    <TextInput
+                        autoComplete="off"
+                        onBlur={(e) => {
+                            const next = e.currentTarget.value.trim();
+                            if (next === settings.roomKeyOverride) return;
+                            setSettings({ peerSync: { roomKeyOverride: next } });
+                        }}
+                        onChange={(e) => setRoomKeyOverrideDraft(e.currentTarget.value)}
+                        placeholder={
+                            serverUsername
+                                ? t('setting.peerSyncRoomKey', {
+                                      context: 'placeholder',
+                                      defaultValue: 'Default: {{username}}',
+                                      username: serverUsername,
+                                  })
+                                : t('setting.peerSyncRoomKey', {
+                                      context: 'empty',
+                                      defaultValue: 'Sign in to a Jellyfin server',
+                                  })
+                        }
+                        value={roomKeyOverrideDraft}
+                    />
                 ),
                 description: t('setting.peerSyncRoomKey', {
                     context: 'description',
                     defaultValue:
-                        'Your Jellyfin username. Every device you sign into on this server shares this room automatically — there is nothing to copy or configure.',
+                        'The room your devices share. Defaults to your Jellyfin username, so your own devices pair automatically. Set a custom value — identical on every device — to share a room across different Jellyfin accounts or servers. Leave blank to use the default.',
                 }),
-                title: t('setting.peerSyncRoomKey', { defaultValue: 'Room' }),
+                title: t('setting.peerSyncRoomKey', { defaultValue: 'Room key' }),
             },
         ],
         [
@@ -455,7 +474,8 @@ export const PeerSyncSettings = memo(() => {
             brokerUrlDraft,
             brokerUsernameDraft,
             handleBrokerToggle,
-            roomKey,
+            roomKeyOverrideDraft,
+            serverUsername,
             settings.broker.enabled,
             settings.broker.host,
             settings.broker.port,
@@ -464,6 +484,7 @@ export const PeerSyncSettings = memo(() => {
             settings.brokerPassword,
             settings.brokerUrl,
             settings.brokerUsername,
+            settings.roomKeyOverride,
             settings.transport,
             setSettings,
             t,

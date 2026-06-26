@@ -145,11 +145,21 @@ export const usePeerSync = () => {
         // shares the vendor-mqtt chunk this hook already pulled in.
         void warmMqttPublish().catch(() => {});
         const tls = effectiveBrokerUrl.startsWith('wss://');
+        // A non-empty roomKeyOverride REPLACES the room identity for the MQTT
+        // lane: the topic namespace (normally the Jellyfin user id) AND the
+        // broker auth password (normally the username) both become the override,
+        // so devices set to the SAME override share a room even across different
+        // Jellyfin accounts/servers. Empty = the signed-in account's identity,
+        // which lets a user's own devices auto-pair with nothing to configure.
+        const roomKeyOverride = peerSync.roomKeyOverride?.trim();
+        const effectiveUserId = roomKeyOverride || serverUserId;
+        const effectiveRoomKey = roomKeyOverride || serverUsername;
         log('booting client', {
             brokerUrl: effectiveBrokerUrl,
             embedded: !peerSync.brokerUrl && Boolean(embeddedBrokerUrl),
             peerId: peerSync.peerId,
-            userId: serverUserId,
+            roomOverride: Boolean(roomKeyOverride),
+            userId: effectiveUserId,
         });
         // Pending pings keyed by id: timestamp captured at publish so the
         // matching pong can compute round-trip in ms. Cleared on stop.
@@ -171,7 +181,7 @@ export const usePeerSync = () => {
             prevTransport.set(peerId, kind);
             if (prev !== undefined) recordTransportFlip(peerId, prev, kind);
         });
-        const userIdForPings = serverUserId;
+        const userIdForPings = effectiveUserId;
 
         startPeerClient(
             {
@@ -180,16 +190,15 @@ export const usePeerSync = () => {
                 brokerUsername: peerSync.brokerUsername,
                 jellyfinDeviceId,
                 peerId: peerSync.peerId,
-                // The room key (== broker auth password against the embedded
-                // broker) is deterministically the Jellyfin username. A random
-                // per-install key would stop a user's own devices from
-                // authenticating to each other's broker; deriving it from the
-                // username means every device the same account signs into
-                // shares the room automatically.
-                roomKey: serverUsername,
+                // Room key (== broker auth password against the embedded broker)
+                // defaults to the Jellyfin username and the namespace to the
+                // Jellyfin user id, so a user's own devices auto-pair. A
+                // non-empty roomKeyOverride replaces BOTH (see effectiveUserId /
+                // effectiveRoomKey above) so a custom room can span accounts.
+                roomKey: effectiveRoomKey,
                 tls,
                 transport: peerSync.transport,
-                userId: serverUserId,
+                userId: effectiveUserId,
             },
             {
                 onCommand: (from, cmd) => {
@@ -304,6 +313,7 @@ export const usePeerSync = () => {
         peerSync.jellyfinRemoteEnabled,
         peerSync.onboarded,
         peerSync.peerId,
+        peerSync.roomKeyOverride,
         peerSync.transport,
     ]);
 
