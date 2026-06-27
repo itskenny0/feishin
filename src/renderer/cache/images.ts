@@ -1207,10 +1207,33 @@ export const resolveThumbnail = async (
     // enabled (otherwise the DB never opens and every cover would stall the
     // full timeout). Sweep callers (`_skipBlobUrl`) only run once the
     // lifecycle is up, so they keep the synchronous check.
-    const db =
+    let db =
         options?._skipBlobUrl || !isLocalCacheEnabled()
             ? getActiveCacheDb()
             : await awaitActiveCacheDb();
+    // Cold-boot DB race, SECOND CHANCE. The bounded wait above (default 2s) can
+    // still LOSE the race on a heavy cold boot: the lifecycle opens the active
+    // DB in a post-mount effect, queued behind first-launch schema migrations
+    // and the blocking first-sync gate, so the very first wave of home covers
+    // can fire their resolve, time the wait out, and see no DB. Falling straight
+    // to `return url` below makes `useNativeImage` settle on the `notcached`
+    // placeholder (the cloud icon) — and because an ALREADY-cached cover
+    // triggers NO sweep write, no `feishin:thumbnail-upgraded` event ever fires
+    // to re-resolve it, so the cover stays blank until a scroll/re-render forces
+    // a fresh resolve. So before giving up, wait ONCE MORE for the DB to
+    // activate and redo the lookup against it. `awaitActiveCacheDb` returns
+    // INSTANTLY when the DB is already active — zero added latency in the
+    // common (warm) case, where the first wait already returned it and this
+    // branch is skipped — and only blocks during the brief cold-boot window. It
+    // times out gracefully, so a genuinely disabled or broken cache still falls
+    // through to the miss / placeholder path rather than hanging. A real miss on
+    // a now-ready DB still returns PENDING_SYNC_URL further down: this rescues
+    // ONLY the "DB wasn't open yet" case, never a true miss. Re-checks
+    // `isLocalCacheEnabled()` so an install where the settings slice only
+    // reported enabled AFTER the first resolve still gets its wait.
+    if (!db && !options?._skipBlobUrl && isLocalCacheEnabled()) {
+        db = await awaitActiveCacheDb();
+    }
     const dbWaitMs = wantsTiming ? Math.round(performance.now() - tStart) : 0;
     if (!db) return url;
 
