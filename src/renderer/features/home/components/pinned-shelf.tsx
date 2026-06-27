@@ -142,6 +142,12 @@ const PinnedTile = memo(({ pin }: { pin: Pin }) => {
                 className={`${qpStyles.tileImage} ${isRoundType(pin.itemType) ? styles.roundImage : ''}`}
             >
                 <ItemImage
+                    // Eager-load: pins are a small, always-above-the-fold set,
+                    // and on a cold mount the viewport observer doesn't fire for
+                    // them (so the cover's resolve never runs and the tile stays
+                    // blank until a scroll). They're cheap cache reads — skip the
+                    // viewport gate so they paint on first render.
+                    enableViewport={false}
                     id={pin.imageId}
                     itemType={pin.itemType}
                     src={pin.imageUrl ?? undefined}
