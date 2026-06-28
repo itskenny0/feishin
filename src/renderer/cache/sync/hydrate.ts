@@ -235,6 +235,22 @@ export const hydrate = async (server: ServerListItem, kind: 'full' | 'lazy'): Pr
             console.warn('[cache] hydrate: aborted between steps', { after: 'thumbnails' });
             return;
         }
+        // The first-sync gate now WAITS on thumbnails (gate-state GATE_ENTITIES),
+        // so mark the cover pass `full` once it completes — mirrors how each
+        // metadata sweep persists its own state. Reached only on a clean finish
+        // (an abort returns above), so an interrupted sweep leaves thumbnails
+        // un-`full` and the gate retries. Persisted to syncMeta so a later boot's
+        // gate seed knows the artwork pass already finished.
+        await db.syncMeta.put({
+            EntityType: 'thumbnails',
+            hydrationState: 'full',
+            lastFullSyncAt: Date.now(),
+            lastSweepAt: Date.now(),
+            nextStartIndex: 0,
+            pausedUntil: undefined,
+            totalCount: undefined,
+        });
+        actions.setHydrationState('thumbnails', 'full');
     } catch (err) {
         if ((err as Error).name === 'AbortError') {
             console.warn('[cache] hydrate: aborted', { serverId: server.id });

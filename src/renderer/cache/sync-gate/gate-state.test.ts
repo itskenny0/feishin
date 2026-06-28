@@ -122,6 +122,16 @@ describe('computeGateState', () => {
         expect(v).toMatchObject({ reason: 'live-complete' });
     });
 
+    it('keeps blocking until thumbnails (the cover sweep) reach full', () => {
+        // Every metadata entity is full but the cover sweep hasn't finished —
+        // the gate must stay up so the app opens with all covers cached.
+        const metaFull = { ...fullStates };
+        delete (metaFull as Record<string, unknown>).thumbnails;
+        expect(computeGateState(base({ hydrationStates: metaFull })).show).toBe('dashboard');
+        // Once the cover sweep completes too, it releases.
+        expect(computeGateState(base({ hydrationStates: fullStates })).show).toBe('app');
+    });
+
     it('respects a persisted completion flag even if a live entity regresses', () => {
         const v = computeGateState(
             base({

@@ -5,14 +5,19 @@
 //
 // The gate blocks the whole authenticated app behind the SyncDashboard until
 // the first full sync completes. "Complete" = every ENABLED library entity has
-// reached hydrationState `full`. Thumbnails are intentionally NOT required:
-// they're opt-in (driven by `thumbnailSizes`) and a huge cover sweep must not
-// keep the app hostage — covers fill in lazily after release.
+// reached hydrationState `full` — INCLUDING thumbnails, so the app opens fully
+// offline-ready with every cover already cached (no blank artwork on first
+// open). The cover sweep is the longest phase on a large library; that's an
+// accepted trade-off for a cover-complete first launch (the dashboard shows its
+// live progress + ETA, and the gate only blocks the FIRST sync — later launches
+// release immediately off the persisted completion flag).
 
 import type { HydrationState } from '../types';
 
 // The library entities the gate cares about. Order mirrors the dashboard /
-// hydrate() sweep order. Thumbnails are excluded by design (see header).
+// hydrate() sweep order; `thumbnails` runs LAST (the cover sweep, after every
+// metadata table is written), so the gate only releases once every cover size
+// is cached.
 export const GATE_ENTITIES = [
     'artists',
     'genres',
@@ -21,6 +26,7 @@ export const GATE_ENTITIES = [
     'lyrics',
     'playlists',
     'favorites',
+    'thumbnails',
 ] as const;
 
 export type GateEntity = (typeof GATE_ENTITIES)[number];

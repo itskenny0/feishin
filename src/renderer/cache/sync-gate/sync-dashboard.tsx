@@ -26,6 +26,7 @@ const ENTITY_LABEL_KEYS: Record<GateEntity, string> = {
     lyrics: 'page.setting.librarySyncDashboard.entityLyrics',
     playlists: 'page.setting.librarySyncDashboard.entityPlaylists',
     songs: 'page.setting.librarySyncDashboard.entitySongs',
+    thumbnails: 'page.setting.librarySyncDashboard.entityThumbnails',
 };
 
 interface SyncDashboardProps {
