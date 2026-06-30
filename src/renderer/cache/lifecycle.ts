@@ -11,10 +11,12 @@ import {
     getActiveCacheDb,
     getLastOpenError,
     type LibraryCacheDb,
+    resetCacheDb,
     setActiveCacheDb,
 } from './db';
 import { estimateBytes, evict } from './eviction';
 import { resolveThumbnail } from './images';
+import { runIntegrityCheck } from './integrity';
 import { startWorker } from './mutations';
 import { refreshOfflineAvailability, refreshOfflineStats } from './offline-media';
 import { resetSearchIndexes } from './search';
@@ -30,6 +32,12 @@ import { toast } from '/@/shared/components/toast/toast';
 // Per-session de-dup so the "Cache unavailable" toast fires once per
 // (serverId, userId) rather than re-firing on every effect re-run.
 let lastToastedErrorKey: string | undefined;
+
+// Auto-reset a hard-broken DB at most once per (serverId, userId) per session so
+// a failed schema upgrade self-heals instead of stranding the user on the manual
+// "go reset in Settings" toast. A second failure for the same key falls through
+// to the toast, so we never loop.
+const autoResetAttempted = new Set<string>();
 
 // Bridge the renderer-only thumbnail cache into the shared `useNativeImage`
 // hook. Registered eagerly at module load so even the first `<ItemImage>`
@@ -261,19 +269,45 @@ export const useCacheLifecycle = (): void => {
         let cancelled = false;
         console.info('[cache] lifecycle: opening db', { serverId, userId });
         setActiveCacheDb(serverId, userId)
-            .then((db) => {
+            .then(async (db) => {
                 if (cancelled) return;
                 if (!db) {
                     console.warn('[cache] lifecycle: db unavailable for', { serverId, userId });
                     actions.setActiveServer(undefined);
-                    // If the open failed because a schema upgrade or
-                    // IndexedDB-level fault tripped, surface it to the
-                    // user immediately rather than waiting for them to
-                    // wander into Settings. The dashboard still renders
-                    // the recovery Alert when reached.
+                    // If the open failed because a schema upgrade or IndexedDB-
+                    // level fault tripped, try to self-heal ONCE: wipe the broken
+                    // DB and re-open clean (the SyncGate then re-blocks and re-
+                    // syncs). Only if that fails too do we fall back to the manual
+                    // "go reset in Settings" toast.
                     const openErr = getLastOpenError();
-                    if (openErr && lastToastedErrorKey !== `${serverId}:${userId}`) {
-                        lastToastedErrorKey = `${serverId}:${userId}`;
+                    const key = `${serverId}:${userId}`;
+                    if (openErr && !autoResetAttempted.has(key)) {
+                        autoResetAttempted.add(key);
+                        console.warn('[integrity] open failed; auto-resetting once', { serverId });
+                        try {
+                            useSettingsStore.getState().actions.clearFirstSyncComplete(serverId);
+                            await resetCacheDb(serverId, userId);
+                            const fresh = await setActiveCacheDb(serverId, userId);
+                            if (!fresh) throw new Error('reopen after auto-reset failed');
+                            if (cancelled) return;
+                            console.info('[integrity] auto-reset reopened clean DB', { serverId });
+                            actions.setActiveServer({ serverId, userId });
+                        } catch (err) {
+                            console.warn('[integrity] auto-reset failed; manual toast', err);
+                            if (lastToastedErrorKey !== key) {
+                                lastToastedErrorKey = key;
+                                toast.error({
+                                    autoClose: 8000,
+                                    message:
+                                        'Local cache database is corrupted. Go to Settings → Library sync to reset it.',
+                                    title: 'Cache unavailable',
+                                });
+                            }
+                        }
+                        return;
+                    }
+                    if (openErr && lastToastedErrorKey !== key) {
+                        lastToastedErrorKey = key;
                         toast.error({
                             autoClose: 8000,
                             message:
@@ -284,6 +318,22 @@ export const useCacheLifecycle = (): void => {
                     return;
                 }
                 console.info('[cache] lifecycle: db ready', { serverId, userId });
+                // Integrity verification: detect cross-store drift / stale
+                // syncMeta and heal (background re-sync) or hard-reset (re-gate)
+                // BEFORE seeding counts. On a reset the runner wipes + re-opens
+                // the DB and clears the first-sync flag, so the SyncGate re-blocks
+                // and re-syncs — skip the rest of this activation (the old `db`
+                // handle is now closed; the fresh sync repopulates).
+                try {
+                    const verdict = await runIntegrityCheck(db, currentServer);
+                    if (cancelled) return;
+                    if (verdict.action === 'reset') {
+                        console.info('[cache] lifecycle: integrity reset complete', { serverId });
+                        return;
+                    }
+                } catch (err) {
+                    console.warn('[cache] lifecycle: integrity check failed', err);
+                }
                 // Bug 9 — only emit setActiveServer when the (serverId,userId)
                 // pair actually changes; the cache store stores a fresh object
                 // on every call and subscribers can't distinguish a cosmetic

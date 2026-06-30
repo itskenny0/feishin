@@ -1039,6 +1039,19 @@ const LocalCacheImageVariantsSchema = z.object({
     }),
 });
 
+// Version stamp the integrity verifier records once a launch verifies clean.
+// A change in any field at the next boot triggers the deep verification pass.
+const VersionStampSchema = z.object({
+    appVersion: z.string(),
+    fsBackendVersion: z.number().int(),
+    schemaVersion: z.number().int(),
+});
+
+const LocalCacheIntegritySchema = z.object({
+    // Last (appVersion, Dexie schemaVersion, FS_BACKEND_VERSION) seen clean.
+    lastSeen: VersionStampSchema.optional(),
+});
+
 const LocalCacheSettingsSchema = z.object({
     android: AndroidStorageSettingsSchema.default({
         backgroundSync: true,
@@ -1058,6 +1071,8 @@ const LocalCacheSettingsSchema = z.object({
         .record(z.string(), z.object({ at: z.number(), partial: z.boolean() }))
         .optional(),
     imageVariants: LocalCacheImageVariantsSchema.optional(),
+    // Cross-store integrity verifier state (see cache/integrity.ts).
+    integrity: LocalCacheIntegritySchema.optional(),
     offlineMedia: OfflineMediaSettingsSchema.optional(),
     // Re-check the server for changes on startup (the only sync behaviour the
     // user can turn off — WHAT is synced is mandatory/local-first). Gates the
@@ -1511,6 +1526,7 @@ export type PlayerFilterOperator = z.infer<typeof PlayerFilterOperatorSchema>;
 export interface SettingsSlice extends z.infer<typeof SettingsStateSchema> {
     actions: {
         addCollection: (collection: SavedCollection) => void;
+        clearFirstSyncComplete: (serverId: string) => void;
         removeCollection: (id: string) => void;
         reset: () => void;
         resetSampleRate: () => void;
@@ -1519,6 +1535,11 @@ export interface SettingsSlice extends z.infer<typeof SettingsStateSchema> {
         setFirstSyncComplete: (serverId: string, partial: boolean) => void;
         setGenreBehavior: (target: GenreTarget) => void;
         setHomeItems: (item: SortableItem<HomeItem>[]) => void;
+        setIntegrityLastSeen: (stamp: {
+            appVersion: string;
+            fsBackendVersion: number;
+            schemaVersion: number;
+        }) => void;
         setList: (type: ItemListKey, data: DeepPartial<ItemListSettings>) => void;
         setLocalCache: (partial: Partial<LocalCacheSettings>) => void;
         setPlaybackFilters: (filters: PlayerFilter[]) => void;
@@ -2776,6 +2797,16 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                                 state.general.collections.push(collection);
                             });
                         },
+                        clearFirstSyncComplete: (serverId) => {
+                            set((state) => {
+                                if (
+                                    state.localCache.firstSyncComplete &&
+                                    typeof state.localCache.firstSyncComplete === 'object'
+                                ) {
+                                    delete state.localCache.firstSyncComplete[serverId];
+                                }
+                            });
+                        },
                         removeCollection: (id: string) => {
                             set((state) => {
                                 state.general.collections = state.general.collections.filter(
@@ -2826,6 +2857,17 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                         setHomeItems: (items: SortableItem<HomeItem>[]) => {
                             set((state) => {
                                 state.general.homeItems = items;
+                            });
+                        },
+                        setIntegrityLastSeen: (stamp) => {
+                            set((state) => {
+                                if (
+                                    !state.localCache.integrity ||
+                                    typeof state.localCache.integrity !== 'object'
+                                ) {
+                                    state.localCache.integrity = {};
+                                }
+                                state.localCache.integrity.lastSeen = stamp;
                             });
                         },
                         setList: (type: ItemListKey, data: DeepPartial<ItemListSettings>) => {
@@ -3981,10 +4023,26 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
+                if (version <= 74) {
+                    // Seed the integrity slice. Leaving lastSeen undefined makes
+                    // the first post-upgrade boot run the deep verification and
+                    // ADOPT the current DB as the baseline — it does NOT wipe an
+                    // existing populated cache (see cache/integrity.ts, I3).
+                    // Guarded: a throwing migrate discards ALL persisted settings.
+                    if (state.localCache && typeof state.localCache === 'object') {
+                        if (
+                            !state.localCache.integrity ||
+                            typeof state.localCache.integrity !== 'object'
+                        ) {
+                            state.localCache.integrity = {};
+                        }
+                    }
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 74,
+            version: 75,
         },
     ),
 );
