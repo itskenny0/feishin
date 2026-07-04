@@ -13,6 +13,7 @@
 // each blob row; eviction by entity only deletes the underlying blob once no
 // target references it anymore.
 
+import type { MediaBlobBackend } from './backends/types';
 import type { LibraryCacheDb } from './db';
 import type {
     CachedMediaBlob,
@@ -92,10 +93,14 @@ export const requestPersistentStorage = async (): Promise<boolean> => {
 };
 
 export class LocalMediaStore {
+    private readonly getBackend: () => MediaBlobBackend;
     private readonly getDb: DbGetter;
 
-    constructor(getDb: DbGetter = getActiveCacheDb) {
+    // `getBackend` is injectable so tests can drive the streaming path against a
+    // fake backend; production defaults to the platform's active backend.
+    constructor(getDb: DbGetter = getActiveCacheDb, getBackend = getActiveBackend) {
         this.getDb = getDb;
+        this.getBackend = getBackend;
     }
 
     /** Wipe every offline blob AND every target. */
@@ -134,6 +139,21 @@ export class LocalMediaStore {
         const key = blobKey(serverId, songId);
         const row = await db.mediaBlobs.get(key);
         if (row) await this.reclaimBytes(row);
+        await db.mediaBlobs.delete(key);
+    }
+
+    /**
+     * Delete a single song's blob row and reclaim its backing bytes. Used by the
+     * download pipeline to discard a just-streamed track that turned out to blow
+     * the storage cap (we can't know a streamed file's exact size until it's
+     * written). Best-effort byte reclaim; the row removal is authoritative.
+     */
+    async deleteBlobBytes(serverId: string, songId: string): Promise<void> {
+        const db = this.db();
+        const key = blobKey(serverId, songId);
+        const row = await db.mediaBlobs.get(key);
+        if (!row) return;
+        await this.reclaimBytes(row);
         await db.mediaBlobs.delete(key);
     }
 
@@ -290,14 +310,14 @@ export class LocalMediaStore {
         return backendForRef(ref).load(ref);
     }
 
+    // --- offline targets -------------------------------------------------
+
     async patchTarget(key: string, patch: Partial<OfflineTargetRow>): Promise<void> {
         const db = this.db();
         const existing = await db.offlineTargets.get(key);
         if (!existing) return;
         await db.offlineTargets.put({ ...existing, ...patch, UpdatedAt: Date.now() });
     }
-
-    // --- offline targets -------------------------------------------------
 
     async putTarget(row: OfflineTargetRow): Promise<void> {
         const db = this.db();
@@ -347,7 +367,7 @@ export class LocalMediaStore {
             }
             return false;
         }
-        const ref = await getActiveBackend().store('audio', key, blob);
+        const ref = await this.getBackend().store('audio', key, blob);
         const row: CachedMediaBlob = {
             ByteSize: blob.size,
             Container: container,
@@ -363,8 +383,64 @@ export class LocalMediaStore {
         return true;
     }
 
+    /**
+     * Streaming twin of {@link save}: dedups FIRST (an already-downloaded song
+     * only gains a membership reference — no network at all), else streams the
+     * URL's bytes straight to backing storage via the backend and records the
+     * row. Returns whether a NEW blob was written and its real byte size (0 for
+     * a dedup hit that touched nothing new). Only valid when
+     * {@link supportsStreaming} is true.
+     */
+    async saveStreamed(args: {
+        container: string | undefined;
+        entityKey: string;
+        serverId: string;
+        signal?: AbortSignal;
+        songId: string;
+        url: string;
+    }): Promise<{ isNew: boolean; size: number }> {
+        const { container, entityKey, serverId, signal, songId, url } = args;
+        const db = this.db();
+        const key = blobKey(serverId, songId);
+        const existing = await db.mediaBlobs.get(key);
+        if (existing) {
+            if (!existing.EntityKeys.includes(entityKey)) {
+                existing.EntityKeys.push(entityKey);
+                await db.mediaBlobs.put(existing);
+            }
+            return { isNew: false, size: existing.ByteSize };
+        }
+        const backend = this.getBackend();
+        if (!backend.storeFromUrl) {
+            throw new Error(`${TAG} active backend cannot stream from url`);
+        }
+        const { ref, size } = await backend.storeFromUrl('audio', key, url, { signal });
+        const row: CachedMediaBlob = {
+            ByteSize: size,
+            Container: container,
+            DownloadedAt: Date.now(),
+            EntityKeys: [entityKey],
+            Key: key,
+            MimeType: mimeForContainer(container),
+            ServerId: serverId,
+            SongId: songId,
+            ...rowFieldsForRef(ref),
+        };
+        await db.mediaBlobs.put(row);
+        return { isNew: true, size };
+    }
+
     async setTargetStatus(key: string, status: OfflineTargetStatus): Promise<void> {
         await this.patchTarget(key, { Status: status });
+    }
+
+    /**
+     * True when the active backend can stream a URL straight to storage without
+     * pulling the whole payload into the JS heap (Android filesystem backend).
+     * The download pipeline uses this to pick the OOM-safe streaming path.
+     */
+    supportsStreaming(): boolean {
+        return typeof this.getBackend().storeFromUrl === 'function';
     }
 
     /** Sum of every offline audio blob's byte size. */

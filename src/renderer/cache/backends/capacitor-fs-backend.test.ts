@@ -1,15 +1,48 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@capacitor/core', () => ({
     Capacitor: { convertFileSrc: (p: string) => `cap://${p}` },
 }));
 
-const { files } = vi.hoisted(() => ({ files: new Map<string, string>() }));
+const { dl, files } = vi.hoisted(() => ({
+    dl: {
+        // Recorded downloadFile calls, and knobs for the cancellation test.
+        calls: [] as Array<{ downloadId: string; path: string; url: string }>,
+        cancelled: [] as string[],
+        // When set, downloadFile blocks until released (or a cancel releases it).
+        hang: false,
+        nextBytes: 4242,
+        release: null as (() => void) | null,
+    },
+    files: new Map<string, string>(),
+}));
 
 vi.mock('./volumes', () => ({
     MediaVolumes: {
+        cancelDownload: async ({ downloadId }: { downloadId: string }) => {
+            dl.cancelled.push(downloadId);
+            if (dl.release) dl.release();
+        },
         deleteFile: async ({ path }: { path: string }) => {
             files.delete(path);
+        },
+        downloadFile: async ({
+            downloadId,
+            path,
+            url,
+        }: {
+            downloadId: string;
+            path: string;
+            url: string;
+        }) => {
+            dl.calls.push({ downloadId, path, url });
+            if (dl.hang) {
+                await new Promise<void>((resolve) => {
+                    dl.release = resolve;
+                });
+            }
+            files.set(path, url);
+            return { bytes: dl.nextBytes };
         },
         mkdirp: async () => {},
         readFile: async ({ path }: { path: string }) => {
@@ -69,6 +102,59 @@ describe('CapacitorFsBackend', () => {
         expect(await new CapacitorFsBackend(() => VOL).health()).toEqual({ available: true });
         expect(await new CapacitorFsBackend(() => undefined).health()).toEqual({
             available: false,
+        });
+    });
+
+    describe('storeFromUrl (native streaming)', () => {
+        beforeEach(() => {
+            dl.calls = [];
+            dl.cancelled = [];
+            dl.hang = false;
+            dl.nextBytes = 4242;
+            dl.release = null;
+        });
+
+        it('streams a URL to a file and returns the ref + written bytes', async () => {
+            const be = new CapacitorFsBackend(() => VOL);
+            const { ref, size } = await be.storeFromUrl('audio', 's:1', 'https://srv/dl/1');
+            expect(size).toBe(4242);
+            expect(ref).toMatchObject({ kind: 'fs', volumeId: 'V1' });
+            if (ref.kind !== 'fs') throw new Error('expected fs');
+            expect(ref.path).toBe('/sd/Android/data/app/files/feishin-cache/audio/s_1');
+            // Native was handed the file path, the source URL, and a stable id.
+            expect(dl.calls).toEqual([
+                { downloadId: 'audio:s:1', path: ref.path, url: 'https://srv/dl/1' },
+            ]);
+        });
+
+        it('rejects (without downloading) when no volume is resolved', async () => {
+            const be = new CapacitorFsBackend(() => undefined);
+            await expect(be.storeFromUrl('audio', 'k', 'https://srv/dl/1')).rejects.toThrow(
+                /no active fs volume/,
+            );
+            expect(dl.calls).toHaveLength(0);
+        });
+
+        it('throws immediately for an already-aborted signal, no download', async () => {
+            const be = new CapacitorFsBackend(() => VOL);
+            const ac = new AbortController();
+            ac.abort();
+            await expect(
+                be.storeFromUrl('audio', 'k', 'https://srv/dl/1', { signal: ac.signal }),
+            ).rejects.toThrow();
+            expect(dl.calls).toHaveLength(0);
+        });
+
+        it('cancels the native download when the signal aborts mid-flight', async () => {
+            dl.hang = true;
+            const be = new CapacitorFsBackend(() => VOL);
+            const ac = new AbortController();
+            const p = be.storeFromUrl('audio', 's:9', 'https://srv/dl/9', { signal: ac.signal });
+            // Let downloadFile register + start hanging, then abort.
+            await Promise.resolve();
+            ac.abort();
+            await p;
+            expect(dl.cancelled).toContain('audio:s:9');
         });
     });
 });

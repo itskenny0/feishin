@@ -588,3 +588,91 @@ describe('same-key re-sync race', () => {
         await Promise.race([b, new Promise((r) => setTimeout(r, 500))]);
     });
 });
+
+describe('syncTarget download — streaming backend (Android fs)', () => {
+    // Build a store whose active backend streams URLs to storage (the Android
+    // filesystem backend's shape) instead of taking an in-heap Blob.
+    const makeStreamingStore = () => {
+        const db = {
+            mediaBlobs: new TableShim<CachedMediaBlob>('Key', MEDIA_BLOBS_MULTI_ENTRY),
+            offlineTargets: new TableShim<OfflineTargetRow>('Key'),
+        } as unknown as LibraryCacheDb;
+        const storeFromUrl = vi.fn(async (_ns: string, key: string) => ({
+            ref: { kind: 'fs', path: `/vol/${key}`, volumeId: 'V' },
+            size: 1000,
+        }));
+        const backend = {
+            health: async () => ({ available: true }),
+            id: 'capacitor-fs',
+            load: async () => undefined,
+            remove: async () => {},
+            resolveUrl: () => undefined,
+            store: async (_ns: string, key: string) => ({
+                kind: 'fs',
+                path: `/vol/${key}`,
+                volumeId: 'V',
+            }),
+            storeFromUrl,
+        };
+        const store = new LocalMediaStore(
+            () => db,
+            () => backend as any,
+        );
+        return { store, storeFromUrl };
+    };
+
+    it('streams every song to storage without ever fetching a Blob', async () => {
+        controller.getAlbumDetail.mockResolvedValue({
+            songs: [song('s1'), song('s2'), song('s3')],
+        });
+        const { store, storeFromUrl } = makeStreamingStore();
+        await store.putTarget(target());
+
+        const result = await syncTarget({ store, target: target() });
+
+        expect(result.Status).toBe('complete');
+        expect(await store.count()).toBe(3);
+        expect(await store.totalBytes()).toBe(3000);
+        // Native streaming was used per song; the in-heap fetch path never ran.
+        expect(storeFromUrl).toHaveBeenCalledTimes(3);
+        expect(global.fetch).not.toHaveBeenCalled();
+        expect(controller.getStreamUrl).toHaveBeenCalledTimes(3);
+    });
+
+    it('dedups already-downloaded songs — no re-stream, no network', async () => {
+        controller.getAlbumDetail.mockResolvedValue({ songs: [song('s1'), song('s2')] });
+        const { store, storeFromUrl } = makeStreamingStore();
+        await store.putTarget(target());
+        // Pre-seed s1 as already streamed.
+        await store.saveStreamed({
+            container: 'mp3',
+            entityKey: 'srv:album:e1',
+            serverId: 'srv',
+            songId: 's1',
+            url: 'https://srv/dl/s1',
+        });
+        storeFromUrl.mockClear();
+
+        await syncTarget({ store, target: target() });
+
+        // Only s2 streamed this run.
+        expect(storeFromUrl).toHaveBeenCalledTimes(1);
+        expect(global.fetch).not.toHaveBeenCalled();
+        expect(await store.count()).toBe(2);
+    });
+
+    it('enforces the byte cap on the streaming path', async () => {
+        mocks.settingsState.localCache.offlineMedia.maxBytes = 2500;
+        controller.getAlbumDetail.mockResolvedValue({
+            songs: [song('s1'), song('s2'), song('s3')],
+        });
+        const { store } = makeStreamingStore();
+        await store.putTarget(target());
+
+        const result = await syncTarget({ store, target: target() });
+
+        expect(result.Status).toBe('partial');
+        expect(await store.count()).toBe(2);
+        expect(await store.totalBytes()).toBe(2000);
+    });
+});

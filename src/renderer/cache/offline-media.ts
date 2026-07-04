@@ -394,6 +394,15 @@ export const syncTarget = async (args: SyncTargetArgs): Promise<OfflineTargetRow
     // post-download counter. Reconciled to the real size after each fetch.
     let reservedBytes = bytesDownloaded;
 
+    // When the active backend can stream a URL straight to storage (Android
+    // filesystem backend), download that way: the bytes go network→file in
+    // native code and never become a multi-MB Blob + base64 string crossing the
+    // Capacitor bridge — the allocation storm that OOM-killed the app when
+    // downloading large/lossless tracks at concurrency. Everywhere else, fall
+    // back to fetch()→Blob→store (idb backend needs the Blob in-heap anyway).
+    const streaming = store.supportsStreaming();
+    console.info(`${TAG} download path`, { key, streaming });
+
     // Bounded-concurrency worker pool over `pending`.
     const concurrency = Math.max(1, DEFAULT_CONCURRENCY);
     let cursor = 0;
@@ -430,38 +439,79 @@ export const syncTarget = async (args: SyncTargetArgs): Promise<OfflineTargetRow
 
             try {
                 const url = await resolveDownloadUrl(song, serverId);
-                const blob = await fetchSongBlob(url, abort.signal);
-                // Reconcile the reservation to the real size.
-                reservedBytes += blob.size - projected;
-                songReserved = blob.size;
-                // Re-check the cap against the real committed total before
-                // writing — catches the case where the real size exceeded the
-                // reservation enough to blow the cap.
-                if (Number.isFinite(maxBytes) && bytesDownloaded + blob.size > maxBytes) {
-                    reservedBytes -= blob.size;
-                    songReserved = 0;
-                    capHit = true;
-                    console.warn(`${TAG} byte cap reached after fetch — discarding`, {
-                        key,
+
+                // Resolve this song's real byte size + whether a NEW blob was
+                // written, via either the streaming path (native network→file)
+                // or the in-heap blob path. Both reconcile the cap reservation
+                // from `projected` to the real size and re-check the cap.
+                let isNew: boolean;
+                let size: number;
+                if (streaming) {
+                    // Streaming dedups BEFORE downloading, so an already-cached
+                    // song costs no network. When it does download, the exact
+                    // size is only known once the file lands — reconcile + a
+                    // post-write cap check that discards an over-cap track.
+                    const res = await store.saveStreamed({
+                        container: song.container ?? undefined,
+                        entityKey: key,
+                        serverId,
+                        signal: abort.signal,
+                        songId: song.id,
+                        url,
+                    });
+                    isNew = res.isNew;
+                    size = res.size;
+                    if (isNew) {
+                        reservedBytes += size - projected;
+                        songReserved = size;
+                        if (Number.isFinite(maxBytes) && bytesDownloaded + size > maxBytes) {
+                            await store.deleteBlobBytes(serverId, song.id);
+                            reservedBytes -= size;
+                            songReserved = 0;
+                            capHit = true;
+                            console.warn(`${TAG} byte cap reached after fetch — discarding`, {
+                                key,
+                                songId: song.id,
+                            });
+                            return;
+                        }
+                    }
+                } else {
+                    const blob = await fetchSongBlob(url, abort.signal);
+                    // Reconcile the reservation to the real size.
+                    reservedBytes += blob.size - projected;
+                    songReserved = blob.size;
+                    // Re-check the cap against the real committed total before
+                    // writing — catches the case where the real size exceeded
+                    // the reservation enough to blow the cap.
+                    if (Number.isFinite(maxBytes) && bytesDownloaded + blob.size > maxBytes) {
+                        reservedBytes -= blob.size;
+                        songReserved = 0;
+                        capHit = true;
+                        console.warn(`${TAG} byte cap reached after fetch — discarding`, {
+                            key,
+                            songId: song.id,
+                        });
+                        return;
+                    }
+                    isNew = await store.save({
+                        blob,
+                        container: song.container ?? undefined,
+                        entityKey: key,
+                        serverId,
                         songId: song.id,
                     });
-                    return;
+                    size = blob.size;
                 }
-                const isNew = await store.save({
-                    blob,
-                    container: song.container ?? undefined,
-                    entityKey: key,
-                    serverId,
-                    songId: song.id,
-                });
+
                 if (isNew) {
                     // Reservation has now become committed bytes; nothing left
                     // to release for this song.
                     songReserved = 0;
-                    bytesDownloaded += blob.size;
+                    bytesDownloaded += size;
                     done += 1;
                     console.info(`${TAG} item downloaded`, {
-                        bytes: blob.size,
+                        bytes: size,
                         done,
                         key,
                         songId: song.id,
@@ -472,7 +522,7 @@ export const syncTarget = async (args: SyncTargetArgs): Promise<OfflineTargetRow
                     // target — we only added a membership reference, no new
                     // bytes. Release this song's reservation so a shared
                     // album/playlist doesn't eat cap headroom it never used.
-                    reservedBytes -= blob.size;
+                    reservedBytes -= songReserved;
                     songReserved = 0;
                     done += 1;
                 }

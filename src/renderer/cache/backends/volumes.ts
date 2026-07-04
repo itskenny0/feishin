@@ -3,7 +3,14 @@ import { Capacitor, registerPlugin } from '@capacitor/core';
 const TAG = '[media-volumes]';
 
 export interface MediaVolumesPlugin {
+    // Abort an in-flight downloadFile by its id: disconnects the native HTTP
+    // connection, which unwinds the streaming copy and deletes the partial file.
+    cancelDownload(o: { downloadId: string }): Promise<void>;
     deleteFile(o: { path: string }): Promise<void>;
+    // Stream a URL's bytes straight to `path` in native code (no base64, no
+    // bridge round-trip of the payload). `downloadId` lets cancelDownload abort
+    // it. Resolves with the number of bytes written.
+    downloadFile(o: { downloadId: string; path: string; url: string }): Promise<{ bytes: number }>;
     freeSpace(o: { path: string }): Promise<{ freeBytes: number; totalBytes: number }>;
     listVolumes(): Promise<{ volumes: VolumeInfo[] }>;
     mkdirp(o: { path: string }): Promise<void>;

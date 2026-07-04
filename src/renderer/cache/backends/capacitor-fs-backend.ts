@@ -88,4 +88,36 @@ export class CapacitorFsBackend implements MediaBlobBackend {
         await MediaVolumes.writeFile({ dataBase64, path });
         return { kind: 'fs', path, volumeId: volume.id };
     }
+
+    // Stream network → file in native code. The bytes never enter the JS heap
+    // and never get base64-encoded/marshalled across the bridge — which is what
+    // OOM-killed the app when downloading large (lossless) tracks at
+    // concurrency. The download URL already embeds credentials in its query
+    // string (see offline-media.ts), so native can plain-GET it.
+    async storeFromUrl(
+        ns: BlobNamespace,
+        key: string,
+        url: string,
+        opts?: { signal?: AbortSignal },
+    ): Promise<{ ref: BlobRef; size: number }> {
+        const volume = this.getVolume();
+        if (!volume) throw new Error(`${TAG} no active fs volume`);
+        const path = pathFor(volume.path, ns, key);
+        const downloadId = `${ns}:${key}`;
+        const signal = opts?.signal;
+        if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+        // Bridge the JS AbortSignal to the native download: an abort disconnects
+        // the native HTTP connection, which rejects downloadFile and deletes the
+        // partial file.
+        const onAbort = (): void => {
+            MediaVolumes.cancelDownload({ downloadId }).catch(() => {});
+        };
+        signal?.addEventListener('abort', onAbort, { once: true });
+        try {
+            const { bytes } = await MediaVolumes.downloadFile({ downloadId, path, url });
+            return { ref: { kind: 'fs', path, volumeId: volume.id }, size: bytes };
+        } finally {
+            signal?.removeEventListener('abort', onAbort);
+        }
+    }
 }

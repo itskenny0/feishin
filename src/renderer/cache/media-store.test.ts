@@ -463,3 +463,99 @@ describe('LocalMediaStore targets', () => {
         expect(keys.sort()).toEqual(['srv:album:al1', 'srv:playlist:pl1']);
     });
 });
+
+describe('LocalMediaStore streaming (saveStreamed)', () => {
+    let db: LibraryCacheDb;
+    let storeFromUrl: ReturnType<typeof vi.fn>;
+    let store: LocalMediaStore;
+
+    beforeEach(() => {
+        db = makeDb();
+        // A fake backend that "streams" a URL to an fs ref without ever
+        // materializing a Blob — the Android filesystem backend's shape.
+        storeFromUrl = vi.fn(async (_ns: string, key: string) => ({
+            ref: { kind: 'fs', path: `/vol/${key}`, volumeId: 'V' },
+            size: 4242,
+        }));
+        const backend = {
+            health: async () => ({ available: true }),
+            id: 'capacitor-fs',
+            load: async () => undefined,
+            remove: async () => {},
+            resolveUrl: () => undefined,
+            store: async (_ns: string, key: string) => ({
+                kind: 'fs',
+                path: `/vol/${key}`,
+                volumeId: 'V',
+            }),
+            storeFromUrl,
+        };
+        store = new LocalMediaStore(
+            () => db,
+            () => backend as any,
+        );
+    });
+
+    it('supportsStreaming reflects the active backend', () => {
+        expect(store.supportsStreaming()).toBe(true);
+        // Default backend (idb, in the node test env) can't stream.
+        expect(new LocalMediaStore(() => db).supportsStreaming()).toBe(false);
+    });
+
+    it('streams a new song to a row and reports it as new', async () => {
+        const res = await store.saveStreamed({
+            container: 'flac',
+            entityKey: 'srv:artist:ar1',
+            serverId: 'srv',
+            songId: 's1',
+            url: 'https://srv/dl/s1',
+        });
+        expect(res).toEqual({ isNew: true, size: 4242 });
+        expect(storeFromUrl).toHaveBeenCalledWith('audio', 'srv:s1', 'https://srv/dl/s1', {
+            signal: undefined,
+        });
+        const row = await store.get('srv', 's1');
+        expect(row?.ByteSize).toBe(4242);
+        expect(row?.Backend).toBe('capacitor-fs');
+        expect(row?.Path).toBe('/vol/srv:s1');
+        expect(row?.EntityKeys).toEqual(['srv:artist:ar1']);
+    });
+
+    it('dedups an already-downloaded song without hitting the network', async () => {
+        await store.saveStreamed({
+            container: 'flac',
+            entityKey: 'srv:artist:ar1',
+            serverId: 'srv',
+            songId: 's1',
+            url: 'https://srv/dl/s1',
+        });
+        storeFromUrl.mockClear();
+        const res = await store.saveStreamed({
+            container: 'flac',
+            entityKey: 'srv:playlist:pl1',
+            serverId: 'srv',
+            songId: 's1',
+            url: 'https://srv/dl/s1',
+        });
+        expect(res).toEqual({ isNew: false, size: 4242 });
+        // No second download — just a membership reference.
+        expect(storeFromUrl).not.toHaveBeenCalled();
+        const row = await store.get('srv', 's1');
+        expect(row?.EntityKeys).toEqual(['srv:artist:ar1', 'srv:playlist:pl1']);
+        expect(await store.count()).toBe(1);
+    });
+
+    it('deleteBlobBytes drops a single song row', async () => {
+        await store.saveStreamed({
+            container: 'flac',
+            entityKey: 'srv:artist:ar1',
+            serverId: 'srv',
+            songId: 's1',
+            url: 'https://srv/dl/s1',
+        });
+        expect(await store.has('srv', 's1')).toBe(true);
+        await store.deleteBlobBytes('srv', 's1');
+        expect(await store.has('srv', 's1')).toBe(false);
+        expect(await store.count()).toBe(0);
+    });
+});

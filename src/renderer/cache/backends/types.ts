@@ -32,6 +32,24 @@ export interface MediaBlobBackend {
     resolveUrl?(ref: BlobRef): string | undefined;
     /** Persist bytes and return the ref the metadata row should carry. */
     store(ns: BlobNamespace, key: string, blob: Blob): Promise<BlobRef>;
+    /**
+     * Stream a remote URL's bytes straight to backing storage WITHOUT
+     * materializing the whole payload in the JS heap. Backends that can do this
+     * (the Capacitor filesystem backend streams network→file in native code)
+     * implement it; the idb backend does NOT (it needs the Blob in-heap to put
+     * it into IndexedDB, so callers fall back to `store(await fetch().blob())`).
+     * Returns the ref plus the number of bytes actually written.
+     *
+     * This is the OOM-safe path for large offline downloads: a 34 MB lossless
+     * track never becomes a 34 MB Blob + ~46 MB base64 string crossing the
+     * bridge — the classic Android renderer/native OOM that killed the app.
+     */
+    storeFromUrl?(
+        ns: BlobNamespace,
+        key: string,
+        url: string,
+        opts?: { signal?: AbortSignal },
+    ): Promise<{ ref: BlobRef; size: number }>;
 }
 
 interface RowRefFields {
