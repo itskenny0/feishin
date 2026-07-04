@@ -771,7 +771,8 @@ function SongResults({ debouncedQuery, onSelectResult, query }: ResultsSectionPr
                 <MobileSearchRow
                     explicitStatus={song.explicitStatus}
                     highlightQuery={debouncedQuery}
-                    imageId={song.imageId}
+                    // Songs are cache-keyed by their album cover (own imageId isn't swept).
+                    imageId={song.albumId ?? song.imageId}
                     imageUrl={song.imageUrl}
                     index={index}
                     itemType={LibraryItem.SONG}

@@ -120,7 +120,8 @@ export const MobileTrackRowColumn = (props: ItemTableListInnerColumn) => {
                         enableDebounce={true}
                         enableViewport={true}
                         explicitStatus={item?.explicitStatus}
-                        id={item?.imageId}
+                        // Songs are cache-keyed by their album cover (own imageId isn't swept).
+                        id={item?.albumId ?? item?.imageId}
                         itemType={item?._itemType}
                         serverId={item?._serverId}
                         src={item?.imageUrl}

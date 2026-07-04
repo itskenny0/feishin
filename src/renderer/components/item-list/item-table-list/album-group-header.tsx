@@ -52,7 +52,8 @@ export const AlbumGroupHeader = ({
                     className={imageColumnStyles.compactImage}
                     enableDebounce
                     enableViewport={true}
-                    id={song?.imageId}
+                    // Songs are cache-keyed by their album cover (own imageId isn't swept).
+                    id={song?.albumId ?? song?.imageId}
                     itemType={LibraryItem.SONG}
                     src={song?.imageUrl}
                     type="table"

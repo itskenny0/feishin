@@ -378,7 +378,10 @@ const SidebarImage = () => {
                         enableDebounce={false}
                         enableViewport={false}
                         fetchPriority="high"
-                        id={currentSong.imageId}
+                        // Album cover (cached by albumId); the song's own imageId
+                        // (Subsonic coverArt) isn't swept, so keying on it would miss
+                        // the cache forever. Matches the player cover surfaces.
+                        id={currentSong.albumId ?? currentSong.imageId}
                         itemType={LibraryItem.SONG}
                         serverId={currentSong._serverId}
                         type="sidebar"

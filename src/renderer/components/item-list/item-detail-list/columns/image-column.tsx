@@ -48,7 +48,8 @@ export const ImageColumn = ({
                 className={styles.compactImage}
                 containerClassName={styles.compactContainer}
                 explicitStatus={song.explicitStatus}
-                id={song.imageId}
+                // Songs are cache-keyed by their album cover (own imageId isn't swept).
+                id={song.albumId ?? song.imageId}
                 itemType={LibraryItem.SONG}
                 serverId={song._serverId}
                 type="table"

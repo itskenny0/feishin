@@ -143,7 +143,8 @@ export function SearchSongsSection({
                                     explicitStatus={song.explicitStatus}
                                     highlightQuery={debouncedQuery}
                                     id={song.id}
-                                    imageId={song.imageId}
+                                    // Songs are cache-keyed by their album cover (own imageId isn't swept).
+                                    imageId={song.albumId ?? song.imageId}
                                     imageUrl={song.imageUrl}
                                     isHighlighted={isHighlighted}
                                     itemType={LibraryItem.SONG}

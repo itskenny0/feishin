@@ -202,7 +202,11 @@ export const FullScreenPlayerImage = () => {
                             exit="closed"
                             explicit={blurExplicitImages && imageState.topExplicit}
                             initial="closed"
-                            key={`top-${songKey || 'none'}`}
+                            // Slot-stable key (not song-derived): only the active slot
+                            // renders and the crossfade fires on the imageState flip, so
+                            // a song-keyed key would spawn a spurious same-image
+                            // transition before the hook's flip lands.
+                            key="crossfade-top"
                             placeholder="var(--theme-colors-foreground-muted)"
                             src={imageState.topImage || ''}
                             variants={imageVariants}
@@ -218,7 +222,7 @@ export const FullScreenPlayerImage = () => {
                             exit="closed"
                             explicit={blurExplicitImages && imageState.bottomExplicit}
                             initial="closed"
-                            key={`bottom-${songKey || 'none'}`}
+                            key="crossfade-bottom"
                             placeholder="var(--theme-colors-foreground-muted)"
                             src={imageState.bottomImage || ''}
                             variants={imageVariants}

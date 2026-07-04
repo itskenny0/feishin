@@ -7,7 +7,7 @@ import {
     useMotionValue,
     Variants,
 } from 'motion/react';
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 import styles from './mobile-fullscreen-player.module.css';
 
@@ -29,6 +29,7 @@ import {
 } from '/@/renderer/features/radio/hooks/use-radio-player';
 import { triggerHaptic } from '/@/renderer/hooks/use-haptic';
 import {
+    useBlurExplicitImages,
     useFullScreenPlayerUseImageAspectRatio,
     useImageRes,
     usePlayerData,
@@ -37,7 +38,7 @@ import {
 import { Center } from '/@/shared/components/center/center';
 import { Icon } from '/@/shared/components/icon/icon';
 import { PlaybackSelectors } from '/@/shared/constants/playback-selectors';
-import { LibraryItem } from '/@/shared/types/domain-types';
+import { ExplicitStatus, LibraryItem } from '/@/shared/types/domain-types';
 
 const imageVariants: Variants = {
     closed: {
@@ -66,10 +67,12 @@ const MotionImage = motion.img;
 
 const ImageWithPlaceholder = ({
     className,
+    explicit,
     placeholderIcon,
     useImageAspectRatio,
     ...props
 }: HTMLMotionProps<'img'> & {
+    explicit?: boolean;
     placeholder?: string;
     placeholderIcon?: 'itemAlbum' | 'radio';
     useImageAspectRatio?: boolean;
@@ -95,7 +98,9 @@ const ImageWithPlaceholder = ({
 
     return (
         <MotionImage
-            className={clsx(styles.albumImage, className)}
+            className={clsx(styles.albumImage, className, {
+                [styles.censored]: explicit,
+            })}
             style={{
                 objectFit: useImageAspectRatio ? 'contain' : 'cover',
                 width: useImageAspectRatio ? 'auto' : '100%',
@@ -107,9 +112,13 @@ const ImageWithPlaceholder = ({
 
 export const MobileFullscreenPlayerAlbumArt = () => {
     const mainImageRef = useRef<HTMLImageElement | null>(null);
-    const [mainImageDimensions, setMainImageDimensions] = useState({ idealSize: 1000 });
 
     const { fullScreenPlayer: albumArtRes } = useImageRes();
+    // Cover fetch-size hint. The offline cache is keyed by (item, variant) — NOT
+    // size — so the value never changes which cover is served; keeping it stable
+    // avoids re-resolving all six covers when a post-mount measurement lands
+    // (the previous 1000→measured state change re-ran every resolver on open).
+    const requestImageSize = albumArtRes || 1000;
     // Leaf selector — album-art is the heaviest mount in the mobile player;
     // re-rendering it on every fullscreen-store change (tab swap, opacity
     // slider drag, dynamic-background toggle) tore down the crossfade
@@ -119,6 +128,11 @@ export const MobileFullscreenPlayerAlbumArt = () => {
     const { isPlaying: isRadioPlaying } = useRadioPlayer();
     const currentSong = usePlayerSong();
     const { nextSong, previousSong } = usePlayerData();
+    // Privacy parity with the mini-player and desktop fullscreen cover: when
+    // "blur explicit images" is on, explicit album art is blurred everywhere it
+    // is painted. Gated per-cover below (main crossfade, swipe peeks, and the
+    // remote/Connect cover) so nothing leaks the art unblurred.
+    const blurExplicitImages = useBlurExplicitImages();
 
     // Remote (Jellyfin Connect) mode: mirror the remote device's cover. We
     // render a simple static cover for it (below) and leave the local
@@ -133,7 +147,7 @@ export const MobileFullscreenPlayerAlbumArt = () => {
         // MobilePlayerContainer uses); the resolver short-circuits on it.
         imageUrl: remoteSong?.imageUrl,
         itemType: LibraryItem.SONG,
-        size: mainImageDimensions.idealSize,
+        size: requestImageSize,
         type: 'fullScreenPlayer',
     });
 
@@ -146,7 +160,7 @@ export const MobileFullscreenPlayerAlbumArt = () => {
         id: remoteNextSong?.albumId ?? remoteNextSong?.imageId ?? undefined,
         imageUrl: remoteNextSong?.imageUrl,
         itemType: LibraryItem.SONG,
-        size: mainImageDimensions.idealSize,
+        size: requestImageSize,
         type: 'fullScreenPlayer',
     });
     // Remote queue boundaries. `hasNext` prefers the target-reported next id;
@@ -171,43 +185,34 @@ export const MobileFullscreenPlayerAlbumArt = () => {
     const currentImageUrl = useCachedItemImageUrl({
         id: currentSong?.albumId ?? currentSong?.imageId ?? undefined,
         itemType: LibraryItem.SONG,
-        size: mainImageDimensions.idealSize,
+        size: requestImageSize,
         type: 'fullScreenPlayer',
     });
 
     const nextImageUrl = useCachedItemImageUrl({
         id: nextSong?.albumId ?? nextSong?.imageId ?? undefined,
         itemType: LibraryItem.SONG,
-        size: mainImageDimensions.idealSize,
+        size: requestImageSize,
         type: 'fullScreenPlayer',
     });
 
     const previousImageUrl = useCachedItemImageUrl({
         id: previousSong?.albumId ?? previousSong?.imageId ?? undefined,
         itemType: LibraryItem.SONG,
-        size: mainImageDimensions.idealSize,
+        size: requestImageSize,
         type: 'fullScreenPlayer',
     });
 
     const imageState = useCrossfadeImageSlots({
+        currentExplicit: currentSong?.explicitStatus === ExplicitStatus.EXPLICIT,
         currentImageUrl,
+        nextExplicit: nextSong?.explicitStatus === ExplicitStatus.EXPLICIT,
         nextImageUrl,
+        // Radio renders its own art in a separate branch — suspend slot updates
+        // then, matching the desktop fullscreen cover.
+        paused: isPlayingRadio,
         songKey: currentSong?._uniqueId,
     });
-
-    const updateImageSize = useCallback(() => {
-        if (mainImageRef.current) {
-            const idealSize =
-                albumArtRes ||
-                Math.ceil((mainImageRef.current as HTMLDivElement).offsetHeight / 100) * 100;
-
-            setMainImageDimensions({ idealSize });
-        }
-    }, [albumArtRes]);
-
-    useLayoutEffect(() => {
-        updateImageSize();
-    }, [updateImageSize]);
 
     /*
      * Spotify-style finger-tracking carousel swipe on the cover. Same
@@ -759,6 +764,19 @@ export const MobileFullscreenPlayerAlbumArt = () => {
     const remoteNextImageSrc =
         remoteHasNext && remoteNextSong?.id ? remoteNextImageUrl || null : null;
 
+    // Explicit-blur flags for the swipe-peek + remote covers (the main
+    // crossfade cover derives its own from imageState.top/bottomExplicit).
+    // Each is already ANDed with the setting so the render sites just apply
+    // the class — an explicit peek/remote cover never flashes unblurred.
+    const nextPeekExplicit =
+        blurExplicitImages && nextSong?.explicitStatus === ExplicitStatus.EXPLICIT;
+    const previousPeekExplicit =
+        blurExplicitImages && previousSong?.explicitStatus === ExplicitStatus.EXPLICIT;
+    const remoteExplicit =
+        blurExplicitImages && remoteSong?.explicitStatus === ExplicitStatus.EXPLICIT;
+    const remoteNextExplicit =
+        blurExplicitImages && remoteNextSong?.explicitStatus === ExplicitStatus.EXPLICIT;
+
     // Remote mode: the mirrored now-playing cover, now swipeable (BUG 3). A
     // horizontal swipe fires mediaNext()/mediaPrevious(), which route through
     // the peer dispatcher to the target. The cover tracks the finger via
@@ -777,7 +795,9 @@ export const MobileFullscreenPlayerAlbumArt = () => {
                     >
                         <img
                             alt=""
-                            className={styles.albumImage}
+                            className={clsx(styles.albumImage, {
+                                [styles.censored]: remoteNextExplicit,
+                            })}
                             draggable={false}
                             src={remoteNextImageSrc}
                             style={{
@@ -803,6 +823,7 @@ export const MobileFullscreenPlayerAlbumArt = () => {
                     <ImageWithPlaceholder
                         className={PlaybackSelectors.playerCoverArt}
                         draggable={false}
+                        explicit={remoteExplicit}
                         loading="eager"
                         src={remoteImageUrl || ''}
                         useImageAspectRatio={useImageAspectRatio}
@@ -824,7 +845,9 @@ export const MobileFullscreenPlayerAlbumArt = () => {
                 >
                     <img
                         alt=""
-                        className={styles.albumImage}
+                        className={clsx(styles.albumImage, {
+                            [styles.censored]: previousPeekExplicit,
+                        })}
                         draggable={false}
                         src={previousImageSrc}
                         style={{
@@ -844,7 +867,9 @@ export const MobileFullscreenPlayerAlbumArt = () => {
                 >
                     <img
                         alt=""
-                        className={styles.albumImage}
+                        className={clsx(styles.albumImage, {
+                            [styles.censored]: nextPeekExplicit,
+                        })}
                         draggable={false}
                         src={nextImageSrc}
                         style={{
@@ -897,8 +922,15 @@ export const MobileFullscreenPlayerAlbumArt = () => {
                                     custom={{ isOpen: imageState.current === 0 }}
                                     draggable={false}
                                     exit="closed"
+                                    explicit={blurExplicitImages && imageState.topExplicit}
                                     initial="closed"
-                                    key={`top-${currentSong?._uniqueId || 'none'}`}
+                                    // Key by SLOT identity, not the song: only the
+                                    // active slot renders (gated on imageState.current),
+                                    // and the crossfade fires when `current` flips. A
+                                    // song-keyed key spawns a spurious same-image
+                                    // transition on the render where the song advances
+                                    // but the hook's flip hasn't applied yet.
+                                    key="crossfade-top"
                                     loading="eager"
                                     placeholder="var(--theme-colors-foreground-muted)"
                                     src={imageState.topImage || ''}
@@ -914,8 +946,9 @@ export const MobileFullscreenPlayerAlbumArt = () => {
                                     custom={{ isOpen: imageState.current === 1 }}
                                     draggable={false}
                                     exit="closed"
+                                    explicit={blurExplicitImages && imageState.bottomExplicit}
                                     initial="closed"
-                                    key={`bottom-${currentSong?._uniqueId || 'none'}`}
+                                    key="crossfade-bottom"
                                     loading="eager"
                                     placeholder="var(--theme-colors-foreground-muted)"
                                     src={imageState.bottomImage || ''}

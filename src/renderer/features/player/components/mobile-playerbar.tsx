@@ -299,7 +299,11 @@ export const MobilePlayerbar = () => {
                                             enableViewport={false}
                                             explicitStatus={currentSong.explicitStatus}
                                             fetchPriority="high"
-                                            id={currentSong.imageId}
+                                            // Album cover (cached by albumId); the song's own
+                                            // imageId (Subsonic coverArt) isn't swept, so keying on
+                                            // it would miss the cache forever. Matches every other
+                                            // player cover surface (left-controls, fullscreen art).
+                                            id={currentSong.albumId ?? currentSong.imageId}
                                             itemType={LibraryItem.SONG}
                                             type="table"
                                         />

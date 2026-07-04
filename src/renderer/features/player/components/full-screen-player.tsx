@@ -115,9 +115,10 @@ const BackgroundImage = memo(({ dynamicBackground, dynamicIsImage }: BackgroundI
         return imageUrl.replace(songId, albumId);
     };
 
-    // Determine which song IDs to use for keys and image URLs
-    const topSongId = imageState.current === 0 ? currentSong?._uniqueId : nextSong?._uniqueId;
-    const bottomSongId = imageState.current === 0 ? nextSong?._uniqueId : currentSong?._uniqueId;
+    // The song whose art backs each slot (only for the getBackgroundImageUrl id
+    // remap). The AnimatePresence key below is SLOT-stable, not song-derived, so
+    // a track change on the render before the crossfade flips can't spawn a
+    // spurious backdrop transition (and can't desync from imageState).
     const topSong = imageState.current === 0 ? currentSong : nextSong;
     const bottomSong = imageState.current === 0 ? nextSong : currentSong;
 
@@ -130,7 +131,7 @@ const BackgroundImage = memo(({ dynamicBackground, dynamicIsImage }: BackgroundI
                     custom={{ isOpen: imageState.current === 0 }}
                     exit="closed"
                     initial="closed"
-                    key={`top-${topSongId || 'none'}`}
+                    key="bg-top"
                     style={
                         {
                             backgroundImage: imageState.topImage
@@ -153,7 +154,7 @@ const BackgroundImage = memo(({ dynamicBackground, dynamicIsImage }: BackgroundI
                     custom={{ isOpen: imageState.current === 1 }}
                     exit="closed"
                     initial="closed"
-                    key={`bottom-${bottomSongId || 'none'}`}
+                    key="bg-bottom"
                     style={
                         {
                             backgroundImage: imageState.bottomImage

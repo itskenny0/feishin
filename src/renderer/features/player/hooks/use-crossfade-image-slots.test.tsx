@@ -99,6 +99,87 @@ describe('useCrossfadeImageSlots', () => {
         expect(result.current.topImage).toBe('blob:song3');
     });
 
+    // The crossfade artifact (device, 2026-07-03): `useCachedItemImageUrl`
+    // seeds its `displaySrc` synchronously only on mount; on a REQUEST change
+    // (song advance) it re-resolves in an effect, so on the render where the
+    // song flips A→B, `currentImageUrl` is a render behind and STILL holds A's
+    // URL. The inactive slot, however, was pre-seeded with B's cover (as the
+    // `next` image) on a prior render. The flip must adopt that pre-seeded
+    // upcoming cover into the newly-active slot — NOT the stale
+    // `currentImageUrl`, which is what briefly flashed the just-left cover back
+    // in (for seconds, when B was uncached).
+    it('shows the pre-seeded upcoming cover, not the render-behind previous URL, on flip', () => {
+        const { rerender, result } = render({
+            currentImageUrl: 'blob:songA',
+            nextImageUrl: 'blob:songB',
+            songKey: 'song-A',
+        });
+
+        // Inactive (bottom) slot now holds B's cover, pre-seeded as `next`.
+        expect(result.current.bottomImage).toBe('blob:songB');
+
+        // Song advances A→B, but the async resolver has not re-run yet:
+        // `currentImageUrl` is a render behind and still reports A's URL, while
+        // `nextImageUrl` has moved on to C.
+        rerender({
+            currentImageUrl: 'blob:songA',
+            nextImageUrl: 'blob:songC',
+            songKey: 'song-B',
+        });
+
+        expect(result.current.current).toBe(1);
+        // The newly-active slot shows B (the pre-seeded upcoming cover) — the
+        // stale A URL must NOT contaminate it.
+        expect(result.current.bottomImage).toBe('blob:songB');
+        expect(result.current.bottomImage).not.toBe('blob:songA');
+        // Outgoing/inactive slot pre-seeds the new upcoming track (C).
+        expect(result.current.topImage).toBe('blob:songC');
+    });
+
+    // No cross-song contamination across rapid, faster-than-resolution flips:
+    // A→B→C where `currentImageUrl` is always a render behind. Each flip must
+    // land the correctly pre-seeded upcoming cover in the active slot and never
+    // resurrect a two-songs-ago cover, even before the current song resolves.
+    it('never lets a past cover contaminate the active slot across rapid flips', () => {
+        const { rerender, result } = render({
+            currentImageUrl: 'blob:songA',
+            nextImageUrl: 'blob:songB',
+            songKey: 'song-A',
+        });
+
+        // A→B: current is a render behind (still A); next has advanced to C.
+        rerender({
+            currentImageUrl: 'blob:songA',
+            nextImageUrl: 'blob:songC',
+            songKey: 'song-B',
+        });
+        expect(result.current.current).toBe(1);
+        expect(result.current.bottomImage).toBe('blob:songB');
+        expect(result.current.bottomImage).not.toBe('blob:songA');
+
+        // B→C before B ever resolved: current is a render behind (now B); next
+        // has advanced to D. The active slot must show C (pre-seeded on the
+        // previous flip), NOT B (previous song) and certainly NOT A.
+        rerender({
+            currentImageUrl: 'blob:songB',
+            nextImageUrl: 'blob:songD',
+            songKey: 'song-C',
+        });
+        expect(result.current.current).toBe(0);
+        expect(result.current.topImage).toBe('blob:songC');
+        expect(result.current.topImage).not.toBe('blob:songB');
+        expect(result.current.topImage).not.toBe('blob:songA');
+
+        // C finally resolves for the (unchanged) current song — a legitimate
+        // same-song adoption, and a no-op here since C already shows.
+        rerender({
+            currentImageUrl: 'blob:songC',
+            nextImageUrl: 'blob:songD',
+            songKey: 'song-C',
+        });
+        expect(result.current.topImage).toBe('blob:songC');
+    });
+
     it('adopts a late URL into the bottom slot after a flip', () => {
         const { rerender, result } = render({
             currentImageUrl: 'blob:song1',

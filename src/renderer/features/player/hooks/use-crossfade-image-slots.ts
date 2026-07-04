@@ -66,14 +66,31 @@ export const useCrossfadeImageSlots = ({
         }
 
         if (songKey !== previousSongRef.current) {
-            const isTop = imageStateRef.current.current === 0;
+            const state = imageStateRef.current;
+            const isTop = state.current === 0;
+
+            // Seed the slot flipping IN from the cover already pre-seeded into
+            // it (the previous render's `next`), NOT from `currentImageUrl`.
+            // `useCachedItemImageUrl` seeds its `displaySrc` synchronously only
+            // on mount; on a song advance it re-resolves in an effect, so on
+            // the flip render `currentImageUrl` is a render behind and still
+            // holds the OUTGOING track's URL. Writing that here is exactly what
+            // flashed the just-left cover back into the newly-active slot (for
+            // seconds when the incoming cover was uncached). The already-active
+            // slot's live URL, meanwhile, keeps painting the outgoing cover
+            // through its exit fade, and the same-song adoption below upgrades
+            // the incoming slot once its resolver catches up. Because the
+            // incoming value comes from a prior `next` (never `currentImageUrl`
+            // on a song change), a stale current URL can't contaminate a slot.
+            const incomingImage = isTop ? state.bottomImage : state.topImage;
+            const incomingExplicit = isTop ? state.bottomExplicit : state.topExplicit;
 
             setImageState({
-                bottomExplicit: isTop ? currentExplicit : nextExplicit,
-                bottomImage: isTop ? currentImageUrl : nextImageUrl,
+                bottomExplicit: isTop ? incomingExplicit : nextExplicit,
+                bottomImage: isTop ? incomingImage : nextImageUrl,
                 current: isTop ? 1 : 0,
-                topExplicit: isTop ? nextExplicit : currentExplicit,
-                topImage: isTop ? nextImageUrl : currentImageUrl,
+                topExplicit: isTop ? nextExplicit : incomingExplicit,
+                topImage: isTop ? nextImageUrl : incomingImage,
             });
 
             previousSongRef.current = songKey;
@@ -93,15 +110,7 @@ export const useCrossfadeImageSlots = ({
             return;
         }
         setImageState(isTop ? { topImage: currentImageUrl } : { bottomImage: currentImageUrl });
-    }, [
-        paused,
-        songKey,
-        currentExplicit,
-        currentImageUrl,
-        nextExplicit,
-        nextImageUrl,
-        setImageState,
-    ]);
+    }, [paused, songKey, currentImageUrl, nextExplicit, nextImageUrl, setImageState]);
 
     return imageState;
 };

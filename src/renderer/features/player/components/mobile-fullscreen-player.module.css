@@ -727,6 +727,16 @@
     object-fit: contain;
 }
 
+/*
+ * Explicit-content blur — parity with the desktop fullscreen cover
+ * (.censored.image in full-screen-player-image.module.css, same 30px blur)
+ * and the mini-player. Applied at the call sites only when the
+ * blurExplicitImages setting is on AND the song is flagged explicit.
+ */
+.album-image.censored {
+    filter: blur(30px);
+}
+
 .metadata-container {
     display: flex;
     flex-shrink: 0;

@@ -281,7 +281,9 @@ const TopResultCard = ({ onPlay, result }: TopResultCardProps) => {
                     className={`${styles.topImage} ${isArtist ? styles.topImageRound : ''}`}
                     explicitStatus={isArtist ? null : (item as Album | Song).explicitStatus}
                     height={120}
-                    id={imageId}
+                    // A song top-result is cache-keyed by its album cover (its own
+                    // imageId/coverArt isn't swept); albums/artists key on their own id.
+                    id={isSong ? ((item as Song).albumId ?? imageId) : imageId}
                     itemType={kind}
                     src={imageUrl}
                     type="itemCard"
@@ -352,7 +354,8 @@ const SongRow = ({ onPlay, song }: SongRowProps) => {
                     className={styles.songThumb}
                     explicitStatus={song.explicitStatus}
                     height={40}
-                    id={song.imageId}
+                    // Songs are cache-keyed by their album cover (own imageId isn't swept).
+                    id={song.albumId ?? song.imageId}
                     itemType={LibraryItem.SONG}
                     src={song.imageUrl}
                     type="table"
