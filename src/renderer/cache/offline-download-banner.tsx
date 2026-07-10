@@ -15,6 +15,7 @@ import { useTranslation } from 'react-i18next';
 import { formatBytes, formatCount } from './format';
 import styles from './offline-download-banner.module.css';
 import { cancelOfflineSync } from './offline-media';
+import { useCacheStore } from './store';
 import { useSmoothOfflineSync } from './use-smooth-offline-sync';
 
 import { useIsMobileShell } from '/@/renderer/hooks/use-breakpoint';
@@ -26,12 +27,25 @@ export const OfflineDownloadBanner = () => {
     const enabled = useSettingsStore((s) => s.localCache?.enabled === true);
     const isMobileShell = useIsMobileShell();
     const sync = useSmoothOfflineSync();
+    const queue = useCacheStore((s) => s.offlineQueue);
 
     if (!enabled || !sync) return null;
 
+    const enumerating = sync.phase === 'enumerating';
     const done = Math.floor(sync.done);
     const total = sync.total;
     const pct = total && total > 0 ? Math.min(100, (100 * done) / total) : undefined;
+
+    const title = enumerating
+        ? t('page.setting.offlineMedia.preparing', {
+              count: sync.foundCount ?? 0,
+              defaultValue: 'Preparing {{name}} — found {{count}} songs…',
+              name: sync.name,
+          })
+        : t('page.setting.offlineMedia.downloading', {
+              defaultValue: 'Downloading {{name}}',
+              name: sync.name,
+          });
 
     const itemsText = total ? `${formatCount(done)} / ${formatCount(total)}` : formatCount(done);
 
@@ -50,13 +64,17 @@ export const OfflineDownloadBanner = () => {
             : formatBytes(sync.bytesDownloaded);
 
     const rateText = sync.bytesPerSec > 0 ? ` · ${formatBytes(sync.bytesPerSec)}/s` : '';
+    const queuedText =
+        queue && queue.queuedCount > 0
+            ? ` · ${t('page.setting.offlineMedia.queuedCount', {
+                  count: queue.queuedCount,
+                  defaultValue: '{{count}} queued',
+              })}`
+            : '';
 
     return (
         <div
-            aria-label={t('page.setting.offlineMedia.downloading', {
-                defaultValue: 'Downloading {{name}}',
-                name: sync.name,
-            })}
+            aria-label={title}
             className={styles.banner}
             data-position={isMobileShell ? 'top' : 'bottom'}
             role="status"
@@ -65,15 +83,22 @@ export const OfflineDownloadBanner = () => {
                 <Icon icon="cache" size="lg" />
                 <Stack gap={2} style={{ flex: 1, minWidth: 0 }}>
                     <Text className={styles.title} fw={600} size="sm" truncate>
-                        {t('page.setting.offlineMedia.downloading', {
-                            defaultValue: 'Downloading {{name}}',
-                            name: sync.name,
-                        })}
+                        {title}
                     </Text>
-                    <Progress size="sm" value={pct ?? 100} />
+                    {/* During enumeration nothing has downloaded yet — show an
+                        animated indeterminate bar instead of a 0% / 100% jump. */}
+                    <Progress
+                        animated={enumerating}
+                        size="sm"
+                        value={enumerating ? 100 : (pct ?? 100)}
+                    />
                     <Text c="dimmed" size="xs" truncate>
-                        {itemsText} · {bytesText}
-                        {rateText}
+                        {enumerating
+                            ? `${formatCount(sync.foundCount ?? 0)} ${t(
+                                  'page.setting.offlineMedia.songsFound',
+                                  { defaultValue: 'songs found' },
+                              )}${queuedText}`
+                            : `${itemsText} · ${bytesText}${rateText}${queuedText}`}
                     </Text>
                 </Stack>
                 <ActionIcon
