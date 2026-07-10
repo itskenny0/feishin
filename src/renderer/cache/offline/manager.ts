@@ -8,7 +8,7 @@ import type { Song } from '/@/shared/types/domain-types';
 import type { LocalMediaStore } from '../media-store';
 import type { OfflineTargetRow } from '../types';
 
-import { localMediaStore, targetKey } from '../media-store';
+import { localMediaStore, normalizeTargetStatus, targetKey } from '../media-store';
 import { isUpToDate, sourceTagFor } from './dedup';
 import { streamTargetSongs } from './enumerate';
 import { publishProgress, publishQueue } from './progress';
@@ -158,6 +158,32 @@ export class OfflineDownloadManager {
                 await this.resume(t.Key);
             }
         }
+    }
+
+    /**
+     * Normalize every persisted target Status (legacy values + crash residue)
+     * and resume the queue. Called on server activation so a restart/crash
+     * auto-resumes pending downloads. Settled targets are left untouched.
+     */
+    async resumePersisted(): Promise<void> {
+        const store = this.getStore();
+        const targets = await store.listTargets();
+        for (const t of targets) {
+            const normalized = normalizeTargetStatus(t.Status);
+            if (normalized !== t.Status) {
+                const patch: Partial<OfflineTargetRow> = { Status: normalized };
+                if (normalized === 'queued' && t.EnqueuedAt === undefined) {
+                    patch.EnqueuedAt = this.nextEnqueuedAt();
+                }
+                await store.patchTarget(t.Key, patch);
+                console.info(`${TAG} resume: normalized`, {
+                    from: t.Status,
+                    key: t.Key,
+                    to: normalized,
+                });
+            }
+        }
+        void this.kick();
     }
 
     /** Retry a failed/partial target (alias of resume). */
@@ -504,6 +530,7 @@ export class OfflineDownloadManager {
             Status: settled,
         });
         console.info(`${TAG} settled`, { done, found, key, settled, shared });
+        await this.onChanged();
     }
 
     protected publishQueueSummary(targets: OfflineTargetRow[], activeKey: string): void {
