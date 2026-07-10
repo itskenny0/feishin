@@ -1,11 +1,13 @@
-// [sync-only] Mirrors library-sync progress onto the Electron taskbar/dock
-// progress bar + a persistent OS notification while the window is backgrounded.
+// [sync-only] Mirrors library-sync AND offline-download progress onto the
+// Electron taskbar/dock progress bar + a persistent OS notification while the
+// window is backgrounded. The library sweep takes precedence; when it's idle
+// but an offline download is running, that is surfaced instead.
 //
 // Android already drives its own foreground-service notification from the same
-// cache-store `sweep` state (see features/sync-service/), and iOS has no
-// equivalent, so this hook only does work in Electron — it no-ops everywhere
-// else. It subscribes to the cache store's `sweep` field and throttles IPC to
-// the main process to ~1 Hz.
+// cache-store `sweep` / `offlineSync` state (see features/sync-service/), and
+// iOS has no equivalent, so this hook only does work in Electron — it no-ops
+// everywhere else. It subscribes to the cache store and throttles IPC to the
+// main process to ~1 Hz.
 
 import isElectron from 'is-electron';
 import { useEffect } from 'react';
@@ -24,8 +26,8 @@ export const useSyncNotification = (): void => {
         let wasActive = false;
 
         const push = (): void => {
-            const { sweep } = useCacheStore.getState();
-            if (!sweep) {
+            const { offlineSync, sweep } = useCacheStore.getState();
+            if (!sweep && !offlineSync) {
                 if (wasActive) {
                     wasActive = false;
                     ipc.send('sync-progress', { active: false });
@@ -37,19 +39,43 @@ export const useSyncNotification = (): void => {
             lastSentAt = now;
             wasActive = true;
 
-            const { bytesDownloaded, done, paused, total } = sweep.progress;
-            const hasTotal = typeof total === 'number' && total > 0;
-            const fraction = hasTotal ? Math.min(1, done / total) : -1;
-            const body = paused
-                ? 'Paused (offline)'
-                : `${formatCount(done)}${hasTotal ? ` / ${formatCount(total)}` : ''} · ${formatBytes(
-                      bytesDownloaded,
-                  )}`;
+            // The library sweep takes precedence; when it's idle but an offline
+            // download is running, surface that instead.
+            if (sweep) {
+                const { bytesDownloaded, done, paused, total } = sweep.progress;
+                const hasTotal = typeof total === 'number' && total > 0;
+                const fraction = hasTotal ? Math.min(1, done / total) : -1;
+                const body = paused
+                    ? 'Paused (offline)'
+                    : `${formatCount(done)}${
+                          hasTotal ? ` / ${formatCount(total)}` : ''
+                      } · ${formatBytes(bytesDownloaded)}`;
+                ipc.send('sync-progress', {
+                    active: true,
+                    body,
+                    fraction,
+                    title: `Syncing ${sweep.entity}`,
+                });
+                return;
+            }
+
+            const os = offlineSync!;
+            const hasTotal = typeof os.total === 'number' && os.total > 0;
+            const body =
+                os.phase === 'enumerating'
+                    ? `Preparing · ${formatCount(os.foundCount ?? 0)} songs`
+                    : `${formatCount(os.done)}${
+                          hasTotal ? ` / ${formatCount(os.total as number)}` : ''
+                      } · ${formatBytes(os.bytesDownloaded)}`;
+            const fraction =
+                os.phase !== 'enumerating' && hasTotal && os.total
+                    ? Math.min(1, os.done / os.total)
+                    : -1;
             ipc.send('sync-progress', {
                 active: true,
                 body,
                 fraction,
-                title: `Syncing ${sweep.entity}`,
+                title: `Downloading ${os.name}`,
             });
         };
 

@@ -89,11 +89,14 @@ const buildImagesUpdate = (progress: SweepProgress, entity: string): SyncUpdateA
 const buildDownloadsUpdate = (
     progress: NonNullable<ReturnType<typeof useCacheStore.getState>['offlineSync']>,
 ): SyncUpdateArgs => {
-    const { bytesDownloaded, done, name, total } = progress;
+    const { bytesDownloaded, done, foundCount, name, phase, total } = progress;
     const hasTotal = typeof total === 'number' && total > 0;
-    const text = `${formatCount(done)}${hasTotal ? `/${formatCount(total)}` : ''} · ${formatBytes(
-        bytesDownloaded,
-    )}`;
+    const text =
+        phase === 'enumerating'
+            ? `Preparing · ${formatCount(foundCount ?? 0)} songs`
+            : `${formatCount(done)}${hasTotal ? `/${formatCount(total)}` : ''} · ${formatBytes(
+                  bytesDownloaded,
+              )}`;
     return {
         indeterminate: !hasTotal,
         kind: 'downloads',
