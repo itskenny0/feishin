@@ -19,6 +19,7 @@ import type {
     CachedMediaBlob,
     OfflineEntityType,
     OfflineKey,
+    OfflineSourceTag,
     OfflineTargetRow,
     OfflineTargetStatus,
 } from './types';
@@ -88,6 +89,9 @@ export interface SaveMediaArgs {
     entityKey: string;
     serverId: string;
     songId: string;
+    // Freshness fingerprint stored on the new blob row; drives change detection
+    // on later re-syncs (see cache/offline/dedup.ts). Not applied to a dedup hit.
+    sourceTag?: OfflineSourceTag;
 }
 
 type DbGetter = () => LibraryCacheDb | undefined;
@@ -376,12 +380,14 @@ export class LocalMediaStore {
      * existing blob simply gained another entity reference.
      */
     async save(args: SaveMediaArgs): Promise<boolean> {
-        const { blob, container, entityKey, serverId, songId } = args;
+        const { blob, container, entityKey, serverId, songId, sourceTag } = args;
         const db = this.db();
         const key = blobKey(serverId, songId);
         const existing = await db.mediaBlobs.get(key);
         if (existing) {
-            // Already have the bytes — just record the new membership.
+            // Already have the bytes — just record the new membership. The
+            // existing SourceTag is authoritative (it describes the bytes on
+            // disk); a dedup caller's tag must not overwrite it.
             if (!existing.EntityKeys.includes(entityKey)) {
                 existing.EntityKeys.push(entityKey);
                 await db.mediaBlobs.put(existing);
@@ -398,6 +404,7 @@ export class LocalMediaStore {
             MimeType: mimeForContainer(container),
             ServerId: serverId,
             SongId: songId,
+            SourceTag: sourceTag,
             ...rowFieldsForRef(ref),
         };
         await db.mediaBlobs.put(row);
@@ -418,9 +425,10 @@ export class LocalMediaStore {
         serverId: string;
         signal?: AbortSignal;
         songId: string;
+        sourceTag?: OfflineSourceTag;
         url: string;
     }): Promise<{ isNew: boolean; size: number }> {
-        const { container, entityKey, serverId, signal, songId, url } = args;
+        const { container, entityKey, serverId, signal, songId, sourceTag, url } = args;
         const db = this.db();
         const key = blobKey(serverId, songId);
         const existing = await db.mediaBlobs.get(key);
@@ -445,6 +453,7 @@ export class LocalMediaStore {
             MimeType: mimeForContainer(container),
             ServerId: serverId,
             SongId: songId,
+            SourceTag: sourceTag,
             ...rowFieldsForRef(ref),
         };
         await db.mediaBlobs.put(row);
