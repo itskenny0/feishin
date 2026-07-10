@@ -4,6 +4,8 @@ import Fuse from 'fuse.js';
 import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { api } from '/@/renderer/api';
+import { queryKeys } from '/@/renderer/api/query-keys';
 import {
     getAlbumArtistSongsById,
     getAlbumSongsById,
@@ -11,7 +13,6 @@ import {
     getPlaylistSongsById,
     getSongsByFolder,
 } from '/@/renderer/features/player/utils';
-import { playlistsQueries } from '/@/renderer/features/playlists/api/playlists-api';
 import { useRecentPlaylists } from '/@/renderer/features/playlists/hooks/use-recent-playlists';
 import { useAddToPlaylist } from '/@/renderer/features/playlists/mutations/add-to-playlist-mutation';
 import { usePlaylistListQuery } from '/@/renderer/features/playlists/queries/playlists-queries';
@@ -208,14 +209,24 @@ export const AddToPlaylistAction = ({ items, itemType }: AddToPlaylistActionProp
                 let songsToAdd: string[] = allSongIds;
 
                 if (skipDuplicates) {
-                    const playlistSongsRes = await queryClient.fetchQuery(
-                        playlistsQueries.songList({
-                            query: { id: playlistId },
-                            serverId,
-                        }),
-                    );
+                    const queryKey = queryKeys.playlists.songListIds(serverId, playlistId);
 
-                    const playlistSongIds = playlistSongsRes?.items?.map((song) => song.id);
+                    const playlistSongsRes = await queryClient.fetchQuery({
+                        queryFn: ({ signal }) => {
+                            return api.controller.getPlaylistSongIds({
+                                apiClientProps: {
+                                    serverId,
+                                    signal,
+                                },
+                                query: {
+                                    id: playlistId,
+                                },
+                            });
+                        },
+                        queryKey,
+                    });
+
+                    const playlistSongIds = playlistSongsRes?.items;
                     const uniqueSongIds: string[] = [];
 
                     for (const songId of allSongIds) {

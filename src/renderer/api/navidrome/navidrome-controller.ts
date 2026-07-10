@@ -19,7 +19,6 @@ import {
     DeleteInternetRadioStationImageResponse,
     DeletePlaylistImageArgs,
     DeletePlaylistImageResponse,
-    genreListSortMap,
     InternalControllerEndpoint,
     playlistListSortMap,
     PlaylistSongListArgs,
@@ -602,26 +601,7 @@ export const NavidromeController: InternalControllerEndpoint = {
             };
         }
 
-        const res = await ndApiClient(apiClientProps).getGenreList({
-            query: {
-                _end: query.startIndex + (query.limit || 0),
-                _order: sortOrderMap.navidrome[query.sortOrder],
-                _sort: genreListSortMap.navidrome[query.sortBy],
-                _start: query.startIndex,
-                library_id: getLibraryId(query.musicFolderId),
-                name: query.searchTerm,
-            },
-        });
-
-        if (res.status !== 200) {
-            throw new Error('Failed to get genre list');
-        }
-
-        return {
-            items: res.body.data.map((genre) => ndNormalize.genre(genre, apiClientProps.server)),
-            startIndex: query.startIndex || 0,
-            totalRecordCount: Number(res.body.headers.get('x-total-count') || 0),
-        };
+        return SubsonicController.getGenreList(args);
     },
     getImageRequest: SubsonicController.getImageRequest,
     getImageUrl: SubsonicController.getImageUrl,
@@ -689,6 +669,11 @@ export const NavidromeController: InternalControllerEndpoint = {
             apiClientProps,
             query: { ...query, limit: 1, startIndex: 0 },
         }).then((result) => result!.totalRecordCount!),
+    getPlaylistSongIds: async (args) =>
+        NavidromeController.getPlaylistSongList(args).then((result) => ({
+            ...result,
+            items: result.items.map((song) => song.id),
+        })),
     getPlaylistSongList: async (args: PlaylistSongListArgs): Promise<PlaylistSongListResponse> => {
         const { apiClientProps, query } = args;
 
@@ -768,6 +753,7 @@ export const NavidromeController: InternalControllerEndpoint = {
             ...navidromeFeatures,
             publicPlaylist: [1],
             [ServerFeature.ALBUM_YES_NO_RATING_FILTER]: [1],
+            [ServerFeature.JUKEBOX]: [1],
             [ServerFeature.MUSIC_FOLDER_MULTISELECT]: [1],
         };
 
@@ -889,12 +875,12 @@ export const NavidromeController: InternalControllerEndpoint = {
             totalRecordCount: albums.totalRecordCount,
         };
     },
-
     getSongListCount: async ({ apiClientProps, query }) =>
         NavidromeController.getSongList({
             apiClientProps,
             query: { ...query, limit: 1, startIndex: 0 },
         }).then((result) => result!.totalRecordCount!),
+
     getStreamUrl: SubsonicController.getStreamUrl,
     getStructuredLyrics: SubsonicController.getStructuredLyrics,
     getTagList: async (args) => {
@@ -1031,6 +1017,7 @@ export const NavidromeController: InternalControllerEndpoint = {
             totalRecordCount: Number(res.body.headers.get('x-total-count') || 0),
         };
     },
+    jukeboxControl: SubsonicController.jukeboxControl,
     movePlaylistItem: async (args) => {
         const { apiClientProps, query } = args;
 

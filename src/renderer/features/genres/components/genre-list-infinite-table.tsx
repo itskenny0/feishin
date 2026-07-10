@@ -45,23 +45,30 @@ export const GenreListInfiniteTable = ({
 
     const listQueryFn = api.controller.getGenreList;
 
-    const { dataVersion, getItem, getItemIndex, itemCount, loadedItems, onRangeChanged } =
-        useItemListInfiniteLoader({
-            eventKey: ItemListKey.GENRE,
-            itemsPerPage,
-            itemType: LibraryItem.GENRE,
-            listCountQuery,
-            listQueryFn,
-            localFetchPage: (args) =>
-                resolveGenrePage({
-                    limit: args.limit,
-                    query: args.query as GenreListQuery,
-                    startIndex: args.startIndex,
-                }),
-            query,
-            serverId,
-            thumbnailVariant: 'table',
-        });
+    const {
+        dataVersion,
+        getItem,
+        getItemIndex,
+        getLoadedItems,
+        itemCount,
+        loadedItems,
+        onRangeChanged,
+    } = useItemListInfiniteLoader({
+        eventKey: ItemListKey.GENRE,
+        itemsPerPage,
+        itemType: LibraryItem.GENRE,
+        listCountQuery,
+        listQueryFn,
+        localFetchPage: (args) =>
+            resolveGenrePage({
+                limit: args.limit,
+                query: args.query as GenreListQuery,
+                startIndex: args.startIndex,
+            }),
+        query,
+        serverId,
+        thumbnailVariant: 'table',
+    });
 
     const { handleOnScrollEnd, scrollOffset } = useItemListScrollPersist({
         enabled: saveScrollOffset,
@@ -91,6 +98,7 @@ export const GenreListInfiniteTable = ({
             enableVerticalBorders={enableVerticalBorders}
             getItem={getItem}
             getItemIndex={getItemIndex}
+            getLoadedItems={getLoadedItems}
             initialTop={{
                 to: scrollOffset ?? 0,
                 type: 'offset',

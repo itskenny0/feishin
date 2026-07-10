@@ -149,6 +149,7 @@ export enum PlayerShuffle {
 export enum PlayerStatus {
     PAUSED = 'paused',
     PLAYING = 'playing',
+    STOPPED = 'stopped',
 }
 
 export enum PlayerStyle {
@@ -157,6 +158,7 @@ export enum PlayerStyle {
 }
 
 export enum PlayerType {
+    JUKEBOX = 'jukebox',
     LOCAL = 'local',
     WEB = 'web',
 }

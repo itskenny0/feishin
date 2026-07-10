@@ -71,9 +71,13 @@ export const MpvPlayerEngine = (props: MpvPlayerEngineProps) => {
         };
 
         eventEmitter.on('MPV_RELOAD', handleMpvReload);
+        // The main process notifies us after the OS resumes from sleep, since the
+        // stream mpv had open is likely on a now-dead connection.
+        mpvPlayerListener?.rendererMpvReconnect(handleMpvReload);
 
         return () => {
             eventEmitter.off('MPV_RELOAD', handleMpvReload);
+            ipc?.removeAllListeners('renderer-mpv-reconnect');
         };
     }, []);
 
@@ -236,7 +240,7 @@ export const MpvPlayerEngine = (props: MpvPlayerEngineProps) => {
 
         if (playerStatus === PlayerStatus.PLAYING) {
             mpvPlayer.play();
-        } else if (playerStatus === PlayerStatus.PAUSED) {
+        } else {
             mpvPlayer.pause();
         }
     }, [playerStatus]);
@@ -310,10 +314,21 @@ export const MpvPlayerEngine = (props: MpvPlayerEngineProps) => {
             handleMpvAutoNext(transcode);
         };
 
+        const handleTrackEnded = () => {
+            const { player } = usePlayerStore.getState();
+            if (player.status !== PlayerStatus.PLAYING) {
+                return;
+            }
+
+            mediaAutoNext();
+        };
+
         mpvPlayerListener.rendererAutoNext(handleOnAutoNext);
+        mpvPlayerListener.rendererTrackEnded(handleTrackEnded);
 
         return () => {
             ipc?.removeAllListeners('renderer-player-auto-next');
+            ipc?.removeAllListeners('renderer-player-track-ended');
         };
     }, [mediaAutoNext, onEnded, transcode]);
 

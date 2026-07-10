@@ -16,23 +16,24 @@
     transform: scale(var(--lyric-scale));
     transform-origin: var(--lyric-scale-origin) center;
     transition:
-        opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1),
-        transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
-
-    /* Hint the compositor only while the active line is animating between
-       scale states. Applying will-change to every line would force ~N layers
-       on long songs, wasting GPU memory and regressing scroll. */
-    @media (prefers-reduced-motion: reduce) {
-        transition:
-            opacity 0.2s linear,
-            transform 0.2s linear;
-    }
+        filter calc(var(--karaoke-line-duration, 1s) / 3) 0.4s,
+        opacity calc(var(--karaoke-line-duration, 1s) / 2) 0.166s,
+        transform 0.166s var(--karaoke-anim-delay, 0s);
+    will-change: transform;
 }
 
+.lyric-line:global(.lyrics-line-active),
+.lyric-line:global(.lyrics-line-animating),
+.lyric-line:global(.lyrics-line-pre-animating),
 .lyric-line:global(.active) {
     opacity: 1 !important;
+    filter: blur(0);
     transform: scale(1);
     will-change: transform;
+}
+
+.lyric-line:global(.lyrics-line-animating) {
+    transition-delay: var(--karaoke-anim-delay, 0s);
 }
 
 .lyric-line:global(.unsynchronized) {
@@ -43,10 +44,7 @@
     cursor: pointer;
 }
 
-/* Larger tap target + comfortable reading size on phone-shaped viewports. */
-@media screen and (orientation: portrait) {
-    .lyric-line {
-        padding: 0.1rem 1.25rem;
-        line-height: 1.35;
-    }
+.romaji-line {
+    font-size: 0.8em;
+    font-weight: 600;
 }

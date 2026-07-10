@@ -1356,6 +1356,7 @@ export const getDataRows = (type?: 'compact' | 'default' | 'poster'): DataRow[] 
                             // compilation must not render a wall of names.
                             maxArtists={4}
                             rootTextProps={{
+                                className: styles.artistsRow,
                                 fw: 400,
                                 isMuted: type === 'compact' ? false : true,
                                 size: 'sm',
@@ -1675,6 +1676,7 @@ const ItemCardRow = memo(
 
         // All rows except the first one (index 0) should be muted
         const isMuted = index > 0 || row.isMuted;
+        const isArtistRow = row.id === 'albumArtists' || row.id === 'artists';
 
         const formattedContent = useMemo(() => {
             if (!data) {
@@ -1701,6 +1703,7 @@ const ItemCardRow = memo(
         return (
             <Text
                 className={clsx(styles.row, alignmentClass, {
+                    [styles.artistsRow]: isArtistRow,
                     [styles.bold]: index === 0,
                     [styles.compact]: type === 'compact',
                     [styles.default]: type === 'default',

@@ -40,10 +40,10 @@ describe('toLyricsRow', () => {
     });
 
     it('builds a positive synced row from a synchronized array', () => {
-        const m = meta([[0, 'hi']]);
+        const m = meta([{ startMs: 0, text: 'hi' }]);
         expect(toLyricsRow('s2', m, NOW)).toEqual({
             __cachedAt: NOW,
-            Lyrics: JSON.stringify([[0, 'hi']]),
+            Lyrics: JSON.stringify([{ startMs: 0, text: 'hi' }]),
             Payload: m,
             SongId: 's2',
             Synced: true,
@@ -55,7 +55,7 @@ describe('toLyricsRow', () => {
             {
                 artist: 'A',
                 lang: 'en',
-                lyrics: [[0, 'hi']],
+                lyrics: [{ startMs: 0, text: 'hi' }],
                 name: 'N',
                 remote: false,
                 source: 'srv',
@@ -65,7 +65,7 @@ describe('toLyricsRow', () => {
         expect(row.SongId).toBe('s3');
         expect(row.Synced).toBe(true);
         expect(row.Payload).toBe(structured[0]);
-        expect(row.Lyrics).toBe(JSON.stringify([[0, 'hi']]));
+        expect(row.Lyrics).toBe(JSON.stringify([{ startMs: 0, text: 'hi' }]));
     });
 
     it('builds a NEGATIVE marker for null (no lyrics found)', () => {

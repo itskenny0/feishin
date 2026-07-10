@@ -211,13 +211,12 @@ export const JF_FIELDS = {
         // minimum-track-count threshold) treat every artist as having 0 songs.
         'ItemCounts',
     ],
-    ALBUM_DETAIL: ['Genres', 'DateCreated', 'ChildCount', 'People', 'Tags', 'ProviderIds', 'Path'],
+    ALBUM_DETAIL: ['Genres', 'DateCreated', 'ChildCount', 'Tags', 'ProviderIds', 'Path'],
     // GenreItems is required for genre IDs (not just names) to appear in the
     // normalized album.genres[].id — used by the *GenreIds Dexie index and
     // the filterAlbumsLocal genre filter. Genres (name-only) stays for
     // backwards-compat with any path that reads item.Genres directly.
     ALBUM_LIST: [
-        'People',
         'Tags',
         'Studios',
         'SortName',
@@ -238,16 +237,7 @@ export const JF_FIELDS = {
         'SortName',
     ],
     PLAYLIST_LIST: ['ChildCount', 'Genres', 'DateCreated', 'ParentId', 'Overview'],
-    SONG: [
-        'Genres',
-        'DateCreated',
-        'MediaSources',
-        'ParentId',
-        'People',
-        'Tags',
-        'SortName',
-        'ProviderIds',
-    ],
+    SONG: ['Genres', 'DateCreated', 'MediaSources', 'ParentId', 'Tags', 'SortName', 'ProviderIds'],
 } as const;
 
 export const JellyfinController: InternalControllerEndpoint = {
@@ -1073,7 +1063,10 @@ export const JellyfinController: InternalControllerEndpoint = {
             return res.body.Lyrics.map((lyric) => lyric.Text).join('\n');
         }
 
-        return res.body.Lyrics.map((lyric) => [lyric.Start! / 1e4, lyric.Text]);
+        return res.body.Lyrics.map((lyric) => ({
+            startMs: lyric.Start! / 1e4,
+            text: lyric.Text,
+        }));
     },
     getMusicFolderList: async (args) => {
         const { apiClientProps } = args;
@@ -1177,6 +1170,35 @@ export const JellyfinController: InternalControllerEndpoint = {
             apiClientProps,
             query: { ...query, limit: 1, startIndex: 0 },
         }).then((result) => result!.totalRecordCount!),
+    getPlaylistSongIds: async (args) => {
+        const { apiClientProps, query } = args;
+
+        if (!apiClientProps.server?.userId) {
+            throw new Error('No userId found');
+        }
+
+        const res = await jfApiClient(apiClientProps).getPlaylistSongList({
+            params: {
+                id: query.id,
+            },
+            query: {
+                // XXX: No fields are required for only IDs, which saves processing time between
+                // the Jellyfin server query, network (MBs vs KBs), and in-app parsing.
+                IncludeItemTypes: 'Audio',
+                UserId: apiClientProps.server?.userId,
+            },
+        });
+
+        if (res.status !== 200) {
+            throw new Error('Failed to get playlist song list IDs');
+        }
+
+        return {
+            items: res.body.Items.map((item) => item.Id),
+            startIndex: 0,
+            totalRecordCount: res.body.TotalRecordCount,
+        };
+    },
     getPlaylistSongList: async (args) => {
         const { apiClientProps, query } = args;
 
@@ -1194,7 +1216,7 @@ export const JellyfinController: InternalControllerEndpoint = {
                 id: query.id,
             },
             query: {
-                Fields: JF_FIELDS.SONG,
+                Fields: JF_FIELDS.PLAYLIST_DETAIL,
                 IncludeItemTypes: 'Audio',
                 Limit: query.limit ?? 5000,
                 StartIndex: query.startIndex ?? 0,

@@ -6,7 +6,7 @@ import {
     UseSuspenseQueryOptions,
 } from '@tanstack/react-query';
 import throttle from 'lodash/throttle';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 
 import { queryKeys } from '/@/renderer/api/query-keys';
 import {
@@ -163,7 +163,6 @@ export const useItemListInfiniteLoader = ({
     const queryClient = useQueryClient();
     const lastFetchedPageRef = useRef<number>(-1);
     const currentVisibleRangeRef = useRef<null | { startIndex: number; stopIndex: number }>(null);
-    const [isRefetching, setIsRefetching] = useState(false);
     const refetchPromiseRef = useRef<null | Promise<void>>(null);
     const previousDataQueryKeyRef = useRef<string>('');
     const isRefetchingRef = useRef<boolean>(false);
@@ -434,7 +433,6 @@ export const useItemListInfiniteLoader = ({
         const countQueryKey = listCountQuery.queryKey;
 
         // Set refetching state and create a promise to suspend
-        setIsRefetching(true);
         const refetchPromise = (async () => {
             try {
                 // Reset the loaded pages (and the ref-held item maps).
@@ -466,7 +464,6 @@ export const useItemListInfiniteLoader = ({
                     new Promise<void>((resolve) => setTimeout(resolve, 2500)),
                 ]);
             } finally {
-                setIsRefetching(false);
                 isRefetchingRef.current = false;
                 refetchPromiseRef.current = null;
             }
@@ -475,7 +472,6 @@ export const useItemListInfiniteLoader = ({
         refetchPromiseRef.current = refetchPromise;
 
         refetchPromise.catch(() => {
-            setIsRefetching(false);
             isRefetchingRef.current = false;
             refetchPromiseRef.current = null;
         });
@@ -493,7 +489,7 @@ export const useItemListInfiniteLoader = ({
     });
 
     // Suspend if refetching
-    if (isRefetching && refetchPromiseRef.current) {
+    if (isRefetchingRef.current && refetchPromiseRef.current) {
         throw refetchPromiseRef.current;
     }
 
@@ -783,10 +779,23 @@ export const useItemListInfiniteLoader = ({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [dataVersion]);
 
+    // Callback form of `loadedItems` for consumers that need the current
+    // snapshot on demand (e.g. select-all). Reads the same ref-held map so it
+    // stays consistent with the fork's ref-based storage instead of the query
+    // cache (which no longer holds the map).
+    const getLoadedItems = useCallback(() => {
+        const map = dataMapRef.current;
+        if (!map || map.size === 0) return [];
+        return Array.from(map.entries())
+            .sort(([a], [b]) => a - b)
+            .map(([, v]) => v);
+    }, []);
+
     return {
         dataVersion,
         getItem,
         getItemIndex,
+        getLoadedItems,
         itemCount,
         loadedItems,
         onRangeChanged,

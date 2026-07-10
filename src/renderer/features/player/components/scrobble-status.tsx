@@ -8,7 +8,7 @@ import {
 import {
     useAppStore,
     usePlayerTimestamp,
-    useScrobbleDebugStore,
+    useScrobbleDebugSnapshot,
     useSettingsStore,
 } from '/@/renderer/store';
 import { Button } from '/@/shared/components/button/button';
@@ -63,7 +63,7 @@ export const ScrobbleStatus = () => {
     const { t } = useTranslation();
     const scrobbleEnabled = useSettingsStore((state) => state.playback.scrobble.enabled);
     const privateMode = useAppStore((state) => state.privateMode);
-    const snapshot = useScrobbleDebugStore((state) => state.snapshot);
+    const snapshot = useScrobbleDebugSnapshot();
 
     const hookInactive = !scrobbleEnabled || privateMode;
 

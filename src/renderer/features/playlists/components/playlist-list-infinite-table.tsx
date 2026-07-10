@@ -45,23 +45,30 @@ export const PlaylistListInfiniteTable = ({
 
     const listQueryFn = api.controller.getPlaylistList;
 
-    const { dataVersion, getItem, getItemIndex, itemCount, loadedItems, onRangeChanged } =
-        useItemListInfiniteLoader({
-            eventKey: ItemListKey.PLAYLIST,
-            itemsPerPage,
-            itemType: LibraryItem.PLAYLIST,
-            listCountQuery,
-            listQueryFn,
-            localFetchPage: (args) =>
-                resolvePlaylistPage({
-                    limit: args.limit,
-                    query: args.query as PlaylistListQuery,
-                    startIndex: args.startIndex,
-                }),
-            query,
-            serverId,
-            thumbnailVariant: 'table',
-        });
+    const {
+        dataVersion,
+        getItem,
+        getItemIndex,
+        getLoadedItems,
+        itemCount,
+        loadedItems,
+        onRangeChanged,
+    } = useItemListInfiniteLoader({
+        eventKey: ItemListKey.PLAYLIST,
+        itemsPerPage,
+        itemType: LibraryItem.PLAYLIST,
+        listCountQuery,
+        listQueryFn,
+        localFetchPage: (args) =>
+            resolvePlaylistPage({
+                limit: args.limit,
+                query: args.query as PlaylistListQuery,
+                startIndex: args.startIndex,
+            }),
+        query,
+        serverId,
+        thumbnailVariant: 'table',
+    });
 
     const { handleOnScrollEnd, scrollOffset } = useItemListScrollPersist({
         enabled: saveScrollOffset,
@@ -91,6 +98,7 @@ export const PlaylistListInfiniteTable = ({
             enableVerticalBorders={enableVerticalBorders}
             getItem={getItem}
             getItemIndex={getItemIndex}
+            getLoadedItems={getLoadedItems}
             initialTop={{
                 to: scrollOffset ?? 0,
                 type: 'offset',

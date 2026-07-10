@@ -503,6 +503,7 @@ export const GeneralSettingsSchema = z.object({
     albumBackground: z.boolean(),
     albumBackgroundBlur: z.number(),
     albumFavoriteFilter: z.boolean().nullable(),
+    albumGroupImageSize: z.number(),
     artistBackground: z.boolean(),
     artistBackgroundBlur: z.number(),
     artistItems: z.array(SortableItemSchema(ArtistItemSchema)),
@@ -622,6 +623,7 @@ export const GeneralSettingsSchema = z.object({
     lastFM: z.boolean(),
     lastfmApiKey: z.string(),
     listenBrainz: z.boolean(),
+    microtonalPitchControls: z.boolean(),
     /*
      * Destination route for the mobile-shell "Library" bottom-tab. The bar
      * navigates here when the user taps Library; defaults to Albums (the
@@ -768,6 +770,8 @@ const LyricsDisplaySettingsSchema = z.object({
     gap: z.number(),
     gapUnsync: z.number(),
     opacityNonActive: z.number(),
+    paddingLeft: z.number(),
+    paddingRight: z.number(),
     scaleNonActive: z.number(),
 });
 
@@ -777,8 +781,11 @@ const LyricsSettingsSchema = z.object({
     enableAutoTranslation: z.boolean(),
     enableFurigana: z.boolean().optional(),
     enableNeteaseTranslation: z.boolean(),
+    enableRomaji: z.boolean().optional(),
     fetch: z.boolean(),
     follow: z.boolean(),
+    followScrollAlignment: z.number(),
+    lineLeadTimeMs: z.number(),
     preferLocalLyrics: z.boolean(),
     showMatch: z.boolean(),
     showProvider: z.boolean(),
@@ -896,6 +903,7 @@ const WindowSettingsSchema = z.object({
     startMinimized: z.boolean(),
     tray: z.boolean(),
     windowBarStyle: z.nativeEnum(Platform),
+    windowBarTrackinfo: z.boolean(),
 });
 
 const QueryValueInputTypeSchema = z.enum([
@@ -1815,6 +1823,7 @@ const initialState: SettingsState = {
         albumBackground: false,
         albumBackgroundBlur: 3,
         albumFavoriteFilter: null,
+        albumGroupImageSize: 0,
         artistBackground: true,
         artistBackgroundBlur: 3,
         artistItems,
@@ -1866,6 +1875,7 @@ const initialState: SettingsState = {
         lastFM: true,
         lastfmApiKey: '',
         listenBrainz: true,
+        microtonalPitchControls: false,
         mobileLibraryDestination: 'albums',
         mobilePlayerbarShowNavButtons: false,
         mobileShellForce: false,
@@ -2573,8 +2583,11 @@ const initialState: SettingsState = {
         enableAutoTranslation: false,
         enableFurigana: false,
         enableNeteaseTranslation: false,
+        enableRomaji: false,
         fetch: true,
         follow: true,
+        followScrollAlignment: 0,
+        lineLeadTimeMs: 800,
         preferLocalLyrics: true,
         showMatch: true,
         showProvider: true,
@@ -2591,6 +2604,8 @@ const initialState: SettingsState = {
             gap: 24,
             gapUnsync: 24,
             opacityNonActive: 0.2,
+            paddingLeft: 0,
+            paddingRight: 0,
             scaleNonActive: 0.95,
         },
     },
@@ -2778,6 +2793,7 @@ const initialState: SettingsState = {
         startMinimized: false,
         tray: true,
         windowBarStyle: platformDefaultWindowBarStyle,
+        windowBarTrackinfo: true,
     },
 };
 
@@ -3283,7 +3299,7 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                                     id: TableColumn.ALBUM_GROUP,
                                     isEnabled: false,
                                     pinned: 'left',
-                                    width: 200,
+                                    width: 240,
                                 });
                             }
                         }
@@ -4039,10 +4055,47 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
+                if (version < 30) {
+                    for (const [key, displaySettings] of Object.entries(state.lyricsDisplay)) {
+                        const legacySettings = displaySettings as typeof displaySettings & {
+                            paddingX?: number;
+                        };
+                        const legacyPaddingX = legacySettings.paddingX ?? 0;
+
+                        state.lyricsDisplay[key] = {
+                            ...displaySettings,
+                            paddingLeft: displaySettings.paddingLeft ?? legacyPaddingX,
+                            paddingRight: displaySettings.paddingRight ?? legacyPaddingX,
+                        };
+                    }
+                }
+
+                if (version < 31) {
+                    if (state.lyrics.followScrollAlignment === undefined) {
+                        state.lyrics.followScrollAlignment = 0;
+                    }
+                }
+
+                if (version < 76) {
+                    // Seed the upstream-merge settings (album-group cover size in
+                    // the queue/table header, microtonal pitch controls). These
+                    // shipped without zod defaults, so existing installs must be
+                    // given the fresh-install values explicitly — a throwing
+                    // migrate discards ALL persisted settings.
+                    if (state.general.albumGroupImageSize === undefined) {
+                        state.general.albumGroupImageSize =
+                            initialState.general.albumGroupImageSize;
+                    }
+                    if (state.general.microtonalPitchControls === undefined) {
+                        state.general.microtonalPitchControls =
+                            initialState.general.microtonalPitchControls;
+                    }
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 75,
+            version: 76,
         },
     ),
 );
@@ -4074,6 +4127,9 @@ export const useWindowSettings = () => useSettingsStore((state) => state.window,
 
 export const useWindowBarStyle = () =>
     useSettingsStore((state) => state.window.windowBarStyle, shallow);
+
+export const useWindowBarTrackinfo = () =>
+    useSettingsStore((state) => state.window.windowBarTrackinfo, shallow);
 
 export const useHotkeySettings = () => useSettingsStore((state) => state.hotkeys, shallow);
 
@@ -4161,6 +4217,9 @@ export const useButtonSize = () => useSettingsStore((state) => state.general.but
 export const useSkipButtons = () => useSettingsStore((state) => state.general.skipButtons, shallow);
 
 export const useImageRes = () => useSettingsStore((state) => state.general.imageRes, shallow);
+
+export const useAlbumGroupImageSize = () =>
+    useSettingsStore((state) => state.general.albumGroupImageSize);
 
 export const useVolumeWidth = () => useSettingsStore((state) => state.general.volumeWidth, shallow);
 
@@ -4517,3 +4576,5 @@ export const useTrackmapAdvanced = () =>
 
 /** The shape of the advanced-knobs slice — exported for the canvas + UI. */
 export type TrackmapAdvancedSettings = ReturnType<typeof useTrackmapAdvanced>;
+export const useMicrotonalPitchControls = () =>
+    useSettingsStore((state) => state.general.microtonalPitchControls, shallow);

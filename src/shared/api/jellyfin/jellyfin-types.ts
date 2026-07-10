@@ -474,6 +474,7 @@ const song = z.object({
     AlbumArtist: z.string(),
     AlbumArtists: z.array(genericItem),
     AlbumId: z.string().optional(),
+    AlbumNormalizationGain: z.number().optional(),
     AlbumPrimaryImageTag: z.string(),
     ArtistItems: z.array(genericItem),
     Artists: z.array(z.string()),

@@ -1,3 +1,4 @@
+import { type RefObject, useRef } from 'react';
 import { useNavigate } from 'react-router';
 
 import { getTitlePath } from '/@/renderer/components/item-list/helpers/get-title-path';
@@ -13,12 +14,14 @@ import { Play } from '/@/shared/types/types';
 
 export const useListHotkeys = ({
     controls,
+    focusContainerRef,
     focused,
     internalState,
     itemType,
     onShowPlayingSong,
 }: {
     controls: ItemControls;
+    focusContainerRef?: RefObject<HTMLElement | null>;
     focused: boolean;
     internalState: ItemListStateActions;
     itemType: LibraryItem;
@@ -27,6 +30,19 @@ export const useListHotkeys = ({
     const { bindings } = useHotkeySettings();
     const playButtonBehavior = usePlayButtonBehavior();
     const navigate = useNavigate();
+    const focusedRef = useRef(focused);
+    focusedRef.current = focused;
+    const internalStateRef = useRef(internalState);
+    internalStateRef.current = internalState;
+
+    const isListFocused = () => {
+        const container = focusContainerRef?.current;
+        if (container) {
+            return container.contains(document.activeElement);
+        }
+
+        return focusedRef.current;
+    };
 
     // Helper to check if item has required properties
     const hasRequiredStateItemProperties = (
@@ -48,19 +64,20 @@ export const useListHotkeys = ({
         [
             'mod+a',
             () => {
-                if (focused) {
-                    if (internalState.isAllSelected()) {
-                        internalState.deselectAll();
-                    } else {
-                        internalState.selectAll();
-                    }
+                if (!isListFocused()) return;
+
+                const state = internalStateRef.current;
+                if (state.isAllSelected()) {
+                    state.deselectAll();
+                } else {
+                    state.selectAll();
                 }
             },
         ],
         [
             bindings.listPlayDefault.hotkey,
             () => {
-                if (!focused) return;
+                if (!isListFocused()) return;
                 // Play the FULL selection (every selected row), matching the
                 // context-menu play path. `onPlaySelected` reads
                 // internalState.getSelected() itself and guards empty selection.
@@ -76,7 +93,7 @@ export const useListHotkeys = ({
         [
             bindings.listPlayNow.hotkey,
             () => {
-                if (!focused) return;
+                if (!isListFocused()) return;
                 controls.onPlaySelected?.({
                     event: null,
                     internalState,
@@ -89,7 +106,7 @@ export const useListHotkeys = ({
         [
             bindings.listPlayNext.hotkey,
             () => {
-                if (!focused) return;
+                if (!isListFocused()) return;
                 controls.onPlaySelected?.({
                     event: null,
                     internalState,
@@ -102,7 +119,7 @@ export const useListHotkeys = ({
         [
             bindings.listPlayLast.hotkey,
             () => {
-                if (!focused) return;
+                if (!isListFocused()) return;
                 controls.onPlaySelected?.({
                     event: null,
                     internalState,
@@ -115,7 +132,7 @@ export const useListHotkeys = ({
         [
             bindings.listNavigateToPage.hotkey,
             () => {
-                if (!focused) return;
+                if (!isListFocused()) return;
                 const selected = internalState.getSelected();
                 const validSelected = selected.filter(hasRequiredStateItemProperties);
                 if (validSelected.length === 0) return;
@@ -130,7 +147,7 @@ export const useListHotkeys = ({
         [
             bindings.listShowPlayingSong.hotkey,
             () => {
-                if (!focused) return;
+                if (!isListFocused()) return;
                 onShowPlayingSong?.();
             },
         ],

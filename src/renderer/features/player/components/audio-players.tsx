@@ -10,6 +10,7 @@ import { UpcomingLyricsPrefetch } from '/@/renderer/features/lyrics/hooks/use-pr
 import { CapacitorMediaSessionHook } from '/@/renderer/features/player/audio-player/hooks/use-capacitor-media-session';
 import { MainPlayerListenerHook } from '/@/renderer/features/player/audio-player/hooks/use-main-player-listener';
 import { PauseOnDeviceDisconnectHook } from '/@/renderer/features/player/audio-player/hooks/use-pause-on-device-disconnect';
+import { JukeboxPlayer } from '/@/renderer/features/player/audio-player/jukebox-player';
 import { MpvPlayer } from '/@/renderer/features/player/audio-player/mpv-player';
 import { WebPlayer } from '/@/renderer/features/player/audio-player/web-player';
 import { SleepTimerHook } from '/@/renderer/features/player/components/sleep-timer-button';
@@ -483,6 +484,7 @@ const AudioPlayersContent = ({
         <>
             {playbackType === PlayerType.WEB && <WebPlayer />}
             {playbackType === PlayerType.LOCAL && <MpvPlayer />}
+            {playbackType === PlayerType.JUKEBOX && <JukeboxPlayer />}
         </>
     );
 };

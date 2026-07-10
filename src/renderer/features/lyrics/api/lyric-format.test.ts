@@ -33,33 +33,33 @@ const asSynced = (result: ReturnType<typeof formatLyricsForDisplay>): Synchroniz
 };
 
 describe('formatLyricsForDisplay — LRC timestamps', () => {
-    it('parses [mm:ss.SSS] lines into [ms, text] tuples', () => {
+    it('parses [mm:ss.SSS] lines into { startMs, text } objects', () => {
         const lrc = '[00:01.500]first line\n[00:02.250]second line';
         const synced = asSynced(formatLyricsForDisplay(lrc));
         expect(synced).toEqual([
-            [1500, 'first line'],
-            [2250, 'second line'],
+            { startMs: 1500, text: 'first line' },
+            { startMs: 2250, text: 'second line' },
         ]);
     });
 
     it('treats two-digit fractional seconds as centiseconds (x10)', () => {
         // [00:00.05] -> 50ms (05 centiseconds), per the *10 branch.
         const synced = asSynced(formatLyricsForDisplay('[00:00.05]centi'));
-        expect(synced).toEqual([[50, 'centi']]);
+        expect(synced).toEqual([{ startMs: 50, text: 'centi' }]);
     });
 
     it('handles minutes beyond 60 and missing fractional part', () => {
         // No fractional component -> milis is NaN*... guarded? The parser uses
         // parseInt(undefined) -> NaN; assert the integer minute/second math.
         const synced = asSynced(formatLyricsForDisplay('[01:30.000]ninety seconds'));
-        expect(synced).toEqual([[90_000, 'ninety seconds']]);
+        expect(synced).toEqual([{ startMs: 90_000, text: 'ninety seconds' }]);
     });
 
     it('preserves line order across multiple timestamps', () => {
         const lrc = '[00:00.000]a\n[00:10.000]b\n[00:05.000]c';
         const synced = asSynced(formatLyricsForDisplay(lrc));
-        expect(synced.map(([, text]) => text)).toEqual(['a', 'b', 'c']);
-        expect(synced.map(([ms]) => ms)).toEqual([0, 10_000, 5_000]);
+        expect(synced.map((line) => line.text)).toEqual(['a', 'b', 'c']);
+        expect(synced.map((line) => line.startMs)).toEqual([0, 10_000, 5_000]);
     });
 });
 
@@ -67,15 +67,15 @@ describe('formatLyricsForDisplay — NetEase karaoke fallback', () => {
     it('parses [ms,dur] karaoke lines when no LRC timestamps match', () => {
         const synced = asSynced(formatLyricsForDisplay('[1200,300]hello\n[2000,300]world'));
         expect(synced).toEqual([
-            [1200, 'hello'],
-            [2000, 'world'],
+            { startMs: 1200, text: 'hello' },
+            { startMs: 2000, text: 'world' },
         ]);
     });
 
     it('strips inline (offset,dur) word markers and tidies stray punctuation', () => {
         const synced = asSynced(formatLyricsForDisplay('[0,500]hel(10,20)lo (30,40) , world .'));
-        expect(synced[0][0]).toBe(0);
-        expect(synced[0][1]).toBe('hello , world.');
+        expect(synced[0].startMs).toBe(0);
+        expect(synced[0].text).toBe('hello , world.');
     });
 });
 

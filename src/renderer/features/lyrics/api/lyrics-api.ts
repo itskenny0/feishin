@@ -19,7 +19,7 @@ import {
     QueueSong,
     Song,
     StructuredLyric,
-    SynchronizedLyricsArray,
+    SynchronizedLyrics,
 } from '/@/shared/types/domain-types';
 import { LyricSource } from '/@/shared/types/domain-types';
 import { LyricsResponse } from '/@/shared/types/domain-types';
@@ -49,7 +49,7 @@ const alternateTimeExp = /\[(\d*),(\d*)]([^\n]+)(\n|$)/g;
 
 const formatLyrics = (lyrics: string) => {
     const synchronizedLines = lyrics.matchAll(timeExp);
-    const formattedLyrics: SynchronizedLyricsArray = [];
+    const formattedLyrics: SynchronizedLyrics = [];
 
     for (const line of synchronizedLines) {
         const [, minute, sec, ms, text] = line;
@@ -59,7 +59,7 @@ const formatLyrics = (lyrics: string) => {
 
         const timeInMilis = (minutes * 60 + seconds) * 1000 + milis;
 
-        formattedLyrics.push([timeInMilis, text]);
+        formattedLyrics.push({ startMs: timeInMilis, text });
     }
 
     if (formattedLyrics.length > 0) return formattedLyrics;
@@ -71,7 +71,7 @@ const formatLyrics = (lyrics: string) => {
             .replaceAll(/\(\d+,\d+\)/g, '')
             .replaceAll(/\s,/g, ',')
             .replaceAll(/\s\./g, '.');
-        formattedLyrics.push([Number(timeInMilis), cleanText]);
+        formattedLyrics.push({ startMs: Number(timeInMilis), text: cleanText });
     }
 
     if (formattedLyrics.length > 0) return formattedLyrics;
@@ -151,6 +151,7 @@ export async function fetchLocalLyrics(params: {
     song: QueueSong;
 }): Promise<FullLyricsMetadata | null | StructuredLyric[]> {
     const { serverId, signal, song } = params;
+
     const server = getServerById(serverId);
     if (!server) throw new Error('Server not found');
 

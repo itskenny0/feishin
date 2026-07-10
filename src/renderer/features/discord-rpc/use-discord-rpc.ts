@@ -105,6 +105,14 @@ export const useDiscordRpc = () => {
     useEffect(() => {
         largeImageCacheRef.current = null;
     }, [discordSettings.showServerImage, lastfmApiKey]);
+    // If the component is unmounted while RPC is enabled, quit RPC
+    useEffect(() => {
+        return () => {
+            if (previousEnabledRef.current) {
+                discordRpc?.quit();
+            }
+        };
+    }, []);
 
     const setActivity = useCallback(
         async (current: ActivityState, trigger: ActivityTrigger) => {

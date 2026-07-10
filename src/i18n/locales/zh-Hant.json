@@ -859,7 +859,11 @@
         "compressorReset_description": "將所有壓縮器參數恢復為預設值",
         "compressorSavePreset_description": "將目前壓縮器設定儲存為具名預設",
         "compressorThreshold_description": "開始進行壓縮的訊號電平。",
-        "compressorThreshold": "閥值"
+        "compressorThreshold": "閥值",
+        "enableRomaji_description": "在日文歌詞下方顯示羅馬拼音。",
+        "enableRomaji": "啟用羅馬拼音顯示",
+        "windowBarTrackinfo": "在視窗標題列顯示曲目資訊",
+        "windowBarTrackinfo_description": "在視窗標題列中顯示目前播放曲目的標題與藝人、播放佇列中的位置，以及播放/暫停狀態。"
     },
     "table": {
         "config": {
@@ -893,7 +897,9 @@
                 "horizontalBorders": "行邊框線",
                 "rowHoverHighlight": "滑鼠懸停Highlight",
                 "verticalBorders": "列邊框線",
-                "showHeader": "顯示標題"
+                "showHeader": "顯示標題",
+                "albumGroupConfig": "專輯群組設定",
+                "albumImageSize": "專輯圖片大小"
             },
             "label": {
                 "actions": "$t(common.action, {\"count\": 2})",
@@ -1103,7 +1109,8 @@
             "input_preferInstantMixDescription": "僅使用即時混音功能來取得相似歌曲。若您擁有能修改此行為的外掛，此功能將相當實用",
             "input_preferRemoteUrl": "優先使用公開網址",
             "input_remoteUrl": "公開網址",
-            "input_remoteUrlPlaceholder": "選用：對外功能的公開網址"
+            "input_remoteUrlPlaceholder": "選用：對外功能的公開網址",
+            "input_passwordNoSSO": "不支援反向代理(SSO)驗證。僅支援使用者名稱/密碼驗證及 Subsonic 驗證"
         },
         "addToPlaylist": {
             "input_playlists": "$t(entity.playlist, {\"count\": 2})",

@@ -10,8 +10,8 @@ import { FullLyricsMetadata, SynchronizedLyricsArray } from '/@/shared/types/dom
 const formatLrc = (synced: SynchronizedLyricsArray): string => {
     return synced
         .slice()
-        .sort((a, b) => a[0] - b[0])
-        .map(([timeMs, text]) => {
+        .sort((a, b) => a.startMs - b.startMs)
+        .map(({ startMs: timeMs, text }) => {
             const ms = Math.max(0, Math.round(timeMs));
             const totalSeconds = ms / 1000;
             const minutes = Math.floor(totalSeconds / 60);

@@ -45,23 +45,30 @@ export const AlbumArtistListInfiniteTable = ({
 
     const listQueryFn = api.controller.getAlbumArtistList;
 
-    const { dataVersion, getItem, getItemIndex, itemCount, loadedItems, onRangeChanged } =
-        useItemListInfiniteLoader({
-            eventKey: ItemListKey.ALBUM_ARTIST,
-            itemsPerPage,
-            itemType: LibraryItem.ALBUM_ARTIST,
-            listCountQuery,
-            listQueryFn,
-            localFetchPage: (args) =>
-                resolveAlbumArtistPage({
-                    limit: args.limit,
-                    query: args.query as AlbumArtistListQuery,
-                    startIndex: args.startIndex,
-                }),
-            query,
-            serverId,
-            thumbnailVariant: 'table',
-        });
+    const {
+        dataVersion,
+        getItem,
+        getItemIndex,
+        getLoadedItems,
+        itemCount,
+        loadedItems,
+        onRangeChanged,
+    } = useItemListInfiniteLoader({
+        eventKey: ItemListKey.ALBUM_ARTIST,
+        itemsPerPage,
+        itemType: LibraryItem.ALBUM_ARTIST,
+        listCountQuery,
+        listQueryFn,
+        localFetchPage: (args) =>
+            resolveAlbumArtistPage({
+                limit: args.limit,
+                query: args.query as AlbumArtistListQuery,
+                startIndex: args.startIndex,
+            }),
+        query,
+        serverId,
+        thumbnailVariant: 'table',
+    });
 
     const { handleOnScrollEnd, scrollOffset } = useItemListScrollPersist({
         enabled: saveScrollOffset,
@@ -91,6 +98,7 @@ export const AlbumArtistListInfiniteTable = ({
             enableVerticalBorders={enableVerticalBorders}
             getItem={getItem}
             getItemIndex={getItemIndex}
+            getLoadedItems={getLoadedItems}
             initialTop={{
                 to: scrollOffset ?? 0,
                 type: 'offset',
