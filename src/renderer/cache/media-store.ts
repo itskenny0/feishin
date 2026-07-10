@@ -128,6 +128,22 @@ export class LocalMediaStore {
         this.getBackend = getBackend;
     }
 
+    /**
+     * Append an entity key to an existing blob's membership without touching its
+     * bytes. Used by the download pipeline's dedup path: a song already on disk
+     * (for this or another target) only gains a reference. No-op if the blob is
+     * absent or already references the entity.
+     */
+    async addEntityMembership(serverId: string, songId: string, entityKey: string): Promise<void> {
+        const db = this.db();
+        const row = await db.mediaBlobs.get(blobKey(serverId, songId));
+        if (!row) return;
+        if (!row.EntityKeys.includes(entityKey)) {
+            row.EntityKeys.push(entityKey);
+            await db.mediaBlobs.put(row);
+        }
+    }
+
     /** Wipe every offline blob AND every target. */
     async clearAll(): Promise<void> {
         const db = this.db();
@@ -144,6 +160,8 @@ export class LocalMediaStore {
         console.info(`${TAG} cleared all offline media`);
     }
 
+    // --- blob CRUD -------------------------------------------------------
+
     /** Number of distinct downloaded songs. */
     async count(): Promise<number> {
         const db = this.dbOrUndefined();
@@ -155,8 +173,6 @@ export class LocalMediaStore {
             return 0;
         }
     }
-
-    // --- blob CRUD -------------------------------------------------------
 
     /** Delete a single song's blob outright (ignores entity membership). */
     async delete(serverId: string, songId: string): Promise<void> {

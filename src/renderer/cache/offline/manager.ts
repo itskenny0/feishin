@@ -3,11 +3,21 @@
 // (queued/enumerating/downloading/paused) are pending work. One target
 // downloads at a time; concurrency lives inside processTarget (added later).
 
+import type { Song } from '/@/shared/types/domain-types';
+
 import type { LocalMediaStore } from '../media-store';
 import type { OfflineTargetRow } from '../types';
 
 import { localMediaStore, targetKey } from '../media-store';
-import { publishQueue } from './progress';
+import { isUpToDate, sourceTagFor } from './dedup';
+import { streamTargetSongs } from './enumerate';
+import { publishProgress, publishQueue } from './progress';
+
+import { api } from '/@/renderer/api';
+import { useSettingsStore } from '/@/renderer/store';
+
+// Songs downloaded concurrently WITHIN a single target.
+const DOWNLOAD_CONCURRENCY = 3;
 
 const TAG = '[offline-media]';
 
@@ -32,6 +42,9 @@ const PENDING = new Set<OfflineTargetRow['Status']>([
 
 export class OfflineDownloadManager {
     protected getStore: () => LocalMediaStore;
+    // Per-target abort controllers so a single target can be paused/cancelled
+    // (or preempted) without touching the others.
+    private aborts = new Map<string, AbortController>();
     private enqueueSeq = 0;
     private idleWaiters: Array<() => void> = [];
     private processHook?: ProcessHook;
@@ -43,6 +56,11 @@ export class OfflineDownloadManager {
 
     constructor(getStore: () => LocalMediaStore = () => localMediaStore) {
         this.getStore = getStore;
+    }
+
+    /** Abort the in-flight download of a specific target (pause/cancel/preempt). */
+    abortTarget(key: string): void {
+        this.aborts.get(key)?.abort();
     }
 
     /** Upsert a target to `queued` and kick the loop. Idempotent. */
@@ -93,6 +111,15 @@ export class OfflineDownloadManager {
     whenIdle(): Promise<void> {
         if (!this.pumping) return Promise.resolve();
         return new Promise((resolve) => this.idleWaiters.push(resolve));
+    }
+
+    protected downloadOriginal(): boolean {
+        return useSettingsStore.getState().localCache?.offlineMedia?.downloadOriginal !== false;
+    }
+
+    protected getMaxBytes(): number {
+        const n = useSettingsStore.getState().localCache?.offlineMedia?.maxBytes;
+        return typeof n === 'number' && n > 0 ? n : Number.POSITIVE_INFINITY;
     }
 
     // Drive the queue: process one target at a time until none remain. Safe to
@@ -154,9 +181,229 @@ export class OfflineDownloadManager {
         return ready[0];
     }
 
-    // Real download implementation lands in a later task.
-    protected async processTarget(_target: OfflineTargetRow): Promise<void> {
-        throw new Error(`${TAG} processTarget not implemented yet`);
+    /**
+     * Download every song of a target, streaming enumeration into a bounded
+     * worker pool so downloads start on page 1. Dedups against existing blobs
+     * (skips a song whose current copy is already on disk), enforces the global
+     * byte cap, and writes a SourceTag on each new blob. Settles the target
+     * complete / partial / error and clears EnqueuedAt.
+     */
+    protected async processTarget(target: OfflineTargetRow): Promise<void> {
+        const store = this.getStore();
+        const { Key: key, Name: name, ServerId: serverId } = target;
+        const abort = new AbortController();
+        this.aborts.set(key, abort);
+        const startedAt = Date.now();
+
+        await store.patchTarget(key, { LastError: undefined, Status: 'enumerating' });
+
+        // Seed from what is already downloaded for THIS target (resume).
+        const existingBlobs = await store.listByEntity(key);
+        const seededBytes = existingBlobs.reduce((sum, b) => sum + b.ByteSize, 0);
+        let bytesDownloaded = seededBytes;
+        let done = existingBlobs.length;
+        let shared = 0;
+        let failed = false;
+        let capHit = false;
+        let found = 0;
+        let total: number | undefined;
+        let phase: 'downloading' | 'enumerating' = 'enumerating';
+        // Bytes committed OR reserved by an in-flight worker (cap accounting).
+        let reservedBytes = seededBytes;
+        const maxBytes = this.getMaxBytes();
+        const streaming = store.supportsStreaming();
+        // In-run dedup: seed with songs already downloaded for this target so we
+        // never re-resolve them; grows as pages enumerate.
+        const seen = new Set<string>(existingBlobs.map((b) => b.SongId));
+
+        const push = (): void => {
+            const elapsed = Math.max(0.001, (Date.now() - startedAt) / 1000);
+            const avg = done > 0 ? bytesDownloaded / done : 0;
+            publishProgress({
+                bytesDownloaded,
+                bytesPerSec: (bytesDownloaded - seededBytes) / elapsed,
+                done,
+                entityKey: key,
+                estimatedTotalBytes: total && avg > 0 ? avg * total : undefined,
+                foundCount: found,
+                itemsPerSec: (done - existingBlobs.length) / elapsed,
+                name,
+                phase,
+                startedAt,
+                total,
+            });
+        };
+        push();
+
+        // Bounded worker pool fed by a shared cursor over a growing `pending`.
+        const pending: Song[] = [];
+        let enumerationDone = false;
+        let cursor = 0;
+
+        const worker = async (): Promise<void> => {
+            while (!abort.signal.aborted && !capHit) {
+                if (cursor >= pending.length) {
+                    if (enumerationDone) return;
+                    // Wait for more pages to enumerate.
+                    await new Promise((r) => setTimeout(r, 15));
+                    continue;
+                }
+                const song = pending[cursor];
+                cursor += 1;
+
+                // Dedup: a current copy already on disk (this or another target).
+                const existing = await store.get(serverId, song.id);
+                if (isUpToDate(existing, song)) {
+                    if (existing) await store.addEntityMembership(serverId, song.id, key);
+                    done += 1;
+                    shared += 1;
+                    push();
+                    continue;
+                }
+
+                const projected = song.size && song.size > 0 ? song.size : 1024 * 1024;
+                if (Number.isFinite(maxBytes) && reservedBytes + projected > maxBytes) {
+                    capHit = true;
+                    return;
+                }
+                reservedBytes += projected;
+                let songReserved = projected;
+                try {
+                    const url = await api.controller.getStreamUrl({
+                        apiClientProps: { serverId },
+                        query: {
+                            id: song.id,
+                            skipAutoTranscode: this.downloadOriginal(),
+                            transcode: false,
+                        },
+                    });
+                    const sourceTag = sourceTagFor(song);
+                    let isNew: boolean;
+                    let size: number;
+                    if (streaming) {
+                        const res = await store.saveStreamed({
+                            container: song.container ?? undefined,
+                            entityKey: key,
+                            serverId,
+                            signal: abort.signal,
+                            songId: song.id,
+                            sourceTag,
+                            url,
+                        });
+                        isNew = res.isNew;
+                        size = res.size;
+                        if (isNew) {
+                            reservedBytes += size - projected;
+                            songReserved = size;
+                            if (Number.isFinite(maxBytes) && bytesDownloaded + size > maxBytes) {
+                                await store.deleteBlobBytes(serverId, song.id);
+                                reservedBytes -= size;
+                                capHit = true;
+                                return;
+                            }
+                        }
+                    } else {
+                        const resp = await fetch(url, { signal: abort.signal });
+                        if (!resp.ok)
+                            throw new Error(`HTTP ${resp.status} downloading offline audio`);
+                        const blob = await resp.blob();
+                        reservedBytes += blob.size - projected;
+                        songReserved = blob.size;
+                        if (Number.isFinite(maxBytes) && bytesDownloaded + blob.size > maxBytes) {
+                            reservedBytes -= blob.size;
+                            capHit = true;
+                            return;
+                        }
+                        isNew = await store.save({
+                            blob,
+                            container: song.container ?? undefined,
+                            entityKey: key,
+                            serverId,
+                            songId: song.id,
+                            sourceTag,
+                        });
+                        size = blob.size;
+                    }
+
+                    if (isNew) {
+                        songReserved = 0;
+                        bytesDownloaded += size;
+                        done += 1;
+                        if (phase !== 'downloading') phase = 'downloading';
+                    } else {
+                        // Blob existed under another target — membership only.
+                        reservedBytes -= songReserved;
+                        songReserved = 0;
+                        done += 1;
+                        shared += 1;
+                    }
+                    await store.patchTarget(key, { Bytes: bytesDownloaded, DownloadedCount: done });
+                    push();
+                } catch (err) {
+                    reservedBytes -= songReserved;
+                    if (abort.signal.aborted) return;
+                    failed = true;
+                    console.warn(`${TAG} item failed`, { err, key, songId: song.id });
+                }
+            }
+        };
+
+        const pool = Array.from({ length: DOWNLOAD_CONCURRENCY }, () => worker());
+
+        try {
+            for await (const page of streamTargetSongs(target, abort.signal)) {
+                for (const song of page) {
+                    if (seen.has(song.id)) continue;
+                    seen.add(song.id);
+                    pending.push(song);
+                    found += 1;
+                }
+                total = found;
+                if (phase === 'enumerating') push();
+            }
+        } catch (err) {
+            // First-page enumeration failure → nothing to download.
+            enumerationDone = true;
+            abort.abort();
+            await Promise.allSettled(pool);
+            this.aborts.delete(key);
+            await store.patchTarget(key, {
+                EnqueuedAt: undefined,
+                LastError: (err as Error).message ?? String(err),
+                Preempt: false,
+                Status: 'error',
+            });
+            publishProgress(undefined);
+            return;
+        }
+
+        enumerationDone = true;
+        await Promise.allSettled(pool);
+        this.aborts.delete(key);
+        publishProgress(undefined);
+
+        // Aborted (paused / cancelled / preempted): leave the Status the control
+        // set — do not overwrite it here.
+        if (abort.signal.aborted) return;
+
+        const settled: OfflineTargetRow['Status'] = capHit
+            ? 'partial'
+            : done < found || failed
+              ? failed
+                  ? 'error'
+                  : 'partial'
+              : 'complete';
+        await store.patchTarget(key, {
+            EnqueuedAt: undefined,
+            ErrorCount: failed ? (target.ErrorCount ?? 0) + 1 : 0,
+            LastError: capHit ? 'Storage cap reached' : undefined,
+            PendingCount: Math.max(0, found - done),
+            Preempt: false,
+            SharedCount: shared,
+            SongCount: found,
+            Status: settled,
+        });
+        console.info(`${TAG} settled`, { done, found, key, settled, shared });
     }
 
     protected publishQueueSummary(targets: OfflineTargetRow[], activeKey: string): void {
