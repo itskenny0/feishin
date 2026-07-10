@@ -135,6 +135,33 @@ export class OfflineDownloadManager {
         }
     }
 
+    /**
+     * Launch/periodic delta pass: for each settled `complete` target, count the
+     * server's current songs (streamed enumeration) and re-queue only when it
+     * grew. Cheap — enumeration is cache-served. User-owned states
+     * (partial/error/paused) are left alone.
+     */
+    async refreshTargets(): Promise<void> {
+        for (const t of await this.getStore().listTargets()) {
+            if (t.Status !== 'complete') continue;
+            let found = 0;
+            try {
+                for await (const page of streamTargetSongs(t)) found += page.length;
+            } catch (err) {
+                console.warn(`${TAG} refresh: enumerate failed`, { err, key: t.Key });
+                continue;
+            }
+            if (found > (t.DownloadedCount ?? 0)) {
+                console.info(`${TAG} refresh: target grew, re-queue`, {
+                    found,
+                    key: t.Key,
+                    was: t.DownloadedCount,
+                });
+                await this.resume(t.Key);
+            }
+        }
+    }
+
     /** Remove a target (cancel if active) and reclaim any blobs it solely owned. */
     async remove(key: string): Promise<void> {
         this.abortTarget(key);

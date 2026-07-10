@@ -372,6 +372,9 @@ export const useCacheLifecycle = (): void => {
                 // already on disk immediately after a cold start.
                 void refreshOfflineStats();
                 void refreshOfflineAvailability();
+                // Auto-resume any pending/interrupted offline downloads (queued
+                // targets + crash residue) now that the DB is open.
+                void offlineManager.resumePersisted();
                 // One-shot: clear the ~46k false 404 markers the old resolver
                 // wrote against a load-shedding server, so the next sweep
                 // re-fetches them under the new soft-miss + stress gate.
@@ -507,16 +510,24 @@ export const useCacheLifecycle = (): void => {
                     useSettingsStore.getState().localCache?.resyncOnStartup !== false;
                 if (!resyncOnStartup) {
                     console.info('[cache] lifecycle: startup re-sync disabled by setting');
-                } else if (ageMs > oneDayMs) {
-                    console.info('[cache] lifecycle: oldest full sync stale, auto re-hydrating', {
-                        ageHours: Math.round(ageMs / (60 * 60 * 1000)),
-                        oldestAt: oldest,
-                    });
-                    void hydrate(currentServer, 'full');
                 } else {
-                    console.info('[cache] lifecycle: full sync still fresh', {
-                        ageHours: Math.round(ageMs / (60 * 60 * 1000)),
-                    });
+                    if (ageMs > oneDayMs) {
+                        console.info(
+                            '[cache] lifecycle: oldest full sync stale, auto re-hydrating',
+                            {
+                                ageHours: Math.round(ageMs / (60 * 60 * 1000)),
+                                oldestAt: oldest,
+                            },
+                        );
+                        void hydrate(currentServer, 'full');
+                    } else {
+                        console.info('[cache] lifecycle: full sync still fresh', {
+                            ageHours: Math.round(ageMs / (60 * 60 * 1000)),
+                        });
+                    }
+                    // Piggyback the daily resync: pull any songs newly added to
+                    // offline targets (playlist/album grew) since last launch.
+                    void offlineManager.refreshTargets();
                 }
             } catch (err) {
                 console.warn('[cache] lifecycle: auto-resync check failed', err);
