@@ -377,6 +377,9 @@ export const syncTarget = async (args: SyncTargetArgs): Promise<OfflineTargetRow
             estimatedTotalBytes: total > 0 && avgPerItem > 0 ? avgPerItem * total : undefined,
             itemsPerSec: downloadedThisRun / elapsedSec,
             name,
+            // Superseded by the new manager; the legacy engine only ever
+            // reports the download phase.
+            phase: 'downloading',
             startedAt,
             total,
         });

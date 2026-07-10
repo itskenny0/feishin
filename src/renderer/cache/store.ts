@@ -14,6 +14,7 @@ export interface CacheStoreActions {
         setHydrationState: (e: EntityType, s: HydrationState) => void;
         setOfflineAvailability: (a: OfflineAvailability) => void;
         setOfflineMedia: (s: Partial<OfflineMediaStats>) => void;
+        setOfflineQueue: (q: CacheStoreState['offlineQueue']) => void;
         setOfflineSync: (s: CacheStoreState['offlineSync']) => void;
         setOfflineTargetStatus: (key: string, status: OfflineTargetStatus) => void;
         setOfflineTargetStatuses: (statuses: Record<string, OfflineTargetStatus>) => void;
@@ -39,6 +40,10 @@ export interface CacheStoreState {
     // Aggregate offline-media stats, kept in the store so the settings panel
     // and any future home-page chip can subscribe without each polling Dexie.
     offlineMedia: OfflineMediaStats;
+    // Summary of the download queue (active + how many are waiting) so the
+    // banner and settings can show overall progress, not just the active
+    // target. Undefined when the queue is idle.
+    offlineQueue: OfflineQueueSummary | undefined;
     // Live in-flight offline download (a single target syncs at a time).
     // Undefined when nothing is downloading.
     offlineSync: OfflineSyncProgress | undefined;
@@ -86,6 +91,17 @@ export interface OfflineMediaStats {
     targetCount: number;
 }
 
+export interface OfflineQueueSummary {
+    // Key of the target currently downloading, if any.
+    activeKey?: string;
+    // Targets still waiting to download (excludes the active one).
+    queuedCount: number;
+    // Targets that have reached a settled state this run.
+    targetsDone: number;
+    // Total targets known to the manager.
+    targetsTotal: number;
+}
+
 export interface OfflineSyncProgress {
     bytesDownloaded: number;
     bytesPerSec: number;
@@ -94,8 +110,14 @@ export interface OfflineSyncProgress {
     // Best-effort projected total payload, from the average blob size so far
     // extrapolated across all songs. Undefined until the first blob lands.
     estimatedTotalBytes: number | undefined;
+    // While enumerating a large target, how many songs have been discovered so
+    // far. Surfaced as "Preparing … found N songs".
+    foundCount?: number;
     itemsPerSec: number;
     name: string;
+    // Which phase the active target is in: still discovering its song list, or
+    // downloading bytes.
+    phase: 'downloading' | 'enumerating';
     startedAt: number;
     total: number | undefined;
 }
@@ -165,6 +187,10 @@ export const useCacheStore = createWithEqualityFn<CacheStoreActions & CacheStore
                     set((st) => {
                         st.offlineMedia = { ...st.offlineMedia, ...s };
                     }),
+                setOfflineQueue: (q) =>
+                    set((st) => {
+                        st.offlineQueue = q;
+                    }),
                 setOfflineSync: (s) =>
                     set((st) => {
                         st.offlineSync = s;
@@ -201,6 +227,7 @@ export const useCacheStore = createWithEqualityFn<CacheStoreActions & CacheStore
             hydrationStates: {},
             offlineAvailability: { entityKeys: new Set(), songKeys: new Set() },
             offlineMedia: { bytesUsed: 0, itemsDownloaded: 0, targetCount: 0 },
+            offlineQueue: undefined,
             offlineSync: undefined,
             offlineTargetStatuses: {},
             pendingMutations: 0,
