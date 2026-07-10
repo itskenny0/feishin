@@ -428,8 +428,10 @@ export const useCacheLifecycle = (): void => {
                         const metas = await db.syncMeta.toArray();
                         for (const meta of metas) {
                             // Skip non-entity one-shot flag rows (e.g. the
-                            // miss-purge marker) — they aren't hydration state.
-                            if ((meta.EntityType as string) === MISS_PURGE_FLAG) continue;
+                            // miss-purge marker, the offline song-meta heal
+                            // flag) — they aren't hydration state.
+                            const et = meta.EntityType as string;
+                            if (et === MISS_PURGE_FLAG || et === 'offlineSongMetaHeal_v1') continue;
                             actions.setHydrationState(meta.EntityType, meta.hydrationState);
                         }
                         console.info('[cache] lifecycle: restored counts + hydration', {

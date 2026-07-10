@@ -216,10 +216,11 @@ export class OfflineDownloadManager {
         await this.onChanged();
     }
 
-    /** Resume a paused/settled target by re-queuing it. */
+    /** Resume a paused/settled target by re-queuing it (normal priority). */
     async resume(key: string): Promise<void> {
         await this.getStore().patchTarget(key, {
             EnqueuedAt: this.nextEnqueuedAt(),
+            Preempt: false,
             Status: 'queued',
         });
         void this.kick();
@@ -301,7 +302,7 @@ export class OfflineDownloadManager {
             (t) => t.Key !== key && (t.Status === 'downloading' || t.Status === 'enumerating'),
         );
         if (active) {
-            await store.patchTarget(active.Key, { Status: 'queued' });
+            await store.patchTarget(active.Key, { Preempt: false, Status: 'queued' });
             this.abortTarget(active.Key);
         }
         void this.kick();
@@ -397,11 +398,15 @@ export class OfflineDownloadManager {
 
         await store.patchTarget(key, { LastError: undefined, Status: 'enumerating' });
 
-        // Seed from what is already downloaded for THIS target (resume).
+        // Songs whose bytes are already counted in THIS target's footprint, so
+        // a re-download's byte delta is reconciled correctly on the cap.
         const existingBlobs = await store.listByEntity(key);
+        const alreadyHave = new Set(existingBlobs.map((b) => b.SongId));
         const seededBytes = existingBlobs.reduce((sum, b) => sum + b.ByteSize, 0);
         let bytesDownloaded = seededBytes;
-        let done = existingBlobs.length;
+        // Live counters (approximate; the persisted counts come from a
+        // ground-truth re-read at settle so resume/retry can't drift them).
+        let done = 0;
         let shared = 0;
         let failed = false;
         let capHit = false;
@@ -412,9 +417,10 @@ export class OfflineDownloadManager {
         let reservedBytes = seededBytes;
         const maxBytes = this.getMaxBytes();
         const streaming = store.supportsStreaming();
-        // In-run dedup: seed with songs already downloaded for this target so we
-        // never re-resolve them; grows as pages enumerate.
-        const seen = new Set<string>(existingBlobs.map((b) => b.SongId));
+        // In-run dedup ONLY (same song enumerated twice across overlapping
+        // pages/targets). NOT seeded from existing blobs — every song must reach
+        // the worker so isUpToDate can decide skip vs. re-download.
+        const seen = new Set<string>();
 
         const push = (): void => {
             const elapsed = Math.max(0.001, (Date.now() - startedAt) / 1000);
@@ -426,7 +432,7 @@ export class OfflineDownloadManager {
                 entityKey: key,
                 estimatedTotalBytes: total && avg > 0 ? avg * total : undefined,
                 foundCount: found,
-                itemsPerSec: (done - existingBlobs.length) / elapsed,
+                itemsPerSec: done / elapsed,
                 name,
                 phase,
                 startedAt,
@@ -451,14 +457,31 @@ export class OfflineDownloadManager {
                 const song = pending[cursor];
                 cursor += 1;
 
-                // Dedup: a current copy already on disk (this or another target).
                 const existing = await store.get(serverId, song.id);
+
+                // Already have a CURRENT copy — no download. A blob from another
+                // target additionally references this one (a shared song).
                 if (isUpToDate(existing, song)) {
-                    if (existing) await store.addEntityMembership(serverId, song.id, key);
+                    if (existing && !existing.EntityKeys.includes(key)) {
+                        await store.addEntityMembership(serverId, song.id, key);
+                        shared += 1;
+                    }
                     done += 1;
-                    shared += 1;
                     push();
                     continue;
+                }
+
+                // Stale existing copy (fingerprint clearly differs): drop it
+                // before re-downloading, preserving its membership under OTHER
+                // targets so those don't silently lose the song.
+                let priorKeys: string[] = [];
+                if (existing) {
+                    priorKeys = existing.EntityKeys.filter((k) => k !== key);
+                    if (alreadyHave.has(song.id)) {
+                        bytesDownloaded -= existing.ByteSize;
+                        reservedBytes -= existing.ByteSize;
+                    }
+                    await store.deleteBlobBytes(serverId, song.id);
                 }
 
                 const projected = song.size && song.size > 0 ? song.size : 1024 * 1024;
@@ -478,9 +501,10 @@ export class OfflineDownloadManager {
                         },
                     });
                     const sourceTag = sourceTagFor(song);
-                    let isNew: boolean;
                     let size: number;
                     if (streaming) {
+                        // The stale copy (if any) was deleted above, so this
+                        // always writes fresh bytes.
                         const res = await store.saveStreamed({
                             container: song.container ?? undefined,
                             entityKey: key,
@@ -490,17 +514,14 @@ export class OfflineDownloadManager {
                             sourceTag,
                             url,
                         });
-                        isNew = res.isNew;
                         size = res.size;
-                        if (isNew) {
-                            reservedBytes += size - projected;
-                            songReserved = size;
-                            if (Number.isFinite(maxBytes) && bytesDownloaded + size > maxBytes) {
-                                await store.deleteBlobBytes(serverId, song.id);
-                                reservedBytes -= size;
-                                capHit = true;
-                                return;
-                            }
+                        reservedBytes += size - projected;
+                        songReserved = size;
+                        if (Number.isFinite(maxBytes) && bytesDownloaded + size > maxBytes) {
+                            await store.deleteBlobBytes(serverId, song.id);
+                            reservedBytes -= size;
+                            capHit = true;
+                            return;
                         }
                     } else {
                         const resp = await fetch(url, { signal: abort.signal });
@@ -514,7 +535,7 @@ export class OfflineDownloadManager {
                             capHit = true;
                             return;
                         }
-                        isNew = await store.save({
+                        await store.save({
                             blob,
                             container: song.container ?? undefined,
                             entityKey: key,
@@ -524,19 +545,14 @@ export class OfflineDownloadManager {
                         });
                         size = blob.size;
                     }
-
-                    if (isNew) {
-                        songReserved = 0;
-                        bytesDownloaded += size;
-                        done += 1;
-                        if (phase !== 'downloading') phase = 'downloading';
-                    } else {
-                        // Blob existed under another target — membership only.
-                        reservedBytes -= songReserved;
-                        songReserved = 0;
-                        done += 1;
-                        shared += 1;
+                    // Restore memberships the stale blob had under other targets.
+                    for (const k of priorKeys) {
+                        await store.addEntityMembership(serverId, song.id, k);
                     }
+                    songReserved = 0;
+                    bytesDownloaded += size;
+                    done += 1;
+                    if (phase !== 'downloading') phase = 'downloading';
                     await store.patchTarget(key, { Bytes: bytesDownloaded, DownloadedCount: done });
                     push();
                 } catch (err) {
@@ -565,18 +581,21 @@ export class OfflineDownloadManager {
                 if (phase === 'enumerating') push();
             }
         } catch (err) {
-            // First-page enumeration failure → nothing to download.
             enumerationDone = true;
             abort.abort();
             await Promise.allSettled(pool);
             this.aborts.delete(key);
+            publishProgress(undefined);
+            // Aborted mid-enumeration (pause / cancel / preempt): leave the
+            // status the control set — do NOT mark it error.
+            if (abort.signal.aborted) return;
+            // A genuine first-page enumeration failure → nothing to download.
             await store.patchTarget(key, {
                 EnqueuedAt: undefined,
                 LastError: (err as Error).message ?? String(err),
                 Preempt: false,
                 Status: 'error',
             });
-            publishProgress(undefined);
             return;
         }
 
@@ -589,24 +608,32 @@ export class OfflineDownloadManager {
         // set — do not overwrite it here.
         if (abort.signal.aborted) return;
 
+        // Persist counts from GROUND TRUTH (the blobs actually referencing this
+        // target) rather than the live counters, so resume/retry/removal can't
+        // leave DownloadedCount > SongCount or other drift.
+        const finalBlobs = await store.listByEntity(key);
+        const downloadedCount = finalBlobs.length;
+        const finalBytes = finalBlobs.reduce((sum, b) => sum + b.ByteSize, 0);
         const settled: OfflineTargetRow['Status'] = capHit
             ? 'partial'
-            : done < found || failed
-              ? failed
-                  ? 'error'
-                  : 'partial'
-              : 'complete';
+            : failed
+              ? 'error'
+              : downloadedCount >= found
+                ? 'complete'
+                : 'partial';
         await store.patchTarget(key, {
+            Bytes: finalBytes,
+            DownloadedCount: downloadedCount,
             EnqueuedAt: undefined,
             ErrorCount: failed ? (target.ErrorCount ?? 0) + 1 : 0,
             LastError: capHit ? 'Storage cap reached' : undefined,
-            PendingCount: Math.max(0, found - done),
+            PendingCount: Math.max(0, found - downloadedCount),
             Preempt: false,
             SharedCount: shared,
             SongCount: found,
             Status: settled,
         });
-        console.info(`${TAG} settled`, { done, found, key, settled, shared });
+        console.info(`${TAG} settled`, { downloadedCount, found, key, settled, shared });
         await this.onChanged();
     }
 
