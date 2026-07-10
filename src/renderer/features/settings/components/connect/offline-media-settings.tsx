@@ -1,10 +1,12 @@
 import type { OfflineEntityType, OfflineTargetRow } from '/@/renderer/cache/types';
+import type { ReactNode } from 'react';
 
 import {
     ActionIcon,
     Alert,
     Badge,
     Button,
+    Checkbox,
     Divider,
     Group,
     Loader,
@@ -20,7 +22,14 @@ import {
 } from '@mantine/core';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { RiAddLine, RiDeleteBinLine, RiRefreshLine } from 'react-icons/ri';
+import {
+    RiAddLine,
+    RiDeleteBinLine,
+    RiDownload2Line,
+    RiPauseLine,
+    RiPlayLine,
+    RiRefreshLine,
+} from 'react-icons/ri';
 
 import { api } from '/@/renderer/api';
 import { getActiveVolume, refreshVolumes } from '/@/renderer/cache/backends/active-backend';
@@ -28,14 +37,16 @@ import { isAndroidNative } from '/@/renderer/cache/backends/volumes';
 import { formatBytes } from '/@/renderer/cache/format';
 import { localMediaStore, requestPersistentStorage } from '/@/renderer/cache/media-store';
 import {
-    addAndSyncOfflineTarget,
-    cancelOfflineSync,
-    refreshOfflineStats,
-    removeAllTargets,
-    removeOfflineTarget,
-    syncAllTargets,
-    syncTarget,
-} from '/@/renderer/cache/offline-media';
+    enqueueOffline,
+    pauseOffline,
+    removeAllOffline,
+    removeOffline,
+    resumeOffline,
+    retryOffline,
+    syncAllOffline,
+    syncNowOffline,
+} from '/@/renderer/cache/offline';
+import { cancelOfflineSync, refreshOfflineStats } from '/@/renderer/cache/offline-media';
 import { useCacheStore } from '/@/renderer/cache/store';
 import { useSmoothOfflineSync } from '/@/renderer/cache/use-smooth-offline-sync';
 import { StorageLocationSettings } from '/@/renderer/features/settings/components/connect/storage-location-settings';
@@ -46,6 +57,7 @@ import {
     AlbumListSort,
     GenreListSort,
     PlaylistListSort,
+    SongListSort,
     SortOrder,
 } from '/@/shared/types/domain-types';
 
@@ -67,6 +79,13 @@ const STATUS_COLOR: Record<OfflineTargetRow['Status'], string> = {
     syncing: 'blue',
 };
 
+// Statuses where a target is actively in the queue (pausable).
+const READY_STATUSES = new Set<OfflineTargetRow['Status']>([
+    'downloading',
+    'enumerating',
+    'queued',
+]);
+
 const safeConfirm = (message: string): boolean => {
     if (typeof window === 'undefined' || typeof window.confirm !== 'function') return false;
     return window.confirm(message);
@@ -83,6 +102,7 @@ export const OfflineMediaSettings = () => {
     const currentServer = useAuthStore((s) => s.currentServer);
     const cacheAvailable = useCacheStore((s) => s.cacheAvailable);
     const stats = useCacheStore((s) => s.offlineMedia);
+    const offlineQueue = useCacheStore((s) => s.offlineQueue);
     const smoothSync = useSmoothOfflineSync();
 
     const cacheEnabled = useSettingsStore((s) => s.localCache?.enabled === true);
@@ -92,6 +112,7 @@ export const OfflineMediaSettings = () => {
     const backgroundSync = androidCfg?.backgroundSync !== false;
 
     const [targets, setTargets] = useState<OfflineTargetRow[]>([]);
+    const [selected, setSelected] = useState<Set<string>>(new Set());
     const [loadingTargets, setLoadingTargets] = useState(false);
     const [sliderValue, setSliderValue] = useState<number>(offlineCfg?.maxBytes ?? 2 * GIB);
     // Free space on the active storage volume (SD card). The cap should scale to
@@ -203,7 +224,7 @@ export const OfflineMediaSettings = () => {
         try {
             const apiClientProps = { serverId: currentServer.id };
             const term = searchTerm.trim();
-            const [albums, artists, genres, playlists] = await Promise.all([
+            const [albums, artists, genres, playlists, songResults] = await Promise.all([
                 api.controller.getAlbumList({
                     apiClientProps,
                     query: {
@@ -250,6 +271,18 @@ export const OfflineMediaSettings = () => {
                         },
                     })
                     .catch(() => undefined),
+                api.controller
+                    .getSongList({
+                        apiClientProps,
+                        query: {
+                            limit: 10,
+                            searchTerm: term,
+                            sortBy: SongListSort.NAME,
+                            sortOrder: SortOrder.ASC,
+                            startIndex: 0,
+                        },
+                    })
+                    .catch(() => undefined),
             ]);
             if (seq !== searchSeq.current) return;
             const albumPicks: PickResult[] = (albums?.items ?? []).map((a) => ({
@@ -272,7 +305,18 @@ export const OfflineMediaSettings = () => {
                 id: p.id,
                 name: p.name,
             }));
-            setResults([...albumPicks, ...artistPicks, ...genrePicks, ...playlistPicks]);
+            const songPicks: PickResult[] = (songResults?.items ?? []).map((s) => ({
+                entityType: 'song',
+                id: s.id,
+                name: s.name,
+            }));
+            setResults([
+                ...albumPicks,
+                ...artistPicks,
+                ...genrePicks,
+                ...playlistPicks,
+                ...songPicks,
+            ]);
         } catch (err) {
             console.warn('[offline-media] settings: search failed', err);
             if (seq === searchSeq.current) setResults([]);
@@ -288,7 +332,7 @@ export const OfflineMediaSettings = () => {
                 console.info('[offline-media] settings: add target', pick);
                 setResults([]);
                 setSearchTerm('');
-                await addAndSyncOfflineTarget({
+                await enqueueOffline({
                     entityId: pick.id,
                     entityType: pick.entityType,
                     name: pick.name,
@@ -303,10 +347,12 @@ export const OfflineMediaSettings = () => {
         [currentServer, refreshTargets],
     );
 
-    const handleSyncRow = useCallback(
-        async (target: OfflineTargetRow) => {
+    // Per-row action runner — each control works independently while other
+    // targets keep downloading (no global sync lock).
+    const runRowAction = useCallback(
+        async (fn: () => Promise<unknown>) => {
             try {
-                await syncTarget({ target });
+                await fn();
                 await refreshTargets();
             } catch (err) {
                 toast.error({ message: (err as Error).message ?? String(err) });
@@ -327,24 +373,63 @@ export const OfflineMediaSettings = () => {
             ) {
                 return;
             }
-            try {
-                await removeOfflineTarget(target.Key);
-                await refreshTargets();
-            } catch (err) {
-                toast.error({ message: (err as Error).message ?? String(err) });
-            }
+            await runRowAction(() => removeOffline(target.Key));
+            setSelected((prev) => {
+                const next = new Set(prev);
+                next.delete(target.Key);
+                return next;
+            });
         },
-        [refreshTargets, t],
+        [runRowAction, t],
     );
 
-    const handleSyncAll = useCallback(async () => {
-        try {
-            await syncAllTargets();
-            await refreshTargets();
-        } catch (err) {
-            toast.error({ message: (err as Error).message ?? String(err) });
+    const toggleSelect = useCallback((key: string) => {
+        setSelected((prev) => {
+            const next = new Set(prev);
+            if (next.has(key)) next.delete(key);
+            else next.add(key);
+            return next;
+        });
+    }, []);
+
+    const toggleSelectAll = useCallback(() => {
+        setSelected((prev) =>
+            prev.size === targets.length ? new Set() : new Set(targets.map((t2) => t2.Key)),
+        );
+    }, [targets]);
+
+    const handleSyncSelected = useCallback(async () => {
+        await runRowAction(async () => {
+            for (const key of selected) await syncNowOffline(key);
+        });
+    }, [runRowAction, selected]);
+
+    const handlePauseSelected = useCallback(async () => {
+        await runRowAction(async () => {
+            for (const key of selected) await pauseOffline(key);
+        });
+    }, [runRowAction, selected]);
+
+    const handleRemoveSelected = useCallback(async () => {
+        if (
+            !safeConfirm(
+                t('page.setting.offlineMedia.confirmRemoveSelected', {
+                    count: selected.size,
+                    defaultValue: 'Remove {{count}} selected downloads?',
+                }),
+            )
+        ) {
+            return;
         }
-    }, [refreshTargets]);
+        await runRowAction(async () => {
+            for (const key of selected) await removeOffline(key);
+        });
+        setSelected(new Set());
+    }, [runRowAction, selected, t]);
+
+    const handleSyncAll = useCallback(async () => {
+        await runRowAction(() => syncAllOffline());
+    }, [runRowAction]);
 
     const handleRemoveAll = useCallback(async () => {
         if (
@@ -356,13 +441,9 @@ export const OfflineMediaSettings = () => {
         ) {
             return;
         }
-        try {
-            await removeAllTargets();
-            await refreshTargets();
-        } catch (err) {
-            toast.error({ message: (err as Error).message ?? String(err) });
-        }
-    }, [refreshTargets, t]);
+        await runRowAction(() => removeAllOffline());
+        setSelected(new Set());
+    }, [runRowAction, t]);
 
     const usagePct = useMemo(() => {
         if (!Number.isFinite(maxBytes) || maxBytes <= 0) return 0;
@@ -371,6 +452,39 @@ export const OfflineMediaSettings = () => {
 
     const entityTypeLabel = (type: OfflineEntityType): string =>
         t(`page.setting.offlineMedia.type.${type}`, { defaultValue: type });
+
+    // The context-appropriate primary action for a row (pause / resume / retry /
+    // sync-now), each independent of any other target's state.
+    const rowPrimaryAction = (
+        target: OfflineTargetRow,
+    ): { icon: ReactNode; label: string; onClick: () => void } => {
+        if (READY_STATUSES.has(target.Status)) {
+            return {
+                icon: <RiPauseLine />,
+                label: t('page.setting.offlineMedia.pause', { defaultValue: 'Pause' }),
+                onClick: () => void runRowAction(() => pauseOffline(target.Key)),
+            };
+        }
+        if (target.Status === 'paused') {
+            return {
+                icon: <RiPlayLine />,
+                label: t('page.setting.offlineMedia.resume', { defaultValue: 'Resume' }),
+                onClick: () => void runRowAction(() => resumeOffline(target.Key)),
+            };
+        }
+        if (target.Status === 'error' || target.Status === 'partial') {
+            return {
+                icon: <RiRefreshLine />,
+                label: t('page.setting.offlineMedia.retry', { defaultValue: 'Retry' }),
+                onClick: () => void runRowAction(() => retryOffline(target.Key)),
+            };
+        }
+        return {
+            icon: <RiDownload2Line />,
+            label: t('page.setting.offlineMedia.syncNow', { defaultValue: 'Sync now' }),
+            onClick: () => void runRowAction(() => syncNowOffline(target.Key)),
+        };
+    };
 
     if (cacheAvailable === false) {
         return (
@@ -581,6 +695,58 @@ export const OfflineMediaSettings = () => {
                     </Title>
                     {loadingTargets && <Loader size="xs" />}
                 </Group>
+
+                {/* Queue overview */}
+                {offlineQueue && (offlineQueue.activeKey || offlineQueue.queuedCount > 0) && (
+                    <Text c="dimmed" size="sm">
+                        {t('page.setting.offlineMedia.queueOverview', {
+                            active: offlineQueue.activeKey ? 1 : 0,
+                            defaultValue: '{{active}} downloading · {{queued}} queued',
+                            queued: offlineQueue.queuedCount,
+                        })}
+                    </Text>
+                )}
+
+                {/* Bulk actions for the current selection */}
+                {selected.size > 0 && (
+                    <Group gap="xs">
+                        <Text size="sm">
+                            {t('page.setting.offlineMedia.selectedCount', {
+                                count: selected.size,
+                                defaultValue: '{{count}} selected',
+                            })}
+                        </Text>
+                        <Button
+                            onClick={() => void handleSyncSelected()}
+                            size="xs"
+                            variant="default"
+                        >
+                            {t('page.setting.offlineMedia.syncSelected', {
+                                defaultValue: 'Sync selected',
+                            })}
+                        </Button>
+                        <Button
+                            onClick={() => void handlePauseSelected()}
+                            size="xs"
+                            variant="default"
+                        >
+                            {t('page.setting.offlineMedia.pauseSelected', {
+                                defaultValue: 'Pause selected',
+                            })}
+                        </Button>
+                        <Button
+                            color="red"
+                            onClick={() => void handleRemoveSelected()}
+                            size="xs"
+                            variant="light"
+                        >
+                            {t('page.setting.offlineMedia.removeSelected', {
+                                defaultValue: 'Remove selected',
+                            })}
+                        </Button>
+                    </Group>
+                )}
+
                 {targets.length === 0 ? (
                     <Text c="dimmed" size="sm">
                         {t('page.setting.offlineMedia.empty', {
@@ -589,9 +755,22 @@ export const OfflineMediaSettings = () => {
                     </Text>
                 ) : (
                     <ScrollArea offsetScrollbars type="auto">
-                        <Table miw={560}>
+                        <Table miw={620}>
                             <Table.Thead>
                                 <Table.Tr>
+                                    <Table.Th w={36}>
+                                        <Checkbox
+                                            aria-label="Select all"
+                                            checked={
+                                                targets.length > 0 &&
+                                                selected.size === targets.length
+                                            }
+                                            indeterminate={
+                                                selected.size > 0 && selected.size < targets.length
+                                            }
+                                            onChange={toggleSelectAll}
+                                        />
+                                    </Table.Th>
                                     <Table.Th>
                                         {t('page.setting.offlineMedia.colName', {
                                             defaultValue: 'Name',
@@ -621,52 +800,110 @@ export const OfflineMediaSettings = () => {
                                 </Table.Tr>
                             </Table.Thead>
                             <Table.Tbody>
-                                {targets.map((target) => (
-                                    <Table.Tr key={target.Key}>
-                                        <Table.Td>{target.Name}</Table.Td>
-                                        <Table.Td>{entityTypeLabel(target.EntityType)}</Table.Td>
-                                        <Table.Td>
-                                            {target.DownloadedCount}
-                                            {target.SongCount !== undefined
-                                                ? `/${target.SongCount}`
-                                                : ''}
-                                        </Table.Td>
-                                        <Table.Td>{formatBytes(target.Bytes)}</Table.Td>
-                                        <Table.Td>
-                                            <Badge
-                                                color={STATUS_COLOR[target.Status]}
-                                                variant="light"
-                                            >
-                                                {t(
-                                                    `page.setting.offlineMedia.status.${target.Status}`,
-                                                    {
-                                                        defaultValue: target.Status,
-                                                    },
-                                                )}
-                                            </Badge>
-                                        </Table.Td>
-                                        <Table.Td>
-                                            <Group gap="xs" justify="flex-end" wrap="nowrap">
-                                                <ActionIcon
-                                                    aria-label="Sync now"
-                                                    disabled={isSyncing}
-                                                    onClick={() => void handleSyncRow(target)}
-                                                    variant="subtle"
-                                                >
-                                                    <RiRefreshLine />
-                                                </ActionIcon>
-                                                <ActionIcon
-                                                    aria-label="Remove"
-                                                    color="red"
-                                                    onClick={() => void handleRemoveRow(target)}
-                                                    variant="subtle"
-                                                >
-                                                    <RiDeleteBinLine />
-                                                </ActionIcon>
-                                            </Group>
-                                        </Table.Td>
-                                    </Table.Tr>
-                                ))}
+                                {targets.map((target) => {
+                                    const isActive = smoothSync?.entityKey === target.Key;
+                                    const action = rowPrimaryAction(target);
+                                    const songsText =
+                                        isActive && smoothSync
+                                            ? smoothSync.phase === 'enumerating'
+                                                ? t('page.setting.offlineMedia.findingShort', {
+                                                      count: smoothSync.foundCount ?? 0,
+                                                      defaultValue: 'finding… {{count}}',
+                                                  })
+                                                : `${Math.floor(smoothSync.done)}/${
+                                                      smoothSync.total ?? target.SongCount ?? '?'
+                                                  }`
+                                            : `${target.DownloadedCount}${
+                                                  target.SongCount !== undefined
+                                                      ? `/${target.SongCount}`
+                                                      : ''
+                                              }`;
+                                    return (
+                                        <Table.Tr key={target.Key}>
+                                            <Table.Td>
+                                                <Checkbox
+                                                    aria-label={`Select ${target.Name}`}
+                                                    checked={selected.has(target.Key)}
+                                                    onChange={() => toggleSelect(target.Key)}
+                                                />
+                                            </Table.Td>
+                                            <Table.Td>{target.Name}</Table.Td>
+                                            <Table.Td>
+                                                {entityTypeLabel(target.EntityType)}
+                                            </Table.Td>
+                                            <Table.Td>
+                                                {songsText}
+                                                {target.SharedCount && target.SharedCount > 0 ? (
+                                                    <Text c="dimmed" component="span" size="xs">
+                                                        {' '}
+                                                        ·{' '}
+                                                        {t(
+                                                            'page.setting.offlineMedia.sharedCount',
+                                                            {
+                                                                count: target.SharedCount,
+                                                                defaultValue: '{{count}} shared',
+                                                            },
+                                                        )}
+                                                    </Text>
+                                                ) : null}
+                                            </Table.Td>
+                                            <Table.Td>{formatBytes(target.Bytes)}</Table.Td>
+                                            <Table.Td>
+                                                <Stack gap={2}>
+                                                    <Badge
+                                                        color={STATUS_COLOR[target.Status]}
+                                                        variant="light"
+                                                    >
+                                                        {t(
+                                                            `page.setting.offlineMedia.status.${target.Status}`,
+                                                            { defaultValue: target.Status },
+                                                        )}
+                                                    </Badge>
+                                                    {isActive &&
+                                                    smoothSync &&
+                                                    smoothSync.phase === 'downloading' &&
+                                                    smoothSync.total ? (
+                                                        <Progress
+                                                            size="xs"
+                                                            value={Math.min(
+                                                                100,
+                                                                (100 * smoothSync.done) /
+                                                                    smoothSync.total,
+                                                            )}
+                                                            w={90}
+                                                        />
+                                                    ) : null}
+                                                    {target.Status === 'error' &&
+                                                    target.LastError ? (
+                                                        <Text c="red" size="xs" truncate>
+                                                            {target.LastError}
+                                                        </Text>
+                                                    ) : null}
+                                                </Stack>
+                                            </Table.Td>
+                                            <Table.Td>
+                                                <Group gap="xs" justify="flex-end" wrap="nowrap">
+                                                    <ActionIcon
+                                                        aria-label={action.label}
+                                                        onClick={action.onClick}
+                                                        title={action.label}
+                                                        variant="subtle"
+                                                    >
+                                                        {action.icon}
+                                                    </ActionIcon>
+                                                    <ActionIcon
+                                                        aria-label="Remove"
+                                                        color="red"
+                                                        onClick={() => void handleRemoveRow(target)}
+                                                        variant="subtle"
+                                                    >
+                                                        <RiDeleteBinLine />
+                                                    </ActionIcon>
+                                                </Group>
+                                            </Table.Td>
+                                        </Table.Tr>
+                                    );
+                                })}
                             </Table.Tbody>
                         </Table>
                     </ScrollArea>
@@ -674,7 +911,7 @@ export const OfflineMediaSettings = () => {
 
                 <Group>
                     <Button
-                        disabled={targets.length === 0 || isSyncing}
+                        disabled={targets.length === 0}
                         onClick={() => void handleSyncAll()}
                         variant="default"
                     >
