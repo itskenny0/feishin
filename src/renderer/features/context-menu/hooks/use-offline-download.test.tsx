@@ -4,16 +4,16 @@
 // toast, then drive useOfflineDownload via renderHook and assert:
 //   - LibraryItem mapping covers every downloadable entity + rejects the rest
 //   - availability gates on localCache.enabled AND cacheAvailable !== false
-//   - download() marshals each entity into addAndSyncOfflineTarget with the
-//     current server id, and emits exactly one toast per invocation.
+//   - download() marshals the entities into a single enqueueOfflineMany call
+//     with the current server id, and emits exactly one toast per invocation.
 
 import { renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => {
     return {
-        addAndSyncOfflineTarget: vi.fn().mockResolvedValue(undefined),
         cacheState: { cacheAvailable: true as boolean | undefined },
+        enqueueOfflineMany: vi.fn().mockResolvedValue(undefined),
         server: { id: 'server-1' } as null | { id: string },
         settingsState: { localCache: { enabled: true as boolean | undefined } },
         toast: { error: vi.fn(), info: vi.fn() },
@@ -23,8 +23,8 @@ const mocks = vi.hoisted(() => {
 // Mock the heavy controller import chain so pulling the hook in doesn't drag
 // in the player store / i18n bootstrap.
 vi.mock('/@/renderer/api', () => ({ api: { controller: {} } }));
-vi.mock('/@/renderer/cache/offline-media', () => ({
-    addAndSyncOfflineTarget: mocks.addAndSyncOfflineTarget,
+vi.mock('/@/renderer/cache/offline', () => ({
+    enqueueOfflineMany: mocks.enqueueOfflineMany,
 }));
 vi.mock('/@/renderer/cache/store', () => ({
     useCacheStore: (selector: (s: typeof mocks.cacheState) => unknown) =>
@@ -105,26 +105,18 @@ describe('useOfflineDownload', () => {
         expect(result.current.available).toBe(true);
     });
 
-    it('downloads each entity via addAndSyncOfflineTarget with the server id', async () => {
+    it('enqueues all entities in one enqueueOfflineMany call with the server id', async () => {
         const { result } = renderHook(() => useOfflineDownload());
         await result.current.download([
             { entityType: 'album', id: 'a1', name: 'Album One' },
             { entityType: 'album', id: 'a2', name: 'Album Two' },
         ]);
 
-        expect(mocks.addAndSyncOfflineTarget).toHaveBeenCalledTimes(2);
-        expect(mocks.addAndSyncOfflineTarget).toHaveBeenNthCalledWith(1, {
-            entityId: 'a1',
-            entityType: 'album',
-            name: 'Album One',
-            serverId: 'server-1',
-        });
-        expect(mocks.addAndSyncOfflineTarget).toHaveBeenNthCalledWith(2, {
-            entityId: 'a2',
-            entityType: 'album',
-            name: 'Album Two',
-            serverId: 'server-1',
-        });
+        expect(mocks.enqueueOfflineMany).toHaveBeenCalledTimes(1);
+        expect(mocks.enqueueOfflineMany).toHaveBeenCalledWith([
+            { entityId: 'a1', entityType: 'album', name: 'Album One', serverId: 'server-1' },
+            { entityId: 'a2', entityType: 'album', name: 'Album Two', serverId: 'server-1' },
+        ]);
         // Exactly one "downloading…" toast per invocation, not per entity.
         expect(mocks.toast.info).toHaveBeenCalledTimes(1);
     });
@@ -133,18 +125,18 @@ describe('useOfflineDownload', () => {
         mocks.server = null;
         const { result } = renderHook(() => useOfflineDownload());
         await result.current.download([{ entityType: 'album', id: 'a1', name: 'A' }]);
-        expect(mocks.addAndSyncOfflineTarget).not.toHaveBeenCalled();
+        expect(mocks.enqueueOfflineMany).not.toHaveBeenCalled();
     });
 
     it('is a no-op for an empty entity list', async () => {
         const { result } = renderHook(() => useOfflineDownload());
         await result.current.download([]);
-        expect(mocks.addAndSyncOfflineTarget).not.toHaveBeenCalled();
+        expect(mocks.enqueueOfflineMany).not.toHaveBeenCalled();
         expect(mocks.toast.info).not.toHaveBeenCalled();
     });
 
-    it('surfaces an error toast when a target download fails', async () => {
-        mocks.addAndSyncOfflineTarget.mockRejectedValueOnce(new Error('boom'));
+    it('surfaces an error toast when the enqueue fails', async () => {
+        mocks.enqueueOfflineMany.mockRejectedValueOnce(new Error('boom'));
         const { result } = renderHook(() => useOfflineDownload());
         await result.current.download([{ entityType: 'album', id: 'a1', name: 'A' }]);
         expect(mocks.toast.error).toHaveBeenCalledTimes(1);

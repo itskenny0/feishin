@@ -12,7 +12,7 @@ import { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { api } from '/@/renderer/api';
-import { addAndSyncOfflineTarget } from '/@/renderer/cache/offline-media';
+import { enqueueOfflineMany } from '/@/renderer/cache/offline';
 import { useCacheStore } from '/@/renderer/cache/store';
 import { OfflineEntityType } from '/@/renderer/cache/types';
 import { useCurrentServer } from '/@/renderer/store';
@@ -105,20 +105,22 @@ export const useOfflineDownload = (): UseOfflineDownload => {
                 }),
             });
 
-            for (const entity of entities) {
-                try {
-                    await addAndSyncOfflineTarget({
+            // Enqueue all at once. Each becomes a queued target and downloads
+            // sequentially — unlike the old per-item addAndSync, which aborted
+            // the previous in-flight sync on every call, so a multi-select
+            // "download all" cancelled everything but the last item.
+            try {
+                await enqueueOfflineMany(
+                    entities.map((entity) => ({
                         entityId: entity.id,
                         entityType: entity.entityType,
                         name: entity.name,
                         serverId: server.id,
-                    });
-                } catch (err) {
-                    console.warn(`${TAG} download failed`, { entity, err });
-                    toast.error({
-                        message: (err as Error).message ?? String(err),
-                    });
-                }
+                    })),
+                );
+            } catch (err) {
+                console.warn(`${TAG} download failed`, { err });
+                toast.error({ message: (err as Error).message ?? String(err) });
             }
         },
         [server, t],
