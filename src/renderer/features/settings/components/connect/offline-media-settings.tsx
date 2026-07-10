@@ -57,9 +57,13 @@ const SLIDER_STEP = 256 * MIB;
 
 const STATUS_COLOR: Record<OfflineTargetRow['Status'], string> = {
     complete: 'green',
+    downloading: 'blue',
+    enumerating: 'cyan',
     error: 'red',
     idle: 'gray',
     partial: 'yellow',
+    paused: 'gray',
+    queued: 'grape',
     syncing: 'blue',
 };
 

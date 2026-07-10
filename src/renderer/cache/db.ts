@@ -382,6 +382,16 @@ export class LibraryCacheDb extends Dexie {
             thumbnails: '[ItemId+Variant], ItemId, LastUsed, ByteSize, MissAt, __cachedAt',
             trackmaps: '[SongId+Sensitivity+Version], SongId, LastUsed, ByteSize, __cachedAt',
         });
+
+        // v13: add the EnqueuedAt index to offlineTargets so the offline-download
+        // manager can order its FIFO queue. Additive index only — no data
+        // transform. Dexie carries every unlisted table forward unchanged; only
+        // the redeclared table's full index set (old + EnqueuedAt) is restated.
+        // The manager normalizes any legacy Status value on read
+        // (normalizeTargetStatus), so no upgrade callback is needed.
+        this.version(13).stores({
+            offlineTargets: 'Key, EntityType, Status, AddedAt, EnqueuedAt',
+        });
     }
 }
 const handles = new Map<Key, LibraryCacheDb>();

@@ -38,6 +38,27 @@ export const targetKey = (
     entityId: string,
 ): string => `${serverId}:${entityType}:${entityId}`;
 
+/**
+ * Map any persisted target Status string into the current state machine. Legacy
+ * values (`idle`/`syncing`) and crash residue (`downloading`/`enumerating`)
+ * become `queued` so the manager resumes them; settled states pass through;
+ * unknown values default to `queued`. Read-time only — never written back
+ * destructively (the manager patches on resume).
+ */
+export const normalizeTargetStatus = (raw: string): OfflineTargetStatus => {
+    switch (raw) {
+        case 'complete':
+        case 'error':
+        case 'partial':
+        case 'paused':
+        case 'queued':
+            return raw;
+        default:
+            // idle, syncing, downloading, enumerating, or anything unknown.
+            return 'queued';
+    }
+};
+
 // Map a Jellyfin container/extension hint to an audio MIME type. The web-audio
 // engine reads the blob's `type`, so a correct MIME lets it pick the right
 // decoder. Unknown containers fall back to a generic audio type — the browser

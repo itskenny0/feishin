@@ -97,6 +97,9 @@ export interface CachedMediaBlob {
     Path?: string;
     ServerId: string;
     SongId: string;
+    // Freshness fingerprint captured at download time. Undefined on pre-overhaul
+    // rows — which are therefore always treated as up to date (never re-fetched).
+    SourceTag?: OfflineSourceTag;
     // Id of the storage volume `Path` lives on (see active-backend). Undefined
     // on the idb backend.
     VolumeId?: string;
@@ -263,6 +266,18 @@ export type OfflineEntityType = 'album' | 'artist' | 'genre' | 'playlist' | 'son
 export type OfflineKey = `${string}:${string}`;
 
 /**
+ * Lightweight freshness fingerprint captured at download time. Compared against
+ * the live song metadata to decide whether a stored blob is still current (see
+ * cache/offline/dedup.ts). Undefined on all pre-overhaul blob rows — those are
+ * always treated as up to date and never re-downloaded.
+ */
+export interface OfflineSourceTag {
+    container?: string;
+    size?: number;
+    updatedAt?: string;
+}
+
+/**
  * An entity the user marked for offline download. Primary key `Key` is
  * `${serverId}:${entityType}:${entityId}`.
  */
@@ -270,22 +285,50 @@ export interface OfflineTargetRow {
     AddedAt: number;
     // Total bytes of the blobs currently downloaded for this target.
     Bytes: number;
+    // --- download-queue fields (all optional; undefined on pre-overhaul rows) ---
+    // Set when this target is fully covered by another target's blobs.
+    CoveredByKey?: string;
     // Number of blobs downloaded so far (<= SongCount).
     DownloadedCount: number;
+    // Monotonic FIFO queue ordering key; undefined when the target is settled.
+    EnqueuedAt?: number;
     EntityId: string;
     EntityType: OfflineEntityType;
+    // Per-song failures observed during the last run.
+    ErrorCount?: number;
     Key: string;
     // Last error message if Status === 'error'.
     LastError: string | undefined;
     Name: string;
+    // Songs still to download for this target (persisted for restart UI).
+    PendingCount?: number;
+
+    // Transient: user asked to sync this target now (jump the queue).
+    Preempt?: boolean;
     ServerId: string;
+    // Songs already covered by another target's blobs (dedup surfacing).
+    SharedCount?: number;
     // Total songs enumerated for this entity (undefined until first sync).
     SongCount: number | undefined;
     Status: OfflineTargetStatus;
     UpdatedAt: number;
 }
 
-export type OfflineTargetStatus = 'complete' | 'error' | 'idle' | 'partial' | 'syncing';
+// `idle` and `syncing` are LEGACY values written by the pre-overhaul engine.
+// They are tolerated in the union only until that engine is deleted (the
+// back-compat shim task), so the old code keeps compiling in the interim. The
+// manager never writes them; normalizeTargetStatus folds them to `queued` on
+// read. Remove both when the old offline-media engine is gone.
+export type OfflineTargetStatus =
+    | 'complete'
+    | 'downloading'
+    | 'enumerating'
+    | 'error'
+    | 'idle'
+    | 'partial'
+    | 'paused'
+    | 'queued'
+    | 'syncing';
 
 export interface SyncMetaRow {
     EntityType: EntityType;
