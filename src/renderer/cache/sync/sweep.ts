@@ -89,6 +89,63 @@ export const isSweepNetworkError = (err: unknown): boolean => {
     );
 };
 
+// A page fetch is retried this many times (with exponential backoff) before the
+// sweep gives up and preserves its checkpoint for a later resume. Covers a
+// transient 5xx from an overloaded server (the controller throws a plain
+// `Error('Failed to get …')` on a 502, which is NOT a network error — so
+// without this the sweep died on the first blip and the wizard froze mid-entity).
+const SWEEP_FETCH_ATTEMPTS = 3;
+let sweepRetryBaseMs = 1500;
+/** Test hook: shorten (or zero) the per-page retry backoff. */
+export const setSweepRetryBaseMsForTests = (ms: number): void => {
+    sweepRetryBaseMs = ms;
+};
+
+const sweepSleep = (ms: number, signal: AbortSignal): Promise<void> =>
+    new Promise((resolve, reject) => {
+        const timer = setTimeout(resolve, ms);
+        signal.addEventListener(
+            'abort',
+            () => {
+                clearTimeout(timer);
+                reject(new DOMException('aborted', 'AbortError'));
+            },
+            { once: true },
+        );
+    });
+
+/**
+ * Fetch one page, retrying a transient failure (e.g. a 502 from an overloaded
+ * server) with bounded exponential backoff. Never retries an abort. Re-throws
+ * the last error once attempts are exhausted so the caller can preserve the
+ * checkpoint and resume later.
+ */
+const fetchPageWithRetry = async <TItem>(
+    fetchPage: () => Promise<{ items: TItem[]; total: number }>,
+    signal: AbortSignal,
+    entity: EntityType,
+    startIndex: number,
+): Promise<{ items: TItem[]; total: number }> => {
+    let lastErr: unknown;
+    for (let attempt = 1; attempt <= SWEEP_FETCH_ATTEMPTS; attempt += 1) {
+        if (signal.aborted) throw new DOMException('aborted', 'AbortError');
+        try {
+            return await fetchPage();
+        } catch (err) {
+            if ((err as Error)?.name === 'AbortError' || signal.aborted) throw err;
+            lastErr = err;
+            if (attempt >= SWEEP_FETCH_ATTEMPTS) break;
+            const delay = sweepRetryBaseMs * 2 ** (attempt - 1);
+            console.warn(
+                `[cache] sweep:${entity} page attempt ${attempt}/${SWEEP_FETCH_ATTEMPTS} failed, retrying in ${delay}ms`,
+                { error: (err as Error)?.message, startIndex },
+            );
+            await sweepSleep(delay, signal);
+        }
+    }
+    throw lastErr;
+};
+
 export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> => {
     const {
         ctx,
@@ -283,27 +340,32 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
         }
         let result: { items: TItem[]; total: number };
         try {
-            result = await fetchPage(startIndex, pageSize, signal);
+            result = await fetchPageWithRetry(
+                () => fetchPage(startIndex, pageSize, signal),
+                signal,
+                entity,
+                startIndex,
+            );
         } catch (err) {
             if ((err as Error)?.name === 'AbortError' || signal.aborted) {
                 console.info(`[cache] sweep:${entity} aborted during fetch`, { startIndex });
                 cleanup();
                 return;
             }
-            if (isSweepNetworkError(err)) {
-                console.warn(
-                    `[cache] sweep:${entity} page failed (network) — checkpoint preserved for resume`,
-                    {
-                        error: (err as Error)?.message,
-                        startIndex,
-                    },
-                );
-                cleanup();
-                return;
-            }
-            console.warn(`[cache] sweep:${entity} page failed`, { error: err, startIndex });
+            // After bounded retries the page still failed — a persistent network
+            // error OR an overloaded server (5xx). Preserve the checkpoint and
+            // stop THIS sweep cleanly WITHOUT throwing: hydrate then continues to
+            // the other entities (so they still make progress), and the sync
+            // runner retries this entity from the saved cursor. Throwing here
+            // made a single flaky entity skip every entity after it and froze the
+            // first-sync wizard at the failing offset.
+            const kind = isSweepNetworkError(err) ? 'network' : 'server';
+            console.warn(
+                `[cache] sweep:${entity} page failed (${kind}) after retries — checkpoint preserved for resume`,
+                { error: (err as Error)?.message, startIndex },
+            );
             cleanup();
-            throw err;
+            return;
         }
 
         if (signal.aborted) break;

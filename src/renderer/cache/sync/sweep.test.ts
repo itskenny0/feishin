@@ -6,12 +6,15 @@
 // with a lock yield between them, and the syncMeta resume marker is written
 // last so the checkpoint stays correct.
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { LibraryCacheDb } from '../db';
 
 import { useCacheStore } from '../store';
-import { runSweep } from './sweep';
+import { runSweep, setSweepRetryBaseMsForTests } from './sweep';
+
+// No real retry backoff in tests.
+beforeEach(() => setSweepRetryBaseMsForTests(0));
 
 // A Dexie-shim that records transaction boundaries + writePage chunk sizes.
 const makeDb = () => {
@@ -129,5 +132,53 @@ describe('runSweep lock-yield', () => {
         // All 1200 items across the three pages were written — a suppressed
         // total:0 did not collapse the loop after page 2 (which would write 1000).
         expect(written.length).toBe(1200);
+    });
+});
+
+describe('runSweep transient-failure retry', () => {
+    it('retries a page that fails once (e.g. a 502) and completes', async () => {
+        const { db, syncMeta } = makeDb();
+        const writePage = vi.fn(async () => undefined);
+        let calls = 0;
+        const ctrl = new AbortController();
+        await runSweep<{ id: string }>({
+            ctx: { db, entity: 'albums', signal: ctrl.signal },
+            fetchPage: async () => {
+                calls += 1;
+                if (calls === 1) throw new Error('Failed to get album artist list'); // 502
+                return { items: [{ id: 'a0' }], total: 1 };
+            },
+            pageSize: 500,
+            writePage,
+        });
+        expect(calls).toBe(2); // failed once, retried, succeeded
+        // Reached the terminal "full" mark.
+        const putCalls = syncMeta.put.mock.calls as unknown as Array<[{ hydrationState?: string }]>;
+        const markedFull = putCalls.some(([m]) => m?.hydrationState === 'full');
+        expect(markedFull).toBe(true);
+    });
+
+    it('preserves the checkpoint (no full mark, resumable) when a page fails every retry', async () => {
+        const { db, syncMeta } = makeDb();
+        // A prior page committed the resume cursor at 500.
+        syncMeta.get = vi.fn(async () => ({ nextStartIndex: 500, totalCount: 2000 }) as never);
+        const writePage = vi.fn(async () => undefined);
+        let calls = 0;
+        const ctrl = new AbortController();
+        // Returns (does NOT throw) so hydrate keeps going to other entities.
+        await expect(
+            runSweep<{ id: string }>({
+                ctx: { db, entity: 'albums', signal: ctrl.signal },
+                fetchPage: async () => {
+                    calls += 1;
+                    throw new Error('Failed to get album artist list');
+                },
+                pageSize: 500,
+                writePage,
+            }),
+        ).resolves.toBeUndefined();
+        expect(calls).toBe(3); // 3 bounded attempts
+        // Never marked the entity fully hydrated → the runner resumes from 500.
+        expect(syncMeta.put).not.toHaveBeenCalled();
     });
 });
