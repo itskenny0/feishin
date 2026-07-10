@@ -375,6 +375,10 @@ export const useCacheLifecycle = (): void => {
                 // Auto-resume any pending/interrupted offline downloads (queued
                 // targets + crash residue) now that the DB is open.
                 void offlineManager.resumePersisted();
+                // One-shot: backfill db.songs metadata for downloads made before
+                // metadata was persisted at download time, so the "Available
+                // offline" view stops undercounting.
+                void offlineManager.healSongMeta();
                 // One-shot: clear the ~46k false 404 markers the old resolver
                 // wrote against a load-shedding server, so the next sweep
                 // re-fetches them under the new soft-miss + stress gate.

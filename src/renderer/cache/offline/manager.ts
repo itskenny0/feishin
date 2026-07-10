@@ -8,10 +8,12 @@ import type { Song } from '/@/shared/types/domain-types';
 import type { LocalMediaStore } from '../media-store';
 import type { OfflineTargetRow } from '../types';
 
+import { getActiveCacheDb } from '../db';
 import { localMediaStore, normalizeTargetStatus, targetKey } from '../media-store';
 import { isUpToDate, sourceTagFor } from './dedup';
 import { streamTargetSongs } from './enumerate';
 import { publishProgress, publishQueue } from './progress';
+import { cacheOfflineSongMeta } from './song-meta';
 
 import { api } from '/@/renderer/api';
 import { useSettingsStore } from '/@/renderer/store';
@@ -104,6 +106,43 @@ export class OfflineDownloadManager {
 
     async enqueueMany(argsList: AddTargetArgs[]): Promise<void> {
         for (const args of argsList) await this.enqueue(args);
+    }
+
+    /**
+     * One-shot heal: populate db.songs metadata for every already-downloaded
+     * target so the "Available offline" view resolves all blobs (fixes downloads
+     * made before metadata was persisted at download time). syncMeta-flagged so
+     * it runs once per DB. Online + best-effort — a failed enumeration leaves the
+     * flag unset so it retries next launch.
+     */
+    async healSongMeta(): Promise<void> {
+        const db = getActiveCacheDb();
+        if (!db) return;
+        const FLAG = 'offlineSongMetaHeal_v1';
+        try {
+            if (await db.syncMeta.get(FLAG as never)) return;
+            for (const t of await this.getStore().listTargets()) {
+                try {
+                    for await (const page of streamTargetSongs(t))
+                        await cacheOfflineSongMeta(page, db);
+                } catch (err) {
+                    console.warn(`${TAG} healSongMeta: enumerate failed`, { err, key: t.Key });
+                    return; // leave the flag unset → retry next launch
+                }
+            }
+            await db.syncMeta.put({
+                EntityType: FLAG as never,
+                hydrationState: 'none',
+                lastFullSyncAt: undefined,
+                lastSweepAt: undefined,
+                nextStartIndex: undefined,
+                pausedUntil: undefined,
+                totalCount: undefined,
+            });
+            console.info(`${TAG} healSongMeta complete`);
+        } catch (err) {
+            console.warn(`${TAG} healSongMeta failed`, err);
+        }
     }
 
     isRunning(): boolean {
@@ -513,6 +552,9 @@ export class OfflineDownloadManager {
 
         try {
             for await (const page of streamTargetSongs(target, abort.signal)) {
+                // Persist every enumerated song's metadata so the "Available
+                // offline" view can render it regardless of the library sweep.
+                void cacheOfflineSongMeta(page);
                 for (const song of page) {
                     if (seen.has(song.id)) continue;
                     seen.add(song.id);
