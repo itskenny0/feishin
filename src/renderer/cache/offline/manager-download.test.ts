@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { LibraryCacheDb } from '../db';
 import { LocalMediaStore } from '../media-store';
+import { setEnumerateRetryBaseMsForTests } from './enumerate';
 import { OfflineDownloadManager } from './manager';
 
 import { api } from '/@/renderer/api';
@@ -46,6 +47,7 @@ describe('processTarget', () => {
     let store: LocalMediaStore;
     beforeEach(async () => {
         settings.maxBytes = 0;
+        setEnumerateRetryBaseMsForTests(0); // no real retry backoff in tests
         store = await makeStore();
         vi.stubGlobal(
             'fetch',
@@ -136,6 +138,18 @@ describe('processTarget', () => {
         const blob = await store.get('s', 's1');
         expect(blob?.SourceTag?.updatedAt).toBe('2026-06-01'); // fresh fingerprint
         expect((await store.getTarget('s:album:a1'))?.Status).toBe('complete');
+    });
+
+    it('a sustained enumeration failure settles error (not stuck looping)', async () => {
+        // Every attempt 502s (server overloaded) → after retries, the target
+        // must settle 'error' so the queue advances — NOT loop in 'enumerating'.
+        getAlbumDetail.mockRejectedValue(new Error('HTTP 502 Bad Gateway'));
+        const mgr = new OfflineDownloadManager(() => store);
+        await mgr.enqueue({ entityId: 'a1', entityType: 'album', name: 'A', serverId: 's' });
+        await mgr.whenIdle();
+        const t = await store.getTarget('s:album:a1');
+        expect(t?.Status).toBe('error');
+        expect(t?.LastError).toContain('502');
     });
 
     it('pausing during enumeration leaves the target paused, not error', async () => {

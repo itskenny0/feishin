@@ -581,6 +581,11 @@ export class OfflineDownloadManager {
                 if (phase === 'enumerating') push();
             }
         } catch (err) {
+            // Capture whether a CONTROL aborted us BEFORE we abort the pool
+            // ourselves — otherwise the abort below always makes this look
+            // control-initiated and the genuine-error branch never runs (which
+            // left a 502'd target stuck in `enumerating`, re-picked forever).
+            const controlAborted = abort.signal.aborted;
             enumerationDone = true;
             abort.abort();
             await Promise.allSettled(pool);
@@ -588,14 +593,16 @@ export class OfflineDownloadManager {
             publishProgress(undefined);
             // Aborted mid-enumeration (pause / cancel / preempt): leave the
             // status the control set — do NOT mark it error.
-            if (abort.signal.aborted) return;
-            // A genuine first-page enumeration failure → nothing to download.
+            if (controlAborted) return;
+            // A genuine enumeration failure (e.g. the server 502'd every retry)
+            // → settle `error` so the queue advances instead of looping.
             await store.patchTarget(key, {
                 EnqueuedAt: undefined,
                 LastError: (err as Error).message ?? String(err),
                 Preempt: false,
                 Status: 'error',
             });
+            console.warn(`${TAG} enumerate failed, target errored`, { err, key });
             return;
         }
 

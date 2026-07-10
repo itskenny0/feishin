@@ -1,12 +1,19 @@
 import type { Mock } from 'vitest';
 
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { OfflineTargetRow } from '../types';
 
-import { streamTargetSongs } from './enumerate';
+import { setEnumerateRetryBaseMsForTests, streamTargetSongs, withRetry } from './enumerate';
 
 import { api } from '/@/renderer/api';
+
+// Isolate mock state between tests (clears leftover once-queues) + no real
+// backoff delay.
+beforeEach(() => {
+    vi.resetAllMocks();
+    setEnumerateRetryBaseMsForTests(0);
+});
 
 vi.mock('/@/renderer/api', () => ({
     api: {
@@ -59,10 +66,10 @@ describe('streamTargetSongs (playlist paging)', () => {
         expect(pages).toEqual([500, 3]);
     });
 
-    it('a mid-stream page error ends the stream without throwing', async () => {
+    it('a mid-stream page error (all retries) ends the stream without throwing', async () => {
         getPlaylistSongList
             .mockResolvedValueOnce({ items: songs(500, 0) })
-            .mockRejectedValueOnce(new Error('boom'));
+            .mockRejectedValue(new Error('boom')); // page 2 fails every retry
         const pages: number[] = [];
         await expect(
             (async () => {
@@ -72,13 +79,52 @@ describe('streamTargetSongs (playlist paging)', () => {
         expect(pages).toEqual([500]);
     });
 
-    it('a first-page error throws (nothing enumerated)', async () => {
-        getPlaylistSongList.mockRejectedValueOnce(new Error('boom'));
+    it('a first-page error (all retries) throws (nothing enumerated)', async () => {
+        getPlaylistSongList.mockRejectedValue(new Error('boom'));
         await expect(
             (async () => {
                 for await (const page of streamTargetSongs(target())) void page;
             })(),
         ).rejects.toThrow('boom');
+    });
+
+    it('retries a transient page error then succeeds', async () => {
+        getPlaylistSongList
+            .mockRejectedValueOnce(new Error('502'))
+            .mockResolvedValueOnce({ items: songs(3, 0) });
+        const pages: number[] = [];
+        for await (const page of streamTargetSongs(target())) pages.push(page.length);
+        expect(pages).toEqual([3]);
+        expect(getPlaylistSongList).toHaveBeenCalledTimes(2); // 1 fail + 1 success
+    });
+});
+
+describe('withRetry', () => {
+    it('retries a transient failure then returns the value', async () => {
+        let n = 0;
+        const fn = vi.fn(async () => {
+            n += 1;
+            if (n < 3) throw new Error('502');
+            return 'ok';
+        });
+        await expect(withRetry(fn)).resolves.toBe('ok');
+        expect(fn).toHaveBeenCalledTimes(3);
+    });
+
+    it('gives up after MAX_ATTEMPTS (no infinite loop)', async () => {
+        const fn = vi.fn(async () => {
+            throw new Error('502');
+        });
+        await expect(withRetry(fn)).rejects.toThrow('502');
+        expect(fn).toHaveBeenCalledTimes(3);
+    });
+
+    it('never retries an abort', async () => {
+        const fn = vi.fn(async () => {
+            throw new DOMException('aborted', 'AbortError');
+        });
+        await expect(withRetry(fn)).rejects.toThrow();
+        expect(fn).toHaveBeenCalledTimes(1);
     });
 });
 
