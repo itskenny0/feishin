@@ -47,6 +47,10 @@ export class OfflineDownloadManager {
     private aborts = new Map<string, AbortController>();
     private enqueueSeq = 0;
     private idleWaiters: Array<() => void> = [];
+    // Called after a target settles or a target/all are removed, so callers can
+    // refresh aggregate stats + the availability index. Injected (defaults to a
+    // no-op) to avoid an import cycle with the stats module.
+    private onChanged: () => Promise<void>;
     private processHook?: ProcessHook;
     private pumping = false;
     // Set when a control enqueues work while the pump is already running, so the
@@ -54,8 +58,12 @@ export class OfflineDownloadManager {
     // between the last empty poll and the pump releasing).
     private rekick = false;
 
-    constructor(getStore: () => LocalMediaStore = () => localMediaStore) {
+    constructor(
+        getStore: () => LocalMediaStore = () => localMediaStore,
+        onChanged: () => Promise<void> = async () => {},
+    ) {
         this.getStore = getStore;
+        this.onChanged = onChanged;
     }
 
     /** Abort the in-flight download of a specific target (pause/cancel/preempt). */
@@ -102,9 +110,101 @@ export class OfflineDownloadManager {
         return this.pumping;
     }
 
+    /** Pause a target: stop its in-flight download and drop it from the queue. */
+    async pause(key: string): Promise<void> {
+        await this.getStore().patchTarget(key, {
+            EnqueuedAt: undefined,
+            Preempt: false,
+            Status: 'paused',
+        });
+        this.abortTarget(key);
+    }
+
+    /** Pause every active/queued target. */
+    async pauseAll(): Promise<void> {
+        for (const t of await this.getStore().listTargets()) {
+            if (READY.has(t.Status)) await this.pause(t.Key);
+        }
+    }
+
+    /** Remove a target (cancel if active) and reclaim any blobs it solely owned. */
+    async remove(key: string): Promise<void> {
+        this.abortTarget(key);
+        await this.getStore().removeTarget(key);
+        await this.onChanged();
+    }
+
+    /** Remove every target and wipe all offline blobs. */
+    async removeAll(): Promise<void> {
+        for (const [, ac] of this.aborts) ac.abort();
+        this.aborts.clear();
+        await this.getStore().clearAll();
+        await this.onChanged();
+    }
+
+    /** Resume a paused/settled target by re-queuing it. */
+    async resume(key: string): Promise<void> {
+        await this.getStore().patchTarget(key, {
+            EnqueuedAt: this.nextEnqueuedAt(),
+            Status: 'queued',
+        });
+        void this.kick();
+    }
+
+    /** Re-queue every paused/partial/error target. */
+    async resumeAll(): Promise<void> {
+        for (const t of await this.getStore().listTargets()) {
+            if (t.Status === 'paused' || t.Status === 'partial' || t.Status === 'error') {
+                await this.resume(t.Key);
+            }
+        }
+    }
+
+    /** Retry a failed/partial target (alias of resume). */
+    async retry(key: string): Promise<void> {
+        await this.resume(key);
+    }
+
+    /** Set the post-change callback (stats/availability refresh). */
+    setOnChanged(fn: () => Promise<void>): void {
+        this.onChanged = fn;
+    }
+
     /** Test seam: replace the real processTarget with a stub. */
     setProcessHook(hook: ProcessHook | undefined): void {
         this.processHook = hook;
+    }
+
+    /** Re-queue every target that isn't already complete or actively running. */
+    async syncAll(): Promise<void> {
+        for (const t of await this.getStore().listTargets()) {
+            if (t.Status !== 'complete' && !READY.has(t.Status)) await this.resume(t.Key);
+            else if (t.Status === 'queued') void this.kick();
+        }
+    }
+
+    /**
+     * Sync a specific target NOW: mark it Preempt + re-queue, and bump the
+     * currently-downloading target out of the way (it re-queues itself and the
+     * pump picks the preempted one next).
+     */
+    async syncNow(key: string): Promise<void> {
+        const store = this.getStore();
+        const target = await store.getTarget(key);
+        if (!target) return;
+        await store.patchTarget(key, {
+            EnqueuedAt: this.nextEnqueuedAt(),
+            Preempt: true,
+            Status: 'queued',
+        });
+        const active = (await store.listTargets()).find(
+            (t) => t.Key !== key && (t.Status === 'downloading' || t.Status === 'enumerating'),
+        );
+        if (active) {
+            await store.patchTarget(active.Key, { Status: 'queued' });
+            this.abortTarget(active.Key);
+        }
+        void this.kick();
     }
 
     /** Resolves when the queue has drained. */
