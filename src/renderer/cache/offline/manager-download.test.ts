@@ -17,9 +17,11 @@ vi.mock('/@/renderer/api', () => ({
         },
     },
 }));
+// Mutable so a test can set a byte cap; 0 = unlimited.
+const settings = vi.hoisted(() => ({ downloadOriginal: true, maxBytes: 0 }));
 vi.mock('/@/renderer/store', () => ({
     useSettingsStore: {
-        getState: () => ({ localCache: { offlineMedia: { downloadOriginal: true, maxBytes: 0 } } }),
+        getState: () => ({ localCache: { offlineMedia: settings } }),
     },
 }));
 
@@ -43,6 +45,7 @@ const makeStore = async () => {
 describe('processTarget', () => {
     let store: LocalMediaStore;
     beforeEach(async () => {
+        settings.maxBytes = 0;
         store = await makeStore();
         vi.stubGlobal(
             'fetch',
@@ -87,5 +90,18 @@ describe('processTarget', () => {
         expect(blob?.EntityKeys).toEqual(
             expect.arrayContaining(['s:playlist:other', 's:album:a1']),
         );
+    });
+
+    it('stops at the byte cap and marks the target partial', async () => {
+        // Cap fits one 10-byte song but not two.
+        settings.maxBytes = 15;
+        getAlbumDetail.mockResolvedValue({ songs: [song('s1'), song('s2')] });
+        const mgr = new OfflineDownloadManager(() => store);
+        await mgr.enqueue({ entityId: 'a1', entityType: 'album', name: 'A', serverId: 's' });
+        await mgr.whenIdle();
+        const t = await store.getTarget('s:album:a1');
+        expect(t?.Status).toBe('partial');
+        expect(t?.DownloadedCount).toBe(1);
+        expect(t?.LastError).toBe('Storage cap reached');
     });
 });

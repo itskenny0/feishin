@@ -120,6 +120,14 @@ export class OfflineDownloadManager {
         this.abortTarget(key);
     }
 
+    /** Pause whichever target is currently downloading/enumerating (if any). */
+    async pauseActive(): Promise<void> {
+        const active = (await this.getStore().listTargets()).find(
+            (t) => t.Status === 'downloading' || t.Status === 'enumerating',
+        );
+        if (active) await this.pause(active.Key);
+    }
+
     /** Pause every active/queued target. */
     async pauseAll(): Promise<void> {
         for (const t of await this.getStore().listTargets()) {

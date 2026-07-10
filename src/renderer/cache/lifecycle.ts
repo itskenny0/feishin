@@ -19,6 +19,7 @@ import { resolveThumbnail } from './images';
 import { runIntegrityCheck } from './integrity';
 import { startWorker } from './mutations';
 import { refreshOfflineAvailability, refreshOfflineStats } from './offline-media';
+import { offlineManager } from './offline/manager';
 import { resetSearchIndexes } from './search';
 import { clearAllSnapshots, dropSnapshotsForServer } from './snapshot';
 import { useCacheActions, useCacheStore } from './store';
@@ -181,6 +182,14 @@ export const useCacheLifecycle = (): void => {
     const currentServer = useAuthStore((s) => s.currentServer);
     const enabled = useSettingsStore((s) => s.localCache?.enabled === true);
     const actions = useCacheActions();
+
+    // Job 0 — wire the offline-download manager's post-change hook to a stats
+    // refresh so a settled/removed target updates the aggregate + availability
+    // immediately. Done at runtime (not module load) to avoid a circular-import
+    // TDZ, and without the manager statically importing the stats module.
+    useEffect(() => {
+        offlineManager.setOnChanged(() => refreshOfflineStats());
+    }, []);
 
     // Job 1 — capability probe (runs once on first mount).
     useEffect(() => {
