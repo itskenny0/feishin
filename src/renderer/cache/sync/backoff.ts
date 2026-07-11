@@ -71,6 +71,17 @@ export interface BackoffController {
 }
 
 export const createBackoffController = (cfg: BackoffConfig): BackoffController => {
+    // Defensive clamp: a misconfigured `floor` of 0 (or negative) would let
+    // the multiplicative halving reach 0, which the sweep's worker loop reads
+    // as "no worker may proceed" — a silent full deadlock rather than a slow
+    // sweep, with no automatic recovery (rampup only fires when `cap <
+    // ceiling`, which a 0 cap still satisfies, but a worker never gets far
+    // enough to record a sample that could trigger it). Every caller today
+    // already passes floor >= 1 (thumbnails.ts derives it via
+    // `Math.min(4, concurrency)` with concurrency clamped >= 1), so this is
+    // pure insurance against a future/changed config, not a behaviour change.
+    const floor = Math.max(1, cfg.floor);
+    const ceiling = Math.max(floor, cfg.ceiling);
     const latency: number[] = [];
     let consecutiveFast = 0;
     let lastBackoffAt = 0;
@@ -82,7 +93,7 @@ export const createBackoffController = (cfg: BackoffConfig): BackoffController =
     // the time-based ramp so a server failing every request isn't ramped into.
     let lastWasTransient = false;
     const ctrl: BackoffController = {
-        cap: cfg.ceiling,
+        cap: ceiling,
         forceBackoff(nowMs) {
             // Identical to the overload branch in record() below — halve toward
             // the floor, clear the recovery streak, and drop the latency window
@@ -92,7 +103,7 @@ export const createBackoffController = (cfg: BackoffConfig): BackoffController =
             // halving rate-limit applies as usual.
             lastBackoffAt = nowMs;
             lastActionAt = nowMs;
-            ctrl.cap = Math.max(cfg.floor, Math.floor(ctrl.cap / 2));
+            ctrl.cap = Math.max(floor, Math.floor(ctrl.cap / 2));
             consecutiveFast = 0;
             latency.length = 0;
         },
@@ -131,17 +142,17 @@ export const createBackoffController = (cfg: BackoffConfig): BackoffController =
             ) {
                 lastBackoffAt = nowMs;
                 lastActionAt = nowMs;
-                ctrl.cap = Math.max(cfg.floor, Math.floor(ctrl.cap / 2));
+                ctrl.cap = Math.max(floor, Math.floor(ctrl.cap / 2));
                 consecutiveFast = 0;
                 latency.length = 0;
                 return 'backoff';
             }
 
             // Recovery: double after a streak of fast items.
-            if (ctrl.cap < cfg.ceiling && consecutiveFast >= cfg.recoverStreak) {
+            if (ctrl.cap < ceiling && consecutiveFast >= cfg.recoverStreak) {
                 consecutiveFast = 0;
                 lastActionAt = nowMs;
-                ctrl.cap = Math.min(cfg.ceiling, ctrl.cap * 2);
+                ctrl.cap = Math.min(ceiling, ctrl.cap * 2);
                 return 'rampup';
             }
 
@@ -151,15 +162,12 @@ export const createBackoffController = (cfg: BackoffConfig): BackoffController =
             // a server failing every request isn't ramped into harder.
             if (
                 cfg.timeRampMs !== undefined &&
-                ctrl.cap < cfg.ceiling &&
+                ctrl.cap < ceiling &&
                 !lastWasTransient &&
                 nowMs - lastActionAt >= cfg.timeRampMs
             ) {
                 lastActionAt = nowMs;
-                ctrl.cap = Math.min(
-                    cfg.ceiling,
-                    Math.max(ctrl.cap + 1, Math.floor(ctrl.cap * 1.5)),
-                );
+                ctrl.cap = Math.min(ceiling, Math.max(ctrl.cap + 1, Math.floor(ctrl.cap * 1.5)));
                 return 'rampup';
             }
             return 'none';

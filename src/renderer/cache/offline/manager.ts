@@ -11,9 +11,9 @@ import type { OfflineTargetRow } from '../types';
 import { getActiveCacheDb } from '../db';
 import { localMediaStore, normalizeTargetStatus, targetKey } from '../media-store';
 import { isUpToDate, sourceTagFor } from './dedup';
-import { streamTargetSongs } from './enumerate';
+import { streamTargetSongs, withRetry } from './enumerate';
 import { publishProgress, publishQueue } from './progress';
-import { cacheOfflineSongMeta } from './song-meta';
+import { cacheOfflineSongMeta, countMissingOfflineSongMeta } from './song-meta';
 
 import { api } from '/@/renderer/api';
 import { useSettingsStore } from '/@/renderer/store';
@@ -112,33 +112,88 @@ export class OfflineDownloadManager {
      * One-shot heal: populate db.songs metadata for every already-downloaded
      * target so the "Available offline" view resolves all blobs (fixes downloads
      * made before metadata was persisted at download time). syncMeta-flagged so
-     * it runs once per DB. Online + best-effort — a failed enumeration leaves the
-     * flag unset so it retries next launch.
+     * it runs once per DB. Online + best-effort.
+     *
+     * A single broken/deleted target (e.g. a playlist removed on the server
+     * after being marked offline) must not block healing for every OTHER
+     * target forever — that previously bailed the whole pass on the first
+     * enumeration failure, so a lone bad entry re-failed (and re-blocked
+     * everything behind it) on every future launch. Instead we skip the
+     * failed target and keep going; the one-shot flag is only stamped once
+     * every target enumerated cleanly, so a bad target still gets retried
+     * next launch WITHOUT starving the others in the meantime.
      */
     async healSongMeta(): Promise<void> {
         const db = getActiveCacheDb();
         if (!db) return;
         const FLAG = 'offlineSongMetaHeal_v1';
-        try {
-            if (await db.syncMeta.get(FLAG as never)) return;
-            for (const t of await this.getStore().listTargets()) {
-                try {
-                    for await (const page of streamTargetSongs(t))
-                        await cacheOfflineSongMeta(page, db);
-                } catch (err) {
-                    console.warn(`${TAG} healSongMeta: enumerate failed`, { err, key: t.Key });
-                    return; // leave the flag unset → retry next launch
-                }
-            }
-            await db.syncMeta.put({
+        const stampFlag = (healedCount: number) =>
+            db.syncMeta.put({
                 EntityType: FLAG as never,
                 hydrationState: 'none',
                 lastFullSyncAt: undefined,
                 lastSweepAt: undefined,
                 nextStartIndex: undefined,
                 pausedUntil: undefined,
-                totalCount: undefined,
+                totalCount: healedCount,
             });
+        try {
+            // The "Available offline" list only shows a downloaded blob that also
+            // has a db.songs metadata row (use-offline-songs.ts), so any
+            // downloaded song lacking metadata is silently invisible there. Drive
+            // the heal off a ground-truth gap check, NOT a permanent one-shot
+            // flag: the old flag made this run once ever, so songs downloaded
+            // after the first heal — or dropped by a failed metadata write —
+            // stayed missing forever (the "N downloaded, far fewer shown" bug).
+            // `totalCount` on the flag row records the downloaded-song count we
+            // last fully healed at, so we re-heal when new downloads arrive but
+            // do NOT re-enumerate the whole library every launch for a residual
+            // gap that is unresolvable (blobs whose song was removed server-side).
+            const songIds = (await this.getStore().listSongKeys())
+                .map((k) => k.slice(k.indexOf(':') + 1))
+                .filter(Boolean);
+            const missing = await countMissingOfflineSongMeta(songIds, db);
+            if (missing === 0) {
+                if (!(await db.syncMeta.get(FLAG as never))) await stampFlag(songIds.length);
+                return;
+            }
+            const flagRow = await db.syncMeta.get(FLAG as never);
+            if (flagRow && songIds.length <= (flagRow.totalCount ?? 0)) {
+                // Already healed at (or above) this library size; the residual
+                // gap won't close by re-enumerating, so don't do it every launch.
+                return;
+            }
+            console.info(
+                `${TAG} healSongMeta: ${missing} downloaded song(s) missing metadata — backfilling`,
+            );
+
+            // A single broken/deleted target (e.g. a playlist removed on the
+            // server after being marked offline) must not block healing the
+            // others — skip it and keep going. Track row-write failures too, so a
+            // transient bulkPut/per-row failure isn't recorded as a clean heal.
+            let allOk = true;
+            let failedRows = 0;
+            for (const t of await this.getStore().listTargets()) {
+                try {
+                    for await (const page of streamTargetSongs(t)) {
+                        const res = await cacheOfflineSongMeta(page, db);
+                        failedRows += res.failed;
+                    }
+                } catch (err) {
+                    allOk = false;
+                    console.warn(`${TAG} healSongMeta: enumerate failed, skipping target`, {
+                        err,
+                        key: t.Key,
+                    });
+                }
+            }
+            if (!allOk || failedRows > 0) {
+                console.warn(
+                    `${TAG} healSongMeta: incomplete (allOk=${allOk}, failedRows=${failedRows}), will retry next launch`,
+                );
+                return; // don't record completion → retry next launch
+            }
+            await stampFlag(songIds.length);
             console.info(`${TAG} healSongMeta complete`);
         } catch (err) {
             console.warn(`${TAG} healSongMeta failed`, err);
@@ -157,6 +212,7 @@ export class OfflineDownloadManager {
             Status: 'paused',
         });
         this.abortTarget(key);
+        console.info(`${TAG} paused`, { key });
     }
 
     /** Pause whichever target is currently downloading/enumerating (if any). */
@@ -338,12 +394,28 @@ export class OfflineDownloadManager {
                 while (next) {
                     const store = this.getStore();
                     const targets = await store.listTargets();
-                    this.publishQueueSummary(targets, next.Key);
+                    // Re-validate against this FRESH read: a control (pause / remove /
+                    // preempt-bump) can change `next`'s status in the window between
+                    // pickNext() and here (both cross an await). processTarget starts
+                    // unconditionally once invoked — it would silently clobber a
+                    // just-applied pause back to 'enumerating'. Skip a target that's no
+                    // longer ready and let pickNext choose the next eligible one.
+                    const fresh = targets.find((t) => t.Key === next!.Key);
+                    if (!fresh || !READY.has(fresh.Status)) {
+                        console.info(`${TAG} skip stale dequeue`, { key: next.Key });
+                        next = this.pickNext(targets);
+                        continue;
+                    }
+                    this.publishQueueSummary(targets, fresh.Key);
+                    console.info(`${TAG} dequeued`, {
+                        key: fresh.Key,
+                        preempt: Boolean(fresh.Preempt),
+                    });
                     try {
-                        await (this.processHook ?? ((t) => this.processTarget(t)))(next);
+                        await (this.processHook ?? ((t) => this.processTarget(t)))(fresh);
                     } catch (err) {
-                        console.warn(`${TAG} process threw`, { err, key: next.Key });
-                        await store.patchTarget(next.Key, {
+                        console.warn(`${TAG} process threw`, { err, key: fresh.Key });
+                        await store.patchTarget(fresh.Key, {
                             EnqueuedAt: undefined,
                             LastError: (err as Error).message ?? String(err),
                             Preempt: false,
@@ -492,14 +564,23 @@ export class OfflineDownloadManager {
                 reservedBytes += projected;
                 let songReserved = projected;
                 try {
-                    const url = await api.controller.getStreamUrl({
-                        apiClientProps: { serverId },
-                        query: {
-                            id: song.id,
-                            skipAutoTranscode: this.downloadOriginal(),
-                            transcode: false,
-                        },
-                    });
+                    // Resolving the stream URL is its own round-trip to the server and
+                    // just as susceptible to a transient 502/503 under load as any
+                    // enumeration call — retry it the same way rather than failing the
+                    // whole song (and forcing a manual retry) on one blip.
+                    const url = await withRetry(
+                        () =>
+                            api.controller.getStreamUrl({
+                                apiClientProps: { serverId },
+                                query: {
+                                    id: song.id,
+                                    skipAutoTranscode: this.downloadOriginal(),
+                                    transcode: false,
+                                },
+                            }),
+                        abort.signal,
+                        `getStreamUrl:${song.id}`,
+                    );
                     const sourceTag = sourceTagFor(song);
                     let size: number;
                     if (streaming) {
@@ -552,8 +633,22 @@ export class OfflineDownloadManager {
                     songReserved = 0;
                     bytesDownloaded += size;
                     done += 1;
-                    if (phase !== 'downloading') phase = 'downloading';
-                    await store.patchTarget(key, { Bytes: bytesDownloaded, DownloadedCount: done });
+                    // Flip the PERSISTED Status the first time real bytes land, not
+                    // just the in-memory `phase` used for progress events — the UI
+                    // renders target.Status verbatim (READY already treats
+                    // 'downloading' as distinct from 'enumerating'), so without this
+                    // a multi-hour download stayed labelled "enumerating" the whole
+                    // time. Gated on !aborted so a pause/cancel/preempt that raced in
+                    // right here can't be clobbered back to an active state.
+                    const enteringDownloadPhase = phase !== 'downloading';
+                    if (enteringDownloadPhase) phase = 'downloading';
+                    await store.patchTarget(key, {
+                        Bytes: bytesDownloaded,
+                        DownloadedCount: done,
+                        ...(enteringDownloadPhase && !abort.signal.aborted
+                            ? { Status: 'downloading' as const }
+                            : {}),
+                    });
                     push();
                 } catch (err) {
                     reservedBytes -= songReserved;

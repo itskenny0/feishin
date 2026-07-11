@@ -11,6 +11,8 @@ import { offlineManager } from './offline/manager';
 
 export { refreshOfflineAvailability, refreshOfflineStats } from './offline/stats';
 
+const TAG = '[offline-media]';
+
 export interface AddTargetArgs {
     entityId: string;
     entityType: OfflineTargetRow['EntityType'];
@@ -27,7 +29,12 @@ export const isSyncing = (): boolean => offlineManager.isRunning();
 
 /** Pause whichever target is downloading right now (the old "cancel" button). */
 export const cancelOfflineSync = (): void => {
-    void offlineManager.pauseActive();
+    // Fire-and-forget from the UI's perspective, but a bare `void` on a
+    // rejecting promise is an unhandled rejection — catch it here so a
+    // transient Dexie write failure logs instead of surfacing as a crash.
+    void offlineManager.pauseActive().catch((err) => {
+        console.warn(`${TAG} cancelOfflineSync failed`, err);
+    });
 };
 
 /** Drain the streaming enumerator into a flat array (legacy callers/tests). */
@@ -36,7 +43,12 @@ export const enumerateTargetSongs = async (
     signal?: AbortSignal,
 ): Promise<Song[]> => {
     const out: Song[] = [];
-    for await (const page of streamTargetSongs(target, signal)) out.push(...page);
+    try {
+        for await (const page of streamTargetSongs(target, signal)) out.push(...page);
+    } catch (err) {
+        console.warn(`${TAG} enumerateTargetSongs failed`, { err, target: target.EntityId });
+        throw err;
+    }
     return out;
 };
 

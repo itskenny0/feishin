@@ -2,6 +2,7 @@ import type { LibraryCacheDb } from '../db';
 import type { EntityType } from '../types';
 
 import { useCacheStore } from '../store';
+import { getCooldownUntil } from './rate-limit-cooldown';
 
 import { getIsOnline, subscribeIsOnline } from '/@/renderer/lib/network-status';
 
@@ -101,6 +102,23 @@ export const setSweepRetryBaseMsForTests = (ms: number): void => {
     sweepRetryBaseMs = ms;
 };
 
+// Upper bound on a single retry's sleep, independent of `sweepRetryBaseMs` /
+// attempt count — insurance against an unbounded wait if SWEEP_FETCH_ATTEMPTS
+// ever grows.
+const SWEEP_RETRY_MAX_DELAY_MS = 20_000;
+
+// Floor a page's requested `limit` can shrink to under repeated retryable
+// failures (see fetchPageWithRetry below). Small enough to make a real
+// difference against a ~30s proxy timeout on a heavy Recursive/Limit=5000
+// query, large enough that per-page HTTP round-trip overhead doesn't dominate.
+const MIN_SWEEP_PAGE_SIZE = 50;
+// Consecutive no-retry-needed pages required, once running below the caller's
+// configured pageSize, before we step the size back up toward it. Mirrors the
+// symmetric halve-down/step-up shape the thumbnail sweep's adaptive
+// concurrency controller uses (backoff.ts) — quick to shrink under pressure,
+// cautious but steady to recover once pages start completing cleanly again.
+const PAGE_SIZE_RAMP_STREAK = 3;
+
 const sweepSleep = (ms: number, signal: AbortSignal): Promise<void> =>
     new Promise((resolve, reject) => {
         const timer = setTimeout(resolve, ms);
@@ -115,31 +133,71 @@ const sweepSleep = (ms: number, signal: AbortSignal): Promise<void> =>
     });
 
 /**
+ * Exponential backoff with equal jitter: half of the raw exponential value is
+ * guaranteed, the other half is randomized. A purely deterministic backoff
+ * (the prior behaviour) makes every client's sweep hit an overloaded server at
+ * the SAME instants after a shared blip — e.g. every open client's page-1
+ * retry lands in the same 1.5s window — which just re-creates the thundering
+ * herd it's supposed to be easing. Capped at SWEEP_RETRY_MAX_DELAY_MS so a
+ * large `sweepRetryBaseMs` / attempt count can't produce a multi-minute sleep.
+ */
+const jitteredRetryDelayMs = (attempt: number): number => {
+    const raw = Math.min(SWEEP_RETRY_MAX_DELAY_MS, sweepRetryBaseMs * 2 ** (attempt - 1));
+    const half = raw / 2;
+    return Math.round(half + Math.random() * half);
+};
+
+/**
  * Fetch one page, retrying a transient failure (e.g. a 502 from an overloaded
- * server) with bounded exponential backoff. Never retries an abort. Re-throws
- * the last error once attempts are exhausted so the caller can preserve the
- * checkpoint and resume later.
+ * server) with bounded, jittered exponential backoff. Never retries an abort.
+ * Re-throws the last error once attempts are exhausted so the caller can
+ * preserve the checkpoint and resume later.
+ *
+ * Also shrinks the requested page size on a retry: the heavy Recursive/
+ * Limit=5000-style queries that trip the ~30s proxy timeout / 502 this is
+ * guarding against are exactly the ones a smaller `limit` is most likely to
+ * fix, so a retry with a reduced size is a genuine second attempt at success,
+ * not just a delayed repeat of the same failing request. Returns the limit
+ * that actually succeeded (`limitUsed`) so the caller can decide whether to
+ * keep the reduced size for subsequent pages.
  */
 const fetchPageWithRetry = async <TItem>(
-    fetchPage: () => Promise<{ items: TItem[]; total: number }>,
+    fetchPage: (limit: number) => Promise<{ items: TItem[]; total: number }>,
     signal: AbortSignal,
     entity: EntityType,
     startIndex: number,
-): Promise<{ items: TItem[]; total: number }> => {
+    initialLimit: number,
+): Promise<{ items: TItem[]; limitUsed: number; total: number }> => {
     let lastErr: unknown;
+    let limit = initialLimit;
+    // Never shrink-target ABOVE what the caller asked for on this page. A
+    // typical caller's pageSize (500) is well above MIN_SWEEP_PAGE_SIZE, so
+    // this is normally just MIN_SWEEP_PAGE_SIZE — but if a future caller ever
+    // configures a smaller pageSize, `Math.max(MIN_SWEEP_PAGE_SIZE, …)` alone
+    // would perversely GROW the request on a "reduction" (e.g. floor(20/2)=10
+    // clamped up to 50, larger than the 20 the caller wanted).
+    const shrinkFloor = Math.min(MIN_SWEEP_PAGE_SIZE, initialLimit);
     for (let attempt = 1; attempt <= SWEEP_FETCH_ATTEMPTS; attempt += 1) {
         if (signal.aborted) throw new DOMException('aborted', 'AbortError');
         try {
-            return await fetchPage();
+            const result = await fetchPage(limit);
+            return { ...result, limitUsed: limit };
         } catch (err) {
             if ((err as Error)?.name === 'AbortError' || signal.aborted) throw err;
             lastErr = err;
             if (attempt >= SWEEP_FETCH_ATTEMPTS) break;
-            const delay = sweepRetryBaseMs * 2 ** (attempt - 1);
+            const reducedLimit = Math.max(shrinkFloor, Math.floor(limit / 2));
+            const willShrink = reducedLimit < limit;
+            const delay = jitteredRetryDelayMs(attempt);
             console.warn(
-                `[cache] sweep:${entity} page attempt ${attempt}/${SWEEP_FETCH_ATTEMPTS} failed, retrying in ${delay}ms`,
-                { error: (err as Error)?.message, startIndex },
+                `[sync] sweep:${entity} page attempt ${attempt}/${SWEEP_FETCH_ATTEMPTS} failed, retrying in ${delay}ms`,
+                {
+                    error: (err as Error)?.message,
+                    nextLimit: willShrink ? reducedLimit : limit,
+                    startIndex,
+                },
             );
+            if (willShrink) limit = reducedLimit;
             await sweepSleep(delay, signal);
         }
     }
@@ -208,6 +266,36 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
         }
     };
 
+    // Rate-limit cooldown gate. `rate-limit-cooldown.ts` is a pool-wide
+    // circuit breaker armed by an authoritative 429/503/Retry-After seen
+    // ANYWHERE in the sync pipeline (today: the thumbnail sweep, which runs
+    // right after every metadata sweep in `hydrate()`, and whose sweep can
+    // still be cooling down when a retried `hydrate()` call starts a fresh
+    // pass from `albums`). This sweep never ARMS the cooldown itself — the
+    // generic `Error` a failed page throws carries no HTTP status (see
+    // isSweepNetworkError's comment) — but it costs nothing to HONOR one
+    // that's already active rather than immediately hammering a server the
+    // app already knows is rate-limited. Bounded by the cooldown module's own
+    // 30s clamp, polled so a cooldown that gets extended mid-wait is honored
+    // too, and it never touches the syncMeta checkpoint.
+    const waitUntilCooldownClears = async (): Promise<void> => {
+        let deadline = getCooldownUntil();
+        if (deadline <= Date.now() || signal.aborted) return;
+        console.info(`[sync] sweep:${entity} rate-limit cooldown active — pausing`, {
+            startIndex,
+            waitMs: deadline - Date.now(),
+        });
+        while (!signal.aborted && deadline > Date.now()) {
+            await sweepSleep(Math.min(1_000, deadline - Date.now()), signal).catch(() => undefined);
+            deadline = getCooldownUntil();
+        }
+        if (!signal.aborted) {
+            console.info(`[sync] sweep:${entity} rate-limit cooldown cleared — resuming`, {
+                startIndex,
+            });
+        }
+    };
+
     // Resume from where a previous sweep left off. Delta sync ignores
     // the resume marker because it walks the newest-first ordering
     // from page 0 — the previous resume marker was based on a
@@ -267,6 +355,14 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
     });
 
     let pageIndex = 0;
+    // Adaptive page size (see fetchPageWithRetry). Starts at the caller's
+    // configured `pageSize` and only ever shrinks in response to an ACTUAL
+    // retryable failure, ramping back up after PAGE_SIZE_RAMP_STREAK clean
+    // pages. `pageSize` itself is never mutated — it stays the stable
+    // denominator for the dashboard's "page X of Y" estimate even while the
+    // real requested size adapts underneath it.
+    let effectivePageSize = pageSize;
+    let pageSizeRampStreak = 0;
     while (!signal.aborted) {
         // Park here while offline — BEFORE incrementing pageIndex or touching
         // the network — and resume from the same `startIndex` once online.
@@ -307,6 +403,10 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
                 }),
         );
         if (signal.aborted) break;
+        // Park here too — same reasoning as the offline gate above — if a
+        // pool-wide rate-limit cooldown armed elsewhere is still active.
+        await waitUntilCooldownClears();
+        if (signal.aborted) break;
         pageIndex += 1;
         const pageTotal = total !== undefined ? Math.ceil(total / pageSize) : undefined;
         const pageStartedAt = Date.now();
@@ -339,13 +439,17 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
             });
         }
         let result: { items: TItem[]; total: number };
+        let limitUsed = effectivePageSize;
         try {
-            result = await fetchPageWithRetry(
-                () => fetchPage(startIndex, pageSize, signal),
+            const fetched = await fetchPageWithRetry(
+                (limit) => fetchPage(startIndex, limit, signal),
                 signal,
                 entity,
                 startIndex,
+                effectivePageSize,
             );
+            result = fetched;
+            limitUsed = fetched.limitUsed;
         } catch (err) {
             if ((err as Error)?.name === 'AbortError' || signal.aborted) {
                 console.info(`[cache] sweep:${entity} aborted during fetch`, { startIndex });
@@ -361,7 +465,7 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
             // first-sync wizard at the failing offset.
             const kind = isSweepNetworkError(err) ? 'network' : 'server';
             console.warn(
-                `[cache] sweep:${entity} page failed (${kind}) after retries — checkpoint preserved for resume`,
+                `[sync] sweep:${entity} page failed (${kind}) after retries — checkpoint preserved for resume`,
                 { error: (err as Error)?.message, startIndex },
             );
             cleanup();
@@ -369,6 +473,33 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
         }
 
         if (signal.aborted) break;
+
+        // Adaptive page size follow-through: adopt a reduced size for
+        // subsequent pages (a server that's struggling on one page is likely
+        // still struggling on the next), or — once running below the
+        // configured pageSize — ramp back up after a streak of pages that
+        // needed no retry, so a recovered server isn't kept crawling forever.
+        if (limitUsed < effectivePageSize) {
+            console.warn(`[sync] sweep:${entity} page size reduced after retries`, {
+                from: effectivePageSize,
+                startIndex,
+                to: limitUsed,
+            });
+            effectivePageSize = limitUsed;
+            pageSizeRampStreak = 0;
+        } else if (effectivePageSize < pageSize) {
+            pageSizeRampStreak += 1;
+            if (pageSizeRampStreak >= PAGE_SIZE_RAMP_STREAK) {
+                const restored = Math.min(pageSize, effectivePageSize * 2);
+                console.info(`[sync] sweep:${entity} page size restored after recovery`, {
+                    from: effectivePageSize,
+                    startIndex,
+                    to: restored,
+                });
+                effectivePageSize = restored;
+                pageSizeRampStreak = 0;
+            }
+        }
 
         // Pages 2..N may suppress EnableTotalRecordCount (a per-page server
         // COUNT(*) cost), returning total:0. NEVER overwrite the page-1 total
@@ -471,9 +602,11 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
         // previous one (current rate < 25% of the prior page). Catches
         // a server going from healthy → degraded mid-sweep before the
         // running average smears over it. Skip the last page (items <
-        // pageSize) since small trailing pages are naturally slower
-        // per-item due to fixed request overhead.
-        const isLastPage = pageItems.length < pageSize;
+        // limitUsed, the actual size requested for THIS page — not the
+        // stable `pageSize` denominator, which can be stale once the
+        // adaptive size has shrunk) since small trailing pages are
+        // naturally slower per-item due to fixed request overhead.
+        const isLastPage = pageItems.length < limitUsed;
         if (!isLastPage && lastPageRate > 5 && pageRate < lastPageRate * 0.25) {
             console.warn(`[cache] sweep:${entity} ANOMALY: throughput drop`, {
                 currentRate: Math.round(pageRate),
@@ -606,7 +739,13 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
             });
             break;
         }
-        if (pageItems.length < pageSize || (total !== undefined && itemsDone >= total)) {
+        // Compare against `limitUsed` — the limit actually requested for
+        // THIS page — not the stable `pageSize` denominator. Once adaptive
+        // shrinking is in play a full-but-reduced page legitimately returns
+        // fewer than `pageSize` items while more of the library remains;
+        // comparing against the original constant would read that as "last
+        // page" and truncate the sweep.
+        if (pageItems.length < limitUsed || (total !== undefined && itemsDone >= total)) {
             break;
         }
 

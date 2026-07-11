@@ -11,6 +11,20 @@ let timer: ReturnType<typeof setInterval> | undefined;
 let startedAt = 0;
 let tickCount = 0;
 let activeLabel = '';
+// Ref-count of outstanding start/stop pairs. `hydrate()` can be re-entrant
+// (the user triggers a resync while one is already running): it aborts the
+// PRIOR run's controller but that prior run's `finally` still calls
+// stopSyncHeartbeat with its OWN label — and since the label is
+// `full/${server.id}`, a resync of the SAME server produces the identical
+// label both times, so label equality can't distinguish "this stop belongs
+// to the run that's still active" from "this stop belongs to the run that
+// just got superseded". Tracking how many callers currently expect the
+// heartbeat to be running (instead of a boolean) fixes that: only the LAST
+// matching stop actually tears it down, so a superseded run's cleanup can't
+// kill the heartbeat (and, via setSyncActive(false), hide the sync-active UI)
+// out from under a sync that's genuinely still going. Every start the module
+// receives is 1:1 balanced by hydrate()'s try/finally, so this can't leak.
+let activeCount = 0;
 
 const snapshot = (): Record<string, unknown> => {
     const st = useCacheStore.getState();
@@ -35,11 +49,12 @@ const snapshot = (): Record<string, unknown> => {
 };
 
 export const startSyncHeartbeat = (label: string): void => {
+    activeCount += 1;
     // Idempotent: a re-entrant hydrate() may try to start a second
-    // heartbeat; keep the existing timer and just relabel it.
+    // heartbeat; keep the existing timer running and just relabel it.
     if (timer) {
         activeLabel = label;
-        console.info('[cache] heartbeat: re-labelled', { label });
+        console.info('[cache] heartbeat: re-labelled', { activeCount, label });
         return;
     }
     startedAt = Date.now();
@@ -51,12 +66,29 @@ export const startSyncHeartbeat = (label: string): void => {
     console.info('[cache] heartbeat: starting', { label, tickMs: TICK_MS });
     timer = setInterval(() => {
         tickCount += 1;
-        console.info('[cache] heartbeat', snapshot());
+        try {
+            console.info('[cache] heartbeat', snapshot());
+        } catch (err) {
+            // Never let a diagnostic-snapshot glitch (e.g. an unexpected store
+            // shape) surface as an uncaught exception from inside a live
+            // sync — this tick is purely informational, so degrade to a
+            // warning and keep ticking.
+            console.warn('[cache] heartbeat: tick failed', { error: (err as Error)?.message });
+        }
     }, TICK_MS);
 };
 
 export const stopSyncHeartbeat = (label: string): void => {
     if (!timer) return;
+    activeCount = Math.max(0, activeCount - 1);
+    if (activeCount > 0) {
+        // A different (still-running) hydrate() is relying on this heartbeat —
+        // this stop came from a run that was superseded before it could
+        // finish. Keep it alive; only the matching stop for the run that's
+        // still holding a reference tears it down.
+        console.info('[cache] heartbeat: stop deferred — still in use', { activeCount, label });
+        return;
+    }
     clearInterval(timer);
     timer = undefined;
     useCacheStore.getState().actions.setSyncActive(false);

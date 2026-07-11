@@ -7,6 +7,12 @@ import { offlineManager } from './manager';
 
 export type { AddTargetArgs } from './manager';
 export { offlineManager } from './manager';
+export type { CacheOfflineSongMetaResult } from './song-meta';
+// Re-exported here (alongside the manager's own free functions) so callers
+// reaching for the "public API for the offline-download subsystem" don't
+// have to know these live in the legacy `../offline-media` shim path too.
+export { cacheOfflineSongMeta, countMissingOfflineSongMeta } from './song-meta';
+export { refreshOfflineAvailability, refreshOfflineStats } from './stats';
 
 export const enqueueOffline = (a: AddTargetArgs) => offlineManager.enqueue(a);
 export const enqueueOfflineMany = (a: AddTargetArgs[]) => offlineManager.enqueueMany(a);

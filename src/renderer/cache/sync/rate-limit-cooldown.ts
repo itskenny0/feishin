@@ -1,4 +1,4 @@
-// Pool-wide rate-limit cooldown for the thumbnail sweep.
+// Pool-wide rate-limit cooldown for the sync pipeline.
 //
 // A 429/503 from the server arms a cooldown that parks every sweep worker until
 // it expires (Retry-After honored when present; otherwise an exponential
@@ -7,9 +7,17 @@
 // a frozen timer only ever finds the deadline already past and proceeds.
 //
 // Module-scoped singleton: both fetch paths feed it (the download resolver in
-// images.ts and the downscale fetch in thumbnails.ts), and the sweep worker
-// loop reads getCooldownUntil(). resetCooldown() runs per sweep so one server's
-// 429 can never gate the next server's sweep.
+// images.ts and the downscale fetch in thumbnails.ts), and the thumbnail
+// sweep's worker loop reads getCooldownUntil(). resetCooldown() runs per
+// thumbnail sweep so one server's 429 can never gate the next server's sweep.
+//
+// The metadata paging sweep (sync/sweep.ts) is also a READER: it parks a page
+// fetch when getCooldownUntil() is still in the future, since a `hydrate()`
+// retry can start a fresh metadata pass (albums first) while a cooldown armed
+// by the PREVIOUS attempt's thumbnail sweep is still cooling down. It never
+// calls noteRateLimit/note404/noteOk itself — the generic Error a failed page
+// throws carries no HTTP status to report (see sweep.ts's isSweepNetworkError
+// comment), so it can only ever consume this signal, never arm or clear it.
 //
 // LOAD-SHED 404 STORM (note404): a slow/overloaded Jellyfin doesn't always
 // answer 429/503 — some silently LOAD-SHED by returning HTTP 404 for covers

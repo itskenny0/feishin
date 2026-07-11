@@ -51,7 +51,13 @@ export const isUpToDate = (existing: CachedMediaBlob | undefined, song: Song): b
         return sizeWithinTolerance(tag.size, liveTag.size);
     }
     if (tag.container && liveTag.container) {
-        return tag.container === liveTag.container;
+        // Case-insensitive: some server types report the container/extension
+        // hint with inconsistent casing across calls (e.g. 'FLAC' vs 'flac').
+        // A bare strict-equality check here would treat that as a changed
+        // file and re-download the same unchanged bytes on every future sync
+        // — this is the tie-break of last resort (updatedAt/size were both
+        // inconclusive), so identity must be stable across casing alone.
+        return tag.container.toLowerCase() === liveTag.container.toLowerCase();
     }
     return true;
 };
