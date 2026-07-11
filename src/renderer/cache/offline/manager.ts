@@ -485,6 +485,7 @@ export class OfflineDownloadManager {
         let found = 0;
         let total: number | undefined;
         let phase: 'downloading' | 'enumerating' = 'enumerating';
+        let pageIndex = 0;
         // Bytes committed OR reserved by an in-flight worker (cap accounting).
         let reservedBytes = seededBytes;
         const maxBytes = this.getMaxBytes();
@@ -506,6 +507,7 @@ export class OfflineDownloadManager {
                 foundCount: found,
                 itemsPerSec: done / elapsed,
                 name,
+                pageIndex,
                 phase,
                 startedAt,
                 total,
@@ -673,6 +675,7 @@ export class OfflineDownloadManager {
                     found += 1;
                 }
                 total = found;
+                pageIndex += 1;
                 if (phase === 'enumerating') push();
             }
         } catch (err) {

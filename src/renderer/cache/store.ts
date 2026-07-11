@@ -115,6 +115,10 @@ export interface OfflineSyncProgress {
     foundCount?: number;
     itemsPerSec: number;
     name: string;
+    // 1-indexed enumeration page counter, surfaced in the progress label as
+    // "page N" so a big playlist/album on a slow server visibly advances
+    // page-by-page instead of looking stuck at "found 0 songs".
+    pageIndex?: number;
     // Which phase the active target is in: still discovering its song list, or
     // downloading bytes.
     phase: 'downloading' | 'enumerating';

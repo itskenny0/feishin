@@ -36,12 +36,22 @@ export const OfflineDownloadBanner = () => {
     const total = sync.total;
     const pct = total && total > 0 ? Math.min(100, (100 * done) / total) : undefined;
 
+    // Page indicator — surfaces enumeration paging so a big playlist/album on a
+    // slow server visibly advances page-by-page instead of looking stuck.
+    const pageText =
+        enumerating && (sync.pageIndex ?? 0) > 0
+            ? ` · ${t('page.setting.offlineMedia.page', {
+                  defaultValue: 'page {{page}}',
+                  page: sync.pageIndex,
+              })}`
+            : '';
+
     const title = enumerating
         ? t('page.setting.offlineMedia.preparing', {
               count: sync.foundCount ?? 0,
               defaultValue: 'Preparing {{name}} — found {{count}} songs…',
               name: sync.name,
-          })
+          }) + pageText
         : t('page.setting.offlineMedia.downloading', {
               defaultValue: 'Downloading {{name}}',
               name: sync.name,

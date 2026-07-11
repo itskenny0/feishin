@@ -19,6 +19,14 @@ import { SongListSort, SortOrder } from '/@/shared/types/domain-types';
 
 const TAG = '[offline-media]';
 const ENUMERATE_PAGE = 500;
+
+// Adaptive floor. On a slow/overloaded server a full ENUMERATE_PAGE request can
+// time out at the proxy (~30s → ERR_NETWORK) and fail EVERY retry at that size,
+// so a big playlist/album never enumerates (observed on-device: "#SELFIE"
+// playlist stuck at 0 songs found). When a page fails we shrink it (500 → 100 →
+// this floor) and retry the SAME offset — a lighter query the server can return
+// within its timeout. Only a failure at this floor gives up.
+const ENUMERATE_MIN_PAGE = 25;
 const MAX_ATTEMPTS = 3;
 // Hard circuit breaker for the playlist/artist/genre paging loop below. A
 // well-behaved server always shrinks below ENUMERATE_PAGE eventually, but a
@@ -93,11 +101,22 @@ const fetchPage = async (
     entityId: string,
     apiClientProps: { serverId: string; signal?: AbortSignal },
     startIndex: number,
+    limit: number,
 ): Promise<Song[]> => {
+    if (entityType === 'album') {
+        // Album songs must be enumerated via getAlbumDetail (ParentId semantics;
+        // the AlbumIds filter returns a wrong subset on some Jellyfin libraries —
+        // see jellyfin-controller getAlbumDetail).
+        const album = await api.controller.getAlbumDetail({
+            apiClientProps,
+            query: { id: entityId, limit, startIndex },
+        });
+        return album?.songs ?? [];
+    }
     if (entityType === 'playlist') {
         const page = await api.controller.getPlaylistSongList({
             apiClientProps,
-            query: { id: entityId, limit: ENUMERATE_PAGE, startIndex },
+            query: { id: entityId, limit, startIndex },
         });
         return page?.items ?? [];
     }
@@ -106,7 +125,7 @@ const fetchPage = async (
         query: {
             albumArtistIds: entityType === 'artist' ? [entityId] : undefined,
             genreIds: entityType === 'genre' ? [entityId] : undefined,
-            limit: ENUMERATE_PAGE,
+            limit,
             sortBy: SongListSort.ALBUM,
             sortOrder: SortOrder.ASC,
             startIndex,
@@ -122,55 +141,6 @@ export async function* streamTargetSongs(
     const { EntityId: entityId, EntityType: entityType, ServerId: serverId } = target;
     const apiClientProps = { serverId, signal };
 
-    if (entityType === 'album') {
-        // Album songs are enumerated via getAlbumDetail (ParentId semantics; the
-        // AlbumIds filter returns a wrong subset on some Jellyfin libraries — see
-        // jellyfin-controller getAlbumDetail). PAGE it: an anomalously large
-        // "album" (e.g. a metadata-grouped ~1000-track entry) fetched in one
-        // unbounded request times out on a slow/overloaded server and never
-        // enumerates — and each timeout trips the global offline latch. Small
-        // pages complete reliably and stream downloads from the first page.
-        let startIndex = 0;
-        let firstPage = true;
-        let pageCount = 0;
-        while (true) {
-            if (signal?.aborted) return;
-            if (pageCount >= MAX_PAGES) {
-                console.warn(`${TAG} enumerate: album page cap reached, ending stream`, {
-                    entityId,
-                    pageCount,
-                });
-                return;
-            }
-            let items: Song[];
-            try {
-                const album = await withRetry(
-                    () =>
-                        api.controller.getAlbumDetail({
-                            apiClientProps,
-                            query: { id: entityId, limit: ENUMERATE_PAGE, startIndex },
-                        }),
-                    signal,
-                    'album',
-                );
-                items = album?.songs ?? [];
-            } catch (err) {
-                if (firstPage) throw err; // nothing enumerated → target fails
-                console.warn(`${TAG} enumerate: album page error, ending stream`, {
-                    entityId,
-                    err,
-                    startIndex,
-                });
-                return;
-            }
-            firstPage = false;
-            pageCount += 1;
-            if (items.length) yield items;
-            if (items.length < ENUMERATE_PAGE) return;
-            startIndex += ENUMERATE_PAGE;
-        }
-    }
-
     if (entityType === 'song') {
         const song = await withRetry(
             () => api.controller.getSongDetail({ apiClientProps, query: { id: entityId } }),
@@ -181,16 +151,20 @@ export async function* streamTargetSongs(
         return;
     }
 
-    // playlist / artist / genre — page through.
+    // album / playlist / artist / genre — page through, ADAPTIVELY. A heavy page
+    // that times out on an overloaded server (30s proxy → ERR_NETWORK) is retried
+    // at a smaller size against the SAME offset (500 → 100 → ENUMERATE_MIN_PAGE),
+    // so a big entity converges to a page the server can actually return instead
+    // of failing every retry at 500 and never enumerating. A short page ends the
+    // stream; a later-page failure keeps what was already yielded (target settles
+    // `partial`, not a stuck `enumerating`).
     let startIndex = 0;
+    let pageSize = ENUMERATE_PAGE;
     let firstPage = true;
     let pageCount = 0;
     while (true) {
         if (signal?.aborted) return;
         if (pageCount >= MAX_PAGES) {
-            // Treated like a later-page error: end the stream cleanly and keep
-            // whatever was already yielded (the target settles `partial`, not a
-            // stuck `enumerating`). See MAX_PAGES for why this exists.
             console.warn(`${TAG} enumerate: page cap reached, ending stream`, {
                 entityId,
                 entityType,
@@ -200,15 +174,35 @@ export async function* streamTargetSongs(
         }
         let items: Song[];
         try {
-            items = await withRetry(
-                () => fetchPage(entityType, entityId, apiClientProps, startIndex),
-                signal,
-                entityType,
-            );
+            const attempt = () =>
+                fetchPage(entityType, entityId, apiClientProps, startIndex, pageSize);
+            // At the floor size, ride out transient blips with withRetry; above it
+            // a single attempt is enough — a failure just shrinks the page (below),
+            // a more effective response to an overloaded server than hammering the
+            // same oversized query three times.
+            items =
+                pageSize <= ENUMERATE_MIN_PAGE
+                    ? await withRetry(attempt, signal, entityType)
+                    : await attempt();
         } catch (err) {
-            if (firstPage) throw err; // nothing enumerated → target fails
-            console.warn(`${TAG} enumerate: page error, ending stream`, {
+            if (isAbort(err, signal)) return;
+            if (pageSize > ENUMERATE_MIN_PAGE) {
+                pageSize = pageSize > 100 ? 100 : ENUMERATE_MIN_PAGE;
+                console.warn(
+                    `${TAG} enumerate: page failed — shrinking page size, retrying offset`,
+                    {
+                        entityId,
+                        entityType,
+                        pageSize,
+                        startIndex,
+                    },
+                );
+                continue; // retry the SAME offset with a smaller page
+            }
+            if (firstPage) throw err; // nothing enumerated even at floor → target fails
+            console.warn(`${TAG} enumerate: page error at min size, ending stream`, {
                 entityId,
+                entityType,
                 err,
                 startIndex,
             });
@@ -217,7 +211,7 @@ export async function* streamTargetSongs(
         firstPage = false;
         pageCount += 1;
         if (items.length) yield items;
-        if (items.length < ENUMERATE_PAGE) return;
-        startIndex += ENUMERATE_PAGE;
+        if (items.length < pageSize) return;
+        startIndex += items.length;
     }
 }

@@ -156,6 +156,26 @@ describe('streamTargetSongs (entity-type routing)', () => {
         );
     });
 
+    it('shrinks the page size and retries the SAME offset when a big page fails', async () => {
+        // A full-size page that times out on an overloaded server (network error)
+        // must not fail the whole enumeration — retry the same offset at a smaller
+        // size until the server can return it. Fix for big playlists stuck at
+        // "0 songs found".
+        getPlaylistSongList
+            .mockRejectedValueOnce(new Error('A network error occurred'))
+            .mockResolvedValueOnce({ items: songs(3) });
+        expect(await drain(typed('playlist', 'pl1'))).toHaveLength(3);
+        expect(getPlaylistSongList).toHaveBeenCalledTimes(2);
+        expect(getPlaylistSongList).toHaveBeenNthCalledWith(
+            1,
+            expect.objectContaining({ query: { id: 'pl1', limit: 500, startIndex: 0 } }),
+        );
+        expect(getPlaylistSongList).toHaveBeenNthCalledWith(
+            2,
+            expect.objectContaining({ query: { id: 'pl1', limit: 100, startIndex: 0 } }),
+        );
+    });
+
     it('single songs use getSongDetail', async () => {
         getSongDetail.mockResolvedValue({ id: 's9' });
         expect(await drain(typed('song', 's9'))).toEqual([{ id: 's9' }]);
