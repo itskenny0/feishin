@@ -639,7 +639,7 @@ export enum SongListSort {
 
 export type AlbumDetailArgs = BaseEndpointArgs & { query: AlbumDetailQuery };
 
-export type AlbumDetailQuery = { id: string };
+export type AlbumDetailQuery = { id: string; limit?: number; startIndex?: number };
 
 // Album Detail
 export type AlbumDetailResponse = Album;

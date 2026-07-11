@@ -133,7 +133,26 @@ describe('streamTargetSongs (entity-type routing)', () => {
         getAlbumDetail.mockResolvedValue({ songs: songs(2) });
         expect(await drain(typed('album', 'al1'))).toHaveLength(2);
         expect(getAlbumDetail).toHaveBeenCalledWith(
-            expect.objectContaining({ query: { id: 'al1' } }),
+            expect.objectContaining({ query: { id: 'al1', limit: 500, startIndex: 0 } }),
+        );
+    });
+
+    it('albums page through when the tracklist exceeds one page', async () => {
+        // A full page (500) means "there may be more" → fetch the next page from
+        // the running startIndex; a short page ends the stream. This is the fix
+        // for anomalously large albums that timed out as one unbounded request.
+        getAlbumDetail
+            .mockResolvedValueOnce({ songs: songs(500) })
+            .mockResolvedValueOnce({ songs: songs(3) });
+        expect(await drain(typed('album', 'al1'))).toHaveLength(503);
+        expect(getAlbumDetail).toHaveBeenCalledTimes(2);
+        expect(getAlbumDetail).toHaveBeenNthCalledWith(
+            1,
+            expect.objectContaining({ query: { id: 'al1', limit: 500, startIndex: 0 } }),
+        );
+        expect(getAlbumDetail).toHaveBeenNthCalledWith(
+            2,
+            expect.objectContaining({ query: { id: 'al1', limit: 500, startIndex: 500 } }),
         );
     });
 

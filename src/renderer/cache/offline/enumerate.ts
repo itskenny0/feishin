@@ -123,17 +123,52 @@ export async function* streamTargetSongs(
     const apiClientProps = { serverId, signal };
 
     if (entityType === 'album') {
-        // Album songs must be enumerated via getAlbumDetail (it uses ParentId
-        // semantics; the AlbumIds filter returns a wrong subset on some Jellyfin
-        // libraries — see jellyfin-controller getAlbumDetail).
-        const album = await withRetry(
-            () => api.controller.getAlbumDetail({ apiClientProps, query: { id: entityId } }),
-            signal,
-            'album',
-        );
-        const items = album?.songs ?? [];
-        if (items.length) yield items;
-        return;
+        // Album songs are enumerated via getAlbumDetail (ParentId semantics; the
+        // AlbumIds filter returns a wrong subset on some Jellyfin libraries — see
+        // jellyfin-controller getAlbumDetail). PAGE it: an anomalously large
+        // "album" (e.g. a metadata-grouped ~1000-track entry) fetched in one
+        // unbounded request times out on a slow/overloaded server and never
+        // enumerates — and each timeout trips the global offline latch. Small
+        // pages complete reliably and stream downloads from the first page.
+        let startIndex = 0;
+        let firstPage = true;
+        let pageCount = 0;
+        while (true) {
+            if (signal?.aborted) return;
+            if (pageCount >= MAX_PAGES) {
+                console.warn(`${TAG} enumerate: album page cap reached, ending stream`, {
+                    entityId,
+                    pageCount,
+                });
+                return;
+            }
+            let items: Song[];
+            try {
+                const album = await withRetry(
+                    () =>
+                        api.controller.getAlbumDetail({
+                            apiClientProps,
+                            query: { id: entityId, limit: ENUMERATE_PAGE, startIndex },
+                        }),
+                    signal,
+                    'album',
+                );
+                items = album?.songs ?? [];
+            } catch (err) {
+                if (firstPage) throw err; // nothing enumerated → target fails
+                console.warn(`${TAG} enumerate: album page error, ending stream`, {
+                    entityId,
+                    err,
+                    startIndex,
+                });
+                return;
+            }
+            firstPage = false;
+            pageCount += 1;
+            if (items.length) yield items;
+            if (items.length < ENUMERATE_PAGE) return;
+            startIndex += ENUMERATE_PAGE;
+        }
     }
 
     if (entityType === 'song') {

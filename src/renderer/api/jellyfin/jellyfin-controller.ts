@@ -541,12 +541,17 @@ export const JellyfinController: InternalControllerEndpoint = {
                     Fields: JF_FIELDS.SONG,
                     IncludeItemTypes: 'Audio',
                     // Pin a large explicit Limit so albums with > the server's
-                    // default page size still come back in full.
-                    Limit: 5000,
+                    // default page size still come back in full. Callers may
+                    // override limit/startIndex to PAGE the tracklist instead —
+                    // an anomalously large "album" (a metadata-grouped ~1000-track
+                    // entry) fetched in one unbounded request times out on a
+                    // slow/overloaded server (see offline enumerate.ts). Absent
+                    // params keep the original single-shot behaviour.
+                    Limit: query.limit ?? 5000,
                     ParentId: query.id,
                     SortBy: 'ParentIndexNumber,IndexNumber,SortName',
                     SortOrder: JFSortOrder.ASC,
-                    StartIndex: 0,
+                    StartIndex: query.startIndex ?? 0,
                     UserId: apiClientProps.server.userId,
                 },
             }),
