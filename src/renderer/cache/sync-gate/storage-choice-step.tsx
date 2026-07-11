@@ -87,6 +87,13 @@ export const StorageChoiceStep = ({ onStart }: StorageChoiceStepProps) => {
                 <Stack gap="md" mt="xl">
                     <Select
                         allowDeselect={false}
+                        // The gate overlay (.root) is position:fixed z-index:9000.
+                        // Mantine renders the Select dropdown in a body-level
+                        // portal at its default popover z-index (~300), so on
+                        // Android onboarding it opened *behind* the gate and the
+                        // tap looked like a no-op. Lift the dropdown above the
+                        // gate so it's visible and tappable.
+                        comboboxProps={{ zIndex: 10000 }}
                         data={options}
                         onChange={handleChange}
                         value={configuredId ?? INTERNAL}
