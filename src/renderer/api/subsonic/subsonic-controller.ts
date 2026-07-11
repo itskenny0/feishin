@@ -579,7 +579,19 @@ export const SubsonicController: InternalControllerEndpoint = {
             throw new Error('Failed to get album detail');
         }
 
-        return ssNormalize.album(res.body.album, apiClientProps.server);
+        const album = ssNormalize.album(res.body.album, apiClientProps.server);
+
+        // Subsonic has no server-side paging for an album's tracklist - it
+        // always returns every song. When a caller asks for a bounded page
+        // (e.g. adaptive paging on a slow server), slice client-side so the
+        // caller sees a short final page and stops requesting more; songCount
+        // stays the true total reported by the server.
+        if (query.limit != null) {
+            const startIndex = query.startIndex ?? 0;
+            album.songs = (album.songs ?? []).slice(startIndex, startIndex + query.limit);
+        }
+
+        return album;
     },
     getAlbumList: async (args) => {
         const { apiClientProps, query } = args;
@@ -1256,6 +1268,21 @@ export const SubsonicController: InternalControllerEndpoint = {
             res.body.playlist.entry?.map((song, index) =>
                 ssNormalize.song(song, apiClientProps.server, index),
             ) || [];
+
+        // Subsonic has no server-side paging for playlist entries - it always
+        // returns the full list. When a caller asks for a bounded page (e.g.
+        // adaptive paging on a slow server), slice client-side so the caller
+        // sees a short final page and stops requesting more; totalRecordCount
+        // stays the true full length.
+        if (query.limit != null) {
+            const startIndex = query.startIndex ?? 0;
+
+            return {
+                items: items.slice(startIndex, startIndex + query.limit),
+                startIndex,
+                totalRecordCount: items.length,
+            };
+        }
 
         return {
             items,

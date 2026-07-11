@@ -851,11 +851,14 @@ export const JellyfinController: InternalControllerEndpoint = {
             },
             query: {
                 Fields: JF_FIELDS.FOLDER,
+                // Optional paging (absent → unbounded, backward-compatible).
+                Limit: query.limit,
                 ParentId: query.id,
                 SortBy: query.sortBy
                     ? (songListSortMap.jellyfin[query.sortBy] as string) || 'SortName'
                     : 'SortName',
                 SortOrder: sortOrderMap.jellyfin[query.sortOrder || SortOrder.ASC],
+                StartIndex: query.startIndex,
             },
         });
 
@@ -976,9 +979,14 @@ export const JellyfinController: InternalControllerEndpoint = {
             query: {
                 Fields: JF_FIELDS.SONG,
                 IncludeItemTypes: 'Audio',
+                // Optional paging so a huge folder tree can be fetched in
+                // adaptive pages instead of one request that times out on a slow
+                // server. Absent → unbounded (backward-compatible).
+                Limit: query.limit,
                 ParentId: query.folderId,
                 Recursive: true,
                 SortBy: 'ParentIndexNumber,IndexNumber,SortName',
+                StartIndex: query.startIndex,
             },
         });
 
@@ -1190,6 +1198,11 @@ export const JellyfinController: InternalControllerEndpoint = {
                 // XXX: No fields are required for only IDs, which saves processing time between
                 // the Jellyfin server query, network (MBs vs KBs), and in-app parsing.
                 IncludeItemTypes: 'Audio',
+                // Only bound the request when a limit is explicitly requested
+                // (e.g. adaptive paging on a slow server) - otherwise keep the
+                // original unbounded single-shot fetch.
+                Limit: query.limit === -1 ? undefined : query.limit,
+                StartIndex: query.limit ? (query.startIndex ?? 0) : undefined,
                 UserId: apiClientProps.server?.userId,
             },
         });
@@ -1200,7 +1213,7 @@ export const JellyfinController: InternalControllerEndpoint = {
 
         return {
             items: res.body.Items.map((item) => item.Id),
-            startIndex: 0,
+            startIndex: query.limit ? (query.startIndex ?? 0) : 0,
             totalRecordCount: res.body.TotalRecordCount,
         };
     },

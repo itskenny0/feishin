@@ -3,11 +3,45 @@ import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { api } from '/@/renderer/api';
+import { collectAdaptivePaged } from '/@/renderer/api/paged-fetch';
 import { queryKeys } from '/@/renderer/api/query-keys';
 import { infiniteLoaderDataQueryKey } from '/@/renderer/components/item-list/helpers/item-list-infinite-loader';
 import { useCurrentServer } from '/@/renderer/store';
 import { toast } from '/@/shared/components/toast/toast';
-import { LibraryItem } from '/@/shared/types/domain-types';
+import { LibraryItem, Song } from '/@/shared/types/domain-types';
+
+// Adaptive-paged wrapper around getFolderSongsRecursive — a single call can
+// fetch an entire (possibly huge) folder tree in one unbounded request, which
+// hangs on a slow/overloaded server. NOTE: the Jellyfin controller does not
+// currently forward limit/startIndex to the server for this endpoint (it
+// always returns the whole subtree), so today this still costs one big
+// request; once the controller honors them this becomes true paging for
+// free. Either way, dedupe by song id so a non-paginating response still
+// terminates in ~1 extra (network-free) call instead of looping on a
+// startIndex that never advances.
+const fetchFolderSongsAdaptive = async (serverId: string, folderId: string): Promise<Song[]> => {
+    const seen = new Set<string>();
+    return collectAdaptivePaged<Song>(
+        async (startIndex, limit) => {
+            // `query` is built as a standalone const (not an inline object
+            // literal at the call site) so passing limit/startIndex here
+            // doesn't trip TS's excess-property check against today's
+            // FolderSongsRecursiveQuery (which only declares `folderId`) —
+            // the controller can pick these up once it supports paging this
+            // endpoint without another edit here.
+            const query = { folderId, limit, startIndex };
+            // Non-null assertion safe: callers are Jellyfin-gated.
+            const songs = await api.controller.getFolderSongsRecursive!({
+                apiClientProps: { serverId },
+                query,
+            });
+            const fresh = songs.filter((song) => !seen.has(song.id));
+            for (const song of fresh) seen.add(song.id);
+            return fresh;
+        },
+        { label: `folder-songs-recursive:${folderId}` },
+    );
+};
 
 export type MigrationStatus =
     | { addedSongs: number; kind: 'adding'; totalSongs: number }
@@ -63,11 +97,7 @@ export const useFolderPlaylistMigration = () => {
                                 phase: 'collecting',
                                 total: input.branchRoots.length,
                             });
-                            // Non-null assertion safe: modal is Jellyfin-gated.
-                            const songs = await api.controller.getFolderSongsRecursive!({
-                                apiClientProps: { serverId },
-                                query: { folderId: root.id },
-                            });
+                            const songs = await fetchFolderSongsAdaptive(serverId, root.id);
                             if (songs.length === 0) continue;
 
                             setStatus({
@@ -150,8 +180,9 @@ export const useFolderPlaylistMigration = () => {
 
                 // Combined mode (existing 1-to-N behaviour).
                 // 1. Collect songs from each branch root sequentially.
-                // The non-null assertion on getFolderSongsRecursive is safe here
-                // because the modal entry point is Jellyfin-gated (Task 4).
+                // The non-null assertion on getFolderSongsRecursive (inside
+                // fetchFolderSongsAdaptive) is safe here because the modal
+                // entry point is Jellyfin-gated (Task 4).
                 const allSongIds = new Set<string>();
                 for (let i = 0; i < input.branchRoots.length; i += 1) {
                     const root = input.branchRoots[i];
@@ -161,10 +192,7 @@ export const useFolderPlaylistMigration = () => {
                         total: input.branchRoots.length,
                     });
                     try {
-                        const songs = await api.controller.getFolderSongsRecursive!({
-                            apiClientProps: { serverId },
-                            query: { folderId: root.id },
-                        });
+                        const songs = await fetchFolderSongsAdaptive(serverId, root.id);
                         for (const s of songs) allSongIds.add(s.id);
                     } catch (err) {
                         console.warn('[folder-migration] failed to fetch folder', root.id, err);

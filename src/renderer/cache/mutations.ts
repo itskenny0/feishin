@@ -26,6 +26,7 @@ import { markRowCacheDirty } from './local-cache';
 import { useCacheStore } from './store';
 
 import { controller } from '/@/renderer/api/controller';
+import { collectAdaptivePaged } from '/@/renderer/api/paged-fetch';
 import { queryKeys } from '/@/renderer/api/query-keys';
 import { CONNECTIVITY_EVENT } from '/@/renderer/lib/network-status';
 import { queryClient } from '/@/renderer/lib/react-query';
@@ -41,6 +42,7 @@ import {
     RemoveFromPlaylistArgs,
     ScrobbleArgs,
     SetRatingArgs,
+    Song,
     UpdatePlaylistArgs,
 } from '/@/shared/types/domain-types';
 
@@ -930,11 +932,27 @@ const refetchPlaylistEntity = async (
     }
 
     try {
-        const result = await controller.getPlaylistSongList({
-            apiClientProps: { serverId },
-            query: { id: playlistId, limit: 5000, startIndex: 0 },
-        });
-        const fresh: CachedPlaylistSong[] = (result?.items ?? []).map((song, idx) => ({
+        // Adaptive-paged instead of one fixed `limit: 5000` request — a single
+        // oversized request can hang on a slow/overloaded server. Not every
+        // server type actually honors limit/startIndex on this endpoint (some
+        // always return the whole playlist); if a page comes back larger than
+        // requested, treat it as the complete list and stop instead of
+        // looping on a startIndex that never advances.
+        let paginationUnsupported = false;
+        const songs = await collectAdaptivePaged<Song>(
+            async (startIndex, limit) => {
+                if (paginationUnsupported) return [];
+                const page = await controller.getPlaylistSongList({
+                    apiClientProps: { serverId },
+                    query: { id: playlistId, limit, startIndex },
+                });
+                const items = page?.items ?? [];
+                if (items.length > limit) paginationUnsupported = true;
+                return items;
+            },
+            { label: `playlist-songs-refetch:${playlistId}` },
+        );
+        const fresh: CachedPlaylistSong[] = songs.map((song, idx) => ({
             __cachedAt: Date.now(),
             ListOrder: idx,
             PlaylistId: playlistId,

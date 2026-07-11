@@ -677,6 +677,11 @@ export const NavidromeController: InternalControllerEndpoint = {
     getPlaylistSongList: async (args: PlaylistSongListArgs): Promise<PlaylistSongListResponse> => {
         const { apiClientProps, query } = args;
 
+        // Only bound the request when a limit is explicitly requested (e.g. the
+        // adaptive-paging play-playlist path). Otherwise keep the original
+        // unbounded (_start: 0, _end: -1) single-shot fetch.
+        const startIndex = query.startIndex ?? 0;
+
         const res = await ndApiClient(
             apiClientProps as Parameters<typeof ndApiClient>[0],
         ).getPlaylistSongList({
@@ -684,10 +689,10 @@ export const NavidromeController: InternalControllerEndpoint = {
                 id: query.id,
             },
             query: {
-                _end: -1,
+                _end: query.limit ? startIndex + query.limit : -1,
                 _order: 'ASC',
                 _sort: NDSongListSort.ID,
-                _start: 0,
+                _start: query.limit ? startIndex : 0,
                 ...excludeMissing(apiClientProps.server),
             },
         });
@@ -698,7 +703,7 @@ export const NavidromeController: InternalControllerEndpoint = {
 
         return {
             items: res.body.data.map((item) => ndNormalize.song(item, apiClientProps.server)),
-            startIndex: 0,
+            startIndex: query.limit ? startIndex : 0,
             totalRecordCount: Number(res.body.headers.get('x-total-count') || 0),
         };
     },
@@ -819,7 +824,11 @@ export const NavidromeController: InternalControllerEndpoint = {
         const fetchAlbums = async (albumIdBatch: string[] | undefined) => {
             const res = await ndApiClient(apiClientProps).getSongList({
                 query: {
-                    _end: query.startIndex + (query.limit || -1),
+                    // -1 is Navidrome's "no end" sentinel. Only add it to
+                    // startIndex when a limit is actually provided - otherwise
+                    // a nonzero startIndex with no limit would produce a bogus
+                    // (and possibly inverted) _end instead of staying unbounded.
+                    _end: query.limit ? query.startIndex + query.limit : -1,
                     _order: sortOrderMap.navidrome[query.sortOrder],
                     _sort: songListSortMap.navidrome[query.sortBy],
                     _start: query.startIndex,

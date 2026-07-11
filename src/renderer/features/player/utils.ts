@@ -1,11 +1,11 @@
 import { QueryClient } from '@tanstack/react-query';
 
 import { api } from '/@/renderer/api';
+import { collectAdaptivePaged } from '/@/renderer/api/paged-fetch';
 import { queryKeys } from '/@/renderer/api/query-keys';
 import { getActiveCacheDb, writeSnapshot } from '/@/renderer/cache';
 import { albumQueries } from '/@/renderer/features/albums/api/album-api';
 import { folderQueries } from '/@/renderer/features/folders/api/folder-api';
-import { playlistsQueries } from '/@/renderer/features/playlists/api/playlists-api';
 import { songsQueries } from '/@/renderer/features/songs/api/songs-api';
 import { PlayerFilter, useSettingsStore } from '/@/renderer/store';
 import { LogCategory, logFn } from '/@/renderer/utils/logger';
@@ -13,8 +13,9 @@ import { logMsg } from '/@/renderer/utils/logger-message';
 import { resolveSongPath } from '/@/renderer/utils/resolve-song-path';
 import { sortSongList } from '/@/shared/api/utils';
 import {
-    PlaylistSongListQuery,
+    FolderResponse,
     PlaylistSongListQueryClientSide,
+    PlaylistSongListResponse,
     Song,
     SongDetailQuery,
     SongListQuery,
@@ -28,34 +29,40 @@ export const getPlaylistSongsById = async (args: {
     query?: Partial<PlaylistSongListQueryClientSide>;
     queryClient: QueryClient;
     serverId: string;
-}) => {
+}): Promise<PlaylistSongListResponse> => {
     const { id, query, queryClient, serverId } = args;
 
-    const queryFilter: PlaylistSongListQuery = {
-        id,
+    // Assemble the full playlist from fetchPlaylistSongsBatch's adaptively
+    // paged, limit+startIndex batches instead of one unbounded request — a
+    // playlist with thousands of tracks used to ask the server for all of
+    // them in a single call, which hangs/ERR_NETWORKs on a slow server
+    // (same bug class fixed for offline enumeration in
+    // cache/offline/enumerate.ts). fetchPlaylistSongsBatch already tries
+    // the local cache (db.playlistSongs) before the network per batch, so
+    // that cached/offline read-through is preserved per page.
+    const items = await collectAdaptivePaged<Song>(
+        (startIndex, limit) =>
+            fetchPlaylistSongsBatch({
+                limit,
+                playlistId: id,
+                queryClient,
+                serverId,
+                startIndex,
+            }).then((page) => page.items),
+        { label: `playlist:${id}` },
+    );
+
+    const sortedItems = sortSongList(
+        items,
+        query?.sortBy || SongListSort.ID,
+        query?.sortOrder || SortOrder.ASC,
+    );
+
+    return {
+        items: sortedItems,
+        startIndex: 0,
+        totalRecordCount: sortedItems.length,
     };
-
-    // Route through the cache-aware playlistsQueries.songList factory so
-    // the snapshot map (and the rest of the cache stack) intercepts before
-    // the network call lands.
-    const res = await queryClient.fetchQuery({
-        ...playlistsQueries.songList({
-            query: queryFilter,
-            serverId,
-        }),
-        gcTime: 1000 * 60,
-        staleTime: 1000 * 60,
-    });
-
-    if (res) {
-        res.items = sortSongList(
-            res.items,
-            query?.sortBy || SongListSort.ID,
-            query?.sortOrder || SortOrder.ASC,
-        );
-    }
-
-    return res;
 };
 
 /**
@@ -184,19 +191,44 @@ export const getAlbumSongsById = async (args: {
     // endpoint uses ParentId, which gives the album's direct audio
     // children consistently. Reusing albumQueries.detail also lets us
     // share its cache with the album-detail page.
+    //
+    // Each album is assembled from adaptively-paged limit+startIndex
+    // requests instead of one unbounded fetch — a large box set used to
+    // ask for every track in a single call, which hangs/ERR_NETWORKs on a
+    // slow server.
     const items: Song[] = [];
 
     for (const albumId of id) {
-        const album = await queryClient.fetchQuery({
-            ...albumQueries.detail({
-                query: { id: albumId },
-                serverId,
-            }),
-        });
+        // albumQueries.detail's Dexie read-through rebuilds the album's
+        // FULL tracklist from cache regardless of the requested
+        // limit/startIndex (it has no notion of a partial cached page), so
+        // a cache hit on a large album would otherwise look like a
+        // never-shrinking "full" page to the adaptive pager and loop
+        // forever re-appending the same songs. Guard against that: if a
+        // later page's leading song matches the previous page's, we're
+        // seeing the same complete cached list again — stop.
+        let previousFirstSongId: string | undefined;
 
-        if (album?.songs?.length) {
-            items.push(...album.songs);
-        }
+        const albumSongs = await collectAdaptivePaged<Song>(
+            async (startIndex, limit) => {
+                const album = await queryClient.fetchQuery({
+                    ...albumQueries.detail({
+                        query: { id: albumId, limit, startIndex },
+                        serverId,
+                    }),
+                });
+
+                const songs = album?.songs ?? [];
+                if (startIndex > 0 && songs[0]?.id === previousFirstSongId) {
+                    return [];
+                }
+                previousFirstSongId = songs[0]?.id;
+                return songs;
+            },
+            { label: `album:${albumId}` },
+        );
+
+        items.push(...albumSongs);
     }
 
     return {
@@ -204,6 +236,33 @@ export const getAlbumSongsById = async (args: {
         startIndex: 0,
         totalRecordCount: items.length,
     };
+};
+
+// Shared adaptive-paged songsQueries.list fetch used by genre/artist/
+// albumArtist song lookups below. `filter` must already carry a concrete
+// sortBy/sortOrder (and whatever else) — this helper owns limit/startIndex
+// exclusively, paging via collectAdaptivePaged instead of one unbounded
+// request (the "big genre/artist hangs on a slow server" bug).
+const collectPagedSongList = (
+    queryClient: QueryClient,
+    serverId: string,
+    filter: Omit<SongListQuery, 'limit' | 'startIndex'>,
+    label: string,
+): Promise<Song[]> => {
+    return collectAdaptivePaged<Song>(
+        (startIndex, limit) =>
+            queryClient
+                .fetchQuery({
+                    ...songsQueries.list({
+                        query: { ...filter, limit, startIndex },
+                        serverId,
+                    }),
+                    gcTime: 1000 * 60,
+                    staleTime: 1000 * 60,
+                })
+                .then((res) => res?.items ?? []),
+        { label },
+    );
 };
 
 export const getGenreSongsById = async (args: {
@@ -215,33 +274,29 @@ export const getGenreSongsById = async (args: {
 }) => {
     const { id, query, queryClient, serverId } = args;
 
-    const data: SongListResponse = {
-        items: [],
-        startIndex: 0,
-        totalRecordCount: 0,
-    };
+    const items: Song[] = [];
+
     for (const genreId of id) {
-        const queryFilter: SongListQuery = {
-            genreIds: [genreId],
-            sortBy: SongListSort.GENRE,
-            sortOrder: SortOrder.ASC,
-            startIndex: 0,
-            ...query,
-        };
+        const genreItems = await collectPagedSongList(
+            queryClient,
+            serverId,
+            {
+                genreIds: [genreId],
+                sortBy: SongListSort.GENRE,
+                sortOrder: SortOrder.ASC,
+                ...query,
+            },
+            `genre:${genreId}`,
+        );
 
-        const res = await queryClient.fetchQuery({
-            ...songsQueries.list({ query: queryFilter, serverId }),
-            gcTime: 1000 * 60,
-            staleTime: 1000 * 60,
-        });
-
-        data.items.push(...res!.items);
-        if (data.totalRecordCount) {
-            data.totalRecordCount += res!.totalRecordCount || 0;
-        }
+        items.push(...genreItems);
     }
 
-    return data;
+    return {
+        items,
+        startIndex: 0,
+        totalRecordCount: items.length,
+    } satisfies SongListResponse;
 };
 
 export const getAlbumArtistSongsById = async (args: {
@@ -253,21 +308,29 @@ export const getAlbumArtistSongsById = async (args: {
 }) => {
     const { id, query, queryClient, serverId } = args;
 
-    const queryFilter: SongListQuery = {
-        albumArtistIds: id || [],
-        sortBy: SongListSort.ALBUM_ARTIST,
-        sortOrder: SortOrder.ASC,
+    const items: Song[] = [];
+
+    for (const albumArtistId of id || []) {
+        const albumArtistItems = await collectPagedSongList(
+            queryClient,
+            serverId,
+            {
+                albumArtistIds: [albumArtistId],
+                sortBy: SongListSort.ALBUM_ARTIST,
+                sortOrder: SortOrder.ASC,
+                ...query,
+            },
+            `albumArtist:${albumArtistId}`,
+        );
+
+        items.push(...albumArtistItems);
+    }
+
+    return {
+        items,
         startIndex: 0,
-        ...query,
-    };
-
-    const res = await queryClient.fetchQuery({
-        ...songsQueries.list({ query: queryFilter, serverId }),
-        gcTime: 1000 * 60,
-        staleTime: 1000 * 60,
-    });
-
-    return res;
+        totalRecordCount: items.length,
+    } satisfies SongListResponse;
 };
 
 export const getArtistSongsById = async (args: {
@@ -278,21 +341,29 @@ export const getArtistSongsById = async (args: {
 }) => {
     const { id, query, queryClient, serverId } = args;
 
-    const queryFilter: SongListQuery = {
-        artistIds: id,
-        sortBy: SongListSort.ALBUM,
-        sortOrder: SortOrder.ASC,
+    const items: Song[] = [];
+
+    for (const artistId of id) {
+        const artistItems = await collectPagedSongList(
+            queryClient,
+            serverId,
+            {
+                artistIds: [artistId],
+                sortBy: SongListSort.ALBUM,
+                sortOrder: SortOrder.ASC,
+                ...query,
+            },
+            `artist:${artistId}`,
+        );
+
+        items.push(...artistItems);
+    }
+
+    return {
+        items,
         startIndex: 0,
-        ...query,
-    };
-
-    const res = await queryClient.fetchQuery({
-        ...songsQueries.list({ query: queryFilter, serverId }),
-        gcTime: 1000 * 60,
-        staleTime: 1000 * 60,
-    });
-
-    return res;
+        totalRecordCount: items.length,
+    } satisfies SongListResponse;
 };
 
 export const getSongsByQuery = async (args: {
@@ -327,26 +398,48 @@ export const getSongsByFolder = async (args: {
 }) => {
     const { id, queryClient, serverId } = args;
 
+    // Unlike getSongList/getAlbumDetail, the folder-listing endpoint
+    // (FolderQuery/getFolder) has no limit/startIndex — it always returns a
+    // directory level's full children in one response, so there's no page
+    // size to shrink here. Still route each per-folder fetch through
+    // collectAdaptivePaged so a transient failure on a slow/overloaded
+    // server is retried with backoff instead of failing the whole
+    // recursive walk outright, mirroring the resilience the other entity
+    // types get. The startIndex > 0 short-circuit stops the pager after
+    // that single page so it can never re-fetch (and re-append) the same
+    // folder's contents.
+    const fetchFolderWithRetry = async (folderId: string): Promise<FolderResponse | undefined> => {
+        const [folder] = await collectAdaptivePaged<FolderResponse>(
+            async (startIndex) => {
+                if (startIndex > 0) return [];
+                const result = await queryClient.fetchQuery({
+                    ...folderQueries.folder({
+                        query: {
+                            id: folderId,
+                            sortBy: SongListSort.ID,
+                            sortOrder: SortOrder.ASC,
+                        },
+                        serverId,
+                    }),
+                    gcTime: 0,
+                    staleTime: 0,
+                });
+                return [result];
+            },
+            { label: `folder:${folderId}` },
+        );
+        return folder;
+    };
+
     const collectSongsFromFolder = async (folderId: string): Promise<Song[]> => {
         const folderSongs: Song[] = [];
-        const folder = await queryClient.fetchQuery({
-            ...folderQueries.folder({
-                query: {
-                    id: folderId,
-                    sortBy: SongListSort.ID,
-                    sortOrder: SortOrder.ASC,
-                },
-                serverId,
-            }),
-            gcTime: 0,
-            staleTime: 0,
-        });
+        const folder = await fetchFolderWithRetry(folderId);
 
-        if (folder.children?.songs) {
+        if (folder?.children?.songs) {
             folderSongs.push(...folder.children.songs);
         }
 
-        if (folder.children?.folders) {
+        if (folder?.children?.folders) {
             for (const subFolder of folder.children.folders) {
                 const subFolderSongs = await collectSongsFromFolder(subFolder.id);
                 folderSongs.push(...subFolderSongs);

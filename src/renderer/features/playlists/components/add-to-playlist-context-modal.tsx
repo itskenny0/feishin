@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import styles from './add-to-playlist-context-modal.module.css';
 
 import { api } from '/@/renderer/api';
+import { collectAdaptivePaged } from '/@/renderer/api/paged-fetch';
 import { queryKeys } from '/@/renderer/api/query-keys';
 import { ItemImage } from '/@/renderer/components/item-image/item-image';
 import {
@@ -242,22 +243,38 @@ export const AddToPlaylistContextModal = ({
                 if (values.skipDuplicates) {
                     const queryKey = queryKeys.playlists.songListIds(serverId, playlistId);
 
-                    const playlistSongsRes = await queryClient.fetchQuery({
+                    // Adaptive-paged instead of one unbounded request — some
+                    // server types don't honor limit/startIndex on this
+                    // endpoint and always return every id in one response; if
+                    // a page comes back larger than requested, treat it as
+                    // the complete list and stop instead of looping on a
+                    // startIndex that never advances.
+                    const playlistSongIds = await queryClient.fetchQuery({
                         queryFn: ({ signal }) => {
-                            return api.controller.getPlaylistSongIds({
-                                apiClientProps: {
-                                    serverId,
-                                    signal,
+                            let paginationUnsupported = false;
+                            return collectAdaptivePaged<string>(
+                                async (startIndex, limit) => {
+                                    if (paginationUnsupported) return [];
+                                    const page = await api.controller.getPlaylistSongIds({
+                                        apiClientProps: {
+                                            serverId,
+                                            signal,
+                                        },
+                                        query: {
+                                            id: playlistId,
+                                            limit,
+                                            startIndex,
+                                        },
+                                    });
+                                    const items = page?.items ?? [];
+                                    if (items.length > limit) paginationUnsupported = true;
+                                    return items;
                                 },
-                                query: {
-                                    id: playlistId,
-                                },
-                            });
+                                { label: `playlist-song-ids:${playlistId}`, signal },
+                            );
                         },
                         queryKey,
                     });
-
-                    const playlistSongIds = playlistSongsRes?.items;
 
                     for (const songId of allSongIds) {
                         if (!playlistSongIds?.includes(songId)) {

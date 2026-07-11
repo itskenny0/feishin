@@ -285,8 +285,10 @@ export type FolderArgs = BaseEndpointArgs & { query: FolderQuery };
 
 export interface FolderQuery extends BaseQuery<SongListSort> {
     id: string;
+    limit?: number;
     musicFolderId?: string | string[];
     searchTerm?: string;
+    startIndex?: number;
 }
 
 export type FolderResponse = Folder;
@@ -295,6 +297,8 @@ export type FolderSongsRecursiveArgs = BaseEndpointArgs & { query: FolderSongsRe
 
 export interface FolderSongsRecursiveQuery {
     folderId: string;
+    limit?: number;
+    startIndex?: number;
 }
 
 export type FolderSongsRecursiveResponse = Song[];

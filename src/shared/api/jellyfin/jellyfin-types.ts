@@ -855,14 +855,16 @@ const folderList = pagination.extend({
     Items: z.array(folder),
 });
 
-const folderParameters = z.object({
-    Fields: z.array(z.string()).readonly().optional(),
-    IncludeItemTypes: z.string().optional(),
-    ParentId: z.string().optional(),
-    Recursive: z.boolean().optional(),
-    SortBy: z.string().optional(),
-    SortOrder: z.enum(sortOrderValues).optional(),
-});
+const folderParameters = paginationParameters.merge(
+    z.object({
+        Fields: z.array(z.string()).readonly().optional(),
+        IncludeItemTypes: z.string().optional(),
+        ParentId: z.string().optional(),
+        Recursive: z.boolean().optional(),
+        SortBy: z.string().optional(),
+        SortOrder: z.enum(sortOrderValues).optional(),
+    }),
+);
 
 const queueItem = z.object({
     Id: z.string(),

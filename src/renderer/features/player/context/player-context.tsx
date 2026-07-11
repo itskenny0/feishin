@@ -4,6 +4,7 @@ import { nanoid } from 'nanoid/non-secure';
 import { createContext, useCallback, useContext, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { streamAdaptivePaged } from '/@/renderer/api/paged-fetch';
 import { queryKeys } from '/@/renderer/api/query-keys';
 import { resolveSongsByItemTypeLocal } from '/@/renderer/cache';
 import { useCacheStore } from '/@/renderer/cache/store';
@@ -267,6 +268,12 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
 
     const timeoutIds = useRef<null | Record<string, ReturnType<typeof setTimeout>>>({});
 
+    // Aborts the in-flight background tail fetch started by the streaming
+    // "Play Now" path in addToQueueByFetch (below) when a newer play call
+    // supersedes it, so a superseded fetch can't keep appending stale songs
+    // to the queue after the user has moved on.
+    const streamTailAbortRef = useRef<AbortController | null>(null);
+
     const [doNotShowAgain, setDoNotShowAgain] = useLocalStorage({
         defaultValue: false,
         key: 'large_fetch_confirmation',
@@ -384,6 +391,11 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
             let toastId: null | string = null;
             const fetchId = nanoid();
 
+            // A new play call supersedes any previous streaming-tail fetch
+            // that may still be appending songs to the queue in the background.
+            streamTailAbortRef.current?.abort();
+            streamTailAbortRef.current = null;
+
             timeoutIds.current = {
                 ...timeoutIds.current,
                 [fetchId]: setTimeout(() => {
@@ -420,11 +432,11 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
                 // to complete before song 1 starts.
                 if (itemType === LibraryItem.PLAYLIST && type === Play.NOW && id.length === 1) {
                     const STREAM_FIRST_BATCH = 50;
-                    const STREAM_TAIL_BATCH = 5000;
+                    const playlistId = id[0];
 
                     const firstBatch = await fetchPlaylistSongsBatch({
                         limit: STREAM_FIRST_BATCH,
-                        playlistId: id[0],
+                        playlistId,
                         queryClient,
                         serverId,
                         startIndex: 0,
@@ -446,29 +458,46 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
                     // Start playback immediately with batch 1.
                     storeActions.addToQueueByType(filteredFirst, Play.NOW);
 
-                    // If the playlist is larger than the first batch, fetch
-                    // the rest in the background and append it. We don't
-                    // await so the caller's "play" click is acknowledged
-                    // the moment song 1 starts.
+                    // If the playlist is larger than the first batch, fetch the
+                    // rest in the background and append it page by page as it
+                    // arrives. We don't await so the caller's "play" click is
+                    // acknowledged the moment song 1 starts. streamAdaptivePaged
+                    // shrinks the page size on a slow/overloaded server instead
+                    // of hanging on one oversized request — or, worse, silently
+                    // dropping every track past it.
                     const total = firstBatch.totalRecordCount ?? 0;
-                    if (total > firstBatch.items.length) {
-                        void fetchPlaylistSongsBatch({
-                            limit: STREAM_TAIL_BATCH,
-                            playlistId: id[0],
-                            queryClient,
-                            serverId,
-                            startIndex: firstBatch.items.length,
-                        })
-                            .then((tail) => {
-                                const filteredTail = filterSongsByPlayerFilters(
-                                    tail.items,
-                                    filters,
+                    const tailStart = firstBatch.items.length;
+                    if (total > tailStart) {
+                        const tailAbortController = new AbortController();
+                        streamTailAbortRef.current = tailAbortController;
+
+                        void (async () => {
+                            try {
+                                const tailPages = streamAdaptivePaged<Song>(
+                                    async (pageStartIndex, limit) => {
+                                        const page = await fetchPlaylistSongsBatch({
+                                            limit,
+                                            playlistId,
+                                            queryClient,
+                                            serverId,
+                                            startIndex: tailStart + pageStartIndex,
+                                        });
+                                        return page.items;
+                                    },
+                                    {
+                                        label: 'playlist-play-now-tail',
+                                        signal: tailAbortController.signal,
+                                    },
                                 );
-                                if (filteredTail.length > 0) {
-                                    storeActions.addToQueueByType(filteredTail, Play.LAST);
+
+                                for await (const page of tailPages) {
+                                    if (tailAbortController.signal.aborted) break;
+                                    const filteredTail = filterSongsByPlayerFilters(page, filters);
+                                    if (filteredTail.length > 0) {
+                                        storeActions.addToQueueByType(filteredTail, Play.LAST);
+                                    }
                                 }
-                            })
-                            .catch((err) => {
+                            } catch (err) {
                                 if (instanceOfCancellationError(err)) return;
                                 logFn.error(logMsg[LogCategory.PLAYER].addToQueueByFetch, {
                                     category: LogCategory.PLAYER,
@@ -477,7 +506,8 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
                                         phase: 'streaming-tail',
                                     },
                                 });
-                            });
+                            }
+                        })();
                     }
                     return;
                 }
