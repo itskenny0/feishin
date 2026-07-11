@@ -99,6 +99,17 @@ const HomeItemSchema = z.enum([
     'quickFilters',
 ]);
 
+const AlbumGroupItemSchema = z.enum([
+    'albumArtists',
+    'duration',
+    'genres',
+    'releaseDate',
+    'releaseYear',
+    'releaseType',
+    'size',
+    'songCount',
+]);
+
 const PlayerItemSchema = z.enum([
     'bit_depth',
     'bit_rate',
@@ -504,6 +515,8 @@ export const GeneralSettingsSchema = z.object({
     albumBackgroundBlur: z.number(),
     albumFavoriteFilter: z.boolean().nullable(),
     albumGroupImageSize: z.number(),
+    albumGroupItems: z.array(SortableItemSchema(AlbumGroupItemSchema)),
+    albumGroupShowFavoriteRating: z.boolean(),
     artistBackground: z.boolean(),
     artistBackgroundBlur: z.number(),
     artistItems: z.array(SortableItemSchema(ArtistItemSchema)),
@@ -1273,6 +1286,17 @@ export const SettingsStateSchema = ValidationSettingsStateSchema.merge(
     NonValidatedSettingsStateSchema,
 );
 
+export enum AlbumGroupItem {
+    ALBUM_ARTISTS = 'albumArtists',
+    DURATION = 'duration',
+    GENRES = 'genres',
+    RELEASE_DATE = 'releaseDate',
+    RELEASE_TYPE = 'releaseType',
+    RELEASE_YEAR = 'releaseYear',
+    SIZE = 'size',
+    SONG_COUNT = 'songCount',
+}
+
 export enum ArtistItem {
     BIOGRAPHY = 'biography',
     FAVORITE_SONGS = 'favoriteSongs',
@@ -1538,6 +1562,7 @@ export interface SettingsSlice extends z.infer<typeof SettingsStateSchema> {
         removeCollection: (id: string) => void;
         reset: () => void;
         resetSampleRate: () => void;
+        setAlbumGroupItems: (items: SortableItem<AlbumGroupItem>[]) => void;
         setArtistItems: (item: SortableItem<ArtistItem>[]) => void;
         setArtistReleaseTypeItems: (item: SortableItem<ArtistReleaseTypeItem>[]) => void;
         setFirstSyncComplete: (serverId: string, partial: boolean) => void;
@@ -1737,6 +1762,17 @@ const artistReleaseTypeItems = Object.values(ArtistReleaseTypeItem).map((item) =
     id: item,
 }));
 
+const albumGroupItems: SortableItem<AlbumGroupItem>[] = [
+    { disabled: false, id: AlbumGroupItem.ALBUM_ARTISTS },
+    { disabled: true, id: AlbumGroupItem.RELEASE_DATE },
+    { disabled: true, id: AlbumGroupItem.RELEASE_YEAR },
+    { disabled: true, id: AlbumGroupItem.SONG_COUNT },
+    { disabled: true, id: AlbumGroupItem.DURATION },
+    { disabled: true, id: AlbumGroupItem.RELEASE_TYPE },
+    { disabled: true, id: AlbumGroupItem.GENRES },
+    { disabled: true, id: AlbumGroupItem.SIZE },
+];
+
 // Determines the default/initial windowBarStyle value based on the current platform.
 const getPlatformDefaultWindowBarStyle = (): Platform => {
     if (utils?.isWindows()) {
@@ -1824,6 +1860,8 @@ const initialState: SettingsState = {
         albumBackgroundBlur: 3,
         albumFavoriteFilter: null,
         albumGroupImageSize: 0,
+        albumGroupItems,
+        albumGroupShowFavoriteRating: true,
         artistBackground: true,
         artistBackgroundBlur: 3,
         artistItems,
@@ -2837,6 +2875,11 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                         resetSampleRate: () => {
                             set((state) => {
                                 state.playback.mpvProperties.audioSampleRateHz = 0;
+                            });
+                        },
+                        setAlbumGroupItems: (items: SortableItem<AlbumGroupItem>[]) => {
+                            set((state) => {
+                                state.general.albumGroupItems = items;
                             });
                         },
                         setArtistItems: (items) => {
@@ -4092,10 +4135,24 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
+                if (version < 77) {
+                    // Upstream's album-group metadata rows + favorite-rating
+                    // toggle also shipped without zod defaults; seed them so an
+                    // existing install (and any imported pre-v77 settings file)
+                    // validates instead of failing on the missing keys.
+                    if (state.general.albumGroupItems === undefined) {
+                        state.general.albumGroupItems = initialState.general.albumGroupItems;
+                    }
+                    if (state.general.albumGroupShowFavoriteRating === undefined) {
+                        state.general.albumGroupShowFavoriteRating =
+                            initialState.general.albumGroupShowFavoriteRating;
+                    }
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 76,
+            version: 77,
         },
     ),
 );
@@ -4220,6 +4277,9 @@ export const useImageRes = () => useSettingsStore((state) => state.general.image
 
 export const useAlbumGroupImageSize = () =>
     useSettingsStore((state) => state.general.albumGroupImageSize);
+
+export const useAlbumGroupShowFavoriteRating = () =>
+    useSettingsStore((state) => state.general.albumGroupShowFavoriteRating);
 
 export const useVolumeWidth = () => useSettingsStore((state) => state.general.volumeWidth, shallow);
 
@@ -4450,6 +4510,9 @@ export const useSleepTimerFadeSeconds = () =>
     useSettingsStore((state) => state.playback.sleepTimerFadeSeconds ?? 0);
 
 export const useHomeItems = () => useSettingsStore((state) => state.general.homeItems, shallow);
+
+export const useAlbumGroupItems = () =>
+    useSettingsStore((state) => state.general.albumGroupItems, shallow);
 
 export const useArtistItems = () => useSettingsStore((state) => state.general.artistItems, shallow);
 
