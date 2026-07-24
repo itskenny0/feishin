@@ -27,24 +27,23 @@ import {
     NsisUpdater,
     UpdateCheckResult,
 } from 'electron-updater';
-import semver from 'semver';
 import { access, constants } from 'fs';
 import path, { join } from 'path';
+import semver from 'semver';
 
+import packageJson from '../../package.json';
 import { loadDeferredCoreFeatures } from './features';
 import { disableMediaKeys, enableMediaKeys } from './features/core/player/media-keys';
 import { shutdownServer } from './features/core/remote';
 import { store } from './features/core/settings';
 import { canHandleVisualizerDisplayMedia } from './features/core/visualizer';
 import log, { autoUpdaterLogInterface } from './logger';
-import MenuBuilder, { MenuPlaybackState } from './menu';
 import './features';
+import MenuBuilder, { MenuPlaybackState } from './menu';
 import { hotkeyToElectronAccelerator } from './utils';
 
 import { disableAutoUpdates, isLinux, isMacOS, isWindows } from '/@/main/env';
 import { PlayerRepeat, PlayerStatus, PlayerType, TitleTheme } from '/@/shared/types/types';
-
-import packageJson from '../../package.json';
 
 // Point the desktop autoUpdater at the fork's releases rather than upstream
 // jeffvli/feishin so users on this build actually receive the fork's updates.

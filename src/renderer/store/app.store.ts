@@ -231,6 +231,7 @@ export const useAppStore = createWithEqualityFn<AppSlice>()(
                 genreSelectMode: 'multi',
                 globalExpanded: null,
                 isReorderingQueue: false,
+                latestVersion: null,
                 // The mobile side ("More") drawer. Lifted to the store so the
                 // Settings view can surface it now that it's off the bottom tab
                 // bar. Not persisted (see partialize) so it never launches open.
@@ -252,7 +253,6 @@ export const useAppStore = createWithEqualityFn<AppSlice>()(
                         });
                     },
                 },
-                latestVersion: null,
                 pageSidebar: {
                     album: true,
                     song: true,
@@ -294,7 +294,12 @@ export const useAppStore = createWithEqualityFn<AppSlice>()(
             },
             name: 'store_app',
             partialize: (state) => {
-                const { globalExpanded: _, mobileDrawer: _mobileDrawer, latestVersion: __, ...rest } = state;
+                const {
+                    globalExpanded: _,
+                    latestVersion: __,
+                    mobileDrawer: _mobileDrawer,
+                    ...rest
+                } = state;
                 return rest;
             },
             version: 5,

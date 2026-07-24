@@ -39,7 +39,6 @@ const levelColors: Record<LogSeverity, string> = {
     warn: '\x1B[38;2;225;125;50m', // #e17d32
 };
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const NO_OP: LogFn = (_message?: string, ..._optionalParams: any[]) => {};
 
 const getElectronLog = (): ElectronLogApi | null => {

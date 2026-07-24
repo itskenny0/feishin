@@ -654,11 +654,12 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
                 timeoutIds.current = {
                     ...timeoutIds.current,
                     [fetchId]: setTimeout(() => {
-                        toastId = toast.info({
-                            autoClose: false,
-                            message: t('player.playbackFetchCancel'),
-                            onClose: () => {
-                                logger.debug('Cancelled fetch', { itemType, serverId });
+                        toastId =
+                            toast.info({
+                                autoClose: false,
+                                message: t('player.playbackFetchCancel'),
+                                onClose: () => {
+                                    logger.debug('Cancelled fetch', { itemType, serverId });
 
                                     queryClient.cancelQueries({
                                         exact: false,

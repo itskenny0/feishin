@@ -42,7 +42,6 @@ export const CollapsedSidebar = () => {
     const offlineSongCount = useOfflineSongCount();
     const { isScanning } = useScanStatus();
 
-
     const translatedSidebarItemMap = useMemo(
         () => ({
             Albums: t('page.sidebar.albums'),

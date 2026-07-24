@@ -1,7 +1,6 @@
 import isElectron from 'is-electron';
 
 import i18n from '/@/i18n/i18n';
-
 import { useAuthStore } from '/@/renderer/store';
 import { toast } from '/@/shared/components/toast/toast';
 import { ServerListItem } from '/@/shared/types/types';
