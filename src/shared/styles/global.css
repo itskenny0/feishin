@@ -206,7 +206,8 @@ button {
     font-variation-settings: 'wght' 500;
     font-weight: 400;
     src: url('../../../assets/fonts/NotoSansJP-VariableFont_wght.woff2');
-    unicode-range: U+3000-9FFF, U+FF00-FFEF; /* Japanese characters */
+    font-display: swap;
+    unicode-range: U+2E80-2FDF, U+3000-9FFF, U+F900-FAFF, U+FF00-FFEF; /* Japanese + common CJK */
 }
 
 @font-face {
@@ -214,7 +215,8 @@ button {
     font-variation-settings: 'wght' 600;
     font-weight: 500;
     src: url('../../../assets/fonts/NotoSansJP-VariableFont_wght.woff2');
-    unicode-range: U+3000-9FFF, U+FF00-FFEF; /* Japanese characters */
+    font-display: swap;
+    unicode-range: U+2E80-2FDF, U+3000-9FFF, U+F900-FAFF, U+FF00-FFEF; /* Japanese + common CJK */
 }
 
 @font-face {
@@ -222,7 +224,8 @@ button {
     font-variation-settings: 'wght' 700;
     font-weight: 600;
     src: url('../../../assets/fonts/NotoSansJP-VariableFont_wght.woff2');
-    unicode-range: U+3000-9FFF, U+FF00-FFEF; /* Japanese characters */
+    font-display: swap;
+    unicode-range: U+2E80-2FDF, U+3000-9FFF, U+F900-FAFF, U+FF00-FFEF; /* Japanese + common CJK */
 }
 
 @font-face {
@@ -230,7 +233,8 @@ button {
     font-variation-settings: 'wght' 800;
     font-weight: 700;
     src: url('../../../assets/fonts/NotoSansJP-VariableFont_wght.woff2');
-    unicode-range: U+3000-9FFF, U+FF00-FFEF; /* Japanese characters */
+    font-display: swap;
+    unicode-range: U+2E80-2FDF, U+3000-9FFF, U+F900-FAFF, U+FF00-FFEF; /* Japanese + common CJK */
 }
 
 @font-face {
@@ -238,7 +242,98 @@ button {
     font-variation-settings: 'wght' 900;
     font-weight: 800 1000;
     src: url('../../../assets/fonts/NotoSansJP-VariableFont_wght.woff2');
-    unicode-range: U+3000-9FFF, U+FF00-FFEF; /* Japanese characters */
+    font-display: swap;
+    unicode-range: U+2E80-2FDF, U+3000-9FFF, U+F900-FAFF, U+FF00-FFEF; /* Japanese + common CJK */
+}
+
+@font-face {
+    font-family: 'Noto Sans KR';
+    font-variation-settings: 'wght' 500;
+    font-weight: 400;
+    src: url('../../../assets/fonts/NotoSansKR-VariableFont_wght.woff2');
+    font-display: swap;
+    unicode-range: U+1100-11FF, U+3130-318F, U+A960-A97F, U+AC00-D7FF; /* Korean Hangul */
+}
+
+@font-face {
+    font-family: 'Noto Sans KR';
+    font-variation-settings: 'wght' 600;
+    font-weight: 500;
+    src: url('../../../assets/fonts/NotoSansKR-VariableFont_wght.woff2');
+    font-display: swap;
+    unicode-range: U+1100-11FF, U+3130-318F, U+A960-A97F, U+AC00-D7FF; /* Korean Hangul */
+}
+
+@font-face {
+    font-family: 'Noto Sans KR';
+    font-variation-settings: 'wght' 700;
+    font-weight: 600;
+    src: url('../../../assets/fonts/NotoSansKR-VariableFont_wght.woff2');
+    font-display: swap;
+    unicode-range: U+1100-11FF, U+3130-318F, U+A960-A97F, U+AC00-D7FF; /* Korean Hangul */
+}
+
+@font-face {
+    font-family: 'Noto Sans KR';
+    font-variation-settings: 'wght' 800;
+    font-weight: 700;
+    src: url('../../../assets/fonts/NotoSansKR-VariableFont_wght.woff2');
+    font-display: swap;
+    unicode-range: U+1100-11FF, U+3130-318F, U+A960-A97F, U+AC00-D7FF; /* Korean Hangul */
+}
+
+@font-face {
+    font-family: 'Noto Sans KR';
+    font-variation-settings: 'wght' 900;
+    font-weight: 800 1000;
+    src: url('../../../assets/fonts/NotoSansKR-VariableFont_wght.woff2');
+    font-display: swap;
+    unicode-range: U+1100-11FF, U+3130-318F, U+A960-A97F, U+AC00-D7FF; /* Korean Hangul */
+}
+
+@font-face {
+    font-family: 'Noto Sans SC';
+    font-variation-settings: 'wght' 500;
+    font-weight: 400;
+    src: url('../../../assets/fonts/NotoSansSC-VariableFont_wght.woff2');
+    font-display: swap;
+    unicode-range: U+2E80-2FDF, U+3000-9FFF, U+F900-FAFF; /* CJK ideographs missing from Noto Sans JP */
+}
+
+@font-face {
+    font-family: 'Noto Sans SC';
+    font-variation-settings: 'wght' 600;
+    font-weight: 500;
+    src: url('../../../assets/fonts/NotoSansSC-VariableFont_wght.woff2');
+    font-display: swap;
+    unicode-range: U+2E80-2FDF, U+3000-9FFF, U+F900-FAFF; /* CJK ideographs missing from Noto Sans JP */
+}
+
+@font-face {
+    font-family: 'Noto Sans SC';
+    font-variation-settings: 'wght' 700;
+    font-weight: 600;
+    src: url('../../../assets/fonts/NotoSansSC-VariableFont_wght.woff2');
+    font-display: swap;
+    unicode-range: U+2E80-2FDF, U+3000-9FFF, U+F900-FAFF; /* CJK ideographs missing from Noto Sans JP */
+}
+
+@font-face {
+    font-family: 'Noto Sans SC';
+    font-variation-settings: 'wght' 800;
+    font-weight: 700;
+    src: url('../../../assets/fonts/NotoSansSC-VariableFont_wght.woff2');
+    font-display: swap;
+    unicode-range: U+2E80-2FDF, U+3000-9FFF, U+F900-FAFF; /* CJK ideographs missing from Noto Sans JP */
+}
+
+@font-face {
+    font-family: 'Noto Sans SC';
+    font-variation-settings: 'wght' 900;
+    font-weight: 800 1000;
+    src: url('../../../assets/fonts/NotoSansSC-VariableFont_wght.woff2');
+    font-display: swap;
+    unicode-range: U+2E80-2FDF, U+3000-9FFF, U+F900-FAFF; /* CJK ideographs missing from Noto Sans JP */
 }
 
 @font-face {
@@ -246,6 +341,7 @@ button {
     font-variation-settings: 'wght' 500;
     font-weight: 400;
     src: url('../../../assets/fonts/NotoSansHebrew-VariableFont_wdth,wght.woff2');
+    font-display: swap;
     unicode-range: U+0590-05FF, U+FB1D-FB4F; /* Hebrew characters */
 }
 
@@ -254,6 +350,7 @@ button {
     font-variation-settings: 'wght' 600;
     font-weight: 500;
     src: url('../../../assets/fonts/NotoSansHebrew-VariableFont_wdth,wght.woff2');
+    font-display: swap;
     unicode-range: U+0590-05FF, U+FB1D-FB4F; /* Hebrew characters */
 }
 
@@ -262,6 +359,7 @@ button {
     font-variation-settings: 'wght' 700;
     font-weight: 600;
     src: url('../../../assets/fonts/NotoSansHebrew-VariableFont_wdth,wght.woff2');
+    font-display: swap;
     unicode-range: U+0590-05FF, U+FB1D-FB4F; /* Hebrew characters */
 }
 
@@ -270,6 +368,7 @@ button {
     font-variation-settings: 'wght' 800;
     font-weight: 700;
     src: url('../../../assets/fonts/NotoSansHebrew-VariableFont_wdth,wght.woff2');
+    font-display: swap;
     unicode-range: U+0590-05FF, U+FB1D-FB4F; /* Hebrew characters */
 }
 
@@ -278,6 +377,7 @@ button {
     font-variation-settings: 'wght' 900;
     font-weight: 800 1000;
     src: url('../../../assets/fonts/NotoSansHebrew-VariableFont_wdth,wght.woff2');
+    font-display: swap;
     unicode-range: U+0590-05FF, U+FB1D-FB4F; /* Hebrew characters */
 }
 
