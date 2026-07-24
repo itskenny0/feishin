@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router';
 
 import styles from './action-bar.module.css';
 
+import { useScanStatus } from '/@/renderer/features/shared/hooks/use-scan-status';
 import { AppMenu } from '/@/renderer/features/titlebar/components/app-menu';
 import { useIsMobileShell } from '/@/renderer/hooks/use-breakpoint';
 import { AppRoute } from '/@/renderer/router/routes';
@@ -20,6 +21,7 @@ export const ActionBar = () => {
     const { open } = useCommandPalette();
     const isMobileShell = useIsMobileShell();
     const navigate = useNavigate();
+    const { isScanning } = useScanStatus();
     // Desktop opens the Mod+K overlay; the mobile shell has no overlay palette —
     // it navigates to the in-shell command palette page at /command.
     const openSearch = isMobileShell ? () => navigate(AppRoute.COMMAND) : open;
@@ -79,7 +81,11 @@ export const ActionBar = () => {
                                     p="0"
                                     radius="xl"
                                 >
-                                    <Icon icon="menu" size="lg" />
+                                    <Icon
+                                        animate={isScanning ? 'spin' : undefined}
+                                        icon={isScanning ? 'spinner' : 'menu'}
+                                        size="lg"
+                                    />
                                 </Button>
                             </DropdownMenu.Target>
                             <DropdownMenu.Dropdown>

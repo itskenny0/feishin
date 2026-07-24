@@ -7,6 +7,14 @@ import { useTranslation } from 'react-i18next';
 
 import packageJson from '../../package.json';
 
+import {
+    GITHUB_RELEASES_URL,
+    type GitHubRelease,
+    parseVersionFromTag,
+    RELEASES_TO_FETCH,
+    toTag,
+    useGithubReleasesList,
+} from '/@/renderer/hooks/use-github-releases';
 import { formatHrDateTime } from '/@/renderer/utils/format';
 import { Button } from '/@/shared/components/button/button';
 import { Center } from '/@/shared/components/center/center';
@@ -51,22 +59,14 @@ function parseVersionFromTag(tagName: string): string {
 function toTag(version: string): string {
     return version.startsWith('v') ? version : `v${version}`;
 }
+}
 
 const ReleaseNotesContent = ({ onDismiss, version }: ReleaseNotesContentProps) => {
     const { t } = useTranslation();
     const [selectedVersion, setSelectedVersion] = useState(version);
 
     // Fetch list of recent releases for the selector
-    const { data: releasesList = [] } = useQuery({
-        queryFn: async () => {
-            const response = await axios.get<GitHubRelease[]>(GITHUB_RELEASES_URL, {
-                params: { per_page: RELEASES_TO_FETCH },
-            });
-            return response.data;
-        },
-        queryKey: ['github-releases-list'],
-        retry: 2,
-    });
+    const { data: releasesList = [] } = useGithubReleasesList();
 
     const releaseOptions = useMemo(() => {
         const options = releasesList.slice(0, RELEASES_TO_FETCH).map((r) => {

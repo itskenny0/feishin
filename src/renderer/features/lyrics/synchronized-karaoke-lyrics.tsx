@@ -34,6 +34,7 @@ export interface SynchronizedKaraokeLyricsProps extends Omit<FullLyricsMetadata,
     extraOverlayLyrics?: SynchronizedLyricsData[];
     lyrics: SynchronizedLyricsData;
     offsetMs?: number;
+    preview?: boolean;
     pronunciationLyrics?: null | SynchronizedLyricsData;
     romajiLyrics?: null | SynchronizedLyricsData;
     settingsKey?: string;
@@ -44,6 +45,8 @@ export interface SynchronizedKaraokeLyricsProps extends Omit<FullLyricsMetadata,
 }
 
 const SEEK_DETECT_THRESHOLD_MS = 500;
+const PREVIEW_FONT_SIZE = 20;
+const PREVIEW_GAP = 20;
 
 export const SynchronizedKaraokeLyrics = ({
     agents,
@@ -52,6 +55,7 @@ export const SynchronizedKaraokeLyrics = ({
     lyrics,
     name,
     offsetMs,
+    preview = false,
     pronunciationLyrics,
     romajiLyrics,
     settingsKey = 'default',
@@ -77,6 +81,11 @@ export const SynchronizedKaraokeLyrics = ({
         showScrollbar,
     } = useSynchronizedLyricsBase(settingsKey, offsetMs);
 
+    const effectiveFontSize = preview ? PREVIEW_FONT_SIZE : settings.fontSize;
+    const effectiveGap = preview ? PREVIEW_GAP : settings.gap;
+    const effectivePaddingLeft = preview ? 0 : settings.paddingLeft;
+    const effectivePaddingRight = preview ? 0 : settings.paddingRight;
+
     const normalizedLyrics = useMemo(() => normalizeLyrics(lyrics), [lyrics]);
     const rafRef = useRef<null | number>(null);
     const statusRef = useRef(usePlayerStoreBase.getState().player.status);
@@ -97,13 +106,13 @@ export const SynchronizedKaraokeLyrics = ({
         containerRef,
         followRef,
         followScrollAlignmentRef,
-        fontSize: settings.fontSize,
-        gap: settings.gap,
+        fontSize: effectiveFontSize,
+        gap: effectiveGap,
         lineIdPrefix: 'karaoke-line',
         lineLeadTimeMsRef,
         lyrics: normalizedLyrics,
-        paddingLeft: settings.paddingLeft,
-        paddingRight: settings.paddingRight,
+        paddingLeft: effectivePaddingLeft,
+        paddingRight: effectivePaddingRight,
         scrollContainerId: LYRICS_SCROLL_CONTAINER_ID,
     });
 
@@ -234,6 +243,33 @@ export const SynchronizedKaraokeLyrics = ({
         syncFromCurrentTimestamp();
     }, [offsetMs, syncFromCurrentTimestamp]);
 
+    // Rebuild animation state when timed overlay DOM changes (pronunciation, translation,
+    // async romaji, or extra overlays). Without this, overlayParts stay empty/stale until
+    // pause/resume triggers rebuildLyricsData().
+    useEffect(() => {
+        const frame = requestAnimationFrame(() => {
+            rebuildLyricsData();
+
+            const timestamp = useTimestampStoreBase.getState().timestamp;
+            const isPlaying = statusRef.current === PlayerStatus.PLAYING;
+            syncAtTime(timestamp * 1000 + delayMsRef.current, isPlaying, {
+                eventCreationTime: playbackAnchorRef.current.eventCreationTime,
+                forceReset: true,
+                forceResync: true,
+            });
+        });
+
+        return () => cancelAnimationFrame(frame);
+    }, [
+        delayMsRef,
+        extraOverlayLyrics,
+        pronunciationLyrics,
+        rebuildLyricsData,
+        syncAtTime,
+        syncedRomajiLyrics,
+        translationLyrics,
+    ]);
+
     useEffect(() => {
         statusRef.current = usePlayerStoreBase.getState().player.status;
 
@@ -246,6 +282,10 @@ export const SynchronizedKaraokeLyrics = ({
                 return;
             }
 
+            // Refresh the wall-clock playback anchor before restarting RAF.
+            // Otherwise resume interpolates from the pause-time eventCreationTime and
+            // briefly advances lyrics by the pause duration until the next progress tick.
+            syncFromCurrentTimestamp();
             startRaf();
         });
 
@@ -297,7 +337,11 @@ export const SynchronizedKaraokeLyrics = ({
 
     return (
         <div
-            className={clsx(styles.container, 'synchronized-karaoke-lyrics overlay-scrollbar')}
+            className={clsx(
+                styles.container,
+                preview && styles.preview,
+                'synchronized-karaoke-lyrics overlay-scrollbar',
+            )}
             id={LYRICS_SCROLL_CONTAINER_ID}
             onClick={handleContainerClick}
             onMouseEnter={showScrollbar}
@@ -306,15 +350,16 @@ export const SynchronizedKaraokeLyrics = ({
             style={{ ...containerStyle, ...style }}
         >
             <LyricsScrollContent
-                gap={settings.gap}
-                paddingLeft={settings.paddingLeft}
-                paddingRight={settings.paddingRight}
+                gap={effectiveGap}
+                paddingLeft={effectivePaddingLeft}
+                paddingRight={effectivePaddingRight}
+                preview={preview}
             >
                 {settings.showProvider && source && (
                     <LyricLine
                         alignment={settings.alignment}
                         className="lyric-credit"
-                        fontSize={settings.fontSize}
+                        fontSize={effectiveFontSize}
                         text={`${source}`}
                     />
                 )}
@@ -322,7 +367,7 @@ export const SynchronizedKaraokeLyrics = ({
                     <LyricLine
                         alignment={settings.alignment}
                         className="lyric-credit"
-                        fontSize={settings.fontSize}
+                        fontSize={effectiveFontSize}
                         text={`${name} — ${artist}`}
                     />
                 )}
@@ -338,11 +383,15 @@ export const SynchronizedKaraokeLyrics = ({
                         lineStartMs,
                         idx,
                     );
+                    const lineLevelRomaji =
+                        syncedRomajiLyrics == null && romajiLyrics?.[idx]
+                            ? getLyricLineText(romajiLyrics[idx])
+                            : undefined;
                     const pronunciationText = getOverlayText(
                         pronunciationLyrics,
                         lineStartMs,
                         idx,
-                        romajiLyrics?.[idx] ? getLyricLineText(romajiLyrics[idx]) : undefined,
+                        lineLevelRomaji,
                     );
                     const translationText = getOverlayText(
                         translationLyrics,
@@ -361,7 +410,7 @@ export const SynchronizedKaraokeLyrics = ({
                                 alignment={settings.alignment}
                                 className="lyric-line synchronized"
                                 data-lyric-time={lineStartMs}
-                                fontSize={settings.fontSize}
+                                fontSize={effectiveFontSize}
                                 id={`karaoke-line-${idx}`}
                                 key={idx}
                                 romajiText={pronunciationText}
@@ -379,13 +428,17 @@ export const SynchronizedKaraokeLyrics = ({
                             cueLines={rawLine.cueLines}
                             data-lyric-time={lineStartMs}
                             extraOverlays={extraOverlays}
-                            fontSize={settings.fontSize}
+                            fontSize={effectiveFontSize}
                             id={`karaoke-line-${idx}`}
                             key={idx}
                             lineIndex={idx}
                             pronunciationCueLines={pronunciationCueLines}
                             pronunciationText={pronunciationText}
-                            romajiCueLines={syncedRomajiLyrics?.[idx] ?? null}
+                            romajiCueLines={
+                                syncedRomajiLyrics != null
+                                    ? (syncedRomajiLyrics[idx] ?? null)
+                                    : undefined
+                            }
                             translatedText={translationText}
                             translationCueLines={translationCueLines}
                         />

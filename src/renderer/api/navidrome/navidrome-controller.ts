@@ -736,6 +736,7 @@ export const NavidromeController: InternalControllerEndpoint = {
     getRandomSongList: SubsonicController.getRandomSongList,
     getRoles: async ({ apiClientProps }) =>
         hasFeature(apiClientProps.server, ServerFeature.BFR) ? NAVIDROME_ROLES : [],
+    getScanStatus: SubsonicController.getScanStatus,
     getServerInfo: async (args) => {
         const { apiClientProps } = args;
 
@@ -1044,6 +1045,7 @@ export const NavidromeController: InternalControllerEndpoint = {
             throw new Error('Failed to move item in playlist');
         }
     },
+    refreshItems: SubsonicController.refreshItems,
     removeFromPlaylist: async (args) => {
         const { apiClientProps, query } = args;
 

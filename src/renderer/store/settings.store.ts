@@ -22,6 +22,7 @@ import {
     PLAYLIST_TABLE_COLUMNS,
     SONG_TABLE_COLUMNS,
 } from '/@/renderer/components/item-list/item-table-list/default-columns';
+import { resolveVolumeMax } from '/@/renderer/features/player/audio-player/utils/volume';
 import { audiomotionanalyzerPresets } from '/@/renderer/features/visualizer/components/audiomotionanalyzer/presets';
 import { AppRoute } from '/@/renderer/router/routes';
 import { getEnvSettingsOverrides } from '/@/renderer/store/env-settings-overrides';
@@ -168,10 +169,12 @@ const BindingActionsSchema = z.enum([
     'volumeMute',
     'navigateHome',
     'next',
+    'nextAlbum',
     'pause',
     'play',
     'playPause',
     'previous',
+    'previousAlbum',
     'rate0',
     'rate1',
     'rate2',
@@ -517,6 +520,7 @@ export const GeneralSettingsSchema = z.object({
     albumGroupImageSize: z.number(),
     albumGroupItems: z.array(SortableItemSchema(AlbumGroupItemSchema)),
     albumGroupShowFavoriteRating: z.boolean(),
+    albumGroupVerticalLayout: z.boolean(),
     artistBackground: z.boolean(),
     artistBackgroundBlur: z.number(),
     artistItems: z.array(SortableItemSchema(ArtistItemSchema)),
@@ -687,10 +691,8 @@ export const GeneralSettingsSchema = z.object({
     showFilesystemNameForAlbums: z.boolean(),
     showFilesystemNameForFolders: z.boolean(),
     showLyricsInSidebar: z.boolean(),
-    // .default(true) so a settings-file import from before this field was
-    // added (or any future version-bump-less addition) doesn't fail
-    // ValidationSettingsStateSchema.safeParse with a missing-key error.
     showPlaybarYearChip: z.boolean().default(true),
+    showQueueInSidebar: z.boolean(),
     /**
      * Show the user-rating star badge in the corner of grid-card images.
      * .default(true) reproduces the current always-on behavior.
@@ -718,9 +720,14 @@ export const GeneralSettingsSchema = z.object({
     /** Show the external/social-links block on album/artist detail pages. */
     socialLinksDisplay: z.boolean().default(true),
     spotify: z.boolean(),
-    theme: z.nativeEnum(AppTheme),
-    themeDark: z.nativeEnum(AppTheme),
-    themeLight: z.nativeEnum(AppTheme),
+    // Accepts either a built-in AppTheme id or a custom theme id (the
+    // filename, without extension, of a JSON file in the themes folder).
+    // Custom theme ids aren't statically known, so this can't be a
+    // nativeEnum(AppTheme) any more; getAppTheme() falls back to the
+    // default theme if the stored id doesn't resolve to anything.
+    theme: z.string(),
+    themeDark: z.string(),
+    themeLight: z.string(),
     trackmapBgGlowAlpha: z.number().min(0).max(100),
     trackmapBreathAmplitudePct: z.number().min(0).max(30),
     trackmapBreathPeriodSec: z.number().min(1).max(30),
@@ -956,12 +963,43 @@ const autoDjStrategyEnum = z.enum(['similar', 'library_random']);
 
 const AutoDJSettingsSchema = z.object({
     albumStrategy: autoDjStrategyEnum,
+    allowDuplicates: z.boolean(),
     enabled: z.boolean(),
     itemCount: z.number(),
     mode: z.enum(['songs', 'albums']),
+    onlySimilar: z.boolean(),
     songStrategy: autoDjStrategyEnum,
     timing: z.number(),
 });
+
+const TagAutocompleteSourceSchema = z.string();
+
+const TagConfigSchema = z.object({
+    autocompleteSource: TagAutocompleteSourceSchema,
+    customValues: z.array(z.string()),
+    multiValue: z.boolean(),
+});
+
+const TagEditorSettingsSchema = z.object({
+    tagConfigs: z.record(z.string(), TagConfigSchema),
+    triggerRescan: z.boolean(),
+});
+
+export type TagAutocompleteSource = string;
+export type TagConfig = z.infer<typeof TagConfigSchema>;
+
+export const SERVER_TAG_AUTOCOMPLETE_PREFIX = 'tag:';
+
+export const isServerTagAutocompleteSource = (source: string): boolean =>
+    source.startsWith(SERVER_TAG_AUTOCOMPLETE_PREFIX);
+
+export const getServerTagAutocompleteName = (source: string): null | string =>
+    isServerTagAutocompleteSource(source)
+        ? source.slice(SERVER_TAG_AUTOCOMPLETE_PREFIX.length)
+        : null;
+
+export const toServerTagAutocompleteSource = (tagName: string): string =>
+    `${SERVER_TAG_AUTOCOMPLETE_PREFIX}${tagName}`;
 
 /**
  * Local-first cache opt-in slice.
@@ -1273,6 +1311,7 @@ export const ValidationSettingsStateSchema = z.object({
     // the subpages list for that category; non-empty = render that
     // subpage's content. Reset to '' when category changes.
     tabSubpage: z.string(),
+    tagEditor: TagEditorSettingsSchema,
     visualizer: VisualizerSettingsSchema,
     window: WindowSettingsSchema,
 });
@@ -1352,10 +1391,12 @@ export enum BindingActions {
     MUTE = 'volumeMute',
     NAVIGATE_HOME = 'navigateHome',
     NEXT = 'next',
+    NEXT_ALBUM = 'nextAlbum',
     PAUSE = 'pause',
     PLAY = 'play',
     PLAY_PAUSE = 'playPause',
     PREVIOUS = 'previous',
+    PREVIOUS_ALBUM = 'previousAlbum',
     RATE_0 = 'rate0',
     RATE_1 = 'rate1',
     RATE_2 = 'rate2',
@@ -1828,9 +1869,11 @@ export const TRACKMAP_ADVANCED_DEFAULTS = {
 const initialState: SettingsState = {
     autoDJ: {
         albumStrategy: AUTO_DJ_STRATEGY.SIMILAR,
+        allowDuplicates: false,
         enabled: false,
         itemCount: 5,
         mode: 'songs',
+        onlySimilar: false,
         songStrategy: AUTO_DJ_STRATEGY.SIMILAR,
         timing: 1,
     },
@@ -1862,6 +1905,7 @@ const initialState: SettingsState = {
         albumGroupImageSize: 0,
         albumGroupItems,
         albumGroupShowFavoriteRating: true,
+        albumGroupVerticalLayout: true,
         artistBackground: true,
         artistBackgroundBlur: 3,
         artistItems,
@@ -1947,6 +1991,7 @@ const initialState: SettingsState = {
         showFilesystemNameForFolders: true,
         showLyricsInSidebar: true,
         showPlaybarYearChip: true,
+        showQueueInSidebar: true,
         showRatingBadge: true,
         showRatings: true,
         showVisualizerInSidebar: true,
@@ -1955,7 +2000,7 @@ const initialState: SettingsState = {
         sidebarCollapseShared: false,
         sidebarItems,
         sidebarPanelOrder: ['queue', 'lyrics', 'visualizer'],
-        sidebarPlaylistFolders: true,
+        sidebarPlaylistFolders: false,
         sidebarPlaylistFolderSeparator: '/',
         sidebarPlaylistFolderTreeIndent: 16,
         sidebarPlaylistFolderTreeLineColor: '',
@@ -2015,10 +2060,12 @@ const initialState: SettingsState = {
             // feels usable without going to Settings first. Users can still
             // remap or clear any binding.
             next: { allowGlobal: true, hotkey: 'mod+right', isGlobal: false },
+            nextAlbum: { allowGlobal: true, hotkey: '', isGlobal: false },
             pause: { allowGlobal: true, hotkey: '', isGlobal: false },
             play: { allowGlobal: true, hotkey: '', isGlobal: false },
             playPause: { allowGlobal: true, hotkey: 'space', isGlobal: false },
             previous: { allowGlobal: true, hotkey: 'mod+left', isGlobal: false },
+            previousAlbum: { allowGlobal: true, hotkey: '', isGlobal: false },
             rate0: { allowGlobal: true, hotkey: '', isGlobal: false },
             rate1: { allowGlobal: true, hotkey: '', isGlobal: false },
             rate2: { allowGlobal: true, hotkey: '', isGlobal: false },
@@ -2755,6 +2802,56 @@ const initialState: SettingsState = {
     },
     tab: 'general',
     tabSubpage: '',
+    tagEditor: {
+        tagConfigs: {
+            albumArtist: {
+                autocompleteSource: 'serverArtists',
+                customValues: [],
+                multiValue: false,
+            },
+            ALBUMARTISTS: {
+                autocompleteSource: 'serverArtists',
+                customValues: [],
+                multiValue: true,
+            },
+            albumArtistSort: {
+                autocompleteSource: 'serverArtists',
+                customValues: [],
+                multiValue: false,
+            },
+            ALBUMARTISTSSORT: {
+                autocompleteSource: 'serverArtists',
+                customValues: [],
+                multiValue: false,
+            },
+            artist: {
+                autocompleteSource: 'serverArtists',
+                customValues: [],
+                multiValue: true,
+            },
+            ARTISTS: {
+                autocompleteSource: 'serverArtists',
+                customValues: [],
+                multiValue: true,
+            },
+            artistSort: {
+                autocompleteSource: 'serverArtists',
+                customValues: [],
+                multiValue: false,
+            },
+            ARTISTSSORT: {
+                autocompleteSource: 'serverArtists',
+                customValues: [],
+                multiValue: false,
+            },
+            genre: {
+                autocompleteSource: 'serverGenres',
+                customValues: [],
+                multiValue: true,
+            },
+        },
+        triggerRescan: true,
+    },
     visualizer: {
         audiomotionanalyzer: {
             alphaBars: false,
@@ -4149,6 +4246,28 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
+                if (version < 32) {
+                    const tagConfigs = state.tagEditor?.tagConfigs;
+                    if (tagConfigs) {
+                        for (const key of [
+                            'albumArtistSort',
+                            'ALBUMARTISTSSORT',
+                            'artistSort',
+                            'ARTISTSSORT',
+                        ] as const) {
+                            if (tagConfigs[key]) {
+                                tagConfigs[key].multiValue = false;
+                            }
+                        }
+                    }
+                }
+
+                if (version < 33) {
+                    if (state.general.showQueueInSidebar === undefined) {
+                        state.general.showQueueInSidebar = true;
+                    }
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
@@ -4176,6 +4295,12 @@ export const useTableSettings = (type: ItemListKey) =>
 export const useGeneralSettings = () => useSettingsStore((state) => state.general, shallow);
 
 export const usePlaybackType = () => useSettingsStore((state) => state.playback.type, shallow);
+
+export const useVolumeMax = () =>
+    useSettingsStore(
+        (state) => resolveVolumeMax(state.playback.type, state.playback.mpvExtraParameters),
+        shallow,
+    );
 
 export const usePlayButtonBehavior = () =>
     useSettingsStore((state) => state.general.playButtonBehavior, shallow);
@@ -4231,6 +4356,8 @@ export const useCssSettings = () => useSettingsStore((state) => state.css, shall
 export const useQueryBuilderSettings = () =>
     useSettingsStore((state) => state.queryBuilder, shallow);
 
+export const useTagEditorSettings = () => useSettingsStore((state) => state.tagEditor, shallow);
+
 const getSettingsStoreVersion = () => useSettingsStore.persist.getOptions().version!;
 
 export const useSettingsForExport = (): SettingsState & { version: number } =>
@@ -4280,6 +4407,9 @@ export const useAlbumGroupImageSize = () =>
 
 export const useAlbumGroupShowFavoriteRating = () =>
     useSettingsStore((state) => state.general.albumGroupShowFavoriteRating);
+
+export const useAlbumGroupVerticalLayout = () =>
+    useSettingsStore((state) => state.general.albumGroupVerticalLayout);
 
 export const useVolumeWidth = () => useSettingsStore((state) => state.general.volumeWidth, shallow);
 
@@ -4541,6 +4671,9 @@ export const useCombinedLyricsAndVisualizer = () =>
 
 export const useShowLyricsInSidebar = () =>
     useSettingsStore((state) => state.general.showLyricsInSidebar, shallow);
+
+export const useShowQueueInSidebar = () =>
+    useSettingsStore((state) => state.general.showQueueInSidebar, shallow);
 
 export const useShowVisualizerInSidebar = () =>
     useSettingsStore((state) => state.general.showVisualizerInSidebar, shallow);

@@ -9,8 +9,7 @@ import {
 } from '/@/renderer/features/player/audio-player/engine/media-error';
 import { AudioPlayer, PlayerOnProgressProps } from '/@/renderer/features/player/audio-player/types';
 import { convertToLogVolume } from '/@/renderer/features/player/audio-player/utils/player-utils';
-import { LogCategory, logFn } from '/@/renderer/utils/logger';
-import { logMsg } from '/@/renderer/utils/logger-message';
+import { logger } from '/@/renderer/utils/logger';
 import { PlayerStatus } from '/@/shared/types/types';
 
 export interface WebPlayerEngineHandle extends AudioPlayer {
@@ -190,6 +189,21 @@ export const WebPlayerEngine = (props: WebPlayerEngineProps) => {
         player2Ref.current?.getInternalPlayer()?.pause();
     }, []);
 
+    const mediaErrorLabel = (code: number | undefined) => {
+        switch (code) {
+            case MediaError.MEDIA_ERR_ABORTED:
+                return 'ABORTED';
+            case MediaError.MEDIA_ERR_DECODE:
+                return 'DECODE';
+            case MediaError.MEDIA_ERR_NETWORK:
+                return 'NETWORK';
+            case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED:
+                return 'SRC_NOT_SUPPORTED';
+            default:
+                return 'unknown';
+        }
+    };
+
     const handleOnError = (
         playerRef: React.RefObject<null | ReactPlayer>,
         onEnded: () => void,
@@ -205,28 +219,21 @@ export const WebPlayerEngine = (props: WebPlayerEngineProps) => {
             }
 
             const { error } = target;
-
-            // `MediaError` stringifies to `{}` (code/message are non-enumerable),
-            // so decode it into something the shipped logs can act on: the error
-            // kind, numeric code, message, and the failing host+path (query
-            // dropped so the apiKey never reaches the logs).
-            logFn.error(logMsg[LogCategory.PLAYER].playbackError, {
-                category: LogCategory.PLAYER,
-                meta: {
-                    code: error?.code,
-                    kind: mediaErrorLabel(error?.code),
-                    message: error?.message || undefined,
-                    src: redactMediaSrc(target.currentSrc || target.src),
-                },
-            });
+            const code = error?.code;
+            const label = mediaErrorLabel(code);
 
             const isNetworkError =
-                error?.code === MediaError.MEDIA_ERR_NETWORK ||
-                error?.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED;
+                code === MediaError.MEDIA_ERR_NETWORK ||
+                code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED;
 
             if (isNetworkError) {
                 if (networkRetryCountRef.current < MAX_NETWORK_RETRIES) {
                     networkRetryCountRef.current += 1;
+                    logger.warn('Playback error, retrying', {
+                        code,
+                        label,
+                        retryCount: networkRetryCountRef.current,
+                    });
                     const audio = target;
                     if (networkRetryTimerRef.current) {
                         clearTimeout(networkRetryTimerRef.current);
@@ -236,9 +243,10 @@ export const WebPlayerEngine = (props: WebPlayerEngineProps) => {
                         pauseBothPlayers();
                         audio.load();
                         audio.play().catch(() => {
-                            logFn.error(logMsg[LogCategory.PLAYER].playbackError, {
-                                category: LogCategory.PLAYER,
-                                meta: { error: 'Failed to play audio after network error' },
+                            logger.error('Playback error, retries exhausted', {
+                                code,
+                                label,
+                                retryCount: networkRetryCountRef.current,
                             });
                         });
                     }, NETWORK_RETRY_DELAY_MS);
@@ -246,14 +254,24 @@ export const WebPlayerEngine = (props: WebPlayerEngineProps) => {
                 }
             }
 
-            if (error?.code !== MediaError.MEDIA_ERR_DECODE && !isNetworkError) {
+            if (code !== MediaError.MEDIA_ERR_DECODE && !isNetworkError) {
                 return;
             }
 
             pauseBothPlayers();
-            if (error?.code === MediaError.MEDIA_ERR_DECODE) {
+            if (code === MediaError.MEDIA_ERR_DECODE) {
+                logger.error('Playback decode error, skipping track', {
+                    code,
+                    label,
+                    retryCount: networkRetryCountRef.current,
+                });
                 onEnded();
             } else {
+                logger.error('Playback error, pausing', {
+                    code,
+                    label,
+                    retryCount: networkRetryCountRef.current,
+                });
                 if (onErrorPause) {
                     onErrorPause();
                 }
@@ -295,11 +313,13 @@ export const WebPlayerEngine = (props: WebPlayerEngineProps) => {
         };
     }, []);
 
-    // When not transitioning, ensure only the active player can play (e.g. after seek/prev during transition)
+    // When not playing, always pause both players — even during a transition
     useEffect(() => {
-        if (isTransitioning) return;
         if (playerStatus !== PlayerStatus.PLAYING) {
             pauseBothPlayers();
+            return;
+        }
+        if (isTransitioning) {
             return;
         }
         if (playerNum === 1) {

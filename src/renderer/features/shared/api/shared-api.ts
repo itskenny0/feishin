@@ -58,6 +58,17 @@ export const sharedQueries = {
             ...args.options,
         });
     },
+    scanStatus: (args: QueryHookArgs<null>) => {
+        return queryOptions({
+            queryFn: ({ signal }) => {
+                return api.controller.getScanStatus({
+                    apiClientProps: { serverId: args.serverId, signal },
+                });
+            },
+            queryKey: queryKeys.server.scanStatus(args.serverId),
+            ...args.options,
+        });
+    },
     tagList: (args: QueryHookArgs<TagListQuery>) => {
         const key = queryKeys.tags.list(args.serverId || '', args.query.type);
         return queryOptions({

@@ -20,8 +20,14 @@ import {
     Tray,
 } from 'electron';
 import electronLocalShortcut from 'electron-localshortcut';
-import log from 'electron-log/main';
-import { autoUpdater } from 'electron-updater';
+import {
+    AppImageUpdater,
+    autoUpdater,
+    MacUpdater,
+    NsisUpdater,
+    UpdateCheckResult,
+} from 'electron-updater';
+import semver from 'semver';
 import { access, constants } from 'fs';
 import path, { join } from 'path';
 
@@ -30,11 +36,15 @@ import { disableMediaKeys, enableMediaKeys } from './features/core/player/media-
 import { shutdownServer } from './features/core/remote';
 import { store } from './features/core/settings';
 import { canHandleVisualizerDisplayMedia } from './features/core/visualizer';
+import log, { autoUpdaterLogInterface } from './logger';
 import MenuBuilder, { MenuPlaybackState } from './menu';
-import { autoUpdaterLogInterface, createLog, hotkeyToElectronAccelerator } from './utils';
+import './features';
+import { hotkeyToElectronAccelerator } from './utils';
 
 import { disableAutoUpdates, isLinux, isMacOS, isWindows } from '/@/main/env';
 import { PlayerRepeat, PlayerStatus, PlayerType, TitleTheme } from '/@/shared/types/types';
+
+import packageJson from '../../package.json';
 
 // Point the desktop autoUpdater at the fork's releases rather than upstream
 // jeffvli/feishin so users on this build actually receive the fork's updates.
@@ -46,56 +56,292 @@ const GITHUB_UPDATER_CONFIG = {
     repo: 'feishin',
 };
 
+const ALPHA_UPDATER_CONFIG = {
+    ...GITHUB_UPDATER_CONFIG,
+    channel: 'alpha',
+};
+
 type UpdaterInstance = typeof autoUpdater;
 
 class AppUpdater {
     constructor() {
-        configureAndGetUpdater();
+        const effectiveChannel = store.get('release_channel') as string;
+        log.info('Effective update channel:', effectiveChannel);
+        if (effectiveChannel === 'alpha') {
+            checkAllChannelsAndGetBest().then(({ result, updater: updaterInstance }) => {
+                attachUpdaterMilestoneLogs(updaterInstance);
+
+                if (!result?.isUpdateAvailable) {
+                    log.info('Updater check complete', { available: false });
+                    return;
+                }
+
+                log.info('Updater check complete', {
+                    available: true,
+                    version: result.updateInfo.version,
+                });
+
+                updaterInstance.autoInstallOnAppQuit = true;
+                updaterInstance.autoRunAppAfterInstall = true;
+                if (isMacOS()) {
+                    getMainWindow()?.webContents.send(
+                        'update-available',
+                        result.updateInfo.version,
+                    );
+                } else {
+                    log.info('Updater download starting', { version: result.updateInfo.version });
+                    updaterInstance.autoDownload = true;
+                    updaterInstance.checkForUpdatesAndNotify();
+                }
+            });
+            return;
+        }
+
+        const updater = configureAndGetUpdater();
+        attachUpdaterMilestoneLogs(updater);
+
         if (isMacOS()) {
             autoUpdater.autoDownload = false;
             autoUpdater
                 .checkForUpdates()
                 .then((result) => {
                     if (result?.isUpdateAvailable) {
+                        log.info('Updater check complete', {
+                            available: true,
+                            version: result.updateInfo.version,
+                        });
                         getMainWindow()?.webContents.send(
                             'update-available',
                             result.updateInfo.version,
                         );
+                    } else {
+                        log.info('Updater check complete', { available: false });
                     }
                 })
-                .catch((err) => console.error('Check for updates failed', err));
+                .catch((err) => log.error('Check for updates failed', err));
         } else {
             autoUpdater.checkForUpdatesAndNotify();
         }
     }
 }
 
+function attachUpdaterMilestoneLogs(updater: UpdaterInstance): void {
+    let downloadStarted = false;
+
+    updater.on('checking-for-update', () => {
+        log.info('Updater checking for update');
+    });
+
+    updater.on('update-available', (info) => {
+        log.info('Updater update available', { version: info.version });
+    });
+
+    updater.on('update-not-available', (info) => {
+        log.info('Updater update not available', { version: info.version });
+    });
+
+    updater.on('download-progress', () => {
+        if (!downloadStarted) {
+            downloadStarted = true;
+            log.info('Updater download starting');
+        }
+    });
+
+    updater.on('update-downloaded', (info) => {
+        log.info('Updater download complete', { version: info.version });
+    });
+
+    updater.on('error', (error) => {
+        log.error('Updater error', error);
+    });
+}
+
+async function checkAllChannelsAndGetBest(): Promise<{
+    result: null | UpdateCheckResult;
+    updater: UpdaterInstance;
+}> {
+    const currentVersion = packageJson.version;
+    const candidates: Array<{
+        channel: 'alpha' | 'beta' | 'latest';
+        result: UpdateCheckResult;
+        updater: UpdaterInstance;
+    }> = [];
+
+    const alphaUpdater = createAlphaUpdaterInstance({ probeOnly: true });
+
+    try {
+        log.info('Checking for updates on alpha channel');
+        const alphaResult = await alphaUpdater.checkForUpdates();
+        if (
+            alphaResult?.updateInfo?.version &&
+            alphaResult.isUpdateAvailable &&
+            semver.valid(alphaResult.updateInfo.version) &&
+            semver.gt(alphaResult.updateInfo.version, currentVersion)
+        ) {
+            candidates.push({ channel: 'alpha', result: alphaResult, updater: alphaUpdater });
+        }
+    } catch (e) {
+        log.warn('Alpha channel check failed', e);
+    }
+
+    try {
+        const latestUpdater = createGithubUpdaterInstance('latest', { probeOnly: true });
+        log.info('Checking for updates on latest channel (GitHub)');
+        const latestResult = await latestUpdater.checkForUpdates();
+        if (
+            latestResult?.updateInfo?.version &&
+            latestResult.isUpdateAvailable &&
+            semver.valid(latestResult.updateInfo.version) &&
+            semver.gt(latestResult.updateInfo.version, currentVersion)
+        ) {
+            candidates.push({ channel: 'latest', result: latestResult, updater: latestUpdater });
+        }
+    } catch (e) {
+        log.warn('Latest channel check failed', e);
+    }
+
+    if (candidates.length === 0) {
+        return { result: null, updater: alphaUpdater };
+    }
+
+    const best = candidates.reduce((a, b) =>
+        semver.gt(a.result.updateInfo.version, b.result.updateInfo.version) ? a : b,
+    );
+
+    if (best.channel === 'latest') {
+        configureAutoUpdaterForChannel('latest');
+        return { result: best.result, updater: autoUpdater };
+    }
+
+    return { result: best.result, updater: best.updater };
+}
+
 function configureAndGetUpdater(): UpdaterInstance {
-    log.transports.file.level = 'info';
+    const isBetaVersion = packageJson.version.includes('-beta');
+    const isAlphaVersion = packageJson.version.includes('-alpha');
+    let releaseChannel = store.get('release_channel');
+    const isNotConfigured = !releaseChannel;
+
+    log.info('Release channel:', releaseChannel);
+    log.info('Is beta version:', isBetaVersion);
+    log.info('Is alpha version:', isAlphaVersion);
+    log.info('Is not configured:', isNotConfigured);
+
+    if (isNotConfigured) {
+        log.info('Release channel not configured, setting default channel');
+        const defaultChannel = isAlphaVersion ? 'alpha' : isBetaVersion ? 'beta' : 'latest';
+        store.set('release_channel', defaultChannel);
+        releaseChannel = defaultChannel;
+    }
+
+    const effectiveChannel = store.get('release_channel') as string;
+
+    if (effectiveChannel === 'alpha') {
+        return createAlphaUpdaterInstance();
+    }
+
     autoUpdater.logger = autoUpdaterLogInterface;
     autoUpdater.autoInstallOnAppQuit = true;
     autoUpdater.autoRunAppAfterInstall = true;
-    // The fork is a single rolling release: always pull the newest GitHub
-    // release from itskenny0/feishin. Pinning the feed at runtime keeps updates
-    // on the fork regardless of the bundled app-update.yml, so the fork never
-    // tries to update itself to an upstream jeffvli release.
+    // Pin the feed at runtime so the fork always pulls releases from
+    // itskenny0/feishin regardless of the bundled app-update.yml.
     autoUpdater.setFeedURL(GITHUB_UPDATER_CONFIG);
-    autoUpdater.channel = 'latest';
-    autoUpdater.allowPrerelease = false;
+
+    if (effectiveChannel === 'beta') {
+        autoUpdater.channel = 'beta';
+        autoUpdater.allowDowngrade = true;
+        autoUpdater.allowPrerelease = true;
+        autoUpdater.disableDifferentialDownload = true;
+    } else {
+        autoUpdater.channel = 'latest';
+        autoUpdater.allowDowngrade = false;
+        autoUpdater.allowPrerelease = false;
+    }
 
     return autoUpdater;
 }
 
-// Fork keeps a single rolling update channel (itskenny0 GITHUB_UPDATER_CONFIG
-// above); upstream's beta/latest/alpha channel helpers are intentionally
-// dropped. Adopt upstream's corsEnabled privilege so the custom `feishin://`
-// protocol can serve cross-origin requests (e.g. image upload).
+function configureAutoUpdaterForChannel(channel: 'beta' | 'latest'): void {
+    autoUpdater.logger = autoUpdaterLogInterface;
+    autoUpdater.autoInstallOnAppQuit = true;
+    autoUpdater.autoRunAppAfterInstall = true;
+    if (channel === 'beta') {
+        autoUpdater.channel = 'beta';
+        autoUpdater.allowDowngrade = true;
+        autoUpdater.allowPrerelease = true;
+        autoUpdater.disableDifferentialDownload = true;
+    } else {
+        autoUpdater.channel = 'latest';
+        autoUpdater.allowDowngrade = false;
+        autoUpdater.allowPrerelease = false;
+    }
+}
+
+function createAlphaUpdaterInstance(
+    options: { probeOnly?: boolean } = {},
+): AppImageUpdater | MacUpdater | NsisUpdater {
+    const probeOnly = options.probeOnly ?? false;
+    let updater: AppImageUpdater | MacUpdater | NsisUpdater;
+
+    if (isMacOS()) {
+        updater = new MacUpdater(ALPHA_UPDATER_CONFIG);
+    } else if (isLinux()) {
+        updater = new AppImageUpdater(ALPHA_UPDATER_CONFIG);
+    } else {
+        updater = new NsisUpdater(ALPHA_UPDATER_CONFIG);
+    }
+
+    updater.logger = autoUpdaterLogInterface;
+    updater.channel = ALPHA_UPDATER_CONFIG.channel;
+    updater.allowPrerelease = true;
+    updater.disableDifferentialDownload = true;
+    updater.allowDowngrade = true;
+    updater.autoDownload = !probeOnly;
+    updater.autoInstallOnAppQuit = true;
+    updater.autoRunAppAfterInstall = true;
+
+    return updater;
+}
+
+function createGithubUpdaterInstance(
+    channel: 'beta' | 'latest',
+    options: { probeOnly?: boolean } = {},
+): AppImageUpdater | MacUpdater | NsisUpdater {
+    const probeOnly = options.probeOnly ?? false;
+    let updater: AppImageUpdater | MacUpdater | NsisUpdater;
+
+    if (isMacOS()) {
+        updater = new MacUpdater(GITHUB_UPDATER_CONFIG);
+    } else if (isLinux()) {
+        updater = new AppImageUpdater(GITHUB_UPDATER_CONFIG);
+    } else {
+        updater = new NsisUpdater(GITHUB_UPDATER_CONFIG);
+    }
+
+    updater.logger = autoUpdaterLogInterface;
+    updater.autoDownload = !probeOnly;
+    updater.autoInstallOnAppQuit = true;
+    updater.autoRunAppAfterInstall = true;
+    updater.channel = channel;
+
+    if (channel === 'beta') {
+        updater.allowDowngrade = true;
+        updater.allowPrerelease = true;
+        updater.disableDifferentialDownload = true;
+    } else {
+        updater.allowDowngrade = false;
+        updater.allowPrerelease = false;
+    }
+
+    return updater;
+}
+
 protocol.registerSchemesAsPrivileged([
     { privileges: { bypassCSP: true, corsEnabled: true }, scheme: 'feishin' },
 ]);
 
-process.on('uncaughtException', (error: Error) => {
-    console.error('Error in main process', error);
+process.on('uncaughtException', (error: any) => {
+    log.error('Error in main process', error);
 });
 
 if (store.get('ignore_ssl')) {
@@ -123,6 +369,13 @@ let currentPrivateMode = false;
 let currentRepeatMode: PlayerRepeat = PlayerRepeat.NONE;
 let currentSidebarCollapsed = false;
 let currentShuffleEnabled = false;
+
+app.on('before-quit', () => {
+    if (isMacOS()) {
+        forceQuit = true;
+    }
+    log.info('App quitting', { reason: exitFromTray ? 'tray' : 'before-quit' });
+});
 let playbackMenuAccelerators: MenuPlaybackState['accelerators'] = {};
 let inputFocused = false;
 // The auto-update network check is deferred to `ready-to-show` (off the
@@ -135,7 +388,7 @@ ipcMain.on('input-focus-state', (_event, focused: boolean) => {
     if (inputFocused === next) return;
     inputFocused = next;
     if (isMacOS()) {
-        rebuildMainMenu();
+        updateMainMenu();
     }
 });
 
@@ -164,10 +417,7 @@ const installExtensions = async () => {
                 { forceDownload },
             )
             .then((installedExtensions) => {
-                createLog({
-                    message: `Installed extension: ${installedExtensions}`,
-                    type: 'info',
-                });
+                log.info(`Installed extension: ${installedExtensions}`);
             })
             .catch(() => {
                 // Ignore
@@ -194,21 +444,30 @@ export const getMainWindow = () => {
     return mainWindow;
 };
 
+const getMainMenuState = (): MenuPlaybackState => ({
+    accelerators: playbackMenuAccelerators,
+    inputFocused,
+    playbackStatus: currentPlaybackStatus,
+    privateMode: currentPrivateMode,
+    repeatMode: currentRepeatMode,
+    shuffleEnabled: currentShuffleEnabled,
+    sidebarCollapsed: currentSidebarCollapsed,
+});
+
 const rebuildMainMenu = () => {
     if (!menuBuilder || !mainWindow) return;
 
-    menuBuilder.buildMenu({
-        accelerators: inputFocused ? {} : playbackMenuAccelerators,
-        playbackStatus: currentPlaybackStatus,
-        privateMode: currentPrivateMode,
-        repeatMode: currentRepeatMode,
-        shuffleEnabled: currentShuffleEnabled,
-        sidebarCollapsed: currentSidebarCollapsed,
-    });
+    menuBuilder.buildMenu(getMainMenuState());
 
     if (process.platform !== 'darwin') {
         Menu.setApplicationMenu(null);
     }
+};
+
+const updateMainMenu = () => {
+    if (!menuBuilder || !mainWindow) return;
+
+    menuBuilder.updateMenu(getMainMenuState());
 };
 
 export const sendToastToRenderer = ({
@@ -340,7 +599,7 @@ const validateUrl = (url: string): boolean => {
 
 async function createWindow(first = true): Promise<void> {
     if (isDevelopment) {
-        await installExtensions().catch(console.log);
+        await installExtensions().catch((error) => log.error(error));
     }
 
     const nativeFrame = store.get('window_window_bar_style', 'linux') === 'linux';
@@ -440,6 +699,7 @@ async function createWindow(first = true): Promise<void> {
     });
 
     ipcMain.on('window-quit', () => {
+        log.info('App quitting', { reason: 'window-quit' });
         shutdownServer();
         mainWindow?.close();
         app.exit();
@@ -617,9 +877,23 @@ async function createWindow(first = true): Promise<void> {
             console.info('[startup] ready-to-show: starting AppUpdater check');
             new AppUpdater();
         }
+
+        log.info('Main window created', { startMinimized: startWindowMinimized && first });
+    });
+
+    mainWindow.webContents.on('render-process-gone', (_event, details) => {
+        log.error('Renderer process gone', {
+            exitCode: details.exitCode,
+            reason: details.reason,
+        });
+    });
+
+    mainWindow.webContents.on('unresponsive', () => {
+        log.error('Renderer process unresponsive');
     });
 
     mainWindow.on('closed', () => {
+        log.info('Main window closed');
         ipcMain.removeHandler('window-clear-cache');
         ipcMain.removeHandler('app-check-for-updates');
         // createWindow() registers these ipcMain.on listeners and the local
@@ -655,10 +929,12 @@ async function createWindow(first = true): Promise<void> {
 
         if (!exitFromTray && store.get('window_exit_to_tray')) {
             event.preventDefault();
+            log.info('Main window hidden to tray');
             mainWindow?.hide();
         }
 
         if (forceQuit) {
+            log.info('App quitting', { reason: 'forceQuit' });
             app.exit();
         }
     });
@@ -671,18 +947,13 @@ async function createWindow(first = true): Promise<void> {
     (mainWindow as unknown as MinimizeListenable).on('minimize', (event) => {
         if (store.get('window_minimize_to_tray') === true) {
             event.preventDefault();
+            log.info('Main window minimized to tray');
             mainWindow?.hide();
         }
     });
 
     if (isWindows()) {
         app.setAppUserModelId('org.jeffvli.feishin');
-    }
-
-    if (isMacOS()) {
-        app.on('before-quit', () => {
-            forceQuit = true;
-        });
     }
 
     menuBuilder = new MenuBuilder(mainWindow);
@@ -773,10 +1044,12 @@ enum BindingActions {
     LOCAL_SEARCH = 'localSearch',
     MUTE = 'volumeMute',
     NEXT = 'next',
+    NEXT_ALBUM = 'nextAlbum',
     PAUSE = 'pause',
     PLAY = 'play',
     PLAY_PAUSE = 'playPause',
     PREVIOUS = 'previous',
+    PREVIOUS_ALBUM = 'previousAlbum',
     SHUFFLE = 'toggleShuffle',
     SKIP_BACKWARD = 'skipBackward',
     SKIP_FORWARD = 'skipForward',
@@ -804,11 +1077,15 @@ const HOTKEY_ACTIONS: Record<BindingActions, () => void> = {
     [BindingActions.LOCAL_SEARCH]: () => {},
     [BindingActions.MUTE]: () => getMainWindow()?.webContents.send('renderer-player-volume-mute'),
     [BindingActions.NEXT]: () => getMainWindow()?.webContents.send('renderer-player-next'),
+    [BindingActions.NEXT_ALBUM]: () =>
+        getMainWindow()?.webContents.send('renderer-player-next-album'),
     [BindingActions.PAUSE]: () => getMainWindow()?.webContents.send('renderer-player-pause'),
     [BindingActions.PLAY]: () => getMainWindow()?.webContents.send('renderer-player-play'),
     [BindingActions.PLAY_PAUSE]: () =>
         getMainWindow()?.webContents.send('renderer-player-play-pause'),
     [BindingActions.PREVIOUS]: () => getMainWindow()?.webContents.send('renderer-player-previous'),
+    [BindingActions.PREVIOUS_ALBUM]: () =>
+        getMainWindow()?.webContents.send('renderer-player-previous-album'),
     [BindingActions.SHUFFLE]: () =>
         getMainWindow()?.webContents.send('renderer-player-toggle-shuffle'),
     [BindingActions.SKIP_BACKWARD]: () =>
@@ -853,11 +1130,11 @@ ipcMain.on(
         }
 
         playbackMenuAccelerators = {
+            globalSearch: getMenuAccelerator(data, BindingActions.GLOBAL_SEARCH),
             next: getMenuAccelerator(data, BindingActions.NEXT),
-            playPause:
-                getMenuAccelerator(data, BindingActions.PLAY_PAUSE) ||
-                getMenuAccelerator(data, BindingActions.PLAY) ||
-                getMenuAccelerator(data, BindingActions.PAUSE),
+            pause: getMenuAccelerator(data, BindingActions.PAUSE),
+            play: getMenuAccelerator(data, BindingActions.PLAY),
+            playPause: getMenuAccelerator(data, BindingActions.PLAY_PAUSE),
             previous: getMenuAccelerator(data, BindingActions.PREVIOUS),
             repeat: getMenuAccelerator(data, BindingActions.TOGGLE_REPEAT),
             seekBackward: getMenuAccelerator(data, BindingActions.SKIP_BACKWARD),
@@ -877,19 +1154,6 @@ ipcMain.on(
         if (globalMediaKeysEnabled) {
             enableMediaKeys(mainWindow);
         }
-    },
-);
-
-ipcMain.on(
-    'logger',
-    (
-        _event,
-        data: {
-            message: string;
-            type: 'debug' | 'error' | 'info' | 'success' | 'verbose' | 'warning';
-        },
-    ) => {
-        createLog(data);
     },
 );
 
@@ -975,6 +1239,15 @@ if (!singleInstance) {
 
     app.whenReady()
         .then(() => {
+            log.info('App ready', {
+                arch: process.arch,
+                electron: process.versions.electron,
+                ignoreCors: !!store.get('ignore_cors'),
+                ignoreSsl: !!store.get('ignore_ssl'),
+                platform: process.platform,
+                version: packageJson.version,
+            });
+
             protocol.handle('feishin', async () => {
                 const filePath = store.get('local_font_path');
                 if (typeof filePath !== 'string') {
@@ -1052,7 +1325,7 @@ if (!singleInstance) {
                 }
             });
         })
-        .catch(console.log);
+        .catch((error) => log.error(error));
 }
 
 // Register 'open-item' handler globally, ensuring it is only registered once
@@ -1085,7 +1358,7 @@ ipcMain.on('update-playback', (_event, status: PlayerStatus) => {
 
     if (!isMacOS()) return;
 
-    rebuildMainMenu();
+    updateMainMenu();
 });
 
 ipcMain.on('update-repeat', (_event, repeat: PlayerRepeat) => {
@@ -1093,7 +1366,7 @@ ipcMain.on('update-repeat', (_event, repeat: PlayerRepeat) => {
 
     if (!isMacOS()) return;
 
-    rebuildMainMenu();
+    updateMainMenu();
 });
 
 ipcMain.on('update-shuffle', (_event, shuffle: boolean) => {
@@ -1101,7 +1374,7 @@ ipcMain.on('update-shuffle', (_event, shuffle: boolean) => {
 
     if (!isMacOS()) return;
 
-    rebuildMainMenu();
+    updateMainMenu();
 });
 
 ipcMain.on('update-private-mode', (_event, privateMode: boolean) => {
@@ -1109,7 +1382,7 @@ ipcMain.on('update-private-mode', (_event, privateMode: boolean) => {
 
     if (!isMacOS()) return;
 
-    rebuildMainMenu();
+    updateMainMenu();
 });
 
 ipcMain.on('update-sidebar-collapsed', (_event, collapsedSidebar: boolean) => {
@@ -1117,5 +1390,5 @@ ipcMain.on('update-sidebar-collapsed', (_event, collapsedSidebar: boolean) => {
 
     if (!isMacOS()) return;
 
-    rebuildMainMenu();
+    updateMainMenu();
 });

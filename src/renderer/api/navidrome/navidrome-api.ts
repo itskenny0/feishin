@@ -9,6 +9,7 @@ import i18n from '/@/i18n/i18n';
 import { authenticationFailure } from '/@/renderer/api/utils';
 import { markServerReachable, markServerUnreachable } from '/@/renderer/lib/network-status';
 import { useAuthStore } from '/@/renderer/store';
+import { logger } from '/@/renderer/utils/logger';
 import { getServerUrl } from '/@/renderer/utils/normalize-server-url';
 import { ndType } from '/@/shared/api/navidrome/navidrome-types';
 import { resultWithHeaders } from '/@/shared/api/utils';
@@ -456,7 +457,7 @@ axiosClient.interceptors.response.use(
                             console.error('Error when trying to reauthenticate: ', newError);
 
                             if (isAxiosError(newError) && newError.code === 'ERR_NETWORK') {
-                                console.log(
+                                logger.warn(
                                     'Network error during reauthentication - preserving credentials',
                                 );
                             } else {
@@ -473,7 +474,7 @@ axiosClient.interceptors.response.use(
             }
 
             if (isAxiosError(error) && error.code === 'ERR_NETWORK') {
-                console.log('Network error during authentication - preserving credentials');
+                logger.warn('Network error during authentication - preserving credentials');
             } else {
                 limitedFail(currentServer);
             }

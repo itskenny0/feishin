@@ -39,8 +39,7 @@ import { getNavigatorOnline } from '/@/renderer/lib/network-status';
 import { AddToQueueType, usePlayerActions, useSettingsStore } from '/@/renderer/store';
 import { useAuthStore } from '/@/renderer/store/auth.store';
 import { usePlayerStoreBase } from '/@/renderer/store/player.store';
-import { LogCategory, logFn } from '/@/renderer/utils/logger';
-import { logMsg } from '/@/renderer/utils/logger-message';
+import { logger } from '/@/renderer/utils/logger';
 import { shuffle as shuffleArray } from '/@/renderer/utils/shuffle';
 import { sortSongsByFetchedOrder } from '/@/shared/api/utils';
 import { Checkbox } from '/@/shared/components/checkbox/checkbox';
@@ -81,12 +80,13 @@ export interface PlayerContext {
     clearQueue: () => void;
     clearSelected: (items: QueueSong[]) => void;
     decreaseVolume: (amount: number) => void;
+    getQueue: () => QueueSong[];
     increaseVolume: (amount: number) => void;
-    mediaNext: () => void;
+    mediaNext: (toNextAlbum: boolean) => void;
     mediaPause: () => void;
     mediaPlay: (id?: string) => void;
     mediaPlayByIndex: (index: number) => void;
-    mediaPrevious: () => void;
+    mediaPrevious: (toPreviousAlbum: boolean) => void;
     mediaSeekToTimestamp: (timestamp: number) => void;
     mediaSkipBackward: () => void;
     mediaSkipForward: () => void;
@@ -116,6 +116,7 @@ export const PlayerContext = createContext<PlayerContext>({
     clearQueue: () => {},
     clearSelected: () => {},
     decreaseVolume: () => {},
+    getQueue: () => [],
     increaseVolume: () => {},
     mediaNext: () => {},
     mediaPause: () => {},
@@ -362,22 +363,20 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
             if (typeof type === 'object' && 'edge' in type && type.edge !== null) {
                 const edge = type.edge === 'top' ? 'top' : 'bottom';
 
-                logFn.debug(logMsg[LogCategory.PLAYER].addToQueueByData, {
-                    category: LogCategory.PLAYER,
-                    meta: {
-                        data: playableData.length,
-                        edge,
-                        filtered: filteredData.length,
-                        type,
-                        uniqueId: type.uniqueId,
-                    },
+                logger.debug('Added to queue by data', {
+                    data: playableData.length,
+                    edge,
+                    filtered: filteredData.length,
+                    type,
+                    uniqueId: type.uniqueId,
                 });
 
                 storeActions.addToQueueByUniqueId(filteredData, type.uniqueId, edge, playSongId);
             } else {
-                logFn.debug(logMsg[LogCategory.PLAYER].addToQueueByType, {
-                    category: LogCategory.PLAYER,
-                    meta: { data: playableData.length, filtered: filteredData.length, type },
+                logger.debug('Added to queue by type', {
+                    data: playableData.length,
+                    filtered: filteredData.length,
+                    type,
                 });
 
                 storeActions.addToQueueByType(filteredData, type as Play, playSongId);
@@ -420,10 +419,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
             };
 
             try {
-                logFn.debug(logMsg[LogCategory.PLAYER].addToQueueByFetch, {
-                    category: LogCategory.PLAYER,
-                    meta: { ids: id, itemType, serverId, type },
-                });
+                logger.debug('Added to queue by fetch', { ids: id, itemType, serverId, type });
 
                 // Streaming start for a single playlist with Play.NOW: fetch
                 // a small first batch so playback can begin immediately, then
@@ -589,10 +585,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
             let toastId: null | string = null;
             let fetchId: null | string = null;
 
-            logFn.debug(logMsg[LogCategory.PLAYER].addToQueueByListQuery, {
-                category: LogCategory.PLAYER,
-                meta: { itemType, query, serverId, type },
-            });
+            logger.debug('Added to queue by list query', { itemType, query, serverId, type });
 
             try {
                 let totalCount = 0;
@@ -664,15 +657,11 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
                 timeoutIds.current = {
                     ...timeoutIds.current,
                     [fetchId]: setTimeout(() => {
-                        toastId =
-                            toast.info({
-                                autoClose: false,
-                                message: t('player.playbackFetchCancel'),
-                                onClose: () => {
-                                    logFn.debug(logMsg[LogCategory.PLAYER].cancelledFetch, {
-                                        category: LogCategory.PLAYER,
-                                        meta: { itemType, serverId },
-                                    });
+                        toastId = toast.info({
+                            autoClose: false,
+                            message: t('player.playbackFetchCancel'),
+                            onClose: () => {
+                                logger.debug('Cancelled fetch', { itemType, serverId });
 
                                     queryClient.cancelQueries({
                                         exact: false,
@@ -767,19 +756,14 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
     );
 
     const clearQueue = useCallback(() => {
-        logFn.debug(logMsg[LogCategory.PLAYER].clearQueue, {
-            category: LogCategory.PLAYER,
-        });
+        logger.debug('Cleared queue');
 
         storeActions.clearQueue();
     }, [storeActions]);
 
     const clearSelected = useCallback(
         (items: QueueSong[]) => {
-            logFn.debug(logMsg[LogCategory.PLAYER].clearSelected, {
-                category: LogCategory.PLAYER,
-                meta: { items: items.length },
-            });
+            logger.debug('Cleared selected', { items: items.length });
 
             storeActions.clearSelected(items);
         },
@@ -788,47 +772,45 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
 
     const decreaseVolume = useCallback(
         (amount: number) => {
-            logFn.debug(logMsg[LogCategory.PLAYER].decreaseVolume, {
-                category: LogCategory.PLAYER,
-                meta: { amount },
-            });
+            logger.debug('Decreased volume', { amount });
 
             storeActions.decreaseVolume(amount);
         },
         [storeActions],
     );
 
+    const getQueue = useCallback(() => {
+        logger.debug('Cleared queue');
+
+        const queue = storeActions.getQueue();
+        return queue.items;
+    }, [storeActions]);
+
     const increaseVolume = useCallback(
         (amount: number) => {
-            logFn.debug(logMsg[LogCategory.PLAYER].increaseVolume, {
-                category: LogCategory.PLAYER,
-                meta: { amount },
-            });
+            logger.debug('Increased volume', { amount });
 
             storeActions.increaseVolume(amount);
         },
         [storeActions],
     );
 
-    const mediaNext = useCallback(() => {
-        logFn.debug(logMsg[LogCategory.PLAYER].mediaNext, {
-            category: LogCategory.PLAYER,
-        });
-        const remote = getRemoteCtx();
-        if (remote) {
-            peerDispatcher.next(remote);
-            // Optimistic local mirror flip + hold so a stale poll can't snap
-            // us back to the just-finished song.
-            useRemoteTargetStore.getState().actions.optimisticNext();
-            return;
-        }
-        storeActions.mediaNext();
-    }, [getRemoteCtx, storeActions]);
+    const mediaNext = useCallback(
+        (toNextAlbum: boolean) => {
+            logger.debug('Media next');
+            const remote = getRemoteCtx();
+            if (remote) {
+                peerDispatcher.next(remote);
+                useRemoteTargetStore.getState().actions.optimisticNext();
+                return;
+            }
+            storeActions.mediaNext(toNextAlbum);
+        },
+        [getRemoteCtx, storeActions],
+    );
 
     const mediaPause = useCallback(() => {
-        logFn.debug(logMsg[LogCategory.PLAYER].mediaPause, {
-            category: LogCategory.PLAYER,
-        });
+        logger.debug('Media pause');
 
         const remote = getRemoteCtx();
         if (remote) {
@@ -858,10 +840,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
 
     const mediaPlayByIndex = useCallback(
         (index: number) => {
-            logFn.debug(logMsg[LogCategory.PLAYER].mediaPlayByIndex, {
-                category: LogCategory.PLAYER,
-                meta: { index },
-            });
+            logger.debug('Media play by index', { index });
 
             const remote = getRemoteCtx();
             if (remote) {
@@ -899,6 +878,49 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
             storeActions.mediaPlayByIndex(index);
         },
         [blockOfflineJump, getRemoteCtx, storeActions],
+    );
+
+    const mediaPlay = useCallback(
+        (id?: string) => {
+            logger.debug('Media play', { id });
+
+            const remote = getRemoteCtx();
+            if (remote) {
+                // H2: locally `mediaPlay(uniqueId)` JUMPS to that queue item (a
+                // double-click on a queue row, item-list-controls passes
+                // queueSong._uniqueId). The remote branch used to discard `id`
+                // and merely resume the current track — wrong song. Resolve the
+                // id against the mirrored queue (match by _uniqueId OR id, since
+                // MQTT-lane stubs only carry id) and route through the corrected
+                // skip-to-index path. Only fall back to resume when no id was
+                // supplied.
+                if (id) {
+                    const queue = useRemoteTargetStore.getState().mirrored.queue;
+                    const idx = queue.findIndex(
+                        (s) => (s as { _uniqueId?: string })._uniqueId === id || s.id === id,
+                    );
+                    if (idx >= 0) {
+                        mediaPlayByIndex(idx);
+                        return;
+                    }
+                    // Unknown id (un-hydrated mirror) — best effort: resume.
+                }
+                peerDispatcher.unpause(remote);
+                useRemoteTargetStore.getState().actions.setPaused(false);
+                return;
+            }
+            // A bare `mediaPlay()` (resume current) is never blocked; only an
+            // explicit jump to a specific queued song is guarded offline.
+            if (id) {
+                const items = usePlayerStoreBase.getState().getQueueOrder().items;
+                const target = items.find(
+                    (s) => (s as { _uniqueId?: string })._uniqueId === id || s.id === id,
+                );
+                if (blockOfflineJump(target)) return;
+            }
+            storeActions.mediaPlay(id);
+        },
+        [blockOfflineJump, getRemoteCtx, mediaPlayByIndex, storeActions],
     );
 
     const mediaPlay = useCallback(
@@ -947,30 +969,19 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
         [blockOfflineJump, getRemoteCtx, mediaPlayByIndex, storeActions],
     );
 
-    const mediaPrevious = useCallback(() => {
-        logFn.debug(logMsg[LogCategory.PLAYER].mediaPrevious, {
-            category: LogCategory.PLAYER,
-        });
-        const remote = getRemoteCtx();
-        if (remote) {
-            peerDispatcher.previous(remote);
-            useRemoteTargetStore.getState().actions.optimisticPrevious();
-            return;
-        }
-        storeActions.mediaPrevious();
-    }, [getRemoteCtx, storeActions]);
-
-    const mediaStop = useCallback(
-        (options?: { reset?: boolean }) => {
-            logFn.debug(logMsg[LogCategory.PLAYER].mediaStop, {
-                category: LogCategory.PLAYER,
-                meta: { reset: options?.reset },
-            });
+    const mediaPrevious = useCallback(
+        (toPreviousAlbum: boolean) => {
+            logger.debug('Media previous');
             const remote = getRemoteCtx();
             if (remote) {
-                peerDispatcher.stop(remote);
+                peerDispatcher.previous(remote);
+                useRemoteTargetStore.getState().actions.optimisticPrevious();
                 return;
             }
+            storeActions.mediaPrevious(toPreviousAlbum);
+        },
+        [getRemoteCtx, storeActions],
+    );
             storeActions.mediaStop(options);
         },
         [getRemoteCtx, storeActions],
@@ -978,10 +989,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
 
     const mediaSeekToTimestamp = useCallback(
         (timestamp: number) => {
-            logFn.debug(logMsg[LogCategory.PLAYER].mediaSeekToTimestamp, {
-                category: LogCategory.PLAYER,
-                meta: { timestamp },
-            });
+            logger.debug('Media seek to timestamp', { timestamp });
             const remote = getRemoteCtx();
             if (remote) {
                 const positionMs = Math.max(0, Math.round(timestamp * 1000));
@@ -995,30 +1003,23 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
     );
 
     const mediaSkipBackward = useCallback(() => {
-        logFn.debug(logMsg[LogCategory.PLAYER].mediaSkipBackward, {
-            category: LogCategory.PLAYER,
-        });
+        logger.debug('Media skip backward');
 
         storeActions.mediaSkipBackward();
     }, [storeActions]);
 
     const mediaSkipForward = useCallback(() => {
-        logFn.debug(logMsg[LogCategory.PLAYER].mediaSkipForward, {
-            category: LogCategory.PLAYER,
-        });
+        logger.debug('Media skip forward');
 
         storeActions.mediaSkipForward();
     }, [storeActions]);
 
     const setQueue = useCallback(
         (data: Song[], index?: number, position?: number) => {
-            logFn.debug(logMsg[LogCategory.PLAYER].setQueue, {
-                category: LogCategory.PLAYER,
-                meta: {
-                    data: data.length,
-                    index,
-                    position,
-                },
+            logger.debug('Set queue', {
+                data: data.length,
+                index,
+                position,
             });
 
             storeActions.setQueue(data, index, position);
@@ -1028,10 +1029,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
 
     const setSpeed = useCallback(
         (speed: number) => {
-            logFn.debug(logMsg[LogCategory.PLAYER].setSpeed, {
-                category: LogCategory.PLAYER,
-                meta: { speed },
-            });
+            logger.debug('Set speed', { speed });
 
             storeActions.setSpeed(speed);
         },
@@ -1039,9 +1037,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
     );
 
     const mediaToggleMute = useCallback(() => {
-        logFn.debug(logMsg[LogCategory.PLAYER].mediaToggleMute, {
-            category: LogCategory.PLAYER,
-        });
+        logger.debug('Media toggle mute');
         const remote = getRemoteCtx();
         if (remote) {
             // J4: skip when the Jellyfin target can't mute — avoids a 4xx toast
@@ -1060,9 +1056,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
     }, [getRemoteCtx, remoteCmdAllowed, storeActions]);
 
     const mediaTogglePlayPause = useCallback(() => {
-        logFn.debug(logMsg[LogCategory.PLAYER].mediaTogglePlayPause, {
-            category: LogCategory.PLAYER,
-        });
+        logger.debug('Media toggle play pause');
 
         const remote = getRemoteCtx();
         if (remote) {
@@ -1083,10 +1077,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
 
     const moveSelectedTo = useCallback(
         (items: QueueSong[], edge: 'bottom' | 'top', uniqueId: string) => {
-            logFn.debug(logMsg[LogCategory.PLAYER].moveSelectedTo, {
-                category: LogCategory.PLAYER,
-                meta: { edge, items, uniqueId },
-            });
+            logger.debug('Moved selected to', { edge, items, uniqueId });
 
             storeActions.moveSelectedTo(items, uniqueId, edge);
         },
@@ -1095,10 +1086,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
 
     const moveSelectedToBottom = useCallback(
         (items: QueueSong[]) => {
-            logFn.debug(logMsg[LogCategory.PLAYER].moveSelectedToBottom, {
-                category: LogCategory.PLAYER,
-                meta: { items },
-            });
+            logger.debug('Moved selected to bottom', { items });
 
             storeActions.moveSelectedToBottom(items);
         },
@@ -1107,10 +1095,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
 
     const moveSelectedToNext = useCallback(
         (items: QueueSong[]) => {
-            logFn.debug(logMsg[LogCategory.PLAYER].moveSelectedToNext, {
-                category: LogCategory.PLAYER,
-                meta: { items },
-            });
+            logger.debug('Moved selected to next', { items });
 
             storeActions.moveSelectedToNext(items);
         },
@@ -1119,10 +1104,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
 
     const moveSelectedToTop = useCallback(
         (items: QueueSong[]) => {
-            logFn.debug(logMsg[LogCategory.PLAYER].moveSelectedToTop, {
-                category: LogCategory.PLAYER,
-                meta: { items },
-            });
+            logger.debug('Moved selected to top', { items });
 
             storeActions.moveSelectedToTop(items);
         },
@@ -1131,10 +1113,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
 
     const setVolume = useCallback(
         (volume: number) => {
-            logFn.debug(logMsg[LogCategory.PLAYER].setVolume, {
-                category: LogCategory.PLAYER,
-                meta: { volume },
-            });
+            logger.debug('Set volume', { volume });
             const remote = getRemoteCtx();
             if (remote) {
                 // J4: skip when the Jellyfin target doesn't accept SetVolume.
@@ -1152,10 +1131,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
 
     const setRepeat = useCallback(
         (repeat: PlayerRepeat) => {
-            logFn.debug(logMsg[LogCategory.PLAYER].setRepeat, {
-                category: LogCategory.PLAYER,
-                meta: { repeat },
-            });
+            logger.debug('Set repeat', { repeat });
 
             const remote = getRemoteCtx();
             if (remote) {
@@ -1175,10 +1151,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
 
     const setShuffle = useCallback(
         (shuffle: PlayerShuffle) => {
-            logFn.debug(logMsg[LogCategory.PLAYER].setShuffle, {
-                category: LogCategory.PLAYER,
-                meta: { shuffle },
-            });
+            logger.debug('Set shuffle', { shuffle });
 
             const remote = getRemoteCtx();
             if (remote) {
@@ -1195,27 +1168,20 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
     );
 
     const shuffle = useCallback(() => {
-        logFn.debug(logMsg[LogCategory.PLAYER].shuffle, {
-            category: LogCategory.PLAYER,
-        });
+        logger.debug('Shuffle');
 
         storeActions.shuffle();
     }, [storeActions]);
 
     const shuffleAll = useCallback(() => {
-        logFn.debug(logMsg[LogCategory.PLAYER].shuffleAll, {
-            category: LogCategory.PLAYER,
-        });
+        logger.debug('Shuffle all');
 
         storeActions.shuffleAll();
     }, [storeActions]);
 
     const shuffleSelected = useCallback(
         (items: QueueSong[]) => {
-            logFn.debug(logMsg[LogCategory.PLAYER].shuffleSelected, {
-                category: LogCategory.PLAYER,
-                meta: { items },
-            });
+            logger.debug('Shuffle selected', { items });
 
             storeActions.shuffleSelected(items);
         },
@@ -1223,9 +1189,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
     );
 
     const toggleRepeat = useCallback(() => {
-        logFn.debug(logMsg[LogCategory.PLAYER].toggleRepeat, {
-            category: LogCategory.PLAYER,
-        });
+        logger.debug('Toggle repeat');
 
         const remote = getRemoteCtx();
         if (remote) {
@@ -1241,9 +1205,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
     }, [getRemoteCtx, remoteCmdAllowed, storeActions]);
 
     const toggleShuffle = useCallback(() => {
-        logFn.debug(logMsg[LogCategory.PLAYER].toggleShuffle, {
-            category: LogCategory.PLAYER,
-        });
+        logger.debug('Toggle shuffle');
 
         const remote = getRemoteCtx();
         if (remote) {
@@ -1265,6 +1227,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
             clearQueue,
             clearSelected,
             decreaseVolume,
+            getQueue,
             increaseVolume,
             mediaNext,
             mediaPause,
@@ -1299,6 +1262,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
             clearQueue,
             clearSelected,
             decreaseVolume,
+            getQueue,
             increaseVolume,
             mediaNext,
             mediaPause,

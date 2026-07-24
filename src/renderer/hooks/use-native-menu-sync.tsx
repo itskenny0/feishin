@@ -9,6 +9,7 @@ import {
     useActiveRepeat,
     useActiveShuffle,
 } from '/@/renderer/features/jellyfin-remote-target/hooks/use-active-player-source';
+import { openCreatePlaylistModal } from '/@/renderer/features/playlists/components/create-playlist-form';
 import { ServerList } from '/@/renderer/features/servers/components/server-list';
 import { openSettingsModal } from '/@/renderer/features/settings/utils/open-settings-modal';
 import { openReleaseNotesModal } from '/@/renderer/release-notes-modal';
@@ -16,6 +17,7 @@ import {
     useAppStore,
     useAppStoreActions,
     useCommandPalette,
+    useCurrentServer,
     usePlayerHydrated,
     usePlayerStatus,
     useSidebarStore,
@@ -30,6 +32,7 @@ export const useNativeMenuSync = () => {
     const sidebar = useSidebarStore();
     const { setPrivateMode, setSideBar } = useAppStoreActions();
     const { open: openCommandPalette } = useCommandPalette();
+    const server = useCurrentServer();
     const playerHydrated = usePlayerHydrated();
     // Active source: reflects the remote device's repeat/shuffle when a
     // Jellyfin Connect target is selected (no-op for local playback).
@@ -64,6 +67,20 @@ export const useNativeMenuSync = () => {
             ipc?.removeAllListeners('renderer-open-command-palette');
         };
     }, [openCommandPalette]);
+
+    useEffect(() => {
+        if (!isElectron()) {
+            return undefined;
+        }
+
+        window.api.utils.rendererOpenCreatePlaylist(() => {
+            openCreatePlaylistModal(server);
+        });
+
+        return () => {
+            ipc?.removeAllListeners('renderer-open-create-playlist');
+        };
+    }, [server]);
 
     useEffect(() => {
         if (!isElectron()) {

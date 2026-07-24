@@ -98,6 +98,10 @@ export const languages = [
         value: 'ko',
     },
     {
+        label: 'Latviešu',
+        value: 'lv',
+    },
+    {
         label: 'Nederlands',
         value: 'nl',
     },

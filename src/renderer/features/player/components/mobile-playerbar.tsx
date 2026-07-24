@@ -394,11 +394,11 @@ export const MobilePlayerbar = () => {
                         icon={<Icon fill="default" icon="mediaPrevious" size="md" />}
                         onClick={(e) => {
                             e.stopPropagation();
-                            mediaPrevious();
+                            mediaPrevious(e.altKey);
                         }}
                         tooltip={{
                             label: t('player.previous'),
-                            openDelay: 400,
+                            openDelay: 0,
                         }}
                         variant="tertiary"
                     />
@@ -417,11 +417,11 @@ export const MobilePlayerbar = () => {
                         icon={<Icon fill="default" icon="mediaNext" size="md" />}
                         onClick={(e) => {
                             e.stopPropagation();
-                            mediaNext();
+                            mediaNext(e.altKey);
                         }}
                         tooltip={{
                             label: t('player.next'),
-                            openDelay: 400,
+                            openDelay: 0,
                         }}
                         variant="tertiary"
                     />

@@ -12,7 +12,7 @@ import {
 } from '/@/renderer/cache';
 import { usePlayerEvents } from '/@/renderer/features/player/audio-player/hooks/use-player-events';
 import { updateQueueSong } from '/@/renderer/store/player.store';
-import { LogCategory, logFn } from '/@/renderer/utils/logger';
+import { logger } from '/@/renderer/utils/logger';
 import { QueueSong, SongDetailQuery } from '/@/shared/types/domain-types';
 
 export const useUpdateCurrentSong = () => {
@@ -62,22 +62,16 @@ export const useUpdateCurrentSong = () => {
                     if (!isEqual(currentSongData, updatedSong)) {
                         updateQueueSong(currentSong.id, updatedSong);
 
-                        logFn.debug('Song updated in queue', {
-                            category: LogCategory.PLAYER,
-                            meta: {
-                                id: currentSong.id,
-                                name: updatedSong.name,
-                            },
+                        logger.debug('Song updated in queue', {
+                            id: currentSong.id,
+                            name: updatedSong.name,
                         });
                     }
                 }
             } catch (error) {
-                logFn.error('Failed to update song in queue', {
-                    category: LogCategory.PLAYER,
-                    meta: {
-                        error: error instanceof Error ? error.message : String(error),
-                        id: currentSong.id,
-                    },
+                logger.error('Failed to update song in queue', {
+                    error: error instanceof Error ? error.message : String(error),
+                    id: currentSong.id,
                 });
             }
         },

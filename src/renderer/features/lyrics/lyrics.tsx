@@ -52,6 +52,7 @@ import { Spinner } from '/@/shared/components/spinner/spinner';
 import { Stack } from '/@/shared/components/stack/stack';
 import { Text } from '/@/shared/components/text/text';
 import { toast } from '/@/shared/components/toast/toast';
+import { useLocalStorage } from '/@/shared/hooks/use-local-storage';
 import { LyricsOverride, QueueSong, ServerType } from '/@/shared/types/domain-types';
 
 type LyricsProps = {
@@ -82,7 +83,10 @@ export const Lyrics = ({ fadeOutNoLyricsMessage = true, settingsKey = 'default' 
     const [index, setIndexState] = useState(0);
     const [translatedLyrics, setTranslatedLyrics] = useState<null | string>(null);
     const [showTranslation, setShowTranslation] = useState(false);
-    const [visibleOverlayKeys, setVisibleOverlayKeys] = useState<Set<string>>(new Set());
+    const [visibleOverlayLayerKeys, setVisibleOverlayLayerKeys] = useLocalStorage<string[]>({
+        defaultValue: [],
+        key: `lyrics:visible-overlay-layers:${settingsKey}`,
+    });
     const [pendingSongId, setPendingSongId] = useState<string | undefined>(currentSong?.id);
     const lyricsFetchTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
     const previousSongIdRef = useRef<string | undefined>(currentSong?.id);
@@ -151,7 +155,10 @@ export const Lyrics = ({ fadeOutNoLyricsMessage = true, settingsKey = 'default' 
     }, [data, indexToUse, preferLocalLyrics]);
 
     const { data: furiganaConvertedLyrics } = useFuriganaLyrics(lyrics?.lyrics, !!enableFurigana);
-    const { data: romajiConvertedLyrics } = useRomajiLyrics(lyrics?.lyrics, !!enableRomaji);
+    const { data: romajiConvertedLyrics, isFetching: isFetchingRomaji } = useRomajiLyrics(
+        lyrics?.lyrics,
+        !!enableRomaji,
+    );
 
     const rawSyncedLyrics = useMemo(() => {
         if (!synced || !lyrics || !('lyrics' in lyrics) || !Array.isArray(lyrics.lyrics)) {
@@ -193,6 +200,11 @@ export const Lyrics = ({ fadeOutNoLyricsMessage = true, settingsKey = 'default' 
             label: formatStructuredLyricLabel(layer),
         }));
     }, [layers]);
+
+    const visibleOverlayKeys = useMemo(
+        () => new Set(visibleOverlayLayerKeys),
+        [visibleOverlayLayerKeys],
+    );
 
     const visibleOverlayLayers = useMemo(() => {
         if (!layers?.overlayLayers.length || !visibleOverlayKeys.size) {
@@ -241,12 +253,15 @@ export const Lyrics = ({ fadeOutNoLyricsMessage = true, settingsKey = 'default' 
     const displayOffsetMs = isLyricsDisabled ? 0 : currentOffsetMs;
     const useServerPronunciation = !!pronunciationLyricsOverlay;
 
-    const { data: syncedRomajiLyrics } = useSyncedRomajiLyrics(
-        rawSyncedLyrics,
+    const shouldGenerateSyncedRomaji =
         !!enableRomaji &&
-            !!rawSyncedLyrics &&
-            lyricsHasWordCues(rawSyncedLyrics) &&
-            !useServerPronunciation,
+        !!rawSyncedLyrics &&
+        lyricsHasWordCues(rawSyncedLyrics) &&
+        !useServerPronunciation;
+
+    const { data: syncedRomajiLyrics, isFetching: isFetchingSyncedRomaji } = useSyncedRomajiLyrics(
+        rawSyncedLyrics,
+        shouldGenerateSyncedRomaji,
     );
 
     const isKaraoke = useMemo(() => {
@@ -268,12 +283,11 @@ export const Lyrics = ({ fadeOutNoLyricsMessage = true, settingsKey = 'default' 
             offsetMs: displayOffsetMs,
             pronunciationLyrics: pronunciationLyricsOverlay,
             romajiLyrics:
-                enableRomaji && !useServerPronunciation
+                enableRomaji && !useServerPronunciation && !shouldGenerateSyncedRomaji
                     ? (romajiConvertedLyrics as SynchronizedLyricsProps['romajiLyrics'])
                     : null,
             settingsKey,
-            syncedRomajiLyrics:
-                enableRomaji && !useServerPronunciation ? (syncedRomajiLyrics ?? null) : null,
+            syncedRomajiLyrics: shouldGenerateSyncedRomaji ? (syncedRomajiLyrics ?? null) : null,
             translatedLyrics:
                 showTranslation && !translationLyricsOverlay ? translatedLyrics : null,
             translationLyrics: translationLyricsOverlay,
@@ -286,6 +300,7 @@ export const Lyrics = ({ fadeOutNoLyricsMessage = true, settingsKey = 'default' 
         isKaraoke,
         pronunciationLyricsOverlay,
         romajiConvertedLyrics,
+        shouldGenerateSyncedRomaji,
         syncedRomajiLyrics,
         settingsKey,
         showTranslation,
@@ -399,24 +414,26 @@ export const Lyrics = ({ fadeOutNoLyricsMessage = true, settingsKey = 'default' 
         await fetchTranslation();
     }, [translatedLyrics, showTranslation, fetchTranslation]);
 
-    const handleToggleOverlayLayer = useCallback((key: string) => {
-        setVisibleOverlayKeys((current) => {
-            const next = new Set(current);
-            if (next.has(key)) {
-                next.delete(key);
-            } else {
-                next.add(key);
-            }
-            return next;
-        });
-    }, []);
+    const handleToggleOverlayLayer = useCallback(
+        (key: string) => {
+            setVisibleOverlayLayerKeys((current) => {
+                const next = new Set(current);
+                if (next.has(key)) {
+                    next.delete(key);
+                } else {
+                    next.add(key);
+                }
+                return Array.from(next);
+            });
+        },
+        [setVisibleOverlayLayerKeys],
+    );
 
     usePlayerEvents(
         {
             onCurrentSongChange: () => {
                 setIndexState(0);
                 setShowTranslation(false);
-                setVisibleOverlayKeys(new Set());
                 setTranslatedLyrics(null);
             },
         },
@@ -443,8 +460,14 @@ export const Lyrics = ({ fadeOutNoLyricsMessage = true, settingsKey = 'default' 
         return [];
     }, [data?.local]);
 
+    const isWaitingForRomaji =
+        !!enableRomaji &&
+        !!lyrics &&
+        (isFetchingRomaji || (shouldGenerateSyncedRomaji && isFetchingSyncedRomaji));
+
     const isLoadingLyrics =
-        shouldFetchLyrics && (isWaitingToFetchLyrics || isLoading || isRefetching);
+        shouldFetchLyrics &&
+        (isWaitingToFetchLyrics || isLoading || isRefetching || isWaitingForRomaji);
     const hasNoLyrics = !displayLyrics;
     const [shouldFadeOut, setShouldFadeOut] = useState(false);
 

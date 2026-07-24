@@ -3,10 +3,12 @@
 // store, lyrics providers, the local visualizer display-media gate, and the
 // remote server whose shutdownServer() is wired into index.ts's window-quit
 // handler).
+import './custom-themes';
 import './lyrics';
 import './player';
 import './remote';
 import './settings';
+import './tag-editor';
 import './visualizer';
 
 // Deferred features: these only register IPC handlers that the renderer

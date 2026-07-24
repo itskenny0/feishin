@@ -9,12 +9,14 @@ import {
 } from '/@/renderer/features/settings/components/settings-section';
 import { useCurrentServer, usePlaybackType, usePlayerStatus } from '/@/renderer/store';
 import { usePlaybackSettings, useSettingsStoreActions } from '/@/renderer/store/settings.store';
+import { logger } from '/@/renderer/utils/logger';
 import { hasFeature } from '/@/shared/api/utils';
 import { Select } from '/@/shared/components/select/select';
 import { Switch } from '/@/shared/components/switch/switch';
 import { toast } from '/@/shared/components/toast/toast';
 import { ServerFeature } from '/@/shared/types/features-types';
 import { PlayerStatus, PlayerType } from '/@/shared/types/types';
+
 const ipc = isElectron() ? window.api.ipc : null;
 const mpvPlayer = isElectron() ? window.api.mpvPlayer : null;
 
@@ -31,12 +33,20 @@ const getMpvAudioDevices = async () => {
     try {
         return await mpvPlayer.getAudioDevices();
     } catch (error) {
-        console.error('Failed to get MPV audio devices:', error);
+        logger.error('Failed to get MPV audio devices:', error);
         return [];
     }
 };
 
 export type AudioDeviceOption = { label: string; value: string };
+
+export const getDefaultAudioDevice = (
+    devices: AudioDeviceOption[],
+    playbackType: PlayerType,
+): null | string => {
+    const defaultId = playbackType === PlayerType.LOCAL ? 'auto' : 'default';
+    return devices.find((d) => d.value === defaultId)?.value ?? devices[0]?.value ?? null;
+};
 
 export const useAudioDevices = (playbackType: PlayerType) => {
     const [audioDevices, setAudioDevices] = useState<AudioDeviceOption[]>([]);
@@ -145,11 +155,7 @@ export const AudioSettings = memo(() => {
                                     : { audioDeviceId: e },
                         })
                     }
-                    // Controlled so swapping player type (the picker stays
-                    // mounted but its source changes) actually updates the
-                    // visible selection rather than sticking on the
-                    // first-render device id.
-                    value={audioDeviceId}
+                    value={audioDeviceId ?? getDefaultAudioDevice(audioDevices, playbackType)}
                 />
             ),
             description: t('setting.audioDevice', { context: 'description' }),

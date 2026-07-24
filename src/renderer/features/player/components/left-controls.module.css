@@ -112,6 +112,17 @@
     user-select: none;
 }
 
+.joined-artists {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.joined-artists,
+.joined-artists > * {
+    white-space: nowrap;
+}
+
 .left-controls-container {
     display: flex;
     width: 100%;

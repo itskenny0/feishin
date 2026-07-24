@@ -200,9 +200,22 @@ const VisualizerSettingsContextModal = () => (
     </Suspense>
 );
 
+const LazySongEditContextModal = lazy(() =>
+    import('/@/renderer/features/tag-editor/components/song-edit-context-modal').then((module) => ({
+        default: module.SongEditContextModal,
+    })),
+);
+
+const SongEditContextModal = (props: any) => (
+    <Suspense fallback={<Spinner container />}>
+        <LazySongEditContextModal {...props} />
+    </Suspense>
+);
+
 const appRouterModals = {
     addToPlaylist: AddToPlaylistContextModal,
     base: BaseContextModal,
+    editMetadata: SongEditContextModal,
     folderPlaylistMigration: FolderPlaylistMigrationModal,
     lyricsSettings: LyricsSettingsContextModal,
     saveAndReplace: SaveAndReplaceContextModal,

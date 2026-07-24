@@ -1,5 +1,6 @@
-import { openModal } from '@mantine/modals';
+import { closeAllModals, openModal } from '@mantine/modals';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import isElectron from 'is-electron';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router';
 
@@ -7,6 +8,7 @@ import { isServerLock } from '/@/renderer/features/action-required/utils/window-
 import JellyfinLogo from '/@/renderer/features/servers/assets/jellyfin.png';
 import NavidromeLogo from '/@/renderer/features/servers/assets/navidrome.png';
 import OpenSubsonicLogo from '/@/renderer/features/servers/assets/opensubsonic.png';
+import { EditServerForm } from '/@/renderer/features/servers/components/edit-server-form';
 import { ServerList } from '/@/renderer/features/servers/components/server-list';
 import { sharedQueries } from '/@/renderer/features/shared/api/shared-api';
 import { AppRoute } from '/@/renderer/router/routes';
@@ -15,15 +17,21 @@ import { hasFeature } from '/@/shared/api/utils';
 import { DropdownMenu } from '/@/shared/components/dropdown-menu/dropdown-menu';
 import { Icon } from '/@/shared/components/icon/icon';
 import { toast } from '/@/shared/components/toast/toast';
-import { ServerListItemWithCredential, ServerType } from '/@/shared/types/domain-types';
+import {
+    ServerListItem,
+    ServerListItemWithCredential,
+    ServerType,
+} from '/@/shared/types/domain-types';
 import { ServerFeature } from '/@/shared/types/features-types';
+
+const localSettings = isElectron() ? window.api.localSettings : null;
 
 export const ServerSelectorItems = () => {
     const { t } = useTranslation();
     const navigate = useNavigate();
     const currentServer = useCurrentServer();
     const serverList = useServerList();
-    const { setCurrentServer, setMusicFolderId } = useAuthStoreActions();
+    const { logout, setCurrentServer, setMusicFolderId } = useAuthStoreActions();
 
     const { data: musicFolders } = useQuery(
         currentServer
@@ -47,6 +55,31 @@ export const ServerSelectorItems = () => {
                 defaultValue: 'Switched to {{name}}',
                 name: server.name,
             }),
+        });
+    };
+
+    const handleCredentialsModal = async (server: ServerListItem) => {
+        let password: null | string = null;
+
+        try {
+            if (localSettings && server.savePassword) {
+                password = await localSettings.passwordGet(server.id);
+            }
+        } catch (error) {
+            console.error(error);
+        }
+
+        openModal({
+            children: (
+                <EditServerForm
+                    isUpdate
+                    onCancel={closeAllModals}
+                    password={password}
+                    server={server}
+                />
+            ),
+            size: 'sm',
+            title: t('form.updateServer.title'),
         });
     };
 
@@ -103,6 +136,21 @@ export const ServerSelectorItems = () => {
         });
     };
 
+    const handleLogout = async () => {
+        const serverId = currentServer.id;
+
+        // Cancel in-flight requests before clearing credentials so they don't
+        // retry/refetch with an empty token and surface auth error toasts.
+        await queryClient.cancelQueries();
+        localSettings?.passwordRemove(serverId);
+        logout();
+
+        // Defer cache clear until after authenticated routes unmount.
+        setTimeout(() => {
+            queryClient.clear();
+        }, 0);
+    };
+
     return (
         <>
             <DropdownMenu.Label>{t('page.appMenu.selectServer')}</DropdownMenu.Label>
@@ -110,7 +158,9 @@ export const ServerSelectorItems = () => {
                 const isNavidromeExpired =
                     server.type === ServerType.NAVIDROME && !server.ndCredential;
                 const isJellyfinExpired = server.type === ServerType.JELLYFIN && !server.credential;
-                const isSessionExpired = isNavidromeExpired || isJellyfinExpired;
+                const isSubsonicExpired = server.type === ServerType.SUBSONIC && !server.credential;
+                const isSessionExpired =
+                    isNavidromeExpired || isJellyfinExpired || isSubsonicExpired;
 
                 const logo =
                     server.type === ServerType.NAVIDROME
@@ -121,29 +171,44 @@ export const ServerSelectorItems = () => {
 
                 return (
                     <DropdownMenu.Item
-                        isSelected={currentServer?.id === server.id}
+                        isSelected={currentServer?.id === server.id && !isSessionExpired}
                         key={`server-${server.id}`}
                         leftSection={
                             <img alt="" src={logo} style={{ height: '1rem', width: '1rem' }} />
                         }
                         onClick={() => {
-                            if (!isSessionExpired) {
+                            if (isSessionExpired) {
+                                handleCredentialsModal(server);
+                            } else {
                                 handleSetCurrentServer(server);
                             }
                         }}
+                        rightSection={
+                            isSessionExpired ? <Icon icon="lock" /> : <Icon icon="arrowRight" />
+                        }
                     >
                         {server.name}
                     </DropdownMenu.Item>
                 );
             })}
             {!isServerLock() && (
-                <DropdownMenu.Item
-                    leftSection={<Icon icon="edit" />}
-                    onClick={handleManageServersModal}
-                >
-                    {t('page.appMenu.manageServers')}
-                </DropdownMenu.Item>
+                <>
+                    <DropdownMenu.Divider />
+                    <DropdownMenu.Item
+                        leftSection={<Icon icon="edit" />}
+                        onClick={handleManageServersModal}
+                    >
+                        {t('page.appMenu.manageServers')}
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Item
+                        leftSection={<Icon color="error" icon="signOut" />}
+                        onClick={handleLogout}
+                    >
+                        {t('page.appMenu.logout')}
+                    </DropdownMenu.Item>
+                </>
             )}
+            {!isServerLock() && <></>}
             {musicFolders && musicFolders.items.length > 0 && (
                 <>
                     <DropdownMenu.Divider />

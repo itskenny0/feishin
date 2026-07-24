@@ -11,6 +11,7 @@ import manifest from './manifest.json';
 
 import { isLinux } from '/@/main/env';
 import { getMainWindow } from '/@/main/index';
+import log from '/@/main/logger';
 import { QueueSong } from '/@/shared/types/domain-types';
 import { ClientEvent, ServerEvent } from '/@/shared/types/remote-types';
 import { PlayerRepeat, PlayerStatus, SongState } from '/@/shared/types/types';
@@ -76,6 +77,10 @@ function send({ client, data, event }: SendData): void {
 }
 
 export const shutdownServer = () => {
+    if (wsServer || server) {
+        log.info('Remote server shutting down');
+    }
+
     if (wsServer) {
         wsServer.clients.forEach((client) => client.close(4000));
         wsServer.close();
@@ -336,33 +341,45 @@ const enableServer = (config: RemoteConfig): Promise<void> => {
                 }
             });
 
-            // A bind failure (EADDRINUSE / EACCES) is emitted asynchronously on
-            // the server AFTER this synchronous try block returns, so it bypasses
-            // the catch and lands in the global uncaughtException handler while
-            // enableServer hangs until the 5s up-timeout. Reject with the real
-            // error instead.
-            server.on('error', (err) => {
-                shutdownServer();
-                reject(err);
+            let settled = false;
+            const settle = (fn: () => void) => {
+                if (settled) return;
+                settled = true;
+                fn();
+            };
+
+            server.listen(config.port, () => {
+                log.info('Remote server listening', { port: config.port });
+                settle(() => resolve());
             });
-            server.listen(config.port, resolve);
+            server.on('error', (error) => {
+                log.error('Remote server listen failed', { error, port: config.port });
+                shutdownServer();
+                settle(() => reject(error));
+            });
             wsServer = new WebSocketServer<typeof StatefulWebSocket>({ server });
 
             wsServer!.on('connection', (ws: StatefulWebSocket) => {
                 let authFail: number | undefined;
                 ws.alive = true;
+                log.info('Remote client connected', { clients: wsServer?.clients.size });
 
                 if (!settings.username && !settings.password) {
                     ws.auth = true;
                 } else {
                     authFail = setTimeout(() => {
                         if (!ws.auth) {
+                            log.warn('Remote client auth timeout');
                             ws.close();
                         }
                     }, 10000) as unknown as number;
                 }
 
-                ws.on('error', console.error);
+                ws.on('error', log.error);
+
+                ws.on('close', () => {
+                    log.info('Remote client disconnected', { clients: wsServer?.clients.size });
+                });
 
                 ws.on('message', (data) => {
                     try {
@@ -378,7 +395,9 @@ const enableServer = (config: RemoteConfig): Promise<void> => {
 
                                 if (login === settings.username && password === settings.password) {
                                     ws.auth = true;
+                                    log.info('Remote client authenticated');
                                 } else {
+                                    log.warn('Remote client auth failed');
                                     ws.close();
                                 }
 
@@ -501,7 +520,7 @@ const enableServer = (config: RemoteConfig): Promise<void> => {
                             }
                         }
                     } catch (error) {
-                        console.error(error);
+                        log.error(error);
                     }
                 });
 
@@ -529,7 +548,7 @@ const enableServer = (config: RemoteConfig): Promise<void> => {
             });
 
             setTimeout(() => {
-                reject(new Error('Server did not come up'));
+                settle(() => reject(new Error('Server did not come up')));
             }, UP_TIMEOUT_MS);
         } catch (error) {
             reject(error);

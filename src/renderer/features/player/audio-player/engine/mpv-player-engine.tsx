@@ -8,6 +8,7 @@ import { eventEmitter } from '/@/renderer/events/event-emitter';
 import { usePlayerEvents } from '/@/renderer/features/player/audio-player/hooks/use-player-events';
 import { getSongUrl } from '/@/renderer/features/player/audio-player/hooks/use-stream-url';
 import { AudioPlayer, PlayerOnProgressProps } from '/@/renderer/features/player/audio-player/types';
+import { resolveVolumeMax } from '/@/renderer/features/player/audio-player/utils/volume';
 import { useRadioStore } from '/@/renderer/features/radio/hooks/use-radio-player';
 import { getMpvProperties } from '/@/renderer/features/settings/components/playback/mpv-properties';
 import {
@@ -19,7 +20,7 @@ import {
     useSettingsStore,
 } from '/@/renderer/store';
 import { toast } from '/@/shared/components/toast/toast';
-import { PlayerStatus } from '/@/shared/types/types';
+import { PlayerStatus, PlayerType } from '/@/shared/types/types';
 
 export interface MpvPlayerEngineHandle extends AudioPlayer {}
 
@@ -316,7 +317,9 @@ export const MpvPlayerEngine = (props: MpvPlayerEngineProps) => {
 
         const handleTrackEnded = () => {
             const { player } = usePlayerStore.getState();
-            if (player.status !== PlayerStatus.PLAYING) {
+            // mpv often emits `stopped` before this event, which already set STOPPED
+            // via mediaStop. Still run mediaAutoNext so end-of-queue seek/reset runs.
+            if (player.status !== PlayerStatus.PLAYING && player.status !== PlayerStatus.STOPPED) {
                 return;
             }
 
@@ -380,7 +383,8 @@ export const MpvPlayerEngine = (props: MpvPlayerEngineProps) => {
             }
         },
         increaseVolume(by: number) {
-            const newVol = Math.min(1, internalVolume + by / 100);
+            const maxVol = resolveVolumeMax(PlayerType.LOCAL, mpvExtraParameters) / 100;
+            const newVol = Math.min(maxVol, internalVolume + by / 100);
             setInternalVolume(newVol);
             if (mpvPlayer) {
                 mpvPlayer.volume(newVol * 100);

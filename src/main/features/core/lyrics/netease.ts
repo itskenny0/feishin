@@ -9,6 +9,8 @@ import {
 import { store } from '../settings';
 import { orderSearchResults } from './shared';
 
+import log from '/@/main/logger';
+
 const SEARCH_URL = 'https://music.163.com/api/search/get';
 const LYRICS_URL = 'https://music.163.com/api/song/lyric';
 
@@ -86,7 +88,7 @@ export async function getLyricsBySongId(songId: string): Promise<null | string> 
             },
         });
     } catch (e) {
-        console.error('NetEase lyrics request got an error!', e);
+        log.error('NetEase lyrics request got an error!', e);
         return null;
     }
     const enableTranslation = store.get('enableNeteaseTranslation', false) as boolean;
@@ -129,7 +131,7 @@ export async function getSearchResults(
             },
         });
     } catch (e) {
-        console.error('NetEase search request got an error!', e);
+        log.error('NetEase search request got an error!', e);
         return null;
     }
 

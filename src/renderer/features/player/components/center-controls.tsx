@@ -25,7 +25,9 @@ import {
 import { useIsBigTablet } from '/@/renderer/hooks/use-breakpoint';
 import { useButtonSize, useSkipButtons } from '/@/renderer/store';
 import { Icon } from '/@/shared/components/icon/icon';
-import { PlayerRepeat, PlayerShuffle } from '/@/shared/types/types';
+import { Stack } from '/@/shared/components/stack/stack';
+import { Text } from '/@/shared/components/text/text';
+import { PlayerRepeat, PlayerShuffle, PlayerStatus } from '/@/shared/types/types';
 
 export const CenterControls = () => {
     const skip = useSkipButtons();
@@ -230,11 +232,20 @@ const PreviousButton = memo(({ buttonSize, disabled, t }: TransportButtonProps) 
         <PlayerButton
             disabled={disabled || !canPrevious}
             icon={<Icon fill="default" icon="mediaPrevious" size={buttonSize} />}
-            onClick={mediaPrevious}
+            onClick={(e) => mediaPrevious(e.altKey)}
             style={{ opacity: canPrevious ? undefined : 0.4 }}
             tooltip={{
-                label: t('player.previous'),
-                openDelay: 400,
+                label: (
+                    <Stack gap="xs" justify="center">
+                        <Text fw={500} ta="center">
+                            {t('player.previous')}
+                        </Text>
+                        <Text fw={500} isMuted size="xs" ta="center">
+                            {t('player.previousAlbum')}
+                        </Text>
+                    </Stack>
+                ),
+                openDelay: 0,
             }}
             variant="secondary"
         />
@@ -315,11 +326,20 @@ const NextButton = memo(({ buttonSize, disabled, t }: TransportButtonProps) => {
         <PlayerButton
             disabled={disabled || !canNext}
             icon={<Icon fill="default" icon="mediaNext" size={buttonSize} />}
-            onClick={mediaNext}
+            onClick={(e) => mediaNext(e.altKey)}
             style={{ opacity: canNext ? undefined : 0.4 }}
             tooltip={{
-                label: t('player.next'),
-                openDelay: 400,
+                label: (
+                    <Stack gap="xs" justify="center">
+                        <Text fw={500} ta="center">
+                            {t('player.next')}
+                        </Text>
+                        <Text fw={500} isMuted size="xs" ta="center">
+                            {t('player.nextAlbum')}
+                        </Text>
+                    </Stack>
+                ),
+                openDelay: 0,
             }}
             variant="secondary"
         />
