@@ -24,6 +24,7 @@ import {
 } from '/@/renderer/store/sleep-timer.store';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Button } from '/@/shared/components/button/button';
+import { Divider } from '/@/shared/components/divider/divider';
 import { Grid } from '/@/shared/components/grid/grid';
 import { Group } from '/@/shared/components/group/group';
 import { NumberInput } from '/@/shared/components/number-input/number-input';
@@ -221,8 +222,9 @@ const useSleepTimer = () => {
     usePlayerEvents(
         {
             onCurrentSongChange: handleOnCurrentSongChange,
+            onPlayerProgress: handleOnPlayerProgress,
         },
-        [handleOnCurrentSongChange],
+        [handleOnCurrentSongChange, handleOnPlayerProgress],
     );
 
     // End-of-song mode: set the pauseOnNextSongEnd flag so that

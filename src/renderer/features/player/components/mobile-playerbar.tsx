@@ -143,7 +143,7 @@ export const MobilePlayerbar = () => {
 
             if (decision === 'next') {
                 triggerHaptic('selection');
-                mediaNext();
+                mediaNext(false);
                 // Continue the motion with the release velocity for a
                 // beat so the gesture feels like a single throw rather
                 // than a jolt-and-snap. The current-song slot
@@ -157,7 +157,7 @@ export const MobilePlayerbar = () => {
                 });
             } else if (decision === 'previous') {
                 triggerHaptic('selection');
-                mediaPrevious();
+                mediaPrevious(false);
                 animate(swipeX, 0, {
                     damping: 30,
                     stiffness: 220,

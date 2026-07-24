@@ -495,12 +495,9 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
                                 }
                             } catch (err) {
                                 if (instanceOfCancellationError(err)) return;
-                                logFn.error(logMsg[LogCategory.PLAYER].addToQueueByFetch, {
-                                    category: LogCategory.PLAYER,
-                                    meta: {
-                                        error: (err as Error).message,
-                                        phase: 'streaming-tail',
-                                    },
+                                logger.error('Add to queue by fetch failed', {
+                                    error: (err as Error).message,
+                                    phase: 'streaming-tail',
                                 });
                             }
                         })();
@@ -923,52 +920,6 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
         [blockOfflineJump, getRemoteCtx, mediaPlayByIndex, storeActions],
     );
 
-    const mediaPlay = useCallback(
-        (id?: string) => {
-            logFn.debug(logMsg[LogCategory.PLAYER].mediaPlay, {
-                category: LogCategory.PLAYER,
-                meta: { id },
-            });
-
-            const remote = getRemoteCtx();
-            if (remote) {
-                // H2: locally `mediaPlay(uniqueId)` JUMPS to that queue item (a
-                // double-click on a queue row, item-list-controls passes
-                // queueSong._uniqueId). The remote branch used to discard `id`
-                // and merely resume the current track — wrong song. Resolve the
-                // id against the mirrored queue (match by _uniqueId OR id, since
-                // MQTT-lane stubs only carry id) and route through the corrected
-                // skip-to-index path. Only fall back to resume when no id was
-                // supplied.
-                if (id) {
-                    const queue = useRemoteTargetStore.getState().mirrored.queue;
-                    const idx = queue.findIndex(
-                        (s) => (s as { _uniqueId?: string })._uniqueId === id || s.id === id,
-                    );
-                    if (idx >= 0) {
-                        mediaPlayByIndex(idx);
-                        return;
-                    }
-                    // Unknown id (un-hydrated mirror) — best effort: resume.
-                }
-                peerDispatcher.unpause(remote);
-                useRemoteTargetStore.getState().actions.setPaused(false);
-                return;
-            }
-            // A bare `mediaPlay()` (resume current) is never blocked; only an
-            // explicit jump to a specific queued song is guarded offline.
-            if (id) {
-                const items = usePlayerStoreBase.getState().getQueueOrder().items;
-                const target = items.find(
-                    (s) => (s as { _uniqueId?: string })._uniqueId === id || s.id === id,
-                );
-                if (blockOfflineJump(target)) return;
-            }
-            storeActions.mediaPlay(id);
-        },
-        [blockOfflineJump, getRemoteCtx, mediaPlayByIndex, storeActions],
-    );
-
     const mediaPrevious = useCallback(
         (toPreviousAlbum: boolean) => {
             logger.debug('Media previous');
@@ -982,6 +933,15 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
         },
         [getRemoteCtx, storeActions],
     );
+
+    const mediaStop = useCallback(
+        (options?: { reset?: boolean }) => {
+            logger.debug('Media stop', { reset: options?.reset });
+            const remote = getRemoteCtx();
+            if (remote) {
+                peerDispatcher.stop(remote);
+                return;
+            }
             storeActions.mediaStop(options);
         },
         [getRemoteCtx, storeActions],

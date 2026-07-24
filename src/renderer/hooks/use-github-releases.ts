@@ -1,7 +1,20 @@
 import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
 
-export const GITHUB_RELEASES_URL = 'https://api.github.com/repos/jeffvli/feishin/releases';
+import packageJson from '../../../package.json';
+
+// Fork-tagged builds (e.g. v1.11.0-itskenny0-2026-05-09g) only exist in the
+// fork's repo, not in the upstream jeffvli/feishin one. Detect that prefix
+// in package.json's version and route GitHub API calls to the right repo so
+// release notes and update checks don't 404 (or point users at upstream
+// releases) on fork builds.
+const FORK_TAG_PATTERN = /-itskenny0?-/;
+const FORK_REPO = 'itskenny0/feishin';
+const UPSTREAM_REPO = 'jeffvli/feishin';
+
+export const GITHUB_REPO = FORK_TAG_PATTERN.test(packageJson.version) ? FORK_REPO : UPSTREAM_REPO;
+
+export const GITHUB_RELEASES_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases`;
 export const RELEASES_TO_FETCH = 30;
 
 export interface GitHubRelease {

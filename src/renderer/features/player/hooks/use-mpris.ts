@@ -8,7 +8,7 @@ import {
     useIsRadioActive,
     useRadioPlayer,
 } from '/@/renderer/features/radio/hooks/use-radio-player';
-import { usePlayerSong, usePlayerStore, useSettingsStore } from '/@/renderer/store';
+import { usePlayerActions, usePlayerSong, useSettingsStore } from '/@/renderer/store';
 import { LibraryItem, QueueSong } from '/@/shared/types/domain-types';
 import { PlayerShuffle, ServerType } from '/@/shared/types/types';
 

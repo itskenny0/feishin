@@ -27,7 +27,7 @@ import { useButtonSize, useSkipButtons } from '/@/renderer/store';
 import { Icon } from '/@/shared/components/icon/icon';
 import { Stack } from '/@/shared/components/stack/stack';
 import { Text } from '/@/shared/components/text/text';
-import { PlayerRepeat, PlayerShuffle, PlayerStatus } from '/@/shared/types/types';
+import { PlayerRepeat, PlayerShuffle } from '/@/shared/types/types';
 
 export const CenterControls = () => {
     const skip = useSkipButtons();

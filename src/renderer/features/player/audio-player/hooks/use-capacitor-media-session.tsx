@@ -234,11 +234,11 @@ const useCapacitorMediaSession = () => {
                 );
                 await MediaSession.setActionHandler({ action: 'nexttrack' }, () => {
                     if (isRadioActiveRef.current) return;
-                    actionsRef.current.mediaNext();
+                    actionsRef.current.mediaNext(false);
                 });
                 await MediaSession.setActionHandler({ action: 'previoustrack' }, () => {
                     if (isRadioActiveRef.current) return;
-                    actionsRef.current.mediaPrevious();
+                    actionsRef.current.mediaPrevious(false);
                 });
                 await MediaSession.setActionHandler({ action: 'seekto' }, (details) => {
                     if (isRadioActiveRef.current) return;

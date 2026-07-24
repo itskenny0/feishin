@@ -26,10 +26,10 @@ export interface DispatcherDeps {
     playerActions: {
         decreaseVolume: (step: number) => void;
         increaseVolume: (step: number) => void;
-        mediaNext: () => void;
+        mediaNext: (toNextAlbum: boolean) => void;
         mediaPause: () => void;
         mediaPlay: () => void;
-        mediaPrevious: () => void;
+        mediaPrevious: (toPreviousAlbum: boolean) => void;
         // NOTE: name says "Timestamp" but the underlying store action expects
         // SECONDS, not milliseconds. The previous typedef said `ms: number`
         // which silently produced a 1000× seek bug fixed in commit 4205727d.
@@ -73,7 +73,7 @@ export async function dispatchJellyfinMessage(
                 playerActions.mediaSkipForward();
                 return;
             case 'NextTrack':
-                playerActions.mediaNext();
+                playerActions.mediaNext(false);
                 return;
             case 'Pause':
                 playerActions.mediaPause();
@@ -82,7 +82,7 @@ export async function dispatchJellyfinMessage(
                 playerActions.mediaTogglePlayPause();
                 return;
             case 'PreviousTrack':
-                playerActions.mediaPrevious();
+                playerActions.mediaPrevious(false);
                 return;
             case 'Rewind':
                 playerActions.mediaSkipBackward();

@@ -222,7 +222,7 @@ export const applyPeerCommand = (from: PeerAddress, cmd: PeerCommand): ApplyResu
             return { reason: 'applied' };
         }
         case 'next': {
-            actions.mediaNext();
+            actions.mediaNext(false);
             return { reason: 'applied' };
         }
         case 'pause': {
@@ -257,7 +257,7 @@ export const applyPeerCommand = (from: PeerAddress, cmd: PeerCommand): ApplyResu
             return { reason: 'applied' };
         }
         case 'prev': {
-            actions.mediaPrevious();
+            actions.mediaPrevious(false);
             return { reason: 'applied' };
         }
         case 'queue': {

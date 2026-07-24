@@ -189,21 +189,6 @@ export const WebPlayerEngine = (props: WebPlayerEngineProps) => {
         player2Ref.current?.getInternalPlayer()?.pause();
     }, []);
 
-    const mediaErrorLabel = (code: number | undefined) => {
-        switch (code) {
-            case MediaError.MEDIA_ERR_ABORTED:
-                return 'ABORTED';
-            case MediaError.MEDIA_ERR_DECODE:
-                return 'DECODE';
-            case MediaError.MEDIA_ERR_NETWORK:
-                return 'NETWORK';
-            case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED:
-                return 'SRC_NOT_SUPPORTED';
-            default:
-                return 'unknown';
-        }
-    };
-
     const handleOnError = (
         playerRef: React.RefObject<null | ReactPlayer>,
         onEnded: () => void,
@@ -221,6 +206,7 @@ export const WebPlayerEngine = (props: WebPlayerEngineProps) => {
             const { error } = target;
             const code = error?.code;
             const label = mediaErrorLabel(code);
+            const src = redactMediaSrc(target.currentSrc || target.src);
 
             const isNetworkError =
                 code === MediaError.MEDIA_ERR_NETWORK ||
@@ -233,6 +219,7 @@ export const WebPlayerEngine = (props: WebPlayerEngineProps) => {
                         code,
                         label,
                         retryCount: networkRetryCountRef.current,
+                        src,
                     });
                     const audio = target;
                     if (networkRetryTimerRef.current) {
@@ -247,6 +234,7 @@ export const WebPlayerEngine = (props: WebPlayerEngineProps) => {
                                 code,
                                 label,
                                 retryCount: networkRetryCountRef.current,
+                                src,
                             });
                         });
                     }, NETWORK_RETRY_DELAY_MS);
@@ -264,6 +252,7 @@ export const WebPlayerEngine = (props: WebPlayerEngineProps) => {
                     code,
                     label,
                     retryCount: networkRetryCountRef.current,
+                    src,
                 });
                 onEnded();
             } else {
@@ -271,6 +260,7 @@ export const WebPlayerEngine = (props: WebPlayerEngineProps) => {
                     code,
                     label,
                     retryCount: networkRetryCountRef.current,
+                    src,
                 });
                 if (onErrorPause) {
                     onErrorPause();

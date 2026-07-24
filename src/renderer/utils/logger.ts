@@ -1,15 +1,5 @@
 import { LogLevel, LogSeverity } from '/@/shared/logger/types';
 
-export enum LogCategory {
-    API = 'api',
-    EXTERNAL = 'external',
-    GENERAL = 'general',
-    OTHER = 'other',
-    PLAYER = 'player',
-    REMOTE = 'remote',
-    SCROBBLE = 'scrobble',
-    SYSTEM = 'system',
-}
 export type { LogLevel, LogSeverity };
 
 type ElectronLogApi = {
@@ -25,13 +15,7 @@ type ElectronLogApi = {
 };
 
 interface LogFn {
-    (
-        message?: string,
-        options?: {
-            category?: string;
-            meta?: unknown;
-        },
-    ): void;
+    (message?: string, meta?: any): void;
 }
 
 interface Logger {
@@ -48,14 +32,15 @@ const PROCESS_WIDTH = 10;
 const LEVEL_WIDTH = 5;
 const RESET = '\x1B[0m';
 
-const NO_OP: LogFn = () => {};
-
-const colors: Record<string, string> = {
+const levelColors: Record<LogSeverity, string> = {
     debug: '\x1B[38;2;100;149;237m', // #6495ED
     error: '\x1B[38;2;255;100;100m', // #ff6464
     info: '\x1B[38;2;76;175;80m', // #4caf50
     warn: '\x1B[38;2;225;125;50m', // #e17d32
 };
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const NO_OP: LogFn = (_message?: string, ..._optionalParams: any[]) => {};
 
 const getElectronLog = (): ElectronLogApi | null => {
     if (typeof window === 'undefined') {
@@ -68,7 +53,7 @@ const getElectronLog = (): ElectronLogApi | null => {
 
 const formatLogLine = (level: LogSeverity, message: string, count = 1): string => {
     const countStr = count > 1 ? ` (x${count})` : '';
-    const levelLabel = `${colors[level]}${level.toUpperCase().padEnd(LEVEL_WIDTH, ' ')}${RESET}`;
+    const levelLabel = `${levelColors[level]}${level.toUpperCase().padEnd(LEVEL_WIDTH, ' ')}${RESET}`;
     const processLabel = PROCESS_LABEL.padEnd(PROCESS_WIDTH, ' ');
     return `${new Date().toISOString()} ${levelLabel} ${processLabel} ${message}${countStr}`;
 };
@@ -173,10 +158,9 @@ class ConsoleLogger implements Logger {
     }
 
     private initializeLoggers(level: LogLevel) {
-        const withTimestamp = (logLevel: string): LogFn => {
-            return (message?: string, options?: { category?: string; meta?: unknown }) => {
-                const { category, meta } = options || {};
-                const key = JSON.stringify([logLevel, message, category, meta]);
+        const withDebounce = (logLevel: LogSeverity): LogFn => {
+            return (message?: any, meta?: any) => {
+                const key = JSON.stringify([logLevel, message, meta]);
                 const now = Date.now();
                 const existing = DEBOUNCE_MAP.get(key);
 

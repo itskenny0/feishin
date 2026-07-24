@@ -441,7 +441,7 @@ export const MobileFullscreenPlayerAlbumArt = () => {
             if (decision === 'next') {
                 console.info('[cover-swipe] commit next', { offset, velocity: releaseVelocity });
                 triggerHaptic('selection');
-                next();
+                next(false);
                 snapBackRef.current = animate(coverSwipeX, 0, {
                     damping: 30,
                     stiffness: 220,
@@ -451,7 +451,7 @@ export const MobileFullscreenPlayerAlbumArt = () => {
             } else if (decision === 'previous') {
                 console.info('[cover-swipe] commit prev', { offset, velocity: releaseVelocity });
                 triggerHaptic('selection');
-                prev();
+                prev(false);
                 snapBackRef.current = animate(coverSwipeX, 0, {
                     damping: 30,
                     stiffness: 220,
@@ -683,11 +683,11 @@ export const MobileFullscreenPlayerAlbumArt = () => {
             if (decision === 'next') {
                 console.info('[cover-swipe] remote commit next', { offset });
                 triggerHaptic('selection');
-                next();
+                next(false);
             } else if (decision === 'previous') {
                 console.info('[cover-swipe] remote commit prev', { offset });
                 triggerHaptic('selection');
-                prev();
+                prev(false);
             } else {
                 console.info('[cover-swipe] remote snap back', {
                     hasNext: hN,

@@ -40,7 +40,7 @@ export const applyHaCommand = (verb: HaCommandVerb, raw: string): void => {
             return;
         }
         case 'next':
-            a.mediaNext();
+            a.mediaNext(false);
             return;
         case 'pause':
             a.mediaPause();
@@ -49,7 +49,7 @@ export const applyHaCommand = (verb: HaCommandVerb, raw: string): void => {
             a.mediaPlay();
             return;
         case 'previous':
-            a.mediaPrevious();
+            a.mediaPrevious(false);
             return;
         case 'repeat': {
             const r =

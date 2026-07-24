@@ -786,6 +786,12 @@ export const useScrobble = () => {
         sendScrobbleRef.current = sendScrobble;
     }, [sendScrobble]);
 
+    const sendProgressAfterSubmissionRef = useRef(sendProgressAfterSubmission);
+
+    useEffect(() => {
+        sendProgressAfterSubmissionRef.current = sendProgressAfterSubmission;
+    }, [sendProgressAfterSubmission]);
+
     useEffect(() => {
         registerScrobbleManualHandlers({
             forceSubmitScrobble: () => {
@@ -822,7 +828,7 @@ export const useScrobble = () => {
                                 id: song.id,
                                 reason: 'forced from UI',
                             });
-                            sendProgressAfterSubmission(song);
+                            sendProgressAfterSubmissionRef.current(song);
                         },
                     },
                 );
@@ -852,14 +858,7 @@ export const useScrobble = () => {
         });
 
         return () => registerScrobbleManualHandlers(null);
-    }, [
-        flushScrobbleDebug,
-        isPrivateModeEnabled,
-        isScrobbleEnabled,
-        playbackRate,
-        sendProgressAfterSubmission,
-        sendScrobble,
-    ]);
+    }, [flushScrobbleDebug]);
 
     usePlayerEvents(
         {
