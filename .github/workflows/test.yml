@@ -20,6 +20,11 @@ jobs:
               run: pnpm run lint
 
     commitlint:
+        # This fork's history predates Conventional Commits and absorbs whole
+        # upstream ranges via merge commits, so push-event linting can never
+        # pass here. Keep it for pull requests (small, self-authored ranges)
+        # and for pushes upstream, where it is meaningful.
+        if: github.event_name == 'pull_request' || github.repository == 'jeffvli/feishin'
         runs-on: ubuntu-latest
 
         steps:
