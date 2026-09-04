@@ -15,6 +15,7 @@ export default tseslint.config(
             '**/dist',
             '**/out',
             '**/android',
+            'commitlint.config.mjs',
             'scripts/cache-verify',
             '**/worktrees/**',
         ],

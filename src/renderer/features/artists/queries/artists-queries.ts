@@ -29,10 +29,9 @@ import {
     AlbumArtistListResponse,
     ArtistListQuery,
     ArtistListResponse,
+    FavoriteSongListQuery,
     Song,
     SongListResponse,
-    SongListSort,
-    SortOrder,
     TopSongListQuery,
     TopSongListResponse,
 } from '/@/shared/types/domain-types';
@@ -324,7 +323,7 @@ export const useArtistTopSongsQuery = (args: ArtistsQueryArgs<TopSongListQuery>)
 
 interface FavoriteSongsArgs {
     options?: CachedQueryHookOptions;
-    query: { artistId: string };
+    query: FavoriteSongListQuery;
     serverId: string | undefined;
 }
 
@@ -346,6 +345,9 @@ export const useArtistFavoriteSongsQuery = (args: FavoriteSongsArgs) => {
         // for the canonical ordering when it lands.
         fromCache: async (db) => {
             if (!query?.artistId) return undefined;
+            // The 'rating' variant ranks by star rating, which the favorites
+            // table can't reproduce — leave that one to the network.
+            if (query.type === 'rating') return undefined;
             const songRows = await db.songs.where('AlbumArtistId').equals(query.artistId).toArray();
             if (songRows.length === 0) return undefined;
             const favs = await db.favorites
@@ -359,18 +361,11 @@ export const useArtistFavoriteSongsQuery = (args: FavoriteSongsArgs) => {
                 totalRecordCount: items.length,
             } as SongListResponse;
         },
-        queryKey: queryKeys.albumArtists.favoriteSongs(serverId ?? '', query.artistId),
+        queryKey: queryKeys.albumArtists.favoriteSongs(serverId ?? '', query),
         remote: (ctx) =>
-            controller.getSongList({
+            controller.getFavoriteSongs({
                 apiClientProps: { serverId: serverId ?? '', signal: ctx.signal },
-                query: {
-                    artistIds: [query.artistId],
-                    favorite: true,
-                    limit: -1,
-                    sortBy: SongListSort.RELEASE_DATE,
-                    sortOrder: SortOrder.ASC,
-                    startIndex: 0,
-                },
+                query,
             }) as Promise<SongListResponse>,
         staleTime: options?.staleTime,
     });

@@ -13,7 +13,9 @@ export type DraggableItemsProps<K, T> = {
     description: string;
     itemLabels: Array<[K, string]>;
     items: T[];
+    nonReorderableItemIds?: K[];
     setItems: (items: T[]) => void;
+    showDescription?: boolean;
     title: string;
 };
 
@@ -46,7 +48,9 @@ export const DraggableItems = <K extends string, T extends SortableItem<K>>({
     description,
     itemLabels,
     items,
+    nonReorderableItemIds,
     setItems,
+    showDescription = true,
     title,
 }: DraggableItemsProps<K, T>) => {
     const { t } = useTranslation();
@@ -107,6 +111,17 @@ export const DraggableItems = <K extends string, T extends SortableItem<K>>({
         );
     }, [description, keyword, title]);
 
+    const orderedItems = useMemo(() => {
+        if (!nonReorderableItemIds?.length) {
+            return localItems;
+        }
+
+        return [
+            ...localItems.filter((item) => nonReorderableItemIds.includes(item.id as K)),
+            ...localItems.filter((item) => !nonReorderableItemIds.includes(item.id as K)),
+        ];
+    }, [localItems, nonReorderableItemIds]);
+
     if (!shouldShow) {
         return null;
     }
@@ -142,6 +157,7 @@ export const DraggableItems = <K extends string, T extends SortableItem<K>>({
                     </>
                 }
                 description={descriptionText}
+                showDescription={showDescription}
                 title={titleText}
             />
             {open && (
@@ -151,11 +167,12 @@ export const DraggableItems = <K extends string, T extends SortableItem<K>>({
                     style={{ userSelect: 'none' }}
                     values={localItems}
                 >
-                    {localItems.map((item, index) => (
+                    {orderedItems.map((item) => (
                         <DraggableItem
                             handleChangeDisabled={handleChangeDisabled}
-                            isFirst={index === 0}
-                            isLast={index === localItems.length - 1}
+                            isFirst={localItems[0]?.id === item.id}
+                            isLast={localItems[localItems.length - 1]?.id === item.id}
+                            isReorderable={!nonReorderableItemIds?.includes(item.id as K)}
                             item={item}
                             key={item.id}
                             onMove={handleMove}

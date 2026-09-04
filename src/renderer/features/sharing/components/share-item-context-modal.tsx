@@ -1,24 +1,56 @@
 import { closeModal, ContextModalProps } from '@mantine/modals';
-import dayjs from 'dayjs';
+import dayjs, { type ManipulateType } from 'dayjs';
+import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useShareItem } from '/@/renderer/features/sharing/mutations/share-item-mutation';
-import {
-    isShareExpiryValid,
-    toShareExpiryTimestamp,
-} from '/@/renderer/features/sharing/utils/share-expiry';
+import { isShareExpiryValid } from '/@/renderer/features/sharing/utils/share-expiry';
 import { useIsMobileShell } from '/@/renderer/hooks/use-breakpoint';
-import { useCurrentServer } from '/@/renderer/store';
+import { useCurrentServer, useGeneralSettings } from '/@/renderer/store';
+import {
+    type SettingsState,
+    ShareExpirationUnit,
+    useSettingsStoreActions,
+} from '/@/renderer/store/settings.store';
 import { getServerUrl } from '/@/renderer/utils/normalize-server-url';
+import { Accordion } from '/@/shared/components/accordion/accordion';
+import { Button } from '/@/shared/components/button/button';
 import { DateTimePicker } from '/@/shared/components/date-time-picker/date-time-picker';
 import { Group } from '/@/shared/components/group/group';
 import { ModalButton } from '/@/shared/components/modal/model-shared';
+import { NumberInput } from '/@/shared/components/number-input/number-input';
+import { Select } from '/@/shared/components/select/select';
 import { Stack } from '/@/shared/components/stack/stack';
 import { Switch } from '/@/shared/components/switch/switch';
 import { Text } from '/@/shared/components/text/text';
 import { Textarea } from '/@/shared/components/textarea/textarea';
 import { toast } from '/@/shared/components/toast/toast';
 import { useForm } from '/@/shared/hooks/use-form';
+
+const EXPIRES_FORMAT = 'YYYY-MM-DD HH:mm:ss';
+
+const unitToDayjs: Record<ShareExpirationUnit, ManipulateType> = {
+    [ShareExpirationUnit.DAY]: 'day',
+    [ShareExpirationUnit.HOUR]: 'hour',
+    [ShareExpirationUnit.MINUTE]: 'minute',
+    [ShareExpirationUnit.MONTH]: 'month',
+    [ShareExpirationUnit.SECOND]: 'second',
+    [ShareExpirationUnit.WEEK]: 'week',
+    [ShareExpirationUnit.YEAR]: 'year',
+};
+
+type ShareExpirationSettings = SettingsState['general']['shareExpiration'];
+const getShareExpirationDate = (settings: ShareExpirationSettings): null | string => {
+    if (settings.useServerDefault) {
+        return null;
+    }
+
+    const amount = Math.max(1, Math.floor(settings.amount) || 1);
+    return dayjs().add(amount, unitToDayjs[settings.unit]).format(EXPIRES_FORMAT);
+};
+
+const addExpiration = (amount: number, unit: ManipulateType): string =>
+    dayjs().add(amount, unit).format(EXPIRES_FORMAT);
 
 export const ShareItemContextModal = ({
     id,
@@ -31,12 +63,13 @@ export const ShareItemContextModal = ({
     const { itemIds, resourceType } = innerProps;
     const server = useCurrentServer();
     const isMobile = useIsMobileShell();
+    const { setSettings } = useSettingsStoreActions();
 
     const shareItemMutation = useShareItem({});
     const isCreating = shareItemMutation.isPending;
 
-    // Uses the same default as Navidrome: 1 year
-    const defaultDate = dayjs().add(1, 'year').format('YYYY-MM-DD HH:mm:ss');
+    const { shareExpiration } = useGeneralSettings();
+    const defaultDate = getShareExpirationDate(shareExpiration);
 
     const form = useForm({
         initialValues: {
@@ -74,6 +107,76 @@ export const ShareItemContextModal = ({
         return false;
     };
 
+    const unitOptions = useMemo(
+        () => [
+            {
+                label: t('datetime.secondLong'),
+                value: ShareExpirationUnit.SECOND,
+            },
+            {
+                label: t('datetime.minuteLong'),
+                value: ShareExpirationUnit.MINUTE,
+            },
+            {
+                label: t('datetime.hourLong'),
+                value: ShareExpirationUnit.HOUR,
+            },
+            {
+                label: t('datetime.dayLong'),
+                value: ShareExpirationUnit.DAY,
+            },
+            {
+                label: t('datetime.weekLong'),
+                value: ShareExpirationUnit.WEEK,
+            },
+            {
+                label: t('datetime.monthLong'),
+                value: ShareExpirationUnit.MONTH,
+            },
+            {
+                label: t('datetime.yearLong'),
+                value: ShareExpirationUnit.YEAR,
+            },
+        ],
+        [t],
+    );
+
+    const expirationPresets = useMemo(
+        () => [
+            {
+                getValue: (): null | string => null,
+                label: t('form.shareItem.setExpiration', { context: 'serverDefault' }),
+            },
+            {
+                getValue: (): null | string => addExpiration(1, 'day'),
+                label: `1 ${t('datetime.dayLong')}`,
+            },
+            {
+                getValue: (): null | string => addExpiration(1, 'week'),
+                label: `1 ${t('datetime.weekLong')}`,
+            },
+            {
+                getValue: (): null | string => addExpiration(1, 'month'),
+                label: `1 ${t('datetime.monthLong')}`,
+            },
+            {
+                getValue: (): null | string => addExpiration(1, 'year'),
+                label: `1 ${t('datetime.yearLong')}`,
+            },
+        ],
+        [t],
+    );
+
+    const updateShareExpiration = (updates: Partial<ShareExpirationSettings>) => {
+        const next = { ...shareExpiration, ...updates };
+        setSettings({
+            general: {
+                shareExpiration: next,
+            },
+        });
+        form.setFieldValue('expires', getShareExpirationDate(next));
+    };
+
     const handleSubmit = form.onSubmit(async (values) => {
         // Prefer the native share sheet on mobile; only fall back to the
         // clipboard path when native share isn't available. Computed
@@ -97,9 +200,9 @@ export const ShareItemContextModal = ({
                 body: {
                     description: values.description,
                     downloadable: values.allowDownloading,
-                    // Empty expiry => "never expires" (mapped to 0). See
-                    // share-expiry util.
-                    expires: toShareExpiryTimestamp(values.expires),
+                    // An empty expiry means "use the server default" — omit the
+                    // field entirely rather than sending a falsy timestamp.
+                    ...(values.expires ? { expires: dayjs(values.expires).valueOf() } : {}),
                     resourceIds: itemIds.join(),
                     resourceType,
                 },
@@ -181,19 +284,95 @@ export const ShareItemContextModal = ({
                             'Create a public link that anyone can open, even without an account.',
                     })}
                 </Text>
-                <DateTimePicker
-                    clearable
-                    description={t('form.shareItem.setExpirationDescription', {
-                        defaultValue: 'Leave empty for a link that never expires.',
-                    })}
-                    disabled={isCreating}
-                    label={t('form.shareItem.setExpiration')}
-                    minDate={new Date()}
-                    placeholder={defaultDate}
-                    popoverProps={{ withinPortal: true }}
-                    valueFormat="MM/DD/YYYY HH:mm"
-                    {...form.getInputProps('expires')}
-                />
+                <Stack gap="xs">
+                    <DateTimePicker
+                        clearable
+                        description={t('form.shareItem.setExpiration', { context: 'description' })}
+                        label={t('form.shareItem.setExpiration')}
+                        minDate={new Date()}
+                        placeholder={
+                            defaultDate ??
+                            t('form.shareItem.setExpiration', { context: 'serverDefault' })
+                        }
+                        popoverProps={{ withinPortal: true }}
+                        valueFormat="MM/DD/YYYY HH:mm"
+                        {...form.getInputProps('expires')}
+                    />
+                    <Group gap="xs" wrap="wrap">
+                        {expirationPresets.map((preset) => (
+                            <Button
+                                key={preset.label}
+                                onClick={() => {
+                                    form.setFieldValue('expires', preset.getValue());
+                                }}
+                                size="compact-xs"
+                                type="button"
+                                variant="default"
+                            >
+                                {preset.label}
+                            </Button>
+                        ))}
+                    </Group>
+                </Stack>
+                <Accordion variant="separated">
+                    <Accordion.Item value="share-expiration-defaults">
+                        <Accordion.Control>
+                            <Text>{t('setting.shareExpiration')}</Text>
+                        </Accordion.Control>
+                        <Accordion.Panel>
+                            <Stack gap="md">
+                                <Switch
+                                    checked={shareExpiration.useServerDefault}
+                                    description={t('setting.shareExpirationUseServerDefault', {
+                                        context: 'description',
+                                    })}
+                                    label={t('setting.shareExpirationUseServerDefault')}
+                                    onChange={(e) => {
+                                        updateShareExpiration({
+                                            useServerDefault: e.currentTarget.checked,
+                                        });
+                                    }}
+                                />
+                                {!shareExpiration.useServerDefault && (
+                                    <Stack gap="xs">
+                                        <Text size="sm">{t('setting.shareExpiration')}</Text>
+                                        <Text c="dimmed" size="xs">
+                                            {t('setting.shareExpiration', {
+                                                context: 'description',
+                                            })}
+                                        </Text>
+                                        <Group gap="xs" wrap="nowrap">
+                                            <NumberInput
+                                                min={1}
+                                                onBlur={(e) => {
+                                                    const amount = Math.max(
+                                                        1,
+                                                        Math.floor(Number(e.currentTarget.value)) ||
+                                                            1,
+                                                    );
+                                                    updateShareExpiration({ amount });
+                                                }}
+                                                value={shareExpiration.amount}
+                                                width={90}
+                                            />
+                                            <Select
+                                                data={unitOptions}
+                                                onChange={(value) => {
+                                                    if (!value) return;
+                                                    updateShareExpiration({
+                                                        unit: value as ShareExpirationUnit,
+                                                    });
+                                                }}
+                                                value={shareExpiration.unit}
+                                                w={120}
+                                            />
+                                        </Group>
+                                    </Stack>
+                                )}
+                            </Stack>
+                        </Accordion.Panel>
+                    </Accordion.Item>
+                </Accordion>
                 <Textarea
                     autosize
                     description={t('form.shareItem.descriptionPlaceholder', {

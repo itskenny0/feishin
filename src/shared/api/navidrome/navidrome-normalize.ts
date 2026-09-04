@@ -212,9 +212,13 @@ const normalizeSong = (
 
     const fromSongRelease = parsePartialIsoDate(item.releaseDate);
     const songApiYear = coerceYear(item.year);
+    const fromSongDate = parsePartialIsoDate(item.date);
     const releaseYear: null | number =
         fromSongRelease.year > 0 ? fromSongRelease.year : songApiYear > 0 ? songApiYear : null;
-    const releaseDate = fromSongRelease.date ?? (songApiYear > 0 ? String(songApiYear) : null);
+    const releaseDate =
+        fromSongRelease.date ?? fromSongDate.date ?? (songApiYear > 0 ? String(songApiYear) : null);
+    const date = fromSongDate.date ?? (songApiYear > 0 ? String(songApiYear) : null);
+    const year = fromSongDate.year > 0 ? fromSongDate.year : releaseYear;
 
     return {
         album: item.album,
@@ -233,6 +237,7 @@ const normalizeSong = (
         compilation: item.compilation,
         container: item.suffix,
         createdAt: item.createdAt,
+        date,
         discNumber: item.discNumber,
         discSubtitle: item.discSubtitle ? item.discSubtitle : null,
         duration: item.duration * 1000,
@@ -262,6 +267,7 @@ const normalizeSong = (
         imageUrl: null,
         lastPlayedAt: normalizePlayDate(item),
         lyrics: item.lyrics ? item.lyrics : null,
+        mbzAlbumId: item.mbzAlbumId || null,
         // Navidrome only exposes the release-track MBID (→ mbzTrackId). It has
         // no recording MBID, so don't alias the release-track id into
         // mbzRecordingId — that pointed MusicBrainz "recording" links/lookups at
@@ -289,6 +295,7 @@ const normalizeSong = (
         updatedAt: item.updatedAt,
         userFavorite: item.starred || false,
         userRating: item.rating || null,
+        year,
     };
 };
 
@@ -341,6 +348,7 @@ const normalizeAlbum = (
 ): Album => {
     const releaseDate = normalizeNavidromeReleaseDate(item);
     const originalDate = normalizeNavidromeOriginalDate(item);
+    const trackYearRange = { max: item.maxYear, min: item.minYear };
 
     return {
         ...parseAlbumTags(item),
@@ -389,6 +397,7 @@ const normalizeAlbum = (
         songs: item.songs ? item.songs.map((song) => normalizeSong(song, server)) : undefined,
         sortName: item.orderAlbumName,
         tags: item.tags || null,
+        trackYearRange,
         updatedAt: item.updatedAt,
         userFavorite: item.starred || false,
         userRating: item.rating || null,
@@ -397,7 +406,9 @@ const normalizeAlbum = (
 
 const normalizeAlbumArtist = (
     item: z.infer<typeof ndType._response.albumArtist> & {
-        similarArtists?: z.infer<typeof ssType._response.artistInfo>['artistInfo']['similarArtist'];
+        similarArtists?: NonNullable<
+            z.infer<typeof ssType._response.artistInfo2>['artistInfo2']
+        >['similarArtist'];
     },
     server?: null | ServerListItem,
 ): AlbumArtist => {
@@ -454,8 +465,8 @@ const normalizeAlbumArtist = (
         playCount: item.playCount || 0,
         similarArtists:
             item.similarArtists?.map((artist) => ({
-                id: artist.id,
-                imageId: artist.id,
+                id: String(artist.id),
+                imageId: String(artist.id),
                 imageUrl: null,
                 name: artist.name,
                 userFavorite: Boolean(artist.starred) || false,
@@ -472,7 +483,9 @@ const normalizePlaylist = (
     item: z.infer<typeof ndType._response.playlist>,
     server?: null | ServerListItem,
 ): Playlist => {
-    const imageId = navidromeImageIdWithCacheBust(item.id, item.uploadedImage, item.updatedAt);
+    // Always bust, not only for uploaded images: the server regenerates the
+    // auto-generated cover when the playlist contents change.
+    const imageId = `${item.id}&_=${item.updatedAt}`;
 
     return {
         _itemType: LibraryItem.PLAYLIST,

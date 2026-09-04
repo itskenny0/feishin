@@ -8,11 +8,12 @@ import { eventEmitter } from '/@/renderer/events/event-emitter';
 import { usePlayerEvents } from '/@/renderer/features/player/audio-player/hooks/use-player-events';
 import { getSongUrl } from '/@/renderer/features/player/audio-player/hooks/use-stream-url';
 import { AudioPlayer, PlayerOnProgressProps } from '/@/renderer/features/player/audio-player/types';
-import { resolveVolumeMax } from '/@/renderer/features/player/audio-player/utils/volume';
 import { useRadioStore } from '/@/renderer/features/radio/hooks/use-radio-player';
 import { getMpvProperties } from '/@/renderer/features/settings/components/playback/mpv-properties';
 import {
+    setMpvInitialized,
     setTimestamp,
+    useMpvInitialized,
     usePlaybackSettings,
     usePlayerActions,
     usePlayerSong,
@@ -20,7 +21,7 @@ import {
     useSettingsStore,
 } from '/@/renderer/store';
 import { toast } from '/@/shared/components/toast/toast';
-import { PlayerStatus, PlayerType } from '/@/shared/types/types';
+import { PlayerStatus } from '/@/shared/types/types';
 
 export interface MpvPlayerEngineHandle extends AudioPlayer {}
 
@@ -31,6 +32,7 @@ interface MpvPlayerEngineProps {
     onProgress: (e: PlayerOnProgressProps) => void;
     playerRef: RefObject<MpvPlayerEngineHandle | null>;
     playerStatus: PlayerStatus;
+    preservePitch?: boolean;
     speed?: number;
     volume: number;
 }
@@ -49,15 +51,16 @@ export const MpvPlayerEngine = (props: MpvPlayerEngineProps) => {
         onProgress,
         playerRef,
         playerStatus,
+        preservePitch,
         speed,
         volume,
     } = props;
 
     const [internalVolume, setInternalVolume] = useState(volume / 100 || 0);
+    const isInitialized = useMpvInitialized();
     const currentSong = usePlayerSong();
 
     const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
-    const isInitializedRef = useRef<boolean>(false);
     const hasPopulatedQueueRef = useRef<boolean>(false);
     const isMountedRef = useRef<boolean>(true);
 
@@ -68,13 +71,18 @@ export const MpvPlayerEngine = (props: MpvPlayerEngineProps) => {
 
     useEffect(() => {
         const handleMpvReload = () => {
+            setMpvInitialized(false);
             setReloadTrigger((prev) => prev + 1);
+        };
+
+        const handleMpvReconnect = () => {
+            handleMpvReload();
         };
 
         eventEmitter.on('MPV_RELOAD', handleMpvReload);
         // The main process notifies us after the OS resumes from sleep, since the
         // stream mpv had open is likely on a now-dead connection.
-        mpvPlayerListener?.rendererMpvReconnect(handleMpvReload);
+        mpvPlayerListener?.rendererMpvReconnect(handleMpvReconnect);
 
         return () => {
             eventEmitter.off('MPV_RELOAD', handleMpvReload);
@@ -85,6 +93,8 @@ export const MpvPlayerEngine = (props: MpvPlayerEngineProps) => {
     // Start the mpv instance on startup
     useEffect(() => {
         isMountedRef.current = true;
+        setMpvInitialized(false);
+        let isCancelled = false;
 
         const initializeMpv = async () => {
             // Always quit mpv first to ensure clean state, especially during HMR remounts
@@ -105,12 +115,12 @@ export const MpvPlayerEngine = (props: MpvPlayerEngineProps) => {
             }
 
             // Reset initialization state
-            isInitializedRef.current = false;
             hasPopulatedQueueRef.current = false;
 
             // Initialize mpv with fresh state
             const properties: Record<string, unknown> = {
                 ...getMpvProperties(mpvProperties),
+                'audio-pitch-correction': preservePitch === false ? 'no' : 'yes',
                 speed: speed,
                 volume: volume,
             };
@@ -159,7 +169,9 @@ export const MpvPlayerEngine = (props: MpvPlayerEngineProps) => {
                         !hasPopulatedQueueRef.current &&
                         mpvPlayer
                     ) {
-                        mpvPlayer.setQueue(currentSongUrl, nextSongUrl, true);
+                        const shouldPause =
+                            usePlayerStore.getState().player.status !== PlayerStatus.PLAYING;
+                        mpvPlayer.setQueue(currentSongUrl, nextSongUrl, shouldPause);
                         hasPopulatedQueueRef.current = true;
                     }
                 } catch (err) {
@@ -178,20 +190,23 @@ export const MpvPlayerEngine = (props: MpvPlayerEngineProps) => {
                 }
             }
 
-            isInitializedRef.current = true;
+            if (!isCancelled) {
+                setMpvInitialized(true);
+            }
         };
 
         initializeMpv();
 
         return () => {
+            isCancelled = true;
             isMountedRef.current = false;
             // Quit mpv on unmount
             mpvPlayer?.quit();
-            isInitializedRef.current = false;
+            setMpvInitialized(false);
             hasPopulatedQueueRef.current = false;
         };
-        // Note: volume, speed, and transcode are intentionally not in dependencies.
-        // Volume and speed changes are handled by separate useEffects below to avoid
+        // Note: volume, speed, preservePitch, and transcode are intentionally not in dependencies.
+        // Volume speed, and preservePitch changes are handled by separate useEffects below to avoid
         // reinitializing the entire player. Transcode changes are handled by queue
         // update callbacks in usePlayerEvents.
         // reloadTrigger is included to allow manual reload via MPV_RELOAD event.
@@ -200,7 +215,7 @@ export const MpvPlayerEngine = (props: MpvPlayerEngineProps) => {
 
     // Update volume
     useEffect(() => {
-        if (!mpvPlayer) {
+        if (!mpvPlayer || !isInitialized) {
             return;
         }
 
@@ -209,20 +224,20 @@ export const MpvPlayerEngine = (props: MpvPlayerEngineProps) => {
             setInternalVolume(vol);
         });
         mpvPlayer.volume(volume);
-    }, [volume]);
+    }, [isInitialized, volume]);
 
     // Update mute status
     useEffect(() => {
-        if (!mpvPlayer) {
+        if (!mpvPlayer || !isInitialized) {
             return;
         }
 
         mpvPlayer.mute(isMuted);
-    }, [isMuted]);
+    }, [isInitialized, isMuted]);
 
     // Update speed/playback rate
     useEffect(() => {
-        if (!mpvPlayer) {
+        if (!mpvPlayer || !isInitialized) {
             return;
         }
 
@@ -231,11 +246,24 @@ export const MpvPlayerEngine = (props: MpvPlayerEngineProps) => {
         }
 
         mpvPlayer.setProperties({ speed });
-    }, [speed]);
+    }, [isInitialized, speed]);
+
+    // Update pitch correction status
+    useEffect(() => {
+        if (!mpvPlayer || !isInitialized) {
+            return;
+        }
+
+        if (preservePitch === false) {
+            mpvPlayer.setProperties({ 'audio-pitch-correction': 'no' });
+        } else {
+            mpvPlayer.setProperties({ 'audio-pitch-correction': 'yes' });
+        }
+    }, [isInitialized, preservePitch]);
 
     // Handle play/pause status
     useEffect(() => {
-        if (!mpvPlayer) {
+        if (!mpvPlayer || !isInitialized) {
             return;
         }
 
@@ -244,7 +272,7 @@ export const MpvPlayerEngine = (props: MpvPlayerEngineProps) => {
         } else {
             mpvPlayer.pause();
         }
-    }, [playerStatus]);
+    }, [isInitialized, playerStatus]);
 
     const hasCurrentSong = !!currentSong?.id;
 
@@ -383,8 +411,7 @@ export const MpvPlayerEngine = (props: MpvPlayerEngineProps) => {
             }
         },
         increaseVolume(by: number) {
-            const maxVol = resolveVolumeMax(PlayerType.LOCAL, mpvExtraParameters) / 100;
-            const newVol = Math.min(maxVol, internalVolume + by / 100);
+            const newVol = Math.min(1, internalVolume + by / 100);
             setInternalVolume(newVol);
             if (mpvPlayer) {
                 mpvPlayer.volume(newVol * 100);

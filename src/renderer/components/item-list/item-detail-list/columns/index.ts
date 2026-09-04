@@ -14,6 +14,7 @@ import { CodecColumn } from './codec-column';
 import { CommentColumn } from './comment-column';
 import { ComposerColumn } from './composer-column';
 import { DateAddedColumn } from './date-added-column';
+import { DateColumn } from './date-column';
 import { DefaultColumn } from './default-column';
 import { DiscNumberColumn } from './disc-number-column';
 import { DurationColumn } from './duration-column';
@@ -27,6 +28,7 @@ import { PathColumn } from './path-column';
 import { PlayCountColumn } from './play-count-column';
 import { RatingColumn } from './rating-column';
 import { ReleaseDateColumn } from './release-date-column';
+import { ReleaseYearColumn } from './release-year-column';
 import { RowIndexColumn } from './row-index-column';
 import { ItemDetailRowPlayControlCell } from './row-play-control-cell';
 import { SampleRateColumn } from './sample-rate-column';
@@ -53,6 +55,7 @@ const COLUMN_MAP: Partial<Record<TableColumn, CellComponent>> = {
     [TableColumn.CODEC]: CodecColumn,
     [TableColumn.COMMENT]: CommentColumn,
     [TableColumn.COMPOSER]: ComposerColumn,
+    [TableColumn.DATE]: DateColumn,
     [TableColumn.DATE_ADDED]: DateAddedColumn,
     [TableColumn.DISC_NUMBER]: DiscNumberColumn,
     [TableColumn.DURATION]: DurationColumn,
@@ -64,6 +67,7 @@ const COLUMN_MAP: Partial<Record<TableColumn, CellComponent>> = {
     [TableColumn.PATH]: PathColumn,
     [TableColumn.PLAY_COUNT]: PlayCountColumn,
     [TableColumn.RELEASE_DATE]: ReleaseDateColumn,
+    [TableColumn.RELEASE_YEAR]: ReleaseYearColumn,
     [TableColumn.ROW_INDEX]: RowIndexColumn,
     [TableColumn.SAMPLE_RATE]: SampleRateColumn,
     [TableColumn.SIZE]: SizeColumn,
@@ -107,6 +111,7 @@ export {
     CommentColumn,
     ComposerColumn,
     DateAddedColumn,
+    DateColumn,
     DefaultColumn,
     DiscNumberColumn,
     DurationColumn,
@@ -121,6 +126,7 @@ export {
     PlayCountColumn,
     RatingColumn,
     ReleaseDateColumn,
+    ReleaseYearColumn,
     RowIndexColumn,
     SampleRateColumn,
     SizeColumn,

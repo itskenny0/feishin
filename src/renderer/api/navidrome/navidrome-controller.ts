@@ -295,7 +295,7 @@ export const NavidromeController: InternalControllerEndpoint = {
     getAlbumArtistInfo: async (args) => {
         const { apiClientProps, query } = args;
 
-        const artistInfoRes = await ssApiClient(apiClientProps).getArtistInfo({
+        const artistInfoRes = await ssApiClient(apiClientProps).getArtistInfo2({
             query: {
                 id: query.id,
                 ...(query.limit != null && { count: query.limit }),
@@ -306,7 +306,7 @@ export const NavidromeController: InternalControllerEndpoint = {
             return null;
         }
 
-        const artistInfo = artistInfoRes.body.artistInfo;
+        const artistInfo = artistInfoRes.body.artistInfo2;
         const imageUrl =
             artistInfo?.largeImageUrl ||
             artistInfo?.mediumImageUrl ||
@@ -318,8 +318,8 @@ export const NavidromeController: InternalControllerEndpoint = {
             imageUrl,
             similarArtists:
                 artistInfo?.similarArtist?.map((artist) => ({
-                    id: artist.id,
-                    imageId: artist.id,
+                    id: String(artist.id),
+                    imageId: String(artist.id),
                     imageUrl: null,
                     name: artist.name,
                     userFavorite: Boolean(artist.starred) || false,
@@ -563,6 +563,57 @@ export const NavidromeController: InternalControllerEndpoint = {
         );
     },
     getDownloadUrl: SubsonicController.getDownloadUrl,
+    getFavoriteSongs: async (args) => {
+        const { apiClientProps, query } = args;
+
+        // if user selects 'rating'
+        if (query.type === 'rating') {
+            const res = await NavidromeController.getSongList({
+                apiClientProps,
+                query: {
+                    artistIds: [query.artistId],
+                    sortBy: SongListSort.RATING,
+                    sortOrder: SortOrder.DESC,
+                    startIndex: 0,
+                },
+            });
+
+            const songsWithHighRating = orderBy(
+                res.items.filter((song) => song.userRating !== null && song.userRating > 2),
+                ['userRating', 'userFavorite', 'playCount', 'albumId', 'trackNumber'],
+                ['desc', 'desc', 'desc', 'asc', 'asc'],
+            );
+
+            return {
+                items: songsWithHighRating,
+                startIndex: 0,
+                totalRecordCount: res.totalRecordCount,
+            };
+        }
+
+        // else if user selects 'favorite'
+        const res = await NavidromeController.getSongList({
+            apiClientProps,
+            query: {
+                artistIds: [query.artistId],
+                sortBy: SongListSort.FAVORITED,
+                sortOrder: SortOrder.DESC,
+                startIndex: 0,
+            },
+        });
+
+        const songsWithFavorite = orderBy(
+            res.items.filter((song) => song.userFavorite),
+            ['userFavorite', 'userRating', 'playCount', 'albumId', 'trackNumber'],
+            ['desc', 'desc', 'desc', 'asc', 'asc'],
+        );
+
+        return {
+            items: songsWithFavorite,
+            startIndex: 0,
+            totalRecordCount: res.totalRecordCount,
+        };
+    },
     getFolder: SubsonicController.getFolder,
     getGenreList: async (args) => {
         const { apiClientProps, query } = args;
@@ -1190,9 +1241,9 @@ export const NavidromeController: InternalControllerEndpoint = {
             body: {
                 description: body.description,
                 downloadable: body.downloadable,
-                expires: body.expires,
                 resourceIds: body.resourceIds,
                 resourceType: body.resourceType,
+                ...(body.expires !== undefined ? { expires: body.expires } : {}),
             },
         });
 
@@ -1204,6 +1255,7 @@ export const NavidromeController: InternalControllerEndpoint = {
             id: res.body.data.id,
         };
     },
+    startLibraryScan: SubsonicController.startLibraryScan,
     updateInternetRadioStation: async (args) => {
         const { apiClientProps, body, query } = args;
 

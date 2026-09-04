@@ -40,6 +40,7 @@ import {
 import {
     SidebarItemType,
     useSidebarBottomSection,
+    useSidebarImageEnabled,
     useSidebarItems,
     useWindowSettings,
 } from '/@/renderer/store/settings.store';
@@ -126,10 +127,11 @@ export const Sidebar = () => {
     // "Available offline" entry below.
     const offlineSongCount = useOfflineSongCount();
     const { windowBarStyle } = useWindowSettings();
-    const sidebarImageEnabled = useAppStore((state) => state.sidebar.image);
+    const sidebarImageEnabled = useSidebarImageEnabled();
+    const sidebarImageShown = useAppStore((state) => state.sidebar.image);
     const sidebarExpandedFromStore = useAppStore((state) => state.sidebar.expanded);
     const { setSideBar } = useAppStoreActions();
-    const showImage = sidebarImageEnabled;
+    const showImage = sidebarImageEnabled && sidebarImageShown;
 
     // Persist accordion open/close across launches. Empty store value
     // (initial state for existing users) is treated as "show defaults" so

@@ -21,7 +21,11 @@ import { useDragDrop } from '/@/renderer/hooks/use-drag-drop';
 import { useLongPress } from '/@/renderer/hooks/use-long-press';
 import { prefetchAlbumDetail, preloadRoute } from '/@/renderer/router/route-preloaders';
 import { AppRoute } from '/@/renderer/router/routes';
-import { useShowFilesystemNameForAlbums, useShowRatings } from '/@/renderer/store';
+import {
+    useShowFavorites,
+    useShowFilesystemNameForAlbums,
+    useShowRatings,
+} from '/@/renderer/store';
 import {
     formatDateAbsolute,
     formatDateRelative,
@@ -100,6 +104,7 @@ export const ItemCard = ({
     withControls,
 }: ItemCardProps) => {
     const showRatings = useShowRatings();
+    const showFavorites = useShowFavorites();
     const imageUrl = getImageUrl(data);
     const rows = providedRows || [];
 
@@ -120,6 +125,7 @@ export const ItemCard = ({
                     isRound={isRound}
                     itemType={itemType}
                     rows={rows}
+                    showFavorite={showFavorites}
                     showRating={showRatings}
                     showRatingBadge={showRatingBadge}
                     withControls={withControls}
@@ -141,6 +147,7 @@ export const ItemCard = ({
                     isRound={isRound}
                     itemType={itemType}
                     rows={rows}
+                    showFavorite={showFavorites}
                     showRating={showRatings}
                     showRatingBadge={showRatingBadge}
                     withControls={withControls}
@@ -162,6 +169,7 @@ export const ItemCard = ({
                     isRound={isRound}
                     itemType={itemType}
                     rows={rows}
+                    showFavorite={showFavorites}
                     showRating={showRatings}
                     showRatingBadge={showRatingBadge}
                     withControls={withControls}
@@ -179,6 +187,7 @@ export interface ItemCardDerivativeProps extends Omit<ItemCardProps, 'type'> {
     imageUrl: string | undefined;
     internalState?: ItemListStateActions;
     rows: DataRow[];
+    showFavorite: boolean;
     showRating: boolean;
     showRatingBadge: boolean;
 }
@@ -200,6 +209,7 @@ const ItemCardStandardImageArea = memo(function ItemCardStandardImageArea({
     isRound,
     itemType,
     navigationPath,
+    showFavorite,
     showRating,
     showRatingBadge = true,
     variant,
@@ -219,6 +229,7 @@ const ItemCardStandardImageArea = memo(function ItemCardStandardImageArea({
     isRound?: boolean;
     itemType: LibraryItem;
     navigationPath: null | string;
+    showFavorite: boolean;
     showRating: boolean;
     showRatingBadge?: boolean;
     variant: 'default' | 'poster';
@@ -329,7 +340,7 @@ const ItemCardStandardImageArea = memo(function ItemCardStandardImageArea({
                     type="itemCard"
                 />
             )}
-            {isFavorite && <div className={styles.favoriteBadge} />}
+            {showFavorite && isFavorite && <div className={styles.favoriteBadge} />}
             {hasRating && <div className={styles.ratingBadge}>{userRating}</div>}
             <AnimatePresence>
                 {withControls && showControls && (
@@ -339,6 +350,7 @@ const ItemCardStandardImageArea = memo(function ItemCardStandardImageArea({
                         {...(variant === 'poster' ? { internalState } : {})}
                         item={data}
                         itemType={itemType}
+                        showFavorite={showFavorite}
                         showRating={showRating}
                         type={variant}
                     />
@@ -403,6 +415,7 @@ const CompactItemCardImageArea = memo(function CompactItemCardImageArea({
     itemType,
     navigationPath,
     rows,
+    showFavorite,
     showRating,
     showRatingBadge = true,
     withControls,
@@ -421,6 +434,7 @@ const CompactItemCardImageArea = memo(function CompactItemCardImageArea({
     itemType: LibraryItem;
     navigationPath: null | string;
     rows: DataRow[];
+    showFavorite: boolean;
     showRating: boolean;
     showRatingBadge?: boolean;
     withControls?: boolean;
@@ -516,7 +530,7 @@ const CompactItemCardImageArea = memo(function CompactItemCardImageArea({
                     type="itemCard"
                 />
             )}
-            {isFavorite && <div className={styles.favoriteBadge} />}
+            {showFavorite && isFavorite && <div className={styles.favoriteBadge} />}
             {hasRating && <div className={styles.ratingBadge}>{userRating}</div>}
             <AnimatePresence>
                 {withControls && showControls && data && (
@@ -526,6 +540,7 @@ const CompactItemCardImageArea = memo(function CompactItemCardImageArea({
                         internalState={internalState}
                         item={data}
                         itemType={itemType}
+                        showFavorite={showFavorite}
                         showRating={showRating}
                         type="compact"
                     />
@@ -603,6 +618,7 @@ const CompactItemCard = ({
     isRound,
     itemType,
     rows,
+    showFavorite,
     showRating,
     showRatingBadge,
     withControls,
@@ -770,6 +786,7 @@ const CompactItemCard = ({
                     itemType={itemType}
                     navigationPath={navigationPath}
                     rows={rows}
+                    showFavorite={showFavorite}
                     showRating={showRating}
                     showRatingBadge={showRatingBadge}
                     withControls={withControls}
@@ -816,6 +833,7 @@ const DefaultItemCard = ({
     isRound,
     itemType,
     rows,
+    showFavorite,
     showRating,
     showRatingBadge,
     withControls,
@@ -915,6 +933,7 @@ const DefaultItemCard = ({
                     isRound={isRound}
                     itemType={itemType}
                     navigationPath={navigationPath}
+                    showFavorite={showFavorite}
                     showRating={showRating}
                     showRatingBadge={showRatingBadge}
                     variant="default"
@@ -979,6 +998,7 @@ const PosterItemCard = ({
     isRound,
     itemType,
     rows,
+    showFavorite,
     showRating,
     showRatingBadge,
     withControls,
@@ -1145,6 +1165,7 @@ const PosterItemCard = ({
                     isRound={isRound}
                     itemType={itemType}
                     navigationPath={navigationPath}
+                    showFavorite={showFavorite}
                     showRating={showRating}
                     showRatingBadge={showRatingBadge}
                     variant="poster"
@@ -1444,6 +1465,24 @@ export const getDataRows = (type?: 'compact' | 'default' | 'poster'): DataRow[] 
                 return '';
             },
             id: 'releaseDate',
+        },
+        {
+            format: (data) => {
+                if ('year' in data && data.year) {
+                    return String(data.year);
+                }
+                return '';
+            },
+            id: 'year',
+        },
+        {
+            format: (data) => {
+                if ('date' in data && data.date) {
+                    return formatPartialIsoDateUTC(data.date);
+                }
+                return '';
+            },
+            id: 'date',
         },
         {
             format: (data) => {

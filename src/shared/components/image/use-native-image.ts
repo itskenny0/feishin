@@ -228,7 +228,6 @@ export function useNativeImage({
     // (fetch->blob) URL we must revoke. The variant MUST match what we
     // acquired with so we release the correct shared entry.
     const sharedUrlRef = useRef<null | { itemId: string; variant: string }>(null);
-    const retiredObjectUrlsRef = useRef<string[]>([]);
     const onFetchErrorRef = useRef(onFetchError);
     const [state, setState] = useState<NativeImageState>(() => {
         // Synchronous initial paint. If a cover (the exact variant OR a
@@ -621,9 +620,6 @@ export function useNativeImage({
                     return;
                 }
                 const objectUrl = URL.createObjectURL(blob);
-                if (objectUrlRef.current) {
-                    retiredObjectUrlsRef.current.push(objectUrlRef.current);
-                }
                 objectUrlRef.current = objectUrl;
                 sharedUrlRef.current = null;
                 loadedRequestSignatureRef.current = requestSignature;
@@ -689,11 +685,6 @@ export function useNativeImage({
     }, []);
 
     useEffect(() => {
-        retiredObjectUrlsRef.current.forEach((objectUrl) => URL.revokeObjectURL(objectUrl));
-        retiredObjectUrlsRef.current = [];
-    }, [state.displaySrc]);
-
-    useEffect(() => {
         return () => {
             abortControllerRef.current?.abort();
 
@@ -710,8 +701,6 @@ export function useNativeImage({
                 }
                 objectUrlRef.current = null;
             }
-
-            retiredObjectUrlsRef.current.forEach((objectUrl) => URL.revokeObjectURL(objectUrl));
         };
     }, []);
 

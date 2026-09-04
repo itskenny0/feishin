@@ -427,7 +427,7 @@ export interface VisualizerProps {
 
 export const Visualizer = ({ chromeless, hideTopControls }: VisualizerProps = {}) => {
     const { t } = useTranslation();
-    const { visualizerExpanded } = useFullScreenPlayerStore();
+    const { expanded, visualizerExpanded, visualizerReturnToPlayer } = useFullScreenPlayerStore();
     const { setStore } = useFullScreenPlayerStoreActions();
     const isMobile = useIsMobileShell();
     // Touch has no hover: reveal controls on touch, hide after an idle
@@ -435,7 +435,19 @@ export const Visualizer = ({ chromeless, hideTopControls }: VisualizerProps = {}
     const { controlsVisible, revealControls } = useIdleControls();
 
     const handleToggleFullscreen = () => {
-        setStore({ expanded: false, visualizerExpanded: !visualizerExpanded });
+        if (visualizerExpanded) {
+            setStore({
+                expanded: visualizerReturnToPlayer,
+                visualizerExpanded: false,
+                visualizerReturnToPlayer: false,
+            });
+        } else {
+            setStore({
+                expanded: false,
+                visualizerExpanded: true,
+                visualizerReturnToPlayer: expanded,
+            });
+        }
     };
 
     const showControls = !chromeless && !hideTopControls && (!isMobile || controlsVisible);
@@ -449,7 +461,7 @@ export const Visualizer = ({ chromeless, hideTopControls }: VisualizerProps = {}
                 <Group className={`${styles.iconGroup} ${styles.iconGroupTop}`} gap="xs">
                     <ActionIcon
                         aria-label={t('player.toggleFullscreenPlayer')}
-                        icon="expand"
+                        icon={visualizerExpanded ? 'shrink' : 'expand'}
                         iconProps={{ size: 'lg' }}
                         onClick={handleToggleFullscreen}
                         tooltip={{ label: t('player.toggleFullscreenPlayer'), openDelay: 400 }}

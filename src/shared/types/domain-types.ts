@@ -208,6 +208,7 @@ export type Album = {
     songs?: Song[];
     sortName: string;
     tags: null | Record<string, string[]>;
+    trackYearRange: null | { max: number; min: number };
     updatedAt: string;
     userFavorite: boolean;
     userRating: null | number;
@@ -402,6 +403,7 @@ export type Song = {
     compilation: boolean | null;
     container: null | string;
     createdAt: string;
+    date: null | PartialIsoDateString;
     discNumber: number;
     discSubtitle: null | string;
     duration: number;
@@ -413,6 +415,7 @@ export type Song = {
     imageUrl: null | string;
     lastPlayedAt: null | string;
     lyrics: null | string;
+    mbzAlbumId: null | string;
     mbzRecordingId: null | string;
     mbzTrackId: null | string;
     name: string;
@@ -432,6 +435,7 @@ export type Song = {
     updatedAt: string;
     userFavorite: boolean;
     userRating: null | number;
+    year: null | number;
 };
 
 type ApiContext = {
@@ -637,6 +641,7 @@ export enum SongListSort {
     RECENTLY_ADDED = 'recentlyAdded',
     RECENTLY_PLAYED = 'recentlyPlayed',
     RELEASE_DATE = 'releaseDate',
+    RELEASE_YEAR = 'releaseYear',
     SORT_NAME = 'sortName',
     YEAR = 'year',
 }
@@ -705,6 +710,7 @@ export const songListSortMap: SongListSortMap = {
         recentlyAdded: JFSongListSort.RECENTLY_ADDED,
         recentlyPlayed: JFSongListSort.RECENTLY_PLAYED,
         releaseDate: JFSongListSort.RELEASE_DATE,
+        releaseYear: undefined,
         sortName: JFSongListSort.NAME,
         year: undefined,
     },
@@ -727,6 +733,7 @@ export const songListSortMap: SongListSortMap = {
         recentlyAdded: NDSongListSort.RECENTLY_ADDED,
         recentlyPlayed: NDSongListSort.PLAY_DATE,
         releaseDate: undefined,
+        releaseYear: NDSongListSort.RELEASE_YEAR,
         sortName: NDSongListSort.TITLE,
         year: NDSongListSort.YEAR,
     },
@@ -749,6 +756,7 @@ export const songListSortMap: SongListSortMap = {
         recentlyAdded: undefined,
         recentlyPlayed: undefined,
         releaseDate: undefined,
+        releaseYear: undefined,
         sortName: undefined,
         year: undefined,
     },
@@ -1133,13 +1141,17 @@ export type ShareItemArgs = BaseEndpointArgs & { body: ShareItemBody };
 export type ShareItemBody = {
     description: string;
     downloadable: boolean;
-    expires: number;
+    expires?: number;
     resourceIds: string;
     resourceType: string;
 };
 
 // Sharing
 export type ShareItemResponse = undefined | { id: string };
+
+export type StartLibraryScanArgs = BaseEndpointArgs;
+
+export type StartLibraryScanResponse = null;
 
 export type UpdateInternetRadioStationArgs = BaseEndpointArgs & {
     body: UpdateInternetRadioStationBody;
@@ -1346,6 +1358,17 @@ export type ArtistInfoQuery = {
     limit: number;
     musicFolderId?: string | string[];
 };
+
+export type FavoriteSongListArgs = BaseEndpointArgs & { query: FavoriteSongListQuery };
+
+export type FavoriteSongListQuery = {
+    artistId: string;
+    limit?: number;
+    type?: 'favorite' | 'rating';
+};
+
+// Favorite Songs List
+export type FavoriteSongListResponse = BasePaginatedResponse<Song[]>;
 
 export type FullLyricsMetadata = Omit<InternetProviderLyricResponse, 'id' | 'lyrics' | 'source'> & {
     lyrics: LyricsResponse;
@@ -1584,6 +1607,7 @@ export type ControllerEndpoint = {
     getArtistListCount: (args: ArtistListCountArgs) => Promise<number>;
     getArtistRadio: (args: ArtistRadioArgs) => Promise<Song[]>;
     getDownloadUrl: (args: DownloadArgs) => string;
+    getFavoriteSongs: (args: FavoriteSongListArgs) => Promise<FavoriteSongListResponse>;
     getFolder: (args: FolderArgs) => Promise<FolderResponse>;
     getFolderSongsRecursive?: (
         args: FolderSongsRecursiveArgs,
@@ -1627,6 +1651,7 @@ export type ControllerEndpoint = {
     setPlaylistSongs: (args: SetPlaylistSongsArgs) => Promise<SetPlaylistSongsResponse>;
     setRating?: (args: SetRatingArgs) => Promise<RatingResponse>;
     shareItem?: (args: ShareItemArgs) => Promise<ShareItemResponse>;
+    startLibraryScan: (args: StartLibraryScanArgs) => Promise<StartLibraryScanResponse>;
     updateInternetRadioStation: (
         args: UpdateInternetRadioStationArgs,
     ) => Promise<UpdateInternetRadioStationResponse>;
@@ -1751,6 +1776,9 @@ export type InternalControllerEndpoint = {
     getArtistListCount: (args: ReplaceApiClientProps<ArtistListCountArgs>) => Promise<number>;
     getArtistRadio: (args: ReplaceApiClientProps<ArtistRadioArgs>) => Promise<Song[]>;
     getDownloadUrl: (args: ReplaceApiClientProps<DownloadArgs>) => string;
+    getFavoriteSongs: (
+        args: ReplaceApiClientProps<FavoriteSongListArgs>,
+    ) => Promise<FavoriteSongListResponse>;
     getFolder: (args: ReplaceApiClientProps<FolderArgs>) => Promise<FolderResponse>;
     getFolderSongsRecursive?: (
         args: ReplaceApiClientProps<FolderSongsRecursiveArgs>,
@@ -1820,6 +1848,9 @@ export type InternalControllerEndpoint = {
     ) => Promise<SetPlaylistSongsResponse>;
     setRating?: (args: ReplaceApiClientProps<SetRatingArgs>) => Promise<RatingResponse>;
     shareItem?: (args: ReplaceApiClientProps<ShareItemArgs>) => Promise<ShareItemResponse>;
+    startLibraryScan: (
+        args: ReplaceApiClientProps<StartLibraryScanArgs>,
+    ) => Promise<StartLibraryScanResponse>;
     updateInternetRadioStation: (
         args: ReplaceApiClientProps<UpdateInternetRadioStationArgs>,
     ) => Promise<UpdateInternetRadioStationResponse>;

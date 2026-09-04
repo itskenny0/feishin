@@ -15,11 +15,20 @@ interface SettingsOptionProps {
     indent?: boolean;
     isSubheader?: boolean;
     note?: string;
+    showDescription?: boolean;
     title: React.ReactNode | string;
 }
 
 export const SettingsOptions = memo(
-    ({ control, description, indent, isSubheader, note, title }: SettingsOptionProps) => {
+    ({
+        control,
+        description,
+        indent,
+        isSubheader,
+        note,
+        showDescription = true,
+        title,
+    }: SettingsOptionProps) => {
         const isMobileShell = useIsMobileShell();
 
         if (isSubheader) {
@@ -55,13 +64,14 @@ export const SettingsOptions = memo(
                             </Tooltip>
                         )}
                     </Group>
-                    {React.isValidElement(description) ? (
-                        description
-                    ) : (
-                        <Text isMuted isNoSelect size="sm">
-                            {description}
-                        </Text>
-                    )}
+                    {showDescription &&
+                        (React.isValidElement(description) ? (
+                            description
+                        ) : (
+                            <Text isMuted isNoSelect size="sm">
+                                {description}
+                            </Text>
+                        ))}
                     <Group className={styles.mobileControl} justify="flex-start" w="100%">
                         {control}
                     </Group>
@@ -87,13 +97,14 @@ export const SettingsOptions = memo(
                                 </Tooltip>
                             )}
                         </Group>
-                        {React.isValidElement(description) ? (
-                            description
-                        ) : (
-                            <Text isMuted isNoSelect size="sm">
-                                {description}
-                            </Text>
-                        )}
+                        {showDescription &&
+                            (React.isValidElement(description) ? (
+                                description
+                            ) : (
+                                <Text isMuted isNoSelect size="sm">
+                                    {description}
+                                </Text>
+                            ))}
                     </Stack>
                     <Group justify="flex-end">{control}</Group>
                 </Group>

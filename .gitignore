@@ -20,3 +20,6 @@ android/captures/
 
 # Playwright MCP scratch output
 .playwright-mcp/
+.idea
+.scratch
+tsconfig.*.tsbuildinfo

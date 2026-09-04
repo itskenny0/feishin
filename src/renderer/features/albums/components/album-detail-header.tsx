@@ -20,7 +20,7 @@ import { useSetRating } from '/@/renderer/features/shared/hooks/use-set-rating';
 import { songsQueries } from '/@/renderer/features/songs/api/songs-api';
 import { useIsMobileShell } from '/@/renderer/hooks/use-breakpoint';
 import { AppRoute } from '/@/renderer/router/routes';
-import { useCurrentServer, useShowRatings } from '/@/renderer/store';
+import { useCurrentServer, useShowFavorites, useShowRatings } from '/@/renderer/store';
 import {
     useArtistRadioCount,
     usePlayButtonBehavior,
@@ -50,6 +50,7 @@ export const AlbumDetailHeader = forwardRef<HTMLDivElement>((_props, ref) => {
     const server = useCurrentServer();
     const showRatings = useShowRatings();
     const useFilesystemName = useShowFilesystemNameForAlbums();
+    const showFavorites = useShowFavorites();
     const queryClient = useQueryClient();
     const albumRadioCount = useArtistRadioCount();
     const isMobile = useIsMobileShell();
@@ -75,15 +76,17 @@ export const AlbumDetailHeader = forwardRef<HTMLDivElement>((_props, ref) => {
     const setRating = useSetRating();
     const setFavorite = useSetFavorite();
 
-    const handleFavorite = () => {
-        if (!detailQuery?.data) return;
-        setFavorite(
-            detailQuery.data._serverId,
-            [detailQuery.data.id],
-            LibraryItem.ALBUM,
-            !detailQuery.data.userFavorite,
-        );
-    };
+    const handleFavorite = showFavorites
+        ? () => {
+              if (!detailQuery?.data) return;
+              setFavorite(
+                  detailQuery.data._serverId,
+                  [detailQuery.data.id],
+                  LibraryItem.ALBUM,
+                  !detailQuery.data.userFavorite,
+              );
+          }
+        : undefined;
 
     const handleUpdateRating = showRating
         ? (rating: number) => {
@@ -153,7 +156,7 @@ export const AlbumDetailHeader = forwardRef<HTMLDivElement>((_props, ref) => {
         if (!album) return [];
 
         const originalDifferentFromRelease =
-            album?.originalDate && album?.originalDate !== album?.releaseDate;
+            album.originalDate && album.originalDate !== album.releaseDate;
 
         const originalYearDifferentFromRelease =
             album.originalYear > 0 &&
@@ -162,54 +165,39 @@ export const AlbumDetailHeader = forwardRef<HTMLDivElement>((_props, ref) => {
 
         const playCount = album?.playCount;
 
-        const releasePrefix = originalDifferentFromRelease ? t('page.albumDetail.released') : '♫';
+        const trackYearRangeDifferent = album.trackYearRange?.max !== album.trackYearRange?.min;
 
-        const releaseYearPrefix = originalYearDifferentFromRelease
-            ? t('page.albumDetail.released')
-            : '♫';
+        if (album.trackYearRange && trackYearRangeDifferent) {
+            items.push({
+                id: 'trackYearRange',
+                value: `${album.trackYearRange.min}-${album.trackYearRange.max}`,
+            });
+        }
 
-        if (album.originalDate) {
-            if (originalDifferentFromRelease) {
-                items.push({
-                    id: 'originalDate',
-                    value: `♫ ${formatPartialIsoDateUTC(album.originalDate)}`,
-                });
-            }
+        if (album.originalDate && originalDifferentFromRelease) {
+            items.push({
+                id: 'originalDate',
+                value: `${formatPartialIsoDateUTC(album.originalDate)}`,
+            });
+        } else if (album.originalYear > 0 && originalYearDifferentFromRelease) {
+            items.push({
+                id: 'originalYear',
+                value: `${album.originalYear}`,
+            });
+        }
 
-            if (releaseDate) {
-                items.push({
-                    id: 'releaseDate',
-                    value: `${releasePrefix} ${formatPartialIsoDateUTC(releaseDate)}`,
-                });
-            }
-        } else if (album.originalYear > 0) {
-            if (originalYearDifferentFromRelease) {
-                items.push({
-                    id: 'originalYear',
-                    value: `♫ ${album.originalYear}`,
-                });
-            }
-
-            if (releaseDate) {
-                items.push({
-                    id: 'releaseDate',
-                    value: `${releaseYearPrefix} ${formatPartialIsoDateUTC(releaseDate)}`,
-                });
-            } else if (releaseYear != null && releaseYear > 0) {
-                items.push({
-                    id: 'releaseYear',
-                    value: `${releaseYearPrefix} ${releaseYear}`,
-                });
-            }
-        } else if (releaseDate) {
+        const prefixNecessary = items.length > 0;
+        const releasePrefix = prefixNecessary ? `${t('page.albumDetail.released')} ` : '';
+        const releaseYearPrefix = prefixNecessary ? `${t('page.albumDetail.released')} ` : '';
+        if (releaseDate) {
             items.push({
                 id: 'releaseDate',
-                value: `♫ ${formatPartialIsoDateUTC(releaseDate)}`,
+                value: `${releasePrefix}${formatPartialIsoDateUTC(releaseDate)}`,
             });
         } else if (releaseYear != null && releaseYear > 0) {
             items.push({
                 id: 'releaseYear',
-                value: `♫ ${releaseYear}`,
+                value: `${releaseYearPrefix}${releaseYear}`,
             });
         }
 
@@ -312,6 +300,7 @@ export const AlbumDetailHeader = forwardRef<HTMLDivElement>((_props, ref) => {
                     <Group className={styles.metadataGroup} gap="xs">
                         {metadataItems.map((item, index) => (
                             <Fragment key={item.id}>
+                                {index === 0 && <Text isNoSelect>♫ </Text>}
                                 {index > 0 && (
                                     <Text isMuted isNoSelect>
                                         <Separator />

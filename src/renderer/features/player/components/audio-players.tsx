@@ -35,6 +35,10 @@ import {
     useIsRadioActive,
 } from '/@/renderer/features/radio/hooks/use-radio-player';
 import { RemoteHook } from '/@/renderer/features/remote/hooks/use-remote';
+import { RemoteLibraryHook } from '/@/renderer/features/remote/hooks/use-remote-library';
+import { RemoteQueuePushHook } from '/@/renderer/features/remote/hooks/use-remote-queue-push';
+import { RemoteRadioPushHook } from '/@/renderer/features/remote/hooks/use-remote-radio-push';
+import { RemoteSettingsPushHook } from '/@/renderer/features/remote/hooks/use-remote-settings-push';
 import { VisualizerSystemAudioBridgeHook } from '/@/renderer/features/visualizer/components/visualizer-system-audio-bridge';
 import {
     updateQueueFavorites,
@@ -254,6 +258,10 @@ export const AudioPlayers = () => {
             <PeerSyncMount />
             <HomeAssistantMount />
             <SyncForegroundServiceMount />
+            <RemoteLibraryHook />
+            <RemoteQueuePushHook />
+            <RemoteRadioPushHook />
+            <RemoteSettingsPushHook />
             <AutoDJHook />
             <UpcomingLyricsPrefetch />
             <UpcomingCoversPrefetch />
@@ -320,7 +328,7 @@ const AudioPlayersContent = ({
     }, []);
 
     useEffect(() => {
-        if (!webAudio || !('AudioContext' in window)) {
+        if (playbackType !== PlayerType.WEB || !webAudio || !('AudioContext' in window)) {
             return;
         }
 
@@ -432,7 +440,25 @@ const AudioPlayersContent = ({
 
         // Intentionally ignore the sample rate dependency, as it makes things really messy
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [webAudio]);
+    }, [playbackType, webAudio]);
+
+    useEffect(() => {
+        if (!audioContext?.context) return undefined;
+        const ctx = audioContext.context;
+        if (ctx.state === 'running') return undefined;
+
+        const unlock = () => {
+            ctx.resume().catch(() => {});
+        };
+
+        document.addEventListener('pointerdown', unlock, { capture: true, once: true });
+        document.addEventListener('keydown', unlock, { capture: true, once: true });
+
+        return () => {
+            document.removeEventListener('pointerdown', unlock, { capture: true });
+            document.removeEventListener('keydown', unlock, { capture: true });
+        };
+    }, [audioContext]);
 
     useEffect(() => {
         // Not standard, just used in chromium-based browsers. See
@@ -492,19 +518,21 @@ const AudioPlayersContent = ({
         };
     }, [serverId]);
 
-    if (isRadioActive && playbackType === PlayerType.LOCAL) {
+    if (playbackType === PlayerType.LOCAL) {
         return <MpvPlayer />;
     }
 
-    if (isRadioActive && playbackType === PlayerType.WEB) {
-        return <RadioWebPlayer />;
+    if (playbackType === PlayerType.WEB) {
+        if (isRadioActive) {
+            return <RadioWebPlayer />;
+        }
+
+        return <WebPlayer />;
     }
 
-    return (
-        <>
-            {playbackType === PlayerType.WEB && <WebPlayer />}
-            {playbackType === PlayerType.LOCAL && <MpvPlayer />}
-            {playbackType === PlayerType.JUKEBOX && <JukeboxPlayer />}
-        </>
-    );
+    if (playbackType === PlayerType.JUKEBOX) {
+        return <JukeboxPlayer />;
+    }
+
+    return null;
 };

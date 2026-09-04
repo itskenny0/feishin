@@ -11,7 +11,11 @@ import {
     writeSnapshot,
 } from '/@/renderer/cache';
 import { usePlayerEvents } from '/@/renderer/features/player/audio-player/hooks/use-player-events';
-import { updateQueueSong } from '/@/renderer/store/player.store';
+import {
+    uniqueSeekToTimestamp,
+    updateQueueSong,
+    usePlayerStoreBase,
+} from '/@/renderer/store/player.store';
 import { logger } from '/@/renderer/utils/logger';
 import { QueueSong, SongDetailQuery } from '/@/shared/types/domain-types';
 
@@ -62,7 +66,7 @@ export const useUpdateCurrentSong = () => {
                     if (!isEqual(currentSongData, updatedSong)) {
                         updateQueueSong(currentSong.id, updatedSong);
 
-                        logger.debug('Song updated in queue', {
+                        logger.debug('Differences found, updating song in queue', {
                             id: currentSong.id,
                             name: updatedSong.name,
                         });
@@ -78,6 +82,12 @@ export const useUpdateCurrentSong = () => {
         [queryClient],
     );
 
+    const resetSeekToTimestamp = useCallback(() => {
+        usePlayerStoreBase.setState((state) => {
+            state.player.seekToTimestamp = uniqueSeekToTimestamp(0);
+        });
+    }, []);
+
     usePlayerEvents(
         {
             onCurrentSongChange: (properties, prev) => {
@@ -87,10 +97,12 @@ export const useUpdateCurrentSong = () => {
                     properties.song?._uniqueId !== prev.song?._uniqueId
                 ) {
                     handleSongChange(properties);
+                    // Prevents issues with lingering seekToTimestamp on song autonext
+                    resetSeekToTimestamp();
                 }
             },
         },
-        [handleSongChange],
+        [handleSongChange, resetSeekToTimestamp],
     );
 };
 

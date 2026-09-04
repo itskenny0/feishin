@@ -26,10 +26,9 @@ import {
     ArtistListQuery,
     ArtistListResponse,
     ArtistListSort,
+    FavoriteSongListQuery,
     ListCountQuery,
     SongListResponse,
-    SongListSort,
-    SortOrder,
     TopSongListQuery,
     TopSongListResponse,
 } from '/@/shared/types/domain-types';
@@ -335,8 +334,8 @@ export const artistsQueries = {
             ...args.options,
         });
     },
-    favoriteSongs: (args: QueryHookArgs<{ artistId: string }>) => {
-        const key = queryKeys.albumArtists.favoriteSongs(args.serverId, args.query.artistId);
+    favoriteSongs: (args: QueryHookArgs<FavoriteSongListQuery>) => {
+        const key = queryKeys.albumArtists.favoriteSongs(args.serverId, args.query);
         return queryOptions({
             initialData: (() => readSnapshot(key)) as never,
             initialDataUpdatedAt: 0,
@@ -354,7 +353,11 @@ export const artistsQueries = {
                         // favorite in db.favorites. Approximate offline
                         // — the live query uses server-side ranking we
                         // can't reproduce — but at least the section
-                        // renders something instead of spinning.
+                        // renders something instead of spinning. The
+                        // 'rating' variant ranks by star rating, which the
+                        // favorites table can't reproduce at all, so leave
+                        // that one to the network.
+                        if (args.query.type === 'rating') return undefined;
                         const songRows = await db.songs
                             .where('AlbumArtistId')
                             .equals(args.query.artistId)
@@ -375,19 +378,13 @@ export const artistsQueries = {
                     },
                     queryKey: key,
                     remote: ({ signal }) =>
-                        api.controller.getSongList({
+                        api.controller.getFavoriteSongs({
                             apiClientProps: { serverId: args.serverId, signal },
-                            query: {
-                                artistIds: [args.query.artistId],
-                                favorite: true,
-                                limit: -1,
-                                sortBy: SongListSort.RELEASE_DATE,
-                                sortOrder: SortOrder.ASC,
-                                startIndex: 0,
-                            },
+                            query: args.query,
                         }) as Promise<SongListResponse>,
                 }),
             queryKey: key,
+            ...args.options,
         });
     },
     topSongs: (args: QueryHookArgs<TopSongListQuery>) => {

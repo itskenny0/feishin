@@ -201,7 +201,7 @@ const ShuffleButton = memo(({ buttonSize, disabled, t }: TransportButtonProps) =
             disabled={disabled || !canShuffle}
             icon={
                 <Icon
-                    fill={shuffle === PlayerShuffle.NONE ? 'default' : 'primary'}
+                    color={shuffle === PlayerShuffle.NONE ? 'default' : 'primary'}
                     icon="mediaShuffle"
                     size={buttonSize}
                 />

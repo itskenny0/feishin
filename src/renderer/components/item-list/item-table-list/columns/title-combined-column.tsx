@@ -124,7 +124,6 @@ export const DefaultTitleCombinedColumn = (props: ItemTableListInnerColumn) => {
                         onMouseLeave={() => setIsHovered(false)}
                     >
                         <ItemImage
-                            containerClassName={styles.image}
                             enableDebounce={true}
                             enableViewport={true}
                             explicitStatus={item?.explicitStatus}
@@ -167,7 +166,10 @@ export const DefaultTitleCombinedColumn = (props: ItemTableListInnerColumn) => {
                     })}
                 >
                     <Text
-                        className={styles.title}
+                        className={clsx(styles.title, {
+                            [styles.compact]: props.size === 'compact',
+                            [styles.large]: props.size === 'large',
+                        })}
                         isNoSelect
                         size="md"
                         truncate
@@ -288,7 +290,6 @@ export const QueueSongTitleCombinedColumn = (props: ItemTableListInnerColumn) =>
                         onMouseLeave={() => setIsHovered(false)}
                     >
                         <ItemImage
-                            containerClassName={styles.image}
                             explicitStatus={item?.explicitStatus}
                             id={item?.albumId ?? item?.imageId}
                             itemType={item?._itemType}
@@ -333,6 +334,8 @@ export const QueueSongTitleCombinedColumn = (props: ItemTableListInnerColumn) =>
                     <Text
                         className={clsx({
                             [styles.active]: isActive,
+                            [styles.compact]: props.size === 'compact',
+                            [styles.large]: props.size === 'large',
                             [styles.title]: true,
                         })}
                         isNoSelect

@@ -1,35 +1,32 @@
 import clsx from 'clsx';
-import { t } from 'i18next';
 import { AnimatePresence, HTMLMotionProps, motion, Variants } from 'motion/react';
-import { Fragment, useMemo, useRef } from 'react';
-import { generatePath, Link } from 'react-router';
+import { useLayoutEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import styles from './full-screen-player-image.module.css';
 
 import { useCachedItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { useActiveNowPlayingItem } from '/@/renderer/features/jellyfin-remote-target/hooks/use-active-player-source';
+import { SharedFullscreenPlayerMetadata } from '/@/renderer/features/player/components/shared-full-screen-player-metadata';
 import { useCrossfadeImageSlots } from '/@/renderer/features/player/hooks/use-crossfade-image-slots';
 import {
     useIsRadioActive,
     useRadioPlayer,
 } from '/@/renderer/features/radio/hooks/use-radio-player';
-import { AppRoute } from '/@/renderer/router/routes';
 import {
+    PlayerItem,
     useBlurExplicitImages,
+    useFullScreenPlayerStore,
     useNativeAspectRatio,
     usePlayerData,
     usePlayerItems,
 } from '/@/renderer/store';
-import { useShowFilesystemNameForAlbums } from '/@/renderer/store/settings.store';
+import { formatPartialIsoDateUTC } from '/@/renderer/utils';
 import { Badge } from '/@/shared/components/badge/badge';
 import { Center } from '/@/shared/components/center/center';
 import { Flex } from '/@/shared/components/flex/flex';
-import { Group } from '/@/shared/components/group/group';
 import { Icon } from '/@/shared/components/icon/icon';
-import { Stack } from '/@/shared/components/stack/stack';
-import { Text } from '/@/shared/components/text/text';
 import { ExplicitStatus, LibraryItem, QueueSong } from '/@/shared/types/domain-types';
-import { albumFolderFromSongPath } from '/@/shared/utils/album-folder-from-path';
 import { isPlausibleReleaseYear } from '/@/shared/utils/release-year';
 
 const imageVariants: Variants = {
@@ -99,25 +96,27 @@ const ImageWithPlaceholder = ({
 };
 
 export const FullScreenPlayerImage = () => {
+    const { t } = useTranslation();
     const mainImageRef = useRef<HTMLImageElement | null>(null);
+    const [imageContainerWidth, setImageContainerWidth] = useState<null | number>(null);
 
     const isRadioActive = useIsRadioActive();
-    const { isPlaying: isRadioPlaying, metadata: radioMetadata, stationName } = useRadioPlayer();
+    const { isPlaying: isRadioPlaying } = useRadioPlayer();
 
     // Active source: mirrors the remote device's now-playing when a Jellyfin
     // Connect target is selected (identical to the local song otherwise). The
-    // mirrored Song has no _uniqueId, so the crossfade keys fall back to id.
+    // mirrored Song has no _uniqueId, so the crossfade key falls back to id.
     const currentSong = useActiveNowPlayingItem();
     const songKey = (currentSong as null | QueueSong)?._uniqueId ?? currentSong?.id;
     const { nextSong } = usePlayerData();
     const blurExplicitImages = useBlurExplicitImages();
     const playerItems = usePlayerItems();
-    const useFsAlbumName = useShowFilesystemNameForAlbums();
-    const albumDisplayName =
-        (useFsAlbumName ? albumFolderFromSongPath(currentSong?.path) : null) || currentSong?.album;
+    const { coverArtSize, titleDisplayType, titleLineCount } = useFullScreenPlayerStore();
 
     const isPlayingRadio = isRadioActive && isRadioPlaying;
 
+    // Cache-first, keyed on albumId: the sweep caches covers by album, and on
+    // Subsonic/Navidrome a song's imageId is the coverArt id, not the album id.
     const currentImageUrl = useCachedItemImageUrl({
         id: currentSong?.albumId ?? currentSong?.imageId ?? undefined,
         itemType: LibraryItem.SONG,
@@ -141,57 +140,99 @@ export const FullScreenPlayerImage = () => {
         songKey,
     });
 
-    // Memo keyed on the song id — the metadata badges only need to rebuild
-    // when the track actually changes, not on every parent re-render (which
-    // happens whenever the fullscreen-player store ticks anything).
-    const builtDataItems = useMemo(
-        () => ({
-            bit_depth: currentSong?.bitDepth && <Badge>{currentSong?.bitDepth} bit</Badge>,
-            bit_rate: currentSong?.bitRate && <Badge>{currentSong?.bitRate} kbps</Badge>,
-            bpm: currentSong?.bpm && (
-                <Badge>
-                    {currentSong?.bpm} {t('common.bpm')}
-                </Badge>
-            ),
-            codec: currentSong?.container && <Badge>{currentSong?.container}</Badge>,
-            disc_number: currentSong?.discNumber && (
-                <Badge>
-                    {t('common.disc')} {currentSong?.discNumber}
-                </Badge>
-            ),
-            genres:
-                currentSong?.genres &&
-                currentSong?.genres
-                    .slice(0, 2)
-                    .map((genre) => <Badge key={genre.id}>{genre.name}</Badge>),
-            release_date: currentSong?.releaseDate && <Badge>{currentSong?.releaseDate}</Badge>,
-            release_type: currentSong?.tags?.releasetype && (
-                <Badge>{currentSong?.tags?.releasetype[0]}</Badge>
-            ),
-            release_year: isPlausibleReleaseYear(currentSong?.releaseYear) && (
-                <Badge>{currentSong?.releaseYear}</Badge>
-            ),
-            sample_rate: currentSong?.sampleRate && (
-                <Badge>{currentSong?.sampleRate / 1000} kHz</Badge>
-            ),
-            track_number: currentSong?.trackNumber && (
-                <Badge>
-                    {t('common.trackNumber')} {currentSong?.trackNumber}
-                </Badge>
-            ),
-        }),
-        [currentSong],
-    );
+    const isItemEnabled = (item: PlayerItem) =>
+        !playerItems.find((entry) => entry.id === item)?.disabled;
+    const showTitle = isItemEnabled(PlayerItem.TITLE);
+    const showArtist = isItemEnabled(PlayerItem.ARTIST);
+    const showAlbum = isItemEnabled(PlayerItem.ALBUM);
+
+    const builtDataItems = {
+        bit_depth: currentSong?.bitDepth && <Badge>{currentSong?.bitDepth} bit</Badge>,
+        bit_rate: currentSong?.bitRate && <Badge>{currentSong?.bitRate} kbps</Badge>,
+        bpm: currentSong?.bpm && (
+            <Badge>
+                {currentSong?.bpm} {t('common.bpm')}
+            </Badge>
+        ),
+        codec: currentSong?.container && <Badge>{currentSong?.container}</Badge>,
+        date: currentSong?.date && <Badge>{formatPartialIsoDateUTC(currentSong?.date)}</Badge>,
+        disc_number: currentSong?.discNumber && (
+            <Badge>
+                {t('common.disc')} {currentSong?.discNumber}
+            </Badge>
+        ),
+        genres:
+            currentSong?.genres &&
+            currentSong?.genres
+                .slice(0, 2)
+                .map((genre) => <Badge key={genre.id}>{genre.name}</Badge>),
+        release_date: currentSong?.releaseDate && (
+            <Badge>{formatPartialIsoDateUTC(currentSong?.releaseDate)}</Badge>
+        ),
+        release_type: currentSong?.tags?.releasetype && (
+            <Badge>{currentSong?.tags?.releasetype[0]}</Badge>
+        ),
+        release_year: isPlausibleReleaseYear(currentSong?.releaseYear) && (
+            <Badge>{currentSong?.releaseYear}</Badge>
+        ),
+        sample_rate: currentSong?.sampleRate && <Badge>{currentSong?.sampleRate / 1000} kHz</Badge>,
+        track_number: currentSong?.trackNumber && (
+            <Badge>
+                {t('common.trackNumber')} {currentSong?.trackNumber}
+            </Badge>
+        ),
+        year: currentSong?.year && <Badge>{currentSong?.year}</Badge>,
+    };
+
+    const showMetadata =
+        playerItems.some((i) => !i.disabled && builtDataItems[i.id]) ||
+        showTitle ||
+        showArtist ||
+        showAlbum;
+
+    useLayoutEffect(() => {
+        const updateImageContainerWidth = () => {
+            if (mainImageRef.current) {
+                const width = mainImageRef.current.getBoundingClientRect().width;
+                setImageContainerWidth(width);
+            }
+        };
+
+        updateImageContainerWidth();
+        window.addEventListener('resize', updateImageContainerWidth);
+
+        return () => window.removeEventListener('resize', updateImageContainerWidth);
+    }, []);
+
+    useLayoutEffect(() => {
+        const updateImageContainerWidth = () => {
+            if (mainImageRef.current) {
+                const width = mainImageRef.current.getBoundingClientRect().width;
+                setImageContainerWidth(width);
+            }
+        };
+
+        updateImageContainerWidth();
+    }, [titleDisplayType, titleLineCount, coverArtSize]);
 
     return (
         <Flex
             align="center"
             className={clsx(styles.playerContainer, 'full-screen-player-image-container')}
             direction="column"
-            justify="flex-start"
+            h="100%"
+            justify="center"
             p="1rem"
+            w="100%"
         >
-            <div className={styles.imageContainer} ref={mainImageRef}>
+            <div
+                className={styles.imageContainer}
+                ref={mainImageRef}
+                style={{
+                    marginBottom: showMetadata ? '2rem' : undefined,
+                    maxHeight: `${coverArtSize}%`,
+                }}
+            >
                 <AnimatePresence initial={false} mode="sync">
                     {!isPlayingRadio && imageState.current === 0 && (
                         <ImageWithPlaceholder
@@ -246,63 +287,7 @@ export const FullScreenPlayerImage = () => {
                     )}
                 </AnimatePresence>
             </div>
-            <Stack className={styles.metadataContainer} gap="md" maw="100%">
-                <Text fw={700} lh="1.2" overflow="hidden" size="4xl" w="100%">
-                    {isPlayingRadio
-                        ? radioMetadata?.title || stationName || 'Radio'
-                        : currentSong?.name}
-                </Text>
-                <Text key="fs-artists" size="lg">
-                    {isPlayingRadio
-                        ? radioMetadata?.artist || stationName || 'Radio'
-                        : currentSong?.artists?.map((artist, index) => (
-                              <Fragment key={`fs-artist-${artist.id}`}>
-                                  {index > 0 && (
-                                      <Text
-                                          style={{
-                                              display: 'inline-block',
-                                              padding: '0 0.5rem',
-                                          }}
-                                      >
-                                          •
-                                      </Text>
-                                  )}
-                                  <Text
-                                      component={Link}
-                                      isLink
-                                      to={generatePath(AppRoute.LIBRARY_ALBUM_ARTISTS_DETAIL, {
-                                          albumArtistId: artist.id,
-                                      })}
-                                  >
-                                      {artist.name}
-                                  </Text>
-                              </Fragment>
-                          ))}
-                </Text>
-                {isPlayingRadio ? (
-                    <Text overflow="hidden" size="xl" w="100%">
-                        {stationName || 'Radio'}
-                    </Text>
-                ) : (
-                    <Text
-                        component={Link}
-                        isLink
-                        overflow="hidden"
-                        size="md"
-                        to={generatePath(AppRoute.LIBRARY_ALBUMS_DETAIL, {
-                            albumId: currentSong?.albumId || '',
-                        })}
-                        w="100%"
-                    >
-                        {albumDisplayName}
-                    </Text>
-                )}
-                {!isPlayingRadio && (
-                    <Group justify="center" mt="sm">
-                        {playerItems.map((i) => !i.disabled && builtDataItems[i.id])}
-                    </Group>
-                )}
-            </Stack>
+            <SharedFullscreenPlayerMetadata imageContainerWidth={imageContainerWidth} />
         </Flex>
     );
 };

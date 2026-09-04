@@ -34,6 +34,7 @@ import {
     useFullScreenPlayerVisualizerExpanded,
     useHotkeySettings,
     useSetFullScreenPlayerStore,
+    useSidebarImageEnabled,
 } from '/@/renderer/store';
 import {
     useShowFilesystemNameForAlbums,
@@ -57,7 +58,7 @@ export const LeftControls = () => {
     const isFullScreenVisualizerExpanded = useFullScreenPlayerVisualizerExpanded();
     const setFullScreenPlayerStore = useSetFullScreenPlayerStore();
 
-    const { collapsed, image } = useAppStore(
+    const { collapsed: sidebarCollapsed, image: sidebarImageShown } = useAppStore(
         (state) => ({
             collapsed: state.sidebar.collapsed,
             image: state.sidebar.image,
@@ -75,10 +76,11 @@ export const LeftControls = () => {
         (useFsAlbumName ? albumFolderFromSongPath(currentSong?.path) : null) ||
         currentSong?.album ||
         '—';
+    const sidebarImageEnabled = useSidebarImageEnabled();
 
     const isRadioMode = isRadioActive;
     const hasRadioStationImage = Boolean(currentStationArt?.imageId || currentStationArt?.imageUrl);
-    const hideImage = image && !collapsed;
+    const hideImage = !sidebarCollapsed && sidebarImageEnabled && sidebarImageShown;
     const isSongDefined = Boolean(currentSong?.id) && !isRadioMode;
     const title = currentSong?.name;
     const artists = currentSong?.artists;
@@ -94,7 +96,11 @@ export const LeftControls = () => {
         const shouldClose = isFullScreenPlayerExpanded || isFullScreenVisualizerExpanded;
 
         if (shouldClose) {
-            setFullScreenPlayerStore({ expanded: false, visualizerExpanded: false });
+            setFullScreenPlayerStore({
+                expanded: false,
+                visualizerExpanded: false,
+                visualizerReturnToPlayer: false,
+            });
         } else {
             setFullScreenPlayerStore({ expanded: true });
         }
@@ -145,7 +151,8 @@ export const LeftControls = () => {
                                 onClick={handleToggleFullScreenPlayer}
                                 onContextMenu={handleToggleContextMenu}
                                 role="button"
-                                transition={{ duration: 0.2, ease: 'easeIn' }}
+                                transition={{ duration: 0.2, ease: 'easeOut' }}
+                                whileHover={{ scale: 1.1 }}
                             >
                                 <Tooltip label={t('player.toggleFullscreenPlayer')} openDelay={400}>
                                     {isRadioMode && hasRadioStationImage ? (
@@ -198,7 +205,7 @@ export const LeftControls = () => {
                                         />
                                     )}
                                 </Tooltip>
-                                {!collapsed && (
+                                {!sidebarCollapsed && sidebarImageEnabled && (
                                     <ActionIcon
                                         icon="arrowUpS"
                                         iconProps={{ size: 'xl' }}

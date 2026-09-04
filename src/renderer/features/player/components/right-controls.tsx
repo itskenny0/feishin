@@ -40,10 +40,10 @@ import {
     usePlayerMuted,
     useSetFullScreenPlayerStore,
     useSettingsStoreActions,
+    useShowFavorites,
     useShowRatings,
     useSidebarRightExpanded,
     useSideQueueType,
-    useVolumeMax,
     useVolumeWheelStep,
     useVolumeWidth,
 } from '/@/renderer/store';
@@ -61,17 +61,16 @@ import { SegmentedControl } from '/@/shared/components/segmented-control/segment
 import { Select } from '/@/shared/components/select/select';
 import { Slider } from '/@/shared/components/slider/slider';
 import { Stack } from '/@/shared/components/stack/stack';
-import { Text } from '/@/shared/components/text/text';
 import { useMediaQuery } from '/@/shared/hooks/use-media-query';
 import { useThrottledCallback } from '/@/shared/hooks/use-throttled-callback';
 import { LibraryItem, QueueSong, ServerType, Song } from '/@/shared/types/domain-types';
 import { PlayerType } from '/@/shared/types/types';
 
-const calculateVolumeUp = (volume: number, volumeWheelStep: number, volumeMax: number) => {
+const calculateVolumeUp = (volume: number, volumeWheelStep: number) => {
     let volumeToSet: number;
-    const newVolumeGreaterThanMax = volume + volumeWheelStep > volumeMax;
-    if (newVolumeGreaterThanMax) {
-        volumeToSet = volumeMax;
+    const newVolumeGreaterThanHundred = volume + volumeWheelStep > 100;
+    if (newVolumeGreaterThanHundred) {
+        volumeToSet = 100;
     } else {
         volumeToSet = volume + volumeWheelStep;
     }
@@ -92,6 +91,7 @@ const calculateVolumeDown = (volume: number, volumeWheelStep: number) => {
 };
 
 export const RightControls = () => {
+    const showFavorites = useShowFavorites();
     const showRatings = useShowRatings();
     return (
         // Spotify's right cluster is a single vertically-centered row
@@ -109,7 +109,7 @@ export const RightControls = () => {
                 <SleepTimerButton />
                 <PlayerConfig />
                 <LyricsButton />
-                <FavoriteButton />
+                {showFavorites && <FavoriteButton />}
                 <QueueButton />
                 <DevicePickerButton />
                 <VolumeButton />
@@ -217,17 +217,9 @@ export const AutoDJButton = () => {
                         w="96px"
                     />
                 ),
+                description: t('setting.autoDJ_itemCount_description'),
                 id: 'itemCount',
-                label: (
-                    <Stack gap="xs">
-                        <Text isNoSelect size="sm">
-                            {t('setting.autoDJ_itemCount')}
-                        </Text>
-                        <Text isMuted isNoSelect size="xs">
-                            {t('setting.autoDJ_itemCount_description')}
-                        </Text>
-                    </Stack>
-                ),
+                label: t('setting.autoDJ_itemCount'),
             },
             {
                 component: (
@@ -255,17 +247,9 @@ export const AutoDJButton = () => {
                         w="144px"
                     />
                 ),
+                description: t('setting.autoDJ_timing_description'),
                 id: 'timing',
-                label: (
-                    <Stack gap="xs">
-                        <Text isNoSelect size="sm">
-                            {t('setting.autoDJ_timing')}
-                        </Text>
-                        <Text isMuted isNoSelect size="xs">
-                            {t('setting.autoDJ_timing_description')}
-                        </Text>
-                    </Stack>
-                ),
+                label: t('setting.autoDJ_timing'),
             },
         ],
         [
@@ -295,17 +279,9 @@ export const AutoDJButton = () => {
                         value={settings.allowDuplicates}
                     />
                 ),
+                description: t('setting.autoDJ_allowDuplicates_description'),
                 id: 'allowDuplicates',
-                label: (
-                    <Stack gap="xs">
-                        <Text isNoSelect size="sm">
-                            {t('setting.autoDJ_allowDuplicates')}
-                        </Text>
-                        <Text isMuted isNoSelect size="xs">
-                            {t('setting.autoDJ_allowDuplicates_description')}
-                        </Text>
-                    </Stack>
-                ),
+                label: t('setting.autoDJ_allowDuplicates'),
             },
             {
                 component: (
@@ -320,17 +296,9 @@ export const AutoDJButton = () => {
                         value={settings.onlySimilar}
                     />
                 ),
+                description: t('setting.autoDJ_onlySimilar_description'),
                 id: 'onlySimilar',
-                label: (
-                    <Stack gap="xs">
-                        <Text isNoSelect size="sm">
-                            {t('setting.autoDJ_onlySimilar')}
-                        </Text>
-                        <Text isMuted isNoSelect size="xs">
-                            {t('setting.autoDJ_onlySimilar_description')}
-                        </Text>
-                    </Stack>
-                ),
+                label: t('setting.autoDJ_onlySimilar'),
             },
         ],
         [setSettings, settings.allowDuplicates, settings.onlySimilar, t],
@@ -482,10 +450,6 @@ const LyricsButton = () => {
     const { setStore } = useFullScreenPlayerStoreActions();
     const isFullScreenPlayerExpanded = useFullScreenPlayerExpanded();
 
-    const expandFullScreenPlayer = () => {
-        setFullScreenPlayerStore({ expanded: !isFullScreenPlayerExpanded });
-    };
-
     return (
         <ActionIcon
             icon="microphone"
@@ -495,8 +459,12 @@ const LyricsButton = () => {
             }}
             onClick={(e) => {
                 e.stopPropagation();
-                if (!isFullScreenPlayerExpanded) setStore({ activeTab: 'lyrics' });
-                expandFullScreenPlayer();
+                if (!isFullScreenPlayerExpanded) {
+                    setStore({ activeTab: 'lyrics' });
+                    setFullScreenPlayerStore({ expanded: true });
+                } else {
+                    setStore({ activeTab: activeTab === 'lyrics' ? '' : 'lyrics' });
+                }
             }}
             role="button"
             size="sm"
@@ -695,7 +663,6 @@ const VolumeButton = () => {
     const muted = source.mode === 'remote' ? source.volume === 0 : localMuted;
     const volumeWheelStep = useVolumeWheelStep();
     const volumeWidth = useVolumeWidth();
-    const volumeMax = useVolumeMax();
     const { decreaseVolume, increaseVolume, mediaToggleMute, setVolume } = usePlayer();
     const isMinWidth = useMediaQuery('(max-width: 480px)');
 
@@ -763,7 +730,7 @@ const VolumeButton = () => {
             if (e.deltaY > 0 || e.deltaX > 0) {
                 volumeToSet = calculateVolumeDown(volume, volumeWheelStep);
             } else {
-                volumeToSet = calculateVolumeUp(volume, volumeWheelStep, volumeMax);
+                volumeToSet = calculateVolumeUp(volume, volumeWheelStep);
             }
 
             // Move the thumb optimistically (like the drag path) instead
@@ -774,7 +741,7 @@ const VolumeButton = () => {
             setSliderValue(volumeToSet);
             setVolume(volumeToSet);
         },
-        [setVolume, volume, volumeWheelStep, volumeMax],
+        [setVolume, volume, volumeWheelStep],
     );
 
     const handleVolumeDownThrottled = useThrottledCallback(handleVolumeDown, 100);
@@ -852,7 +819,7 @@ const VolumeButton = () => {
             {!isMinWidth ? (
                 <CustomPlayerbarSlider
                     disabled={!canSetVolume}
-                    max={volumeMax}
+                    max={100}
                     min={0}
                     onChange={handleVolumeSlider}
                     onClick={(e) => {

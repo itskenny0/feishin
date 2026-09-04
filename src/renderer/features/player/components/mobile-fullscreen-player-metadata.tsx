@@ -27,6 +27,7 @@ interface MobileFullscreenPlayerMetadataProps {
     radioArtist?: string;
     radioStationName?: string;
     radioTitle?: string;
+    showFavorite?: boolean;
     showRating?: boolean;
 }
 
@@ -46,6 +47,7 @@ export const MobileFullscreenPlayerMetadata = memo(
         radioArtist,
         radioStationName,
         radioTitle,
+        showFavorite,
         showRating,
     }: MobileFullscreenPlayerMetadataProps) => {
         const isRadio = radioTitle !== undefined || radioStationName !== undefined;
@@ -120,7 +122,7 @@ export const MobileFullscreenPlayerMetadata = memo(
                             </Text>
                         )}
                     </div>
-                    {!isRadio && (
+                    {!isRadio && showFavorite !== false && (
                         <ActionIcon
                             aria-label={t('common.favorite', { defaultValue: 'Favorite' })}
                             aria-pressed={Boolean(isFavorite)}

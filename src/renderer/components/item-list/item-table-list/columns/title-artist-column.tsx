@@ -68,7 +68,15 @@ export const DefaultTitleArtistColumn = (props: ItemTableListInnerColumn) => {
                         [styles.compact]: props.size === 'compact',
                     })}
                 >
-                    <Text className={styles.title} isNoSelect size="md" {...titleLinkProps}>
+                    <Text
+                        className={clsx(styles.title, {
+                            [styles.compact]: props.size === 'compact',
+                            [styles.large]: props.size === 'large',
+                        })}
+                        isNoSelect
+                        size="md"
+                        {...titleLinkProps}
+                    >
                         <ExplicitIndicator explicitStatus={item?.explicitStatus} />
                         {displayName}
                     </Text>
@@ -138,6 +146,8 @@ export const QueueSongTitleArtistColumn = (props: ItemTableListInnerColumn) => {
                     <Text
                         className={clsx({
                             [styles.active]: isActive,
+                            [styles.compact]: props.size === 'compact',
+                            [styles.large]: props.size === 'large',
                             [styles.title]: true,
                         })}
                         isNoSelect

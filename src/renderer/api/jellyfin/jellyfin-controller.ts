@@ -42,6 +42,37 @@ import {
 } from '/@/shared/types/domain-types';
 import { ServerFeature } from '/@/shared/types/features-types';
 
+// Jellyfin can receive the client's play queue with playback reports, which lets
+// server-side consumers (session UI, prefetch plugins) see the upcoming tracks.
+// Only a window from the current track onward is reported - full queues degrade
+// the /Sessions endpoint (jellyfin/jellyfin#13377).
+const QUEUE_REPORT_WINDOW = 20;
+
+const getNowPlayingQueueWindow = (): undefined | { Id: string; PlaylistItemId: string }[] => {
+    try {
+        const state = usePlayerStoreBase.getState();
+        const { default: order, shuffled, songs } = state.queue;
+        const playOrder = isShuffleEnabled(state) ? shuffled.map((idx) => order[idx]) : order;
+        const index = state.player.index;
+
+        if (index < 0 || index >= playOrder.length) {
+            return undefined;
+        }
+
+        // PlaylistItemId is the queue-entry identity (the same song can appear
+        // twice); other Jellyfin clients need it to address a specific entry.
+        const window = playOrder
+            .slice(index, index + QUEUE_REPORT_WINDOW)
+            .flatMap((uniqueId) =>
+                songs[uniqueId] ? [{ Id: songs[uniqueId].id, PlaylistItemId: uniqueId }] : [],
+            );
+
+        return window.length > 1 ? window : undefined;
+    } catch {
+        return undefined;
+    }
+};
+
 const getJellyfinImageRequest = ({
     apiClientProps: { server },
     baseUrl,
@@ -738,6 +769,43 @@ export const JellyfinController: InternalControllerEndpoint = {
         const { apiClientProps, query } = args;
 
         return `${apiClientProps.server?.url}/items/${query.id}/download?apiKey=${apiClientProps.server?.credential}`;
+    },
+    getFavoriteSongs: async (args) => {
+        const { apiClientProps, query } = args;
+
+        if (!apiClientProps.server?.userId) {
+            throw new Error('No userId found');
+        }
+
+        // Gets songs sorted by play count and filters favorited songs
+        const res = await jfApiClient(apiClientProps).getTopSongsList({
+            params: {
+                userId: apiClientProps.server?.userId,
+            },
+            query: {
+                ArtistIds: query.artistId,
+                Fields: JF_FIELDS.SONG,
+                IncludeItemTypes: 'Audio',
+                IsFavorite: true,
+                Limit: query.limit,
+                Recursive: true,
+                SortBy: JFSongListSort.PLAY_COUNT,
+                SortOrder: 'Descending',
+                UserId: apiClientProps.server?.userId,
+            },
+        });
+
+        if (res.status !== 200) {
+            throw new Error('Failed to get top song list');
+        }
+
+        const items = res.body.Items.map((item) => jfNormalize.song(item, apiClientProps.server));
+
+        return {
+            items,
+            startIndex: 0,
+            totalRecordCount: res.body.TotalRecordCount,
+        };
     },
     getFolder: async (args) => {
         const { apiClientProps, query } = args;
@@ -1880,21 +1948,12 @@ export const JellyfinController: InternalControllerEndpoint = {
         const { apiClientProps, query } = args;
 
         const position = query.position && Math.round(query.position);
-
-        // Build NowPlayingQueue + PlaylistItemId so other Jellyfin clients can
+        // Report NowPlayingQueue + PlaylistItemId so other Jellyfin clients can
         // see Feishin's upcoming tracks (in playback order, respecting shuffle).
+        // Windowed from the current track onward — full queues degrade
+        // /Sessions (jellyfin/jellyfin#13377).
+        const nowPlayingQueue = getNowPlayingQueueWindow();
         const playerState = usePlayerStoreBase.getState();
-        const songsById = playerState.queue.songs;
-        const defaultIds = playerState.queue.default;
-        const orderedUniqueIds = isShuffleEnabled(playerState)
-            ? playerState.queue.shuffled
-                  .map((idx) => defaultIds[idx])
-                  .filter((id): id is string => Boolean(id))
-            : defaultIds;
-        const nowPlayingQueue = orderedUniqueIds
-            .map((uid) => songsById[uid])
-            .filter((s): s is NonNullable<typeof s> => Boolean(s))
-            .map((song) => ({ Id: song.id, PlaylistItemId: song._uniqueId }));
         const currentSong = playerState.getCurrentSong();
         const queueFields = {
             IsMuted: playerState.player.muted,
@@ -2116,6 +2175,54 @@ export const JellyfinController: InternalControllerEndpoint = {
         if (res.status !== 204) {
             throw new Error('Failed to update playlist songs');
         }
+
+        return null;
+    },
+    startLibraryScan: async (args) => {
+        const { apiClientProps } = args;
+        const server = apiClientProps.server;
+        const userId = server?.userId;
+
+        if (!userId) {
+            throw new Error('No userId found');
+        }
+
+        let musicFolderIds = server.musicFolderId?.filter(Boolean) ?? [];
+
+        if (musicFolderIds.length === 0) {
+            const res = await jfApiClient(apiClientProps).getMusicFolderList({
+                params: { userId },
+            });
+
+            if (res.status !== 200) {
+                throw new Error('Failed to get music folders');
+            }
+
+            musicFolderIds = res.body.Items.filter(
+                (folder) => folder.CollectionType === jfType._enum.collection.MUSIC,
+            ).map((folder) => folder.Id);
+        }
+
+        if (musicFolderIds.length === 0) {
+            throw new Error('No music folders found');
+        }
+
+        await Promise.all(
+            musicFolderIds.map((id) =>
+                jfApiClient(apiClientProps).refreshItem({
+                    body: null,
+                    params: { id },
+                    query: {
+                        ImageRefreshMode: 'Default',
+                        MetadataRefreshMode: 'Default',
+                        Recursive: true,
+                        RegenerateTrickplay: false,
+                        ReplaceAllImages: false,
+                        ReplaceAllMetadata: false,
+                    },
+                }),
+            ),
+        );
 
         return null;
     },

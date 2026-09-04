@@ -25,6 +25,8 @@ import {
 import { useIsMobileShell } from '/@/renderer/hooks/use-breakpoint';
 import { useIosStatusBar } from '/@/renderer/hooks/use-ios-native';
 import { useCheckForUpdates } from '/@/renderer/hooks/use-check-for-updates';
+import { useFullscreenAutoOpen } from '/@/renderer/hooks/use-fullscreen-auto-open';
+import { useFullscreenToggle } from '/@/renderer/hooks/use-fullscreen-toggle';
 import { useGithubReleasesUpdater } from '/@/renderer/hooks/use-github-releases-updater';
 import { useNativeMenuSync } from '/@/renderer/hooks/use-native-menu-sync';
 import { useSyncSettingsToMain } from '/@/renderer/hooks/use-sync-settings-to-main';
@@ -167,6 +169,8 @@ const AppEffects = () => (
         <DocumentTitleEffect />
         <CacheLifecycleEffect />
         <SyncNotificationEffect />
+        <FullscreenToggleEffect />
+        <FullscreenAutoOpenEffect />
         <InputFocusEffect />
         <DeferredAppEffects />
     </>
@@ -389,6 +393,18 @@ const LanguageEffect = () => {
 
 const NativeMenuSyncEffect = () => {
     useNativeMenuSync();
+
+    return null;
+};
+
+const FullscreenToggleEffect = () => {
+    useFullscreenToggle();
+
+    return null;
+};
+
+const FullscreenAutoOpenEffect = () => {
+    useFullscreenAutoOpen();
 
     return null;
 };

@@ -1,8 +1,11 @@
 import merge from 'lodash/merge';
+import omit from 'lodash/omit';
 import { devtools, persist } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
 import { shallow } from 'zustand/shallow';
 import { createWithEqualityFn } from 'zustand/traditional';
+
+export type FullScreenPlayerItemAlignment = 'center' | 'left' | 'right';
 
 export interface FullScreenPlayerSlice extends FullScreenPlayerState {
     actions: {
@@ -10,17 +13,24 @@ export interface FullScreenPlayerSlice extends FullScreenPlayerState {
     };
 }
 
+export type FullScreenPlayerTitleDisplayType = 'multiLine' | 'scroll';
+
 interface FullScreenPlayerState {
     activeTab: 'lyrics' | 'queue' | 'related' | string;
+    coverArtSize: number;
     dynamicBackground?: boolean;
     dynamicImageBlur: number;
     dynamicIsImage?: boolean;
     expanded: boolean;
     opacity: number;
+    playerItemAlignment: FullScreenPlayerItemAlignment;
+    titleDisplayType: FullScreenPlayerTitleDisplayType;
+    titleLineCount: number;
     useImageAspectRatio: boolean;
     visualizerAsBackground?: boolean;
     visualizerExpanded: boolean;
     visualizerLyricsOverlay?: boolean;
+    visualizerReturnToPlayer: boolean;
 }
 
 export const useFullScreenPlayerStore = createWithEqualityFn<FullScreenPlayerSlice>()(
@@ -32,16 +42,21 @@ export const useFullScreenPlayerStore = createWithEqualityFn<FullScreenPlayerSli
                         set({ ...get(), ...data });
                     },
                 },
-                activeTab: 'queue',
+                activeTab: '',
+                coverArtSize: 75,
                 dynamicBackground: true,
-                dynamicImageBlur: 1.5,
+                dynamicImageBlur: 6,
                 dynamicIsImage: false,
                 expanded: false,
-                opacity: 60,
+                opacity: 25,
+                playerItemAlignment: 'center',
+                titleDisplayType: 'scroll',
+                titleLineCount: 1,
                 useImageAspectRatio: false,
                 visualizerAsBackground: false,
                 visualizerExpanded: false,
                 visualizerLyricsOverlay: true,
+                visualizerReturnToPlayer: false,
             })),
             { name: 'store_full_screen_player' },
         ),
@@ -62,19 +77,31 @@ export const useFullScreenPlayerStore = createWithEqualityFn<FullScreenPlayerSli
                     return {} as FullScreenPlayerState;
                 }
 
+                if (version <= 4) {
+                    const state = persistedState as { coverArtSize?: number | string };
+                    const legacyCoverArtSizeMap: Record<string, number> = {
+                        large: 100,
+                        medium: 75,
+                        small: 50,
+                    };
+
+                    if (typeof state.coverArtSize === 'string') {
+                        state.coverArtSize = legacyCoverArtSizeMap[state.coverArtSize] ?? 75;
+                    }
+                }
+
                 return persistedState;
             },
             name: 'store_full_screen_player',
-            partialize: (state) => {
-                // Don't persist the transient overlay flags at all — they're
-                // forced false on load anyway, and keeping them out of storage
-                // avoids a stale `expanded:true` lingering in localStorage.
-                const { expanded, visualizerExpanded, ...rest } = state;
-                void expanded;
-                void visualizerExpanded;
-                return rest as typeof state;
-            },
-            version: 3,
+            // Don't persist the transient overlay flags at all — they're
+            // forced false on load anyway, and keeping them out of storage
+            // avoids a stale `expanded:true` lingering in localStorage.
+            // `visualizerReturnToPlayer` is transient navigation intent used only to route
+            // the "shrink visualizer" action back to the full-screen player; it isn't
+            // meaningful across app restarts either.
+            partialize: (state) =>
+                omit(state, ['expanded', 'visualizerExpanded', 'visualizerReturnToPlayer']),
+            version: 5,
         },
     ),
 );

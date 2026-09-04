@@ -54,6 +54,7 @@ import {
     usePlayerData,
     usePlayerSong,
     useSetFullScreenPlayerStore,
+    useShowFavorites,
     useShowRatings,
 } from '/@/renderer/store';
 import { usePlaybackSettings, useSettingsStore } from '/@/renderer/store/settings.store';
@@ -312,10 +313,11 @@ const overlayVariants: Variants = {
 interface BackgroundImageOverlayProps {
     dynamicBackground: boolean | undefined;
     dynamicImageBlur: number | undefined;
+    dynamicIsImage: boolean | undefined;
 }
 
 const BackgroundImageOverlay = memo(
-    ({ dynamicBackground, dynamicImageBlur }: BackgroundImageOverlayProps) => {
+    ({ dynamicBackground, dynamicImageBlur, dynamicIsImage }: BackgroundImageOverlayProps) => {
         const currentSong = usePlayerSong();
         const { nextSong } = usePlayerData();
 
@@ -349,7 +351,7 @@ const BackgroundImageOverlay = memo(
             previousSongRef.current = currentSong?._uniqueId;
         }, [currentSong?._uniqueId, nextSong?._uniqueId]);
 
-        if (!dynamicBackground) {
+        if (!dynamicBackground || !dynamicIsImage) {
             return null;
         }
 
@@ -408,6 +410,7 @@ interface DismissibleMobilePlayerContainerProps extends MobilePlayerContainerPro
 interface MobilePlayerContainerProps {
     children: ReactNode;
     dynamicBackground: boolean | undefined;
+    dynamicImageBlur: number | undefined;
     dynamicIsImage: boolean | undefined;
 }
 
@@ -538,6 +541,7 @@ export const MobileFullscreenPlayer = () => {
      */
     const effectiveDynamicBackground =
         dynamicBackground && !isPlayingRadio && !(visualizerAsBackground && webAudioEnabled);
+    const showFavorites = useShowFavorites();
     const setFavorite = useSetFavorite();
     const showRatingsSetting = useShowRatings();
     const setRating = useSetRating();
@@ -880,6 +884,7 @@ export const MobileFullscreenPlayer = () => {
     return (
         <MobilePlayerContainer
             dynamicBackground={effectiveDynamicBackground}
+            dynamicImageBlur={dynamicImageBlur}
             dynamicIsImage={dynamicIsImage}
             swipeY={swipeY}
         >
@@ -887,6 +892,7 @@ export const MobileFullscreenPlayer = () => {
             <BackgroundImageOverlay
                 dynamicBackground={effectiveDynamicBackground}
                 dynamicImageBlur={dynamicImageBlur}
+                dynamicIsImage={dynamicIsImage}
             />
             <motion.div
                 animate={{
@@ -927,11 +933,7 @@ export const MobileFullscreenPlayer = () => {
                     <div aria-hidden className={styles.dragHandle}>
                         <div className={styles.dragHandlePill} />
                     </div>
-                    <MobileFullscreenPlayerHeader
-                        currentSong={currentSong}
-                        isPageHovered={isPageHovered}
-                        onClose={handleToggleFullScreenPlayer}
-                    />
+                    <MobileFullscreenPlayerHeader />
                     {/*
                      * Body wrapper for the cover + control-stack. In
                      * portrait this is `display: contents` so the
@@ -961,6 +963,7 @@ export const MobileFullscreenPlayer = () => {
                                 radioTitle={
                                     isPlayingRadio ? (radioMetadata?.title ?? undefined) : undefined
                                 }
+                                showFavorite={showFavorites}
                                 showRating={showRating}
                             />
                             <MobileFullscreenPlayerProgress

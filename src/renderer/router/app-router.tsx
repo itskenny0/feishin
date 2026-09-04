@@ -5,6 +5,7 @@ import { HashRouter, Navigate, Route, Routes } from 'react-router';
 
 import { FolderPlaylistMigrationModal } from '/@/renderer/features/folders/components/folder-playlist-migration-modal';
 import { ShuffleAllContextModal } from '/@/renderer/features/player/components/shuffle-all-modal';
+import { SettingsContextModal } from '/@/renderer/features/settings/components/settings-modal';
 import { RouterErrorBoundary } from '/@/renderer/features/shared/components/router-error-boundary';
 import { ShortcutsHelpContextModal } from '/@/renderer/features/shortcuts/components/shortcuts-help-modal';
 import { AuthenticationOutlet } from '/@/renderer/layouts/authentication-outlet';
@@ -159,20 +160,6 @@ const UpdatePlaylistContextModal = (
     </Suspense>
 );
 
-const LazySettingsContextModal = lazy(() =>
-    import('/@/renderer/features/settings/components/settings-modal').then((module) => ({
-        default: module.SettingsContextModal,
-    })),
-);
-
-// SettingsContextModal takes no props; ComponentProps collapses to `unknown`
-// for a zero-arg component, so render it bare rather than spreading.
-const SettingsContextModal = () => (
-    <Suspense fallback={<Spinner container />}>
-        <LazySettingsContextModal />
-    </Suspense>
-);
-
 const LazyShareItemContextModal = lazy(() =>
     import('/@/renderer/features/sharing/components/share-item-context-modal').then((module) => ({
         default: module.ShareItemContextModal,
@@ -229,7 +216,7 @@ const appRouterModals = {
 
 export const AppRouter = () => {
     const router = (
-        <HashRouter unstable_useTransitions={false}>
+        <HashRouter useTransitions={false}>
             <ModalsProvider modals={appRouterModals}>
                 <RouterErrorBoundary>
                     <Routes>

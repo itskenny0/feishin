@@ -207,3 +207,9 @@
      */
     --lyric-opacity: 0.55;
 }
+
+.visualizer-container:fullscreen {
+    width: 100vw;
+    height: 100vh;
+    background: var(--theme-colors-background);
+}

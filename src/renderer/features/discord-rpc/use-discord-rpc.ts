@@ -232,7 +232,7 @@ export const useDiscordRpc = () => {
             if (
                 (discordSettings.linkType == DiscordLinkType.LAST_FM ||
                     discordSettings.linkType == DiscordLinkType.MBZ_LAST_FM) &&
-                song?.artistName
+                song.artistName
             ) {
                 const stateArtistName = song.artists?.[0]?.name;
                 if (stateArtistName) {
@@ -242,15 +242,18 @@ export const useDiscordRpc = () => {
 
                 const detailsArtistName = song.albumArtists?.[0]?.name;
                 if (detailsArtistName) {
-                    const detailsUrl =
+                    const albumUrl =
                         'https://www.last.fm/music/' +
                         encodeURIComponent(detailsArtistName) +
                         '/' +
-                        encodeURIComponent(song.album || '_') +
-                        '/' +
-                        encodeURIComponent(song.name);
+                        encodeURIComponent(song.album || '_');
+                    const detailsUrl = albumUrl + '/' + encodeURIComponent(song.name);
 
                     // The details URL has a max length, only set it if it doesn't exceed it
+                    if (albumUrl.length <= MAX_URL_LENGTH) {
+                        activity.largeImageUrl = albumUrl;
+                    }
+
                     if (detailsUrl.length <= MAX_URL_LENGTH) {
                         activity.detailsUrl = detailsUrl;
                     }
@@ -266,6 +269,10 @@ export const useDiscordRpc = () => {
                 } else if (song?.mbzRecordingId) {
                     activity.detailsUrl =
                         'https://musicbrainz.org/recording/' + song.mbzRecordingId;
+                }
+
+                if (song.mbzAlbumId) {
+                    activity.largeImageUrl = 'https://musicbrainz.org/release/' + song.mbzAlbumId;
                 }
             }
 

@@ -1,4 +1,4 @@
-import { defineConfig, externalizeDepsPlugin, UserConfig } from 'electron-vite';
+import { defineConfig, UserConfig } from 'electron-vite';
 import { createRequire } from 'module';
 import { dirname, resolve } from 'path';
 import conditionalImportPlugin from 'vite-plugin-conditional-import';
@@ -97,7 +97,6 @@ const createConfig = (isDevelopment: boolean): UserConfig => ({
             'import.meta.env.IS_WIN': JSON.stringify(currentOSEnv === 'win32'),
         },
         plugins: [
-            externalizeDepsPlugin(),
             dynamicImportPlugin(),
             conditionalImportPlugin({
                 currentEnv: currentOSEnv,
@@ -115,7 +114,6 @@ const createConfig = (isDevelopment: boolean): UserConfig => ({
         build: {
             sourcemap: true,
         },
-        plugins: [externalizeDepsPlugin()],
         resolve: {
             alias: {
                 '/@/preload': resolve('src/preload'),

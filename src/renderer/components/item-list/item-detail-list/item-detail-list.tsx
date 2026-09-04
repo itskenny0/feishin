@@ -67,7 +67,7 @@ import { useSongListQuery } from '/@/renderer/features/songs/queries/songs-queri
 import { useDragDrop } from '/@/renderer/hooks/use-drag-drop';
 import { useLongPress } from '/@/renderer/hooks/use-long-press';
 import { AppRoute } from '/@/renderer/router/routes';
-import { useSettingsStore, useShowRatings } from '/@/renderer/store';
+import { useSettingsStore, useShowFavorites, useShowRatings } from '/@/renderer/store';
 import { useShowFilesystemNameForAlbums } from '/@/renderer/store/settings.store';
 import { formatDurationString, formatPartialIsoDateUTC } from '/@/renderer/utils';
 import { SEPARATOR_STRING } from '/@/shared/api/utils';
@@ -506,6 +506,7 @@ const MetadataSection = memo(
         const { t } = useTranslation();
         const showRatings = useShowRatings();
         const useFsForAlbums = useShowFilesystemNameForAlbums();
+        const showFavorites = useShowFavorites();
         const [isImageHovered, setIsImageHovered] = useState(false);
         const [isMetadataHovered, setIsMetadataHovered] = useState(false);
 
@@ -657,7 +658,7 @@ const MetadataSection = memo(
                             serverId={item._serverId}
                             type="itemCard"
                         />
-                        {isFavorite && <div className={styles.favoriteBadge} />}
+                        {showFavorites && isFavorite && <div className={styles.favoriteBadge} />}
                         {hasRating && <div className={styles.ratingBadge}>{userRating}</div>}
                         <AnimatePresence>
                             {controls && isImageHovered && (
@@ -667,6 +668,7 @@ const MetadataSection = memo(
                                     internalState={internalState}
                                     item={item}
                                     itemType={item._itemType}
+                                    showFavorite={showFavorites}
                                     showRating={true}
                                     type="compact"
                                 />
