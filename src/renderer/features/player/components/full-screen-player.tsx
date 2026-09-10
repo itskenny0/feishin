@@ -269,12 +269,28 @@ const PlayerContainer = memo(
         windowBarStyle,
     }: PlayerContainerProps) => {
         const currentSong = usePlayerSong();
-        const imageUrl = useCachedItemImageUrl({
-            id: currentSong?.albumId ?? currentSong?.imageId ?? undefined,
-            imageUrl: currentSong?.imageUrl,
-            itemType: LibraryItem.SONG,
-            type: 'itemCard',
-        });
+        const isRadioActive = useIsRadioActive();
+        const { currentStationArt: currentRadioStationArt } = useRadioPlayer();
+
+        // The dynamic background samples whatever art is on screen. On radio
+        // that is the station art, otherwise the album cover, which caches
+        // under albumId - the id the thumbnail sweep keys on.
+        const imageUrl = useCachedItemImageUrl(
+            isRadioActive
+                ? {
+                      id: currentRadioStationArt?.imageId || undefined,
+                      imageUrl: currentRadioStationArt?.imageUrl,
+                      itemType: LibraryItem.RADIO_STATION,
+                      serverId: currentRadioStationArt?.serverId,
+                      type: 'itemCard',
+                  }
+                : {
+                      id: currentSong?.albumId ?? currentSong?.imageId ?? undefined,
+                      imageUrl: currentSong?.imageUrl,
+                      itemType: LibraryItem.SONG,
+                      type: 'itemCard',
+                  },
+        );
         const { background } = useFastAverageColor({
             algorithm: 'dominant',
             src: imageUrl,
@@ -320,11 +336,7 @@ export const FullScreenPlayer = () => {
         activeTab === 'visualizer';
 
     const { windowBarStyle } = useWindowSettings();
-    const isRadioActive = useIsRadioActive();
-    const { isPlaying: isRadioPlaying } = useRadioPlayer();
-
-    const isPlayingRadio = isRadioActive && isRadioPlaying;
-    const effectiveDynamicBackground = dynamicBackground && !isPlayingRadio;
+    const effectiveDynamicBackground = dynamicBackground;
 
     const location = useLocation();
     const isOpenedRef = useRef<boolean | null>(null);

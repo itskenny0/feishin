@@ -41,6 +41,8 @@ vi.mock('/@/renderer/store', () => ({
 // the <img> (not the placeholder) and the crossfade slots carry a real src.
 vi.mock('/@/renderer/components/item-image/item-image', () => ({
     useCachedItemImageUrl: () => 'https://example.test/cover.jpg',
+    // Radio station art resolves off the server, not through the cache.
+    useItemImageUrl: () => 'https://example.test/station.jpg',
 }));
 
 // Local (non-remote) playback: no active remote source, targetDeviceId null.

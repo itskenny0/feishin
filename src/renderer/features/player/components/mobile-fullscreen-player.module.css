@@ -731,6 +731,13 @@
     }
 }
 
+.image-native-aspect-ratio .album-image {
+    position: relative;
+    height: auto;
+    max-height: 50dvh;
+    margin: 0 auto;
+}
+
 .album-image {
     position: absolute;
     top: 0;
@@ -1154,7 +1161,6 @@
     padding: 1rem;
 }
 
-.queue-content,
 .lyrics-content {
     flex: 1 1 auto;
     min-height: 0;

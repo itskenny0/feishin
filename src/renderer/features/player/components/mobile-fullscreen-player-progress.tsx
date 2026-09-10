@@ -7,6 +7,7 @@ import styles from './mobile-fullscreen-player.module.css';
 import { useRemoteInterpolatedPositionMs } from '/@/renderer/features/jellyfin-remote-target/hooks/use-active-player-source';
 import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
 import { PlayerbarSeekSlider } from '/@/renderer/features/player/components/playerbar-seek-slider';
+import { useIsRadioActive } from '/@/renderer/features/radio/hooks/use-radio-player';
 import { TrackmapCanvas } from '/@/renderer/features/trackmap';
 import { usePlayerTimestamp } from '/@/renderer/store';
 import { useTrackmapEnabled } from '/@/renderer/store/settings.store';
@@ -58,7 +59,12 @@ export const MobileFullscreenPlayerProgress = memo(
             [songDuration],
         );
 
+        const isRadioActive = useIsRadioActive();
         const trackmapEnabled = useTrackmapEnabled();
+
+        if (isRadioActive) {
+            return <></>;
+        }
 
         return (
             <div className={styles.progressContainer}>

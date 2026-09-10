@@ -206,6 +206,24 @@
     gap: var(--theme-spacing-sm);
     align-items: center;
     width: 100%;
+
+    /* Upstream's overflow guards: without min-width:0 a long button label
+       forces the flex row wider than its container instead of shrinking. */
+    min-width: 0;
+
+    > * {
+        min-width: 0;
+    }
+
+    button {
+        min-width: 0;
+        overflow: hidden;
+        white-space: nowrap;
+    }
+
+    button * {
+        min-width: 0;
+    }
 }
 
 .library-header[data-layout='mobile'] .library-header-menu {

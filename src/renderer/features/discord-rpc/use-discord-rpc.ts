@@ -63,7 +63,7 @@ export const useDiscordRpc = () => {
     const [lastUniqueId, setlastUniqueId] = useState('');
 
     const isRadioActive = useIsRadioActive();
-    const { isPlaying: isRadioPlaying, metadata: radioMetadata, stationName } = useRadioPlayer();
+    const { metadata: radioMetadata, stationName } = useRadioPlayer();
 
     const currentSong = usePlayerSong();
     const imageUrl = useItemImageUrl({
@@ -118,8 +118,7 @@ export const useDiscordRpc = () => {
             const song = current[0];
             const trackChanged = song ? lastUniqueId !== song._uniqueId : false;
 
-            const isPlayingRadio = isRadioActive && isRadioPlaying;
-            const hasTrackOrRadio = Boolean(current[0]) || isPlayingRadio;
+            const hasTrackOrRadio = Boolean(current[0]) || isRadioActive;
 
             if (
                 !hasTrackOrRadio || // No track and not playing radio
@@ -143,9 +142,15 @@ export const useDiscordRpc = () => {
                 return discordRpc?.clearActivity();
             }
 
-            if (isPlayingRadio) {
+            if (isRadioActive) {
                 const title = radioMetadata?.title || stationName || 'Radio';
                 const artist = radioMetadata?.artist || stationName || '';
+
+                const statusDisplayMap = {
+                    [DiscordDisplayType.ARTIST_NAME]: DiscordStatusDisplayType.STATE,
+                    [DiscordDisplayType.FEISHIN]: DiscordStatusDisplayType.NAME,
+                    [DiscordDisplayType.SONG_NAME]: DiscordStatusDisplayType.DETAILS,
+                };
 
                 const activity: SetActivity = {
                     details: truncate(title),
@@ -165,7 +170,7 @@ export const useDiscordRpc = () => {
                                 : undefined
                             : sentenceCase(current[2]),
                     state: truncate(artist),
-                    statusDisplayType: DiscordStatusDisplayType.STATE,
+                    statusDisplayType: statusDisplayMap[discordSettings.displayType],
                     type: discordSettings.showAsListening ? 2 : 0,
                 };
 
@@ -409,7 +414,6 @@ export const useDiscordRpc = () => {
             lastUniqueId,
             currentSong?._uniqueId,
             isRadioActive,
-            isRadioPlaying,
             radioMetadata?.artist,
             radioMetadata?.title,
             stationName,

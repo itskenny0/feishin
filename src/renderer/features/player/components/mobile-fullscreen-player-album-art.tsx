@@ -11,7 +11,10 @@ import { useCallback, useEffect, useRef } from 'react';
 
 import styles from './mobile-fullscreen-player.module.css';
 
-import { useCachedItemImageUrl } from '/@/renderer/components/item-image/item-image';
+import {
+    useCachedItemImageUrl,
+    useItemImageUrl,
+} from '/@/renderer/components/item-image/item-image';
 import {
     useActiveNextItem,
     useActiveNowPlayingItem,
@@ -103,7 +106,6 @@ const ImageWithPlaceholder = ({
             })}
             style={{
                 objectFit: useImageAspectRatio ? 'contain' : 'cover',
-                width: useImageAspectRatio ? 'auto' : '100%',
             }}
             {...props}
         />
@@ -125,7 +127,7 @@ export const MobileFullscreenPlayerAlbumArt = () => {
     // image stack unnecessarily.
     const useImageAspectRatio = useFullScreenPlayerUseImageAspectRatio();
     const isRadioActive = useIsRadioActive();
-    const { isPlaying: isRadioPlaying } = useRadioPlayer();
+    const { currentStationArt: currentRadioStationArt } = useRadioPlayer();
     const currentSong = usePlayerSong();
     const { nextSong, previousSong } = usePlayerData();
     // Privacy parity with the mini-player and desktop fullscreen cover: when
@@ -180,8 +182,6 @@ export const MobileFullscreenPlayerAlbumArt = () => {
         return s.mirrored.queueIndex !== 0;
     });
 
-    const isPlayingRadio = isRadioActive && isRadioPlaying;
-
     const currentImageUrl = useCachedItemImageUrl({
         id: currentSong?.albumId ?? currentSong?.imageId ?? undefined,
         itemType: LibraryItem.SONG,
@@ -203,6 +203,16 @@ export const MobileFullscreenPlayerAlbumArt = () => {
         type: 'fullScreenPlayer',
     });
 
+    // Station art is not part of the thumbnail sweep, so it resolves straight
+    // off the server rather than through the cache-first hook above.
+    const radioImage = useItemImageUrl({
+        id: currentRadioStationArt?.imageId || undefined,
+        imageUrl: currentRadioStationArt?.imageUrl,
+        itemType: LibraryItem.RADIO_STATION,
+        serverId: currentRadioStationArt?.serverId,
+        type: 'fullScreenPlayer',
+    });
+
     const imageState = useCrossfadeImageSlots({
         currentExplicit: currentSong?.explicitStatus === ExplicitStatus.EXPLICIT,
         currentImageUrl,
@@ -210,7 +220,7 @@ export const MobileFullscreenPlayerAlbumArt = () => {
         nextImageUrl,
         // Radio renders its own art in a separate branch — suspend slot updates
         // then, matching the desktop fullscreen cover.
-        paused: isPlayingRadio,
+        paused: isRadioActive,
         songKey: currentSong?._uniqueId,
     });
 
@@ -750,7 +760,7 @@ export const MobileFullscreenPlayerAlbumArt = () => {
      * Both are hidden when the corresponding side has no song (or in
      * radio mode), so the gesture still feels clean at queue boundaries.
      */
-    // Peek covers are gated on isRadioActive (not isPlayingRadio): a
+    // Peek covers are gated on isRadioActive rather than on playback: a
     // radio stream that's loaded but paused still has no meaningful
     // prev/next, and we don't want a swipe on it to fire mediaNext().
     const nextImageSrc = !isRadioActive && nextSong?._uniqueId ? nextImageUrl : null;
@@ -897,7 +907,7 @@ export const MobileFullscreenPlayerAlbumArt = () => {
                 style={{ x: coverSwipeX }}
             >
                 <AnimatePresence initial={false} mode="sync">
-                    {isPlayingRadio ? (
+                    {isRadioActive ? (
                         <ImageWithPlaceholder
                             animate="open"
                             className={PlaybackSelectors.playerCoverArt}
@@ -909,7 +919,7 @@ export const MobileFullscreenPlayerAlbumArt = () => {
                             loading="eager"
                             placeholder="var(--theme-colors-foreground-muted)"
                             placeholderIcon="radio"
-                            src=""
+                            src={radioImage || ''}
                             useImageAspectRatio={useImageAspectRatio}
                             variants={imageVariants}
                         />

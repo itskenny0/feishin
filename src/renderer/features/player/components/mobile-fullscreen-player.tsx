@@ -59,6 +59,7 @@ import {
 } from '/@/renderer/store';
 import { usePlaybackSettings, useSettingsStore } from '/@/renderer/store/settings.store';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
+import { Stack } from '/@/shared/components/stack/stack';
 import { Text } from '/@/shared/components/text/text';
 import { LibraryItem, ServerType } from '/@/shared/types/domain-types';
 import { ItemListKey } from '/@/shared/types/types';
@@ -422,12 +423,28 @@ const MobilePlayerContainer = memo(
         swipeY,
     }: DismissibleMobilePlayerContainerProps) => {
         const currentSong = usePlayerSong();
-        const imageUrl = useCachedItemImageUrl({
-            id: currentSong?.albumId ?? currentSong?.imageId ?? undefined,
-            imageUrl: currentSong?.imageUrl,
-            itemType: LibraryItem.SONG,
-            type: 'itemCard',
-        });
+        const isRadioActive = useIsRadioActive();
+        const { currentStationArt: currentRadioStationArt } = useRadioPlayer();
+
+        // The dynamic background samples whatever art is on screen. On radio
+        // that is the station art, otherwise the album cover, which caches
+        // under albumId - the id the thumbnail sweep keys on.
+        const imageUrl = useCachedItemImageUrl(
+            isRadioActive
+                ? {
+                      id: currentRadioStationArt?.imageId || undefined,
+                      imageUrl: currentRadioStationArt?.imageUrl,
+                      itemType: LibraryItem.RADIO_STATION,
+                      serverId: currentRadioStationArt?.serverId,
+                      type: 'itemCard',
+                  }
+                : {
+                      id: currentSong?.albumId ?? currentSong?.imageId ?? undefined,
+                      imageUrl: currentSong?.imageUrl,
+                      itemType: LibraryItem.SONG,
+                      type: 'itemCard',
+                  },
+        );
         const { background } = useFastAverageColor({
             algorithm: 'dominant',
             src: imageUrl,
@@ -525,10 +542,9 @@ export const MobileFullscreenPlayer = () => {
     // (lyrics, related-artist/album cards, context menu).
     const displaySong = useActiveNowPlayingItem();
     const isRadioActive = useIsRadioActive();
-    const { isPlaying: isRadioPlaying, metadata: radioMetadata, stationName } = useRadioPlayer();
+    const { metadata: radioMetadata, stationName } = useRadioPlayer();
     const server = useCurrentServer();
 
-    const isPlayingRadio = isRadioActive && isRadioPlaying;
     const { webAudio: webAudioEnabled } = usePlaybackSettings();
     /*
      * When the visualizer is the chosen background AND Web Audio is
@@ -540,8 +556,9 @@ export const MobileFullscreenPlayer = () => {
      * the visualizer should have been.
      */
     const effectiveDynamicBackground =
-        dynamicBackground && !isPlayingRadio && !(visualizerAsBackground && webAudioEnabled);
+        dynamicBackground && !(visualizerAsBackground && webAudioEnabled);
     const showFavorites = useShowFavorites();
+
     const setFavorite = useSetFavorite();
     const showRatingsSetting = useShowRatings();
     const setRating = useSetRating();
@@ -953,15 +970,13 @@ export const MobileFullscreenPlayer = () => {
                                 onToggleFavorite={handleToggleFavorite}
                                 onUpdateRating={handleUpdateRating}
                                 radioArtist={
-                                    isPlayingRadio
-                                        ? (radioMetadata?.artist ?? undefined)
-                                        : undefined
+                                    isRadioActive ? (radioMetadata?.artist ?? undefined) : undefined
                                 }
                                 radioStationName={
-                                    isPlayingRadio ? (stationName ?? undefined) : undefined
+                                    isRadioActive ? (stationName ?? undefined) : undefined
                                 }
                                 radioTitle={
-                                    isPlayingRadio ? (radioMetadata?.title ?? undefined) : undefined
+                                    isRadioActive ? (radioMetadata?.title ?? undefined) : undefined
                                 }
                                 showFavorite={showFavorites}
                                 showRating={showRating}
@@ -992,7 +1007,7 @@ export const MobileFullscreenPlayer = () => {
                  */}
                 {isSongDefined && deferredCardsReady && (
                     <>
-                        {!isPlayingRadio && (
+                        {!isRadioActive && (
                             <MobileFullscreenArtistCard
                                 artistId={displaySong?.artists?.[0]?.id}
                                 artistName={displaySong?.artists?.[0]?.name}
@@ -1051,7 +1066,7 @@ export const MobileFullscreenPlayer = () => {
                                 </div>
                             </div>
                         )}
-                        {!isPlayingRadio && (
+                        {!isRadioActive && (
                             <MobileFullscreenAlbumCard
                                 albumId={displaySong?.albumId}
                                 albumName={displaySong?.album ?? undefined}
@@ -1089,9 +1104,9 @@ export const MobileFullscreenPlayer = () => {
                                 variant={isPageHovered ? 'default' : 'subtle'}
                             />
                         </div>
-                        <div className={styles.queueContent}>
+                        <Stack gap={0} h="100%" w="100%">
                             <PlayQueue listKey={ItemListKey.FULL_SCREEN} searchTerm={undefined} />
-                        </div>
+                        </Stack>
                     </motion.div>
                 )}
             </AnimatePresence>

@@ -212,6 +212,8 @@ const GenreTargetSchema = z.enum(['album', 'track']);
 
 const PlaylistTargetSchema = z.enum(['album', 'track']);
 
+const ScrobbleMinimumModeSchema = z.enum(['both', 'percentage', 'seconds']);
+
 const SideQueueTypeSchema = z.enum(['sideDrawerQueue', 'sideQueue']);
 const SideQueueLayoutSchema = z.enum(['horizontal', 'vertical']);
 
@@ -843,6 +845,7 @@ const LyricsSettingsSchema = z.object({
 
 const ScrobbleSettingsSchema = z.object({
     enabled: z.boolean(),
+    minimumMode: ScrobbleMinimumModeSchema,
     notify: z.boolean(),
     scrobbleAtDuration: z.number(),
     scrobbleAtPercentage: z.number(),
@@ -1026,6 +1029,14 @@ export const getServerTagAutocompleteName = (source: string): null | string =>
 
 export const toServerTagAutocompleteSource = (tagName: string): string =>
     `${SERVER_TAG_AUTOCOMPLETE_PREFIX}${tagName}`;
+
+export const ScrobbleMinimumMode = {
+    BOTH: 'both',
+    PERCENTAGE: 'percentage',
+    SECONDS: 'seconds',
+} as const;
+
+export type ScrobbleMinimumMode = (typeof ScrobbleMinimumMode)[keyof typeof ScrobbleMinimumMode];
 
 /**
  * Local-first cache opt-in slice.
@@ -2849,6 +2860,7 @@ const initialState: SettingsState = {
         remoteTargetDeviceName: null,
         scrobble: {
             enabled: true,
+            minimumMode: ScrobbleMinimumMode.BOTH,
             notify: false,
             scrobbleAtDuration: 240,
             scrobbleAtPercentage: 75,
@@ -4427,6 +4439,18 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
+                if (version < 79) {
+                    // Upstream's scrobble minimum-mode setting ships without a
+                    // zod default, so an existing install (or an imported
+                    // pre-v79 settings file) would fail validation on the
+                    // missing key. Guarded: a sparse blob may lack the scrobble
+                    // object, and a throwing migrate discards ALL settings.
+                    const scrobble = state.playback?.scrobble;
+                    if (scrobble && scrobble.minimumMode === undefined) {
+                        scrobble.minimumMode = initialState.playback.scrobble.minimumMode;
+                    }
+                }
+
                 if (version < 32) {
                     const tagConfigs = state.tagEditor?.tagConfigs;
                     if (tagConfigs) {
@@ -4452,7 +4476,7 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                 return persistedState;
             },
             name: 'store_settings',
-            version: 78,
+            version: 79,
         },
     ),
 );

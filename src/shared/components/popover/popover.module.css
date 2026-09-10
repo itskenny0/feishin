@@ -2,16 +2,15 @@
     /*
      * Constrain the dropdown to the viewport so long settings menus
      * (the fullscreen-player config has ~15 options between dynamic
-     * background, lyrics typography, list display etc.) can scroll
-     * instead of running off the bottom of the screen. Without this,
-     * tapping a setting at the bottom of the list was impossible on
-     * phones — half the menu was below the safe area and inaccessible.
+     * background, lyrics typography, list display etc.) stay inside the
+     * screen instead of running off the bottom. Without this, tapping a
+     * setting at the bottom of the list was impossible on phones - half
+     * the menu was below the safe area and inaccessible. The mobile
+     * breakpoint below adds the scrolling that makes it reachable.
      */
     max-width: calc(100vw - 24px);
     max-height: calc(100dvh - 96px);
     padding: var(--theme-spacing-sm);
-    overflow-y: auto;
-    overscroll-behavior: contain;
     color: var(--theme-colors-foreground);
     background: var(--theme-colors-background);
     border: 2px solid var(--theme-colors-border);
@@ -38,6 +37,15 @@
 @media (width <= 767px) {
     .dropdown {
         width: calc(100vw - 24px);
+
+        /*
+         * Upstream drops `overflow-y` on the dropdown so nested menus aren't
+         * clipped. On phones the tall config menus still need to scroll or the
+         * bottom entries land off-screen with no way to reach them, so the
+         * scroll behaviour stays but only in the mobile breakpoint.
+         */
+        overflow-y: auto;
+        overscroll-behavior: contain;
     }
 
     /* stylelint-disable-next-line selector-class-pattern */

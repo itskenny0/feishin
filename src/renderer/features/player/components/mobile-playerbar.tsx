@@ -19,8 +19,13 @@ import {
 } from '/@/renderer/features/jellyfin-remote-target/hooks/use-active-player-source';
 import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
 import { MainPlayButton, PlayerButton } from '/@/renderer/features/player/components/player-button';
+import { RadioMetadataDisplay } from '/@/renderer/features/player/components/radio-metadata-display';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
 import { decideCoverSwipeCommit } from '/@/renderer/features/player/utils/cover-swipe-signal';
+import {
+    useIsRadioActive,
+    useRadioPlayer,
+} from '/@/renderer/features/radio/hooks/use-radio-player';
 import { ComponentErrorBoundary } from '/@/renderer/features/shared/components/component-error-boundary';
 import { TrackmapCanvas } from '/@/renderer/features/trackmap';
 import { triggerHaptic } from '/@/renderer/hooks/use-haptic';
@@ -66,9 +71,11 @@ export const MobilePlayerbar = () => {
     const { nextSong, previousSong } = usePlayerData();
     const hasNext = Boolean(nextSong?._uniqueId);
     const hasPrevious = Boolean(previousSong?._uniqueId);
+    const { currentStationArt } = useRadioPlayer();
     const { mediaNext, mediaPrevious, mediaTogglePlayPause } = usePlayer();
     const title = currentSong?.name;
     const artists = currentSong?.artists;
+    const isRadioActive = useIsRadioActive();
     const isSongDefined = Boolean(currentSong?.id);
     const useFsAlbumName = useShowFilesystemNameForAlbums();
     const showNavButtons = useMobilePlayerbarShowNavButtons();
@@ -297,13 +304,21 @@ export const MobilePlayerbar = () => {
                                             )}
                                             enableDebounce={false}
                                             enableViewport={false}
-                                            explicitStatus={currentSong.explicitStatus}
+                                            explicitStatus={
+                                                isRadioActive
+                                                    ? undefined
+                                                    : currentSong.explicitStatus
+                                            }
                                             fetchPriority="high"
                                             // Album cover (cached by albumId); the song's own
                                             // imageId (Subsonic coverArt) isn't swept, so keying on
                                             // it would miss the cache forever. Matches every other
                                             // player cover surface (left-controls, fullscreen art).
-                                            id={currentSong.albumId ?? currentSong.imageId}
+                                            id={
+                                                isRadioActive
+                                                    ? currentStationArt?.imageId
+                                                    : (currentSong.albumId ?? currentSong.imageId)
+                                            }
                                             itemType={LibraryItem.SONG}
                                             type="table"
                                         />
@@ -313,76 +328,85 @@ export const MobilePlayerbar = () => {
                         )}
                     </AnimatePresence>
                     <motion.div className={styles.metadataStack} layout="position">
-                        <div className={styles.lineItem} onClick={stopPropagation}>
-                            <Group align="center" gap="xs" wrap="nowrap">
-                                <Text
-                                    className={PlaybackSelectors.songTitle}
-                                    component={Link}
-                                    fw={700}
-                                    isLink
+                        {isRadioActive ? (
+                            <RadioMetadataDisplay
+                                onStopPropagation={stopPropagation}
+                                onToggleContextMenu={handleToggleContextMenu}
+                            />
+                        ) : (
+                            <>
+                                <div className={styles.lineItem} onClick={stopPropagation}>
+                                    <Group align="center" gap="xs" wrap="nowrap">
+                                        <Text
+                                            className={PlaybackSelectors.songTitle}
+                                            component={Link}
+                                            fw={700}
+                                            isLink
+                                            onClick={handleToggleFullScreenPlayer}
+                                            onContextMenu={handleToggleContextMenu}
+                                            overflow="hidden"
+                                            size="sm"
+                                            to={AppRoute.NOW_PLAYING}
+                                            truncate
+                                        >
+                                            {title || '—'}
+                                        </Text>
+                                        {isSongDefined && (
+                                            <ActionIcon
+                                                icon="ellipsisVertical"
+                                                onClick={handleToggleContextMenu}
+                                                size="xs"
+                                                styles={{
+                                                    root: {
+                                                        '--ai-size-xs': '1.15rem',
+                                                    },
+                                                }}
+                                                variant="subtle"
+                                            />
+                                        )}
+                                    </Group>
+                                </div>
+                                {/*
+                                 * Spotify pattern: tapping the artist or album line
+                                 * in the MINI-player surfaces the fullscreen player
+                                 * — the same affordance as tapping the cover. The
+                                 * artist/album detail pages are reachable via the
+                                 * fullscreen player metadata (which IS linked) or
+                                 * via the long-press context menu. Removing the
+                                 * inline navigation here makes the whole content
+                                 * row feel like one cohesive tap target.
+                                 */}
+                                <div
+                                    className={clsx(
+                                        styles.lineItem,
+                                        styles.secondary,
+                                        PlaybackSelectors.songArtist,
+                                    )}
                                     onClick={handleToggleFullScreenPlayer}
-                                    onContextMenu={handleToggleContextMenu}
-                                    overflow="hidden"
-                                    size="sm"
-                                    to={AppRoute.NOW_PLAYING}
-                                    truncate
                                 >
-                                    {title || '—'}
-                                </Text>
-                                {isSongDefined && (
-                                    <ActionIcon
-                                        icon="ellipsisVertical"
-                                        onClick={handleToggleContextMenu}
-                                        size="xs"
-                                        styles={{
-                                            root: {
-                                                '--ai-size-xs': '1.15rem',
-                                            },
-                                        }}
-                                        variant="subtle"
-                                    />
-                                )}
-                            </Group>
-                        </div>
-                        {/*
-                         * Spotify pattern: tapping the artist or album line
-                         * in the MINI-player surfaces the fullscreen player
-                         * — the same affordance as tapping the cover. The
-                         * artist/album detail pages are reachable via the
-                         * fullscreen player metadata (which IS linked) or
-                         * via the long-press context menu. Removing the
-                         * inline navigation here makes the whole content
-                         * row feel like one cohesive tap target.
-                         */}
-                        <div
-                            className={clsx(
-                                styles.lineItem,
-                                styles.secondary,
-                                PlaybackSelectors.songArtist,
-                            )}
-                            onClick={handleToggleFullScreenPlayer}
-                        >
-                            {artists?.map((artist, index) => (
-                                <React.Fragment key={`bar-${artist.id}`}>
-                                    {index > 0 && <Separator />}
+                                    {artists?.map((artist, index) => (
+                                        <React.Fragment key={`bar-${artist.id}`}>
+                                            {index > 0 && <Separator />}
+                                            <Text fw={500} overflow="hidden" size="xs">
+                                                {artist.name || '—'}
+                                            </Text>
+                                        </React.Fragment>
+                                    ))}
+                                </div>
+                                <div
+                                    className={clsx(
+                                        styles.lineItem,
+                                        styles.secondary,
+                                        PlaybackSelectors.songAlbum,
+                                    )}
+                                    onClick={handleToggleFullScreenPlayer}
+                                >
                                     <Text fw={500} overflow="hidden" size="xs">
-                                        {artist.name || '—'}
+                                        {albumDisplayName}
                                     </Text>
-                                </React.Fragment>
-                            ))}
-                        </div>
-                        <div
-                            className={clsx(
-                                styles.lineItem,
-                                styles.secondary,
-                                PlaybackSelectors.songAlbum,
-                            )}
-                            onClick={handleToggleFullScreenPlayer}
-                        >
-                            <Text fw={500} overflow="hidden" size="xs">
-                                {albumDisplayName}
-                            </Text>
-                        </div>
+                                </div>
+                            </>
+                        )}
                     </motion.div>
                 </LayoutGroup>
             </motion.div>

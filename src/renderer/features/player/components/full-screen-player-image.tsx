@@ -5,7 +5,10 @@ import { useTranslation } from 'react-i18next';
 
 import styles from './full-screen-player-image.module.css';
 
-import { useCachedItemImageUrl } from '/@/renderer/components/item-image/item-image';
+import {
+    useCachedItemImageUrl,
+    useItemImageUrl,
+} from '/@/renderer/components/item-image/item-image';
 import { useActiveNowPlayingItem } from '/@/renderer/features/jellyfin-remote-target/hooks/use-active-player-source';
 import { SharedFullscreenPlayerMetadata } from '/@/renderer/features/player/components/shared-full-screen-player-metadata';
 import { useCrossfadeImageSlots } from '/@/renderer/features/player/hooks/use-crossfade-image-slots';
@@ -65,6 +68,7 @@ const ImageWithPlaceholder = ({
     placeholderIcon?: 'itemAlbum' | 'radio';
 }) => {
     const nativeAspectRatio = useNativeAspectRatio();
+    const useImageAspectRatio = useFullScreenPlayerStore((state) => state.useImageAspectRatio);
 
     if (!props.src) {
         return (
@@ -87,8 +91,8 @@ const ImageWithPlaceholder = ({
                 [styles.censored]: explicit,
             })}
             style={{
-                objectFit: nativeAspectRatio ? 'contain' : 'cover',
-                width: nativeAspectRatio ? 'auto' : '100%',
+                objectFit: nativeAspectRatio || useImageAspectRatio ? 'contain' : 'cover',
+                width: nativeAspectRatio || useImageAspectRatio ? 'auto' : '100%',
             }}
             {...props}
         />
@@ -101,7 +105,7 @@ export const FullScreenPlayerImage = () => {
     const [imageContainerWidth, setImageContainerWidth] = useState<null | number>(null);
 
     const isRadioActive = useIsRadioActive();
-    const { isPlaying: isRadioPlaying } = useRadioPlayer();
+    const { currentStationArt: currentRadioStationArt } = useRadioPlayer();
 
     // Active source: mirrors the remote device's now-playing when a Jellyfin
     // Connect target is selected (identical to the local song otherwise). The
@@ -112,8 +116,6 @@ export const FullScreenPlayerImage = () => {
     const blurExplicitImages = useBlurExplicitImages();
     const playerItems = usePlayerItems();
     const { coverArtSize, titleDisplayType, titleLineCount } = useFullScreenPlayerStore();
-
-    const isPlayingRadio = isRadioActive && isRadioPlaying;
 
     // Cache-first, keyed on albumId: the sweep caches covers by album, and on
     // Subsonic/Navidrome a song's imageId is the coverArt id, not the album id.
@@ -131,12 +133,22 @@ export const FullScreenPlayerImage = () => {
         type: 'fullScreenPlayer',
     });
 
+    // Station art is not part of the thumbnail sweep, so it resolves straight
+    // off the server the same way the sidebar's radio thumbnail does.
+    const radioImage = useItemImageUrl({
+        id: currentRadioStationArt?.imageId || undefined,
+        imageUrl: currentRadioStationArt?.imageUrl,
+        itemType: LibraryItem.RADIO_STATION,
+        serverId: currentRadioStationArt?.serverId,
+        type: 'fullScreenPlayer',
+    });
+
     const imageState = useCrossfadeImageSlots({
         currentExplicit: currentSong?.explicitStatus === ExplicitStatus.EXPLICIT,
         currentImageUrl,
         nextExplicit: nextSong?.explicitStatus === ExplicitStatus.EXPLICIT,
         nextImageUrl,
-        paused: isPlayingRadio,
+        paused: isRadioActive,
         songKey,
     });
 
@@ -234,7 +246,7 @@ export const FullScreenPlayerImage = () => {
                 }}
             >
                 <AnimatePresence initial={false} mode="sync">
-                    {!isPlayingRadio && imageState.current === 0 && (
+                    {!isRadioActive && imageState.current === 0 && (
                         <ImageWithPlaceholder
                             animate="open"
                             className="full-screen-player-image"
@@ -254,7 +266,7 @@ export const FullScreenPlayerImage = () => {
                         />
                     )}
 
-                    {!isPlayingRadio && imageState.current === 1 && (
+                    {!isRadioActive && imageState.current === 1 && (
                         <ImageWithPlaceholder
                             animate="open"
                             className="full-screen-player-image"
@@ -270,7 +282,7 @@ export const FullScreenPlayerImage = () => {
                         />
                     )}
 
-                    {isPlayingRadio && (
+                    {isRadioActive && (
                         <ImageWithPlaceholder
                             animate="open"
                             className="full-screen-player-image"
@@ -281,7 +293,7 @@ export const FullScreenPlayerImage = () => {
                             key="radio"
                             placeholder="var(--theme-colors-foreground-muted)"
                             placeholderIcon="radio"
-                            src=""
+                            src={radioImage || ''}
                             variants={imageVariants}
                         />
                     )}
