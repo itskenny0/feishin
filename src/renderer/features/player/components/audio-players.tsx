@@ -7,6 +7,7 @@ import { DiscordRpcHook } from '/@/renderer/features/discord-rpc/use-discord-rpc
 import { JellyfinRemoteControlHook } from '/@/renderer/features/jellyfin-remote-control';
 import { SessionsPollerHook } from '/@/renderer/features/jellyfin-remote-target/hooks/use-sessions-poller';
 import { UpcomingLyricsPrefetch } from '/@/renderer/features/lyrics/hooks/use-prefetch-upcoming-lyrics';
+import { DlnaPlayer } from '/@/renderer/features/player/audio-player/dlna-player';
 import { CapacitorMediaSessionHook } from '/@/renderer/features/player/audio-player/hooks/use-capacitor-media-session';
 import { MainPlayerListenerHook } from '/@/renderer/features/player/audio-player/hooks/use-main-player-listener';
 import { PauseOnDeviceDisconnectHook } from '/@/renderer/features/player/audio-player/hooks/use-pause-on-device-disconnect';
@@ -28,6 +29,7 @@ import {
 import { ScrobbleHook } from '/@/renderer/features/player/hooks/use-scrobble';
 import { UpdateCurrentSongHook } from '/@/renderer/features/player/hooks/use-update-current-song';
 import { useWebAudio } from '/@/renderer/features/player/hooks/use-webaudio';
+import { RadioDlnaPlayer } from '/@/renderer/features/radio/components/radio-dlna-player';
 import { RadioWebPlayer } from '/@/renderer/features/radio/components/radio-web-player';
 import {
     RadioAudioInstanceHook,
@@ -39,6 +41,7 @@ import { RemoteLibraryHook } from '/@/renderer/features/remote/hooks/use-remote-
 import { RemoteQueuePushHook } from '/@/renderer/features/remote/hooks/use-remote-queue-push';
 import { RemoteRadioPushHook } from '/@/renderer/features/remote/hooks/use-remote-radio-push';
 import { RemoteSettingsPushHook } from '/@/renderer/features/remote/hooks/use-remote-settings-push';
+import { ComponentErrorBoundary } from '/@/renderer/features/shared/components/component-error-boundary';
 import { VisualizerSystemAudioBridgeHook } from '/@/renderer/features/visualizer/components/visualizer-system-audio-bridge';
 import {
     updateQueueFavorites,
@@ -228,18 +231,15 @@ export const AudioPlayers = () => {
     const playbackType = usePlaybackType();
     const serverId = useCurrentServerId();
     const { resetSampleRate } = useSettingsStoreActions();
-
     const {
         audioDeviceId,
         mpvProperties: { audioSampleRateHz },
         webAudio,
     } = usePlaybackSettings();
     const { setWebAudio, webAudio: audioContext } = useWebAudio();
-
     useEffect(() => {
         detectBrowserProfile();
     }, []);
-
     return (
         <>
             <SleepTimerHook />
@@ -528,6 +528,14 @@ const AudioPlayersContent = ({
         }
 
         return <WebPlayer />;
+    }
+
+    if (playbackType === PlayerType.DLNA) {
+        return (
+            <ComponentErrorBoundary>
+                {isRadioActive ? <RadioDlnaPlayer /> : <DlnaPlayer />}
+            </ComponentErrorBoundary>
+        );
     }
 
     if (playbackType === PlayerType.JUKEBOX) {

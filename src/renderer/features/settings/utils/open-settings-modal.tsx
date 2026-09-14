@@ -9,6 +9,8 @@ import { openContextModal } from '@mantine/modals';
  */
 const MOBILE_SHELL_QUERY = '(max-width: 767px), (orientation: landscape) and (max-height: 480px)';
 
+import { SettingsHeader } from '/@/renderer/features/settings/components/settings-header';
+
 export const openSettingsModal = () => {
     const isMobile =
         typeof window !== 'undefined' && window.matchMedia
@@ -41,6 +43,7 @@ export const openSettingsModal = () => {
                       width: '100%',
                   },
         },
+        title: <SettingsHeader showUpdateAvailable />,
         transitionProps: {
             transition: isMobile ? 'slide-up' : 'pop',
         },

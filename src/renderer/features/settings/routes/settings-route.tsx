@@ -1,7 +1,6 @@
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense } from 'react';
 
 import { SettingsContent } from '/@/renderer/features/settings/components/settings-content';
-import { SettingSearchContext } from '/@/renderer/features/settings/context/search-context';
 import { AnimatedPage } from '/@/renderer/features/shared/components/animated-page';
 import { LibraryContainer } from '/@/renderer/features/shared/components/library-container';
 import { PageErrorBoundary } from '/@/renderer/features/shared/components/page-error-boundary';
@@ -13,24 +12,18 @@ const SettingsHeader = lazy(() =>
     })),
 );
 
-const SettingsRoute = () => {
-    const [search, setSearch] = useState('');
-
-    return (
-        <AnimatedPage>
-            <SettingSearchContext.Provider value={search}>
-                <LibraryContainer>
-                    <Flex direction="column" h="100%" w="100%">
-                        <Suspense fallback={<></>}>
-                            <SettingsHeader setSearch={setSearch} />
-                        </Suspense>
-                        <SettingsContent />
-                    </Flex>
-                </LibraryContainer>
-            </SettingSearchContext.Provider>
-        </AnimatedPage>
-    );
-};
+const SettingsRoute = () => (
+    <AnimatedPage>
+        <LibraryContainer>
+            <Flex direction="column" h="100%" w="100%">
+                <Suspense fallback={<></>}>
+                    <SettingsHeader />
+                </Suspense>
+                <SettingsContent />
+            </Flex>
+        </LibraryContainer>
+    </AnimatedPage>
+);
 
 // Wrap with PageErrorBoundary so a broken setting subpanel doesn't blow up
 // the whole router. Every other route in this app does the same — Settings

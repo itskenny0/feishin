@@ -8,11 +8,13 @@ import {
     useAuthStore,
     useBlurExplicitImages,
     useCurrentServerId,
+    useImagePlaceholderPriority,
     useImageRes,
     useSettingsStore,
 } from '/@/renderer/store';
 import { BaseImage, ImageProps } from '/@/shared/components/image/image';
 import { useNativeImage } from '/@/shared/components/image/use-native-image';
+import { useImageHashUrl } from '/@/shared/hooks/use-image-hash-url';
 import { ExplicitStatus, ImageRequest, LibraryItem } from '/@/shared/types/domain-types';
 
 const getUnloaderIcon = (itemType: LibraryItem) => {
@@ -36,16 +38,21 @@ const getUnloaderIcon = (itemType: LibraryItem) => {
 
 const BaseItemImage = (
     props: Omit<ImageProps, 'id' | 'src'> & {
+        blurHash?: null | string;
+        dominantColor?: null | string;
         explicitStatus?: ExplicitStatus | null;
         id?: null | string;
         itemType: LibraryItem;
         serverId?: null | string;
         src?: null | string;
+        thumbHash?: null | string;
         type?: keyof z.infer<typeof GeneralSettingsSchema>['imageRes'];
     },
 ) => {
-    const { explicitStatus, serverId, src, ...rest } = props;
+    const { blurHash, dominantColor, explicitStatus, serverId, src, thumbHash, ...rest } = props;
     const blurExplicitImages = useBlurExplicitImages();
+    const imagePlaceholderPriority = useImagePlaceholderPriority();
+    const hashUrl = useImageHashUrl(thumbHash, blurHash, dominantColor, imagePlaceholderPriority);
 
     // Compute the request once and derive the display `src` from it. The
     // request already carries the resolved URL (`imageRequest.url`), so the
@@ -65,6 +72,7 @@ const BaseItemImage = (
 
     return (
         <BaseImage
+            hashUrl={hashUrl}
             imageRequest={imageRequest}
             isExplicit={isExplicit}
             src={imageUrl}

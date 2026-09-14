@@ -56,7 +56,7 @@ export type MpvReloadEventPayload = Record<string, never>;
 
 export type PlayerLyricsFetchedEventPayload = {
     lyrics: FullLyricsMetadata;
-    offsetMs: number;
+    offsetMs: null | number;
     synced: boolean;
 };
 

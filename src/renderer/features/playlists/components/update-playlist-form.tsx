@@ -36,8 +36,11 @@ import {
 import { ServerFeature } from '/@/shared/types/features-types';
 
 type PlaylistImageProps = {
+    blurHash?: null | string;
+    dominantColor?: null | string;
     imageId: null | string;
     imageUrl: null | string;
+    thumbHash?: null | string;
     uploadedImage?: string;
 };
 
@@ -330,11 +333,14 @@ function PlaylistCoverField({
                 }}
             >
                 <ItemImage
+                    blurHash={showServerCover ? (playlistImage?.blurHash ?? null) : null}
+                    dominantColor={showServerCover ? (playlistImage?.dominantColor ?? null) : null}
                     enableViewport={false}
                     id={previewId}
                     itemType={LibraryItem.PLAYLIST}
                     serverId={server?.id}
                     src={previewSrc}
+                    thumbHash={showServerCover ? (playlistImage?.thumbHash ?? null) : null}
                     type="header"
                 />
                 <Group

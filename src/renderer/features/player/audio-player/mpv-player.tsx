@@ -144,6 +144,18 @@ export function MpvPlayer() {
         };
     }, []);
 
+    useEffect(() => {
+        if (status !== PlayerStatus.PLAYING || localPlayerStatus === PlayerStatus.PLAYING) {
+            return;
+        }
+        if (fadeIntervalRef.current) {
+            clearInterval(fadeIntervalRef.current);
+            fadeIntervalRef.current = null;
+        }
+        setLocalPlayerStatus(PlayerStatus.PLAYING);
+        playerRef.current?.setVolume(volume);
+    }, [status, localPlayerStatus, volume]);
+
     return (
         <MpvPlayerEngine
             isMuted={isMuted}

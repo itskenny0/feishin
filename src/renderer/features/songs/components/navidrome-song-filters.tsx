@@ -93,6 +93,8 @@ export const NavidromeSongFilters = ({
 
         return albumArtistListQuery?.data?.items?.map((artist) => ({
             albumCount: artist.albumCount,
+            blurHash: artist.blurHash,
+            dominantColor: artist.dominantColor,
             imageUrl: getItemImageUrl({
                 id: artist.id,
                 itemType: LibraryItem.ARTIST,
@@ -100,6 +102,7 @@ export const NavidromeSongFilters = ({
             }),
             label: artist.name,
             songCount: artist.songCount,
+            thumbHash: artist.thumbHash,
             value: artist.id,
         }));
     }, [albumArtistListQuery.data?.items]);

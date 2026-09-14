@@ -53,6 +53,7 @@ const RadioListItem = ({ station }: RadioListItemProps) => {
                 imageId: station.imageId,
                 imageUrl: station.imageUrl,
                 serverId: server.id,
+                thumbHash: station.thumbHash ?? null,
             });
         }
     };
@@ -126,6 +127,7 @@ const RadioListItem = ({ station }: RadioListItemProps) => {
                                 itemType={LibraryItem.RADIO_STATION}
                                 serverId={server?.id}
                                 src={station.imageUrl ?? ''}
+                                thumbHash={station.thumbHash ?? null}
                                 type="table"
                             />
                         </Box>

@@ -4,6 +4,7 @@
 // remote server whose shutdownServer() is wired into index.ts's window-quit
 // handler).
 import './custom-themes';
+import './dlna';
 import './lyrics';
 import './player';
 import './remote';

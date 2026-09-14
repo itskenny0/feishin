@@ -315,10 +315,13 @@ export const PlaylistRowButton = memo(
                     <>
                         <div className={styles.rowGroup}>
                             <ItemImage
+                                blurHash={item.blurHash}
                                 containerClassName={styles.imageContainer}
+                                dominantColor={item.dominantColor}
                                 enableDebounce={false}
                                 id={item.imageId}
                                 itemType={LibraryItem.PLAYLIST}
+                                thumbHash={item.thumbHash}
                                 type="table"
                             />
                             <div className={styles.metadata}>

@@ -7,6 +7,12 @@ vi.mock('@mantine/modals', () => ({
     openContextModal: vi.fn(),
 }));
 
+// The modal title renders SettingsHeader, whose import graph pulls in the
+// player/modal stack; the util under test only needs a component reference.
+vi.mock('/@/renderer/features/settings/components/settings-header', () => ({
+    SettingsHeader: () => null,
+}));
+
 const openContextModalMock = vi.mocked(openContextModal);
 
 /**

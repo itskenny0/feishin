@@ -1,8 +1,9 @@
 import { closeAllModals, openModal } from '@mantine/modals';
 import { useTranslation } from 'react-i18next';
 
+import { PageHeader } from '/@/renderer/components/page-header/page-header';
 import { UpdateAvailableButton } from '/@/renderer/features/settings/components/update-available-button';
-import { useSettingSearchContext } from '/@/renderer/features/settings/context/search-context';
+import { useSettingSearchStore } from '/@/renderer/features/settings/store/search.store';
 import { LibraryHeaderBar } from '/@/renderer/features/shared/components/library-header-bar';
 import { SearchInput } from '/@/renderer/features/shared/components/search-input';
 import { useIsMobileShell, useIsTouch } from '/@/renderer/hooks/use-breakpoint';
@@ -17,19 +18,18 @@ import { ConfirmModal } from '/@/shared/components/modal/modal';
 import { Text } from '/@/shared/components/text/text';
 
 export type SettingsHeaderProps = {
-    setSearch: (search: string) => void;
     showUpdateAvailable?: boolean;
 };
 
-export const SettingsHeader = ({ setSearch, showUpdateAvailable }: SettingsHeaderProps) => {
+export const SettingsHeader = ({ showUpdateAvailable }: SettingsHeaderProps) => {
     const { t } = useTranslation();
     const { reset } = useSettingsStoreActions();
-    const search = useSettingSearchContext();
+    const { search, setSearch } = useSettingSearchStore();
     /*
      * Touch devices: skip the search input's autofocus. Auto-focus
      * pops the on-screen keyboard the instant Settings opens, which
      * (a) covers half the viewport before the user sees any settings,
-     * and (b) is unwanted 90% of the time — most users land in
+     * and (b) is unwanted most of the time - most users land in
      * Settings to flip a known switch, not to search. Mouse users
      * still get autofocus so cmd-K-style "open + type immediately"
      * flow stays intact.
@@ -95,16 +95,13 @@ export const SettingsHeader = ({ setSearch, showUpdateAvailable }: SettingsHeade
     }
 
     return (
-        <Flex>
+        <PageHeader>
             <LibraryHeaderBar>
                 <Flex align="center" justify="space-between" w="100%">
-                    <Group wrap="nowrap">
-                        <Icon icon="settings" size="5xl" />
-                        <LibraryHeaderBar.Title>
-                            {t('common.setting', { count: 2 })}
-                        </LibraryHeaderBar.Title>
-                    </Group>
-                    <Group>
+                    <LibraryHeaderBar.Title>
+                        {t('common.setting', { count: 2 })}
+                    </LibraryHeaderBar.Title>
+                    <Group pr="2rem">
                         {showUpdateAvailable && <UpdateAvailableButton />}
                         <SearchInput
                             autoFocus={!isTouch}
@@ -117,6 +114,6 @@ export const SettingsHeader = ({ setSearch, showUpdateAvailable }: SettingsHeade
                     </Group>
                 </Flex>
             </LibraryHeaderBar>
-        </Flex>
+        </PageHeader>
     );
 };

@@ -200,12 +200,14 @@ const LibraryCommandItemComponent = ({
                 <div className={styles.imageWrapper}>
                     <ItemImage
                         alt="cover"
+                        blurHash={song?.blurHash}
                         className={styles.image}
                         explicitStatus={explicitStatus ?? song?.explicitStatus ?? null}
                         height={40}
                         id={imageId}
                         itemType={itemType}
                         src={imageUrl}
+                        thumbHash={song?.thumbHash}
                         type="table"
                         width={40}
                     />

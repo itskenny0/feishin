@@ -38,6 +38,7 @@ vi.mock('/@/renderer/store', () => ({
     useAuthStore: { getState: () => ({ currentServer: { id: 'srv' } }) },
     useBlurExplicitImages: () => false,
     useCurrentServerId: () => 'srv',
+    useImagePlaceholderPriority: () => 'off',
     useImageRes: () => ({
         fullScreenPlayer: 1024,
         header: 300,

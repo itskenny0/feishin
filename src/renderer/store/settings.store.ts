@@ -41,6 +41,7 @@ import {
     PlayerType,
     TableColumn,
 } from '/@/shared/types/types';
+import { IMAGE_PLACEHOLDER_PRIORITIES } from '/@/shared/utils/image-hash';
 
 const utils = isElectron() ? window.api.utils : null;
 
@@ -304,6 +305,7 @@ const TranscodingConfigSchema = z.object({
     bitrate: z.number().optional(),
     enabled: z.boolean(),
     format: z.string().optional(),
+    maxSampleRate: z.number().optional(),
 });
 
 const MpvSettingsSchema = z.object({
@@ -653,6 +655,7 @@ export const GeneralSettingsSchema = z.object({
     /** Show the time-aware greeting at the top of the home page. */
     homeGreetingVisible: z.boolean().default(true),
     homeItems: z.array(SortableItemSchema(HomeItemSchema)),
+    imagePlaceholderPriority: z.enum(IMAGE_PLACEHOLDER_PRIORITIES),
     imageRes: z.object({
         fullScreenPlayer: z.number(),
         header: z.number(),
@@ -911,6 +914,8 @@ const PlaybackSettingsSchema = z.object({
     mpvExtraParameters: z.array(z.string()),
     mpvProperties: MpvSettingsSchema,
     preservePitch: z.boolean(),
+    previousLocalVolume: z.number().min(0).max(100).optional(),
+    previousPlayerType: z.nativeEnum(PlayerType).optional(),
     remoteTargetDeviceId: z.string().nullable().optional(),
     remoteTargetDeviceName: z.string().nullable().optional(),
     scrobble: ScrobbleSettingsSchema,
@@ -2011,6 +2016,7 @@ const initialState: SettingsState = {
         homeFeelingLucky: true,
         homeGreetingVisible: true,
         homeItems,
+        imagePlaceholderPriority: 'thumbhash',
         imageRes: {
             fullScreenPlayer: 0,
             header: 300,
@@ -2856,6 +2862,8 @@ const initialState: SettingsState = {
             replayGainPreampDB: 0,
         },
         preservePitch: true,
+        previousLocalVolume: undefined,
+        previousPlayerType: undefined,
         remoteTargetDeviceId: null,
         remoteTargetDeviceName: null,
         scrobble: {
@@ -4451,6 +4459,16 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
+                if (version < 80) {
+                    // Upstream's image placeholder priority ships without a zod
+                    // default; seed it so pre-v80 installs/imports validate.
+                    const general = state.general;
+                    if (general && general.imagePlaceholderPriority === undefined) {
+                        general.imagePlaceholderPriority =
+                            initialState.general.imagePlaceholderPriority;
+                    }
+                }
+
                 if (version < 32) {
                     const tagConfigs = state.tagEditor?.tagConfigs;
                     if (tagConfigs) {
@@ -4476,7 +4494,7 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                 return persistedState;
             },
             name: 'store_settings',
-            version: 79,
+            version: 80,
         },
     ),
 );
@@ -4594,6 +4612,9 @@ export const useAccent = () => useSettingsStore((state) => state.general.accent,
 
 export const useNativeAspectRatio = () =>
     useSettingsStore((state) => state.general.nativeAspectRatio, shallow);
+
+export const useImagePlaceholderPriority = () =>
+    useSettingsStore((state) => state.general.imagePlaceholderPriority);
 
 export const useButtonSize = () => useSettingsStore((state) => state.general.buttonSize, shallow);
 

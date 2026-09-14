@@ -5,7 +5,9 @@ import styles from './drag-preview.module.css';
 
 import { CachedImage } from '/@/renderer/cache';
 import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
+import { useImagePlaceholderPriority } from '/@/renderer/store';
 import { Icon } from '/@/shared/components/icon/icon';
+import { useImageHashUrl } from '/@/shared/hooks/use-image-hash-url';
 import { LibraryItem } from '/@/shared/types/domain-types';
 import { DragData, DragTarget } from '/@/shared/types/drag-and-drop';
 
@@ -38,6 +40,20 @@ export const DragPreview = memo(({ data }: DragPreviewProps) => {
         itemType: data.itemType || LibraryItem.SONG,
         type: 'table',
     });
+    const item = firstItem as
+        | undefined
+        | {
+              blurHash?: null | string;
+              dominantColor?: null | string;
+              thumbHash?: null | string;
+          };
+    const imagePlaceholderPriority = useImagePlaceholderPriority();
+    const hashUrl = useImageHashUrl(
+        item?.thumbHash,
+        item?.blurHash,
+        item?.dominantColor,
+        imagePlaceholderPriority,
+    );
 
     const isMultiple = itemCount > 1;
 
@@ -45,21 +61,34 @@ export const DragPreview = memo(({ data }: DragPreviewProps) => {
         <div className={styles.container}>
             <div className={styles.preview}>
                 <div className={styles.content}>
-                    {itemImage && data.id[0] ? (
-                        <div className={styles['image-container']}>
+                    {(itemImage && data.id[0]) || hashUrl ? (
+                        <div
+                            className={styles['image-container']}
+                            style={
+                                hashUrl
+                                    ? {
+                                          backgroundImage: `url(${hashUrl})`,
+                                          backgroundPosition: 'center',
+                                          backgroundSize: 'cover',
+                                      }
+                                    : undefined
+                            }
+                        >
                             {/* Sync-only: render the cover through the cache
-                                (CachedImage) ONLY — never a plain <img> of the
+                                (CachedImage) ONLY - never a plain <img> of the
                                 raw server URL, which downloads on demand. Without
-                                an entity id we can't key the cache, so fall
-                                through to the icon placeholder below. */}
-                            <CachedImage
-                                alt={itemName}
-                                className={styles.image}
-                                itemId={data.id[0]}
-                                size={96}
-                                src={itemImage}
-                                variant="itemCard"
-                            />
+                                an entity id we can't key the cache, so only the
+                                hash placeholder (if any) shows. */}
+                            {itemImage && data.id[0] ? (
+                                <CachedImage
+                                    alt={itemName}
+                                    className={styles.image}
+                                    itemId={data.id[0]}
+                                    size={96}
+                                    src={itemImage}
+                                    variant="itemCard"
+                                />
+                            ) : null}
                             <div className={styles['image-overlay']} />
                         </div>
                     ) : (

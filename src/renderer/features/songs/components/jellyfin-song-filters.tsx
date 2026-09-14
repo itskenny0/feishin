@@ -84,6 +84,7 @@ export const JellyfinSongFilters = ({
 
         return albumArtistListQuery?.data?.items?.map((artist) => ({
             albumCount: artist.albumCount,
+            blurHash: artist.blurHash,
             imageUrl: getItemImageUrl({
                 id: artist.id,
                 itemType: LibraryItem.ARTIST,
@@ -91,6 +92,7 @@ export const JellyfinSongFilters = ({
             }),
             label: artist.name,
             songCount: artist.songCount,
+            thumbHash: artist.thumbHash,
             value: artist.id,
         }));
     }, [albumArtistListQuery.data?.items]);

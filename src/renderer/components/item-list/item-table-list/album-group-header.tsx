@@ -173,6 +173,7 @@ export const AlbumGroupHeader = ({
                 style={imageContainerStyle}
             >
                 <ItemImage
+                    blurHash={song?.blurHash}
                     className={imageColumnStyles.compactImage}
                     enableDebounce
                     enableViewport={true}
@@ -180,6 +181,7 @@ export const AlbumGroupHeader = ({
                     id={song?.albumId ?? song?.imageId}
                     itemType={LibraryItem.SONG}
                     src={song?.imageUrl}
+                    thumbHash={song?.thumbHash}
                     type="table"
                 />
                 {isImageHovered && onPlay && (

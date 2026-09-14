@@ -352,6 +352,21 @@ const authenticate = z.object({
     User: user,
 });
 
+const quickConnectResult = z.object({
+    AppName: z.string().optional(),
+    AppVersion: z.string().optional(),
+    Authenticated: z.boolean().optional(),
+    Code: z.string().optional(),
+    DateAdded: z.string().optional(),
+    DeviceId: z.string().optional(),
+    DeviceName: z.string().optional(),
+    Secret: z.string().optional(),
+});
+
+const quickConnectAuthenticateParameters = z.object({
+    Secret: z.string(),
+});
+
 const genreItem = z.object({
     Id: z.string(),
     Name: z.string(),
@@ -965,6 +980,7 @@ export const jfType = {
         postGeneralCommand: postGeneralCommandBody,
         postPlaying: postPlayingParameters,
         postPlayingCommand: postPlayingCommandParameters,
+        quickConnectAuthenticate: quickConnectAuthenticateParameters,
         removeFromPlaylist: removeFromPlaylistParameters,
         saveQueue: saveQueueParameters,
         scrobble: scrobbleParameters,
@@ -1003,6 +1019,7 @@ export const jfType = {
         playlist,
         playlistList,
         playlistSongList,
+        quickConnectResult,
         remoteCommand: remoteCommandResponse,
         removeFromPlaylist,
         scheduledTasks,

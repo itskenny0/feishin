@@ -20,7 +20,7 @@ import {
     UnsynchronizedLyrics,
     UnsynchronizedLyricsProps,
 } from '/@/renderer/features/lyrics/unsynchronized-lyrics';
-import { usePlayerSong } from '/@/renderer/store';
+import { useLyricsSettings, usePlayerSong } from '/@/renderer/store';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Button } from '/@/shared/components/button/button';
 import { Center } from '/@/shared/components/center/center';
@@ -105,6 +105,7 @@ interface LyricSearchFormProps {
 
 export const LyricsSearchForm = ({ artist, name, onSearchOverride }: LyricSearchFormProps) => {
     const { t } = useTranslation();
+    const { delayMs } = useLyricsSettings();
     const currentSong = usePlayerSong();
     const [selectedResult, setSelectedResult] =
         useState<InternetProviderLyricSearchResponse | null>(null);
@@ -171,12 +172,12 @@ export const LyricsSearchForm = ({ artist, name, onSearchOverride }: LyricSearch
                 artist: selectedResult.artist,
                 lyrics: previewData,
                 name: selectedResult.name,
-                offsetMs: 0,
+                offsetMs: null,
                 remote: true,
                 source: selectedResult.source,
             };
             const synced = Array.isArray(previewData);
-            openLyricsExportModal({ lyrics: lyricsMetadata, offsetMs: 0, synced });
+            openLyricsExportModal({ lyrics: lyricsMetadata, offsetMs: delayMs, synced });
         }
     };
 

@@ -73,6 +73,7 @@ export const Lyrics = ({ fadeOutNoLyricsMessage = true, settingsKey = 'default' 
     const isLyricsDisabled = isRadioActive;
 
     const {
+        delayMs,
         enableAutoTranslation,
         enableFurigana,
         enableRomaji,
@@ -198,8 +199,8 @@ export const Lyrics = ({ fadeOutNoLyricsMessage = true, settingsKey = 'default' 
 
     const currentOffsetMs = useMemo(() => {
         if (!data) return 0;
-        return getDisplayOffset(lyrics, data.selectedOffsetMs, indexToUse, data.local);
-    }, [data, indexToUse, lyrics]);
+        return getDisplayOffset(lyrics, data.selectedOffsetMs, indexToUse, data.local, delayMs);
+    }, [data, delayMs, indexToUse, lyrics]);
 
     const layers = useMemo(() => {
         if (!Array.isArray(data?.local)) {
@@ -372,6 +373,7 @@ export const Lyrics = ({ fadeOutNoLyricsMessage = true, settingsKey = 'default' 
                 data.selectedOffsetMs,
                 newIndex,
                 data.local,
+                delayMs,
             );
             queryClient.setQueryData<LyricsQueryResult>(lyricsKey, (prev) =>
                 prev
@@ -385,7 +387,7 @@ export const Lyrics = ({ fadeOutNoLyricsMessage = true, settingsKey = 'default' 
                     : prev,
             );
         },
-        [data, lyricsKey, preferLocalLyrics],
+        [data, delayMs, lyricsKey, preferLocalLyrics],
     );
 
     const handleOnRemoveLyric = useCallback(async () => {

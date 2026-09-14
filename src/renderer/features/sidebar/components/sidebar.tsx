@@ -371,6 +371,7 @@ const SidebarImage = () => {
                     // (and offline showed nothing despite cached art).
                     <ItemImage
                         alt={currentSong?.name ?? ''}
+                        blurHash={currentSong.blurHash}
                         className={clsx(styles.sidebarImage, {
                             [styles.censored]:
                                 currentSong?.explicitStatus === ExplicitStatus.EXPLICIT &&
@@ -385,6 +386,7 @@ const SidebarImage = () => {
                         id={currentSong.albumId ?? currentSong.imageId}
                         itemType={LibraryItem.SONG}
                         serverId={currentSong._serverId}
+                        thumbHash={currentSong.thumbHash}
                         type="sidebar"
                     />
                 ) : (

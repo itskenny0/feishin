@@ -50,12 +50,7 @@ export const openLyricsSettingsModal = (settingsKey: string = 'default') => {
                       maxWidth: '100vw',
                       width: '100vw',
                   }
-                : {
-                      height: '90%',
-                      maxWidth: '1400px',
-                      minHeight: '600px',
-                      width: '100%',
-                  },
+                : undefined,
             // The lyrics modal can be opened from the fullscreen visualizer
             // (overlay z-index 200). Without a solid background the still
             // running visualizer paints through and the settings become
@@ -78,10 +73,13 @@ export const openLyricsSettingsModal = (settingsKey: string = 'default') => {
                   }
                 : undefined,
         },
-        title: i18n.t('common.setting', { count: 2 }),
+        // Desktop follows upstream (untitled, no close X); the mobile sheet
+        // keeps a titled header so it stays dismissable.
+        title: fullScreen ? i18n.t('common.setting', { count: 2 }) : undefined,
         transitionProps: {
             transition: 'pop',
         },
+        withCloseButton: fullScreen,
         // Render above the fullscreen visualizer/player overlays (z-index
         // 200). Without this the modal portal ties on z-index and the
         // later-painted visualizer overlay wins, leaving the config UI dead

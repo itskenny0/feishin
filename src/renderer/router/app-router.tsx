@@ -116,6 +116,18 @@ const LyricsSettingsContextModal = (
     </Suspense>
 );
 
+const LazyListConfigSettingsContextModal = lazy(() =>
+    import('/@/renderer/features/shared/components/list-config-settings-modal').then((module) => ({
+        default: module.ListConfigSettingsContextModal,
+    })),
+);
+
+const ListConfigSettingsContextModal = (props: any) => (
+    <Suspense fallback={<Spinner container />}>
+        <LazyListConfigSettingsContextModal {...props} />
+    </Suspense>
+);
+
 const LazyAddToPlaylistContextModal = lazy(() =>
     import('/@/renderer/features/playlists/components/add-to-playlist-context-modal').then(
         (module) => ({
@@ -199,11 +211,27 @@ const SongEditContextModal = (props: any) => (
     </Suspense>
 );
 
+const LazyFullScreenPlayerSettingsContextModal = lazy(() =>
+    import('/@/renderer/features/player/components/full-screen-player-settings-modal').then(
+        (module) => ({
+            default: module.FullScreenPlayerSettingsContextModal,
+        }),
+    ),
+);
+
+const FullScreenPlayerSettingsContextModal = (props: any) => (
+    <Suspense fallback={<Spinner container />}>
+        <LazyFullScreenPlayerSettingsContextModal {...props} />
+    </Suspense>
+);
+
 const appRouterModals = {
     addToPlaylist: AddToPlaylistContextModal,
     base: BaseContextModal,
     editMetadata: SongEditContextModal,
     folderPlaylistMigration: FolderPlaylistMigrationModal,
+    fullScreenPlayerSettings: FullScreenPlayerSettingsContextModal,
+    listConfigSettings: ListConfigSettingsContextModal,
     lyricsSettings: LyricsSettingsContextModal,
     saveAndReplace: SaveAndReplaceContextModal,
     settings: SettingsContextModal,

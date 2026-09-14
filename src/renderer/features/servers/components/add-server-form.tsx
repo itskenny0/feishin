@@ -16,8 +16,15 @@ import JellyfinIcon from '/@/renderer/features/servers/assets/jellyfin.png';
 import NavidromeIcon from '/@/renderer/features/servers/assets/navidrome.png';
 import SubsonicIcon from '/@/renderer/features/servers/assets/opensubsonic.png';
 import { IgnoreCorsSslSwitches } from '/@/renderer/features/servers/components/ignore-cors-ssl-switches';
+import { JellyfinQuickConnectButton } from '/@/renderer/features/servers/components/jellyfin-quick-connect-button';
+import {
+    JellyfinSignInMethod,
+    JellyfinSignInMethodPicker,
+} from '/@/renderer/features/servers/components/jellyfin-sign-in-method-picker';
+import { useJellyfinQuickConnect } from '/@/renderer/features/servers/hooks/use-jellyfin-quick-connect';
 import { useIsMobileShell } from '/@/renderer/hooks/use-breakpoint';
 import { useAuthStoreActions, useServerList } from '/@/renderer/store';
+import { normalizeServerUrl } from '/@/renderer/utils/normalize-server-url';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Box } from '/@/shared/components/box/box';
 import { Button } from '/@/shared/components/button/button';
@@ -322,6 +329,52 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
           }
         : {};
 
+    const [signInMethod, setSignInMethod] = useState<JellyfinSignInMethod>('password');
+    const showQuickConnect =
+        form.values.type === ServerType.JELLYFIN && signInMethod === 'quickConnect';
+
+    const {
+        code: quickConnectCode,
+        isLoading: isQuickConnectLoading,
+        start: startQuickConnect,
+        stop: stopQuickConnect,
+    } = useJellyfinQuickConnect({
+        onAuthenticated: (data) => {
+            const url = form.values.url;
+            const serverItem: ServerListItemWithCredential = {
+                credential: data.credential,
+                id: nanoid(),
+                isAdmin: data.isAdmin,
+                name: form.values.name,
+                type: ServerType.JELLYFIN,
+                url: normalizeServerUrl(url),
+                userId: data.userId,
+                username: data.username,
+            };
+
+            if (form.values.remoteUrl?.trim()) {
+                serverItem.remoteUrl = form.values.remoteUrl.trim().replace(/\/$/, '');
+            }
+
+            if (form.values.preferRemoteUrl !== undefined) {
+                serverItem.preferRemoteUrl = form.values.preferRemoteUrl;
+            }
+
+            if (form.values.preferInstantMix !== undefined) {
+                serverItem.preferInstantMix = form.values.preferInstantMix;
+            }
+
+            addServer(serverItem);
+            setCurrentServer(serverItem);
+            closeAllModals();
+            toast.success({ message: t('form.addServer.success') });
+        },
+    });
+
+    useEffect(() => {
+        if (!showQuickConnect) stopQuickConnect();
+    }, [showQuickConnect, stopQuickConnect]);
+
     const handleTypeSelect = (newType: ServerType) => {
         if (newType !== ServerType.JELLYFIN && form.values.type === ServerType.JELLYFIN) {
             openModal({
@@ -381,7 +434,9 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
     })();
 
     const isSubmitDisabled =
-        !form.values.name || !form.values.url || !form.values.username || !form.values.password;
+        !form.values.name ||
+        !form.values.url ||
+        (!showQuickConnect && (!form.values.username || !form.values.password));
 
     const handleSubmit = form.onSubmit(async (values) => {
         if (serverLock && Object.keys(serverList).length >= 1) {
@@ -423,7 +478,7 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
                 isAdmin: data.isAdmin,
                 name: values.name,
                 type: values.type as ServerType,
-                url: values.url.replace(/\/$/, ''),
+                url: normalizeServerUrl(values.url),
                 userId: data.userId,
                 username: data.username,
             };
@@ -607,25 +662,39 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
                         {/* Step 2: Credentials */}
                         {step === 2 && (
                             <Stack gap="md">
-                                <TextInput
-                                    autoCapitalize="none"
-                                    autoComplete="username"
-                                    autoCorrect="off"
-                                    data-autofocus
-                                    enterKeyHint="next"
-                                    label={t('form.addServer.input', { context: 'username' })}
-                                    required
-                                    spellCheck={false}
-                                    {...form.getInputProps('username')}
-                                    {...mobileInputProps}
-                                />
-                                <PasswordInput
-                                    autoComplete="current-password"
-                                    enterKeyHint="go"
-                                    label={t('form.addServer.input', { context: 'password' })}
-                                    {...form.getInputProps('password')}
-                                    {...mobileInputProps}
-                                />
+                                {form.values.type === ServerType.JELLYFIN && (
+                                    <JellyfinSignInMethodPicker
+                                        onChange={setSignInMethod}
+                                        value={signInMethod}
+                                    />
+                                )}
+                                {!showQuickConnect && (
+                                    <>
+                                        <TextInput
+                                            autoCapitalize="none"
+                                            autoComplete="username"
+                                            autoCorrect="off"
+                                            data-autofocus
+                                            enterKeyHint="next"
+                                            label={t('form.addServer.input', {
+                                                context: 'username',
+                                            })}
+                                            required
+                                            spellCheck={false}
+                                            {...form.getInputProps('username')}
+                                            {...mobileInputProps}
+                                        />
+                                        <PasswordInput
+                                            autoComplete="current-password"
+                                            enterKeyHint="go"
+                                            label={t('form.addServer.input', {
+                                                context: 'password',
+                                            })}
+                                            {...form.getInputProps('password')}
+                                            {...mobileInputProps}
+                                        />
+                                    </>
+                                )}
                                 {localSettings && form.values.type === ServerType.NAVIDROME && (
                                     <Checkbox
                                         label={t('form.addServer.input', {
@@ -682,16 +751,28 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
                                         <Divider />
                                     </>
                                 )}
-                                <Group grow justify="flex-end">
-                                    <ModalButton
-                                        disabled={isSubmitDisabled}
-                                        loading={isLoading}
-                                        type="submit"
-                                        variant="filled"
-                                    >
-                                        {t('common.connect')}
-                                    </ModalButton>
-                                </Group>
+                                {showQuickConnect && (
+                                    <JellyfinQuickConnectButton
+                                        code={quickConnectCode}
+                                        disabled={!form.values.name || !form.values.url}
+                                        isLoading={isQuickConnectLoading}
+                                        onStart={() => startQuickConnect(form.values.url)}
+                                        onStop={stopQuickConnect}
+                                        url={form.values.url}
+                                    />
+                                )}
+                                {!showQuickConnect && (
+                                    <Group grow justify="flex-end">
+                                        <ModalButton
+                                            disabled={isSubmitDisabled}
+                                            loading={isLoading}
+                                            type="submit"
+                                            variant="filled"
+                                        >
+                                            {t('common.connect')}
+                                        </ModalButton>
+                                    </Group>
+                                )}
                             </Stack>
                         )}
                     </>
@@ -802,24 +883,34 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
                                 {...form.getInputProps('preferRemoteUrl', { type: 'checkbox' })}
                             />
                         )}
-                        <TextInput
-                            autoCapitalize="none"
-                            autoComplete="username"
-                            autoCorrect="off"
-                            enterKeyHint="next"
-                            label={t('form.addServer.input', { context: 'username' })}
-                            required
-                            spellCheck={false}
-                            {...form.getInputProps('username')}
-                            {...mobileInputProps}
-                        />
-                        <PasswordInput
-                            autoComplete="current-password"
-                            enterKeyHint="go"
-                            label={t('form.addServer.input', { context: 'password' })}
-                            {...form.getInputProps('password')}
-                            {...mobileInputProps}
-                        />
+                        {form.values.type === ServerType.JELLYFIN && (
+                            <JellyfinSignInMethodPicker
+                                onChange={setSignInMethod}
+                                value={signInMethod}
+                            />
+                        )}
+                        {!showQuickConnect && (
+                            <>
+                                <TextInput
+                                    autoCapitalize="none"
+                                    autoComplete="username"
+                                    autoCorrect="off"
+                                    enterKeyHint="next"
+                                    label={t('form.addServer.input', { context: 'username' })}
+                                    required
+                                    spellCheck={false}
+                                    {...form.getInputProps('username')}
+                                    {...mobileInputProps}
+                                />
+                                <PasswordInput
+                                    autoComplete="current-password"
+                                    enterKeyHint="go"
+                                    label={t('form.addServer.input', { context: 'password' })}
+                                    {...form.getInputProps('password')}
+                                    {...mobileInputProps}
+                                />
+                            </>
+                        )}
                         {localSettings && form.values.type === ServerType.NAVIDROME && (
                             <Checkbox
                                 label={t('form.addServer.input', { context: 'savePassword' })}
@@ -851,18 +942,30 @@ export const AddServerForm = ({ onCancel }: AddServerFormProps) => {
                                 <Divider />
                             </>
                         )}
+                        {showQuickConnect && (
+                            <JellyfinQuickConnectButton
+                                code={quickConnectCode}
+                                disabled={!form.values.name || !form.values.url}
+                                isLoading={isQuickConnectLoading}
+                                onStart={() => startQuickConnect(form.values.url)}
+                                onStop={stopQuickConnect}
+                                url={form.values.url}
+                            />
+                        )}
                         <Group grow justify="flex-end">
                             {onCancel && (
                                 <ModalButton onClick={onCancel}>{t('common.cancel')}</ModalButton>
                             )}
-                            <ModalButton
-                                disabled={isSubmitDisabled}
-                                loading={isLoading}
-                                type="submit"
-                                variant="filled"
-                            >
-                                {t('common.add')}
-                            </ModalButton>
+                            {!showQuickConnect && (
+                                <ModalButton
+                                    disabled={isSubmitDisabled}
+                                    loading={isLoading}
+                                    type="submit"
+                                    variant="filled"
+                                >
+                                    {t('common.add')}
+                                </ModalButton>
+                            )}
                         </Group>
                     </>
                 )}

@@ -272,9 +272,9 @@ function calculateNextIndex(
             return { nextIndex: currentIndex + 1, shouldStop: false };
         }
     } else {
-        // Repeat none: move to next track, or stop if at the end
+        // Repeat none: move to next track, or loop back and stop if at the end
         if (isLastTrack) {
-            return { nextIndex: currentIndex, shouldStop: true };
+            return { nextIndex: 0, shouldStop: true };
         } else {
             return { nextIndex: currentIndex + 1, shouldStop: false };
         }
@@ -1210,6 +1210,7 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
 
                     if (shouldStop) {
                         set((state) => {
+                            state.player.index = nextIndex;
                             state.player.status = PlayerStatus.STOPPED;
                             state.player.playerNum = 1;
                             setTimestampStore(0);
@@ -1780,7 +1781,7 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                 },
                 setVolume: (volume: number) => {
                     set((state) => {
-                        state.player.volume = volume;
+                        state.player.volume = Math.min(100, Math.max(0, volume));
                     });
                 },
                 shuffle: () => {
@@ -1933,7 +1934,13 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
         ),
         {
             merge: (persistedState: any, currentState: any) => {
-                return merge(currentState, persistedState);
+                const merged = merge(currentState, persistedState);
+
+                if (merged.player) {
+                    merged.player.volume = Math.min(100, Math.max(0, merged.player.volume));
+                }
+
+                return merged;
             },
             migrate: async (persistedState, oldVersion) => {
                 if (oldVersion < 3) {
@@ -1948,7 +1955,12 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                 return persistedState as Partial<PlayerState>;
             },
             name: 'player-store',
-            onRehydrateStorage: () => () => {
+            onRehydrateStorage: () => (state) => {
+                if (!state) return;
+                const playback = useSettingsStore.getState().playback;
+                if (playback.previousLocalVolume !== undefined) {
+                    state.player.volume = Math.min(100, Math.max(0, playback.previousLocalVolume));
+                }
                 usePlayerStoreBase.setState({ hydrated: true });
             },
             partialize: (state) => {

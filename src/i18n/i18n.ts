@@ -50,12 +50,20 @@ export const languages = [
         value: 'ar',
     },
     {
+        label: 'Български',
+        value: 'bg',
+    },
+    {
         label: 'Català',
         value: 'ca',
     },
     {
         label: 'Čeština',
         value: 'cs',
+    },
+    {
+        label: 'Dansk',
+        value: 'da',
     },
     {
         label: 'Deutsch',
@@ -72,6 +80,10 @@ export const languages = [
     {
         label: 'Français',
         value: 'fr',
+    },
+    {
+        label: 'Galego',
+        value: 'gl',
     },
     {
         label: 'Bahasa Indonesia',
@@ -110,6 +122,10 @@ export const languages = [
         value: 'nb-NO',
     },
     {
+        label: 'Norsk (Nynorsk)',
+        value: 'nn',
+    },
+    {
         label: 'فارسی',
         value: 'fa',
     },
@@ -126,8 +142,16 @@ export const languages = [
         value: 'pl',
     },
     {
+        label: 'Română',
+        value: 'ro',
+    },
+    {
         label: 'Русский',
         value: 'ru',
+    },
+    {
+        label: 'Slovenčina',
+        value: 'sk',
     },
     {
         label: 'Slovenščina',
@@ -148,6 +172,10 @@ export const languages = [
     {
         label: 'Türkçe',
         value: 'tr',
+    },
+    {
+        label: 'Українська',
+        value: 'uk',
     },
     {
         label: '简体中文',
