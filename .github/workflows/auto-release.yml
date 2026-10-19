@@ -1,0 +1,56 @@
+# Cuts a fork release for every push to `development` (including GitHub's
+# "Sync fork" button). Creates a `v<version>-itskenny0-YYYY.MM.DD-HHMM` tag on
+# the pushed commit, then dispatches the desktop, Android and iOS release
+# workflows for it.
+#
+# Tags pushed with GITHUB_TOKEN do not fire `push: tags` triggers, so the
+# release workflows are started via workflow_dispatch instead.
+name: Auto Release (fork)
+
+on:
+    push:
+        branches: [development]
+
+permissions:
+    contents: write
+    actions: write
+
+concurrency:
+    group: auto-release
+    cancel-in-progress: false
+
+jobs:
+    tag-and-release:
+        if: github.repository == 'itskenny0/feishin'
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v6
+              with:
+                  fetch-depth: 0
+            - name: Tag commit and dispatch release workflows
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  SHA: ${{ github.sha }}
+              run: |
+                  git fetch --tags --force
+                  existing="$(git tag --points-at "$SHA" --list 'v*-itskenny0-*' | head -1)"
+                  if [ -n "$existing" ]; then
+                      echo "Commit already tagged as $existing - skipping."
+                      exit 0
+                  fi
+
+                  version="$(node -p "require('./package.json').version")"
+                  tag="v${version}-itskenny0-$(date -u +%Y.%m.%d-%H%M)"
+                  if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+                      echo "Tag $tag already exists - skipping."
+                      exit 0
+                  fi
+
+                  echo "Tagging $SHA as $tag"
+                  git tag "$tag" "$SHA"
+                  git push origin "refs/tags/$tag"
+
+                  for wf in release-fork.yml release-android.yml release-ios.yml; do
+                      echo "Dispatching $wf for $tag"
+                      gh workflow run "$wf" --ref development -f tag="$tag"
+                  done
