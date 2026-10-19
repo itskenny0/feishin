@@ -180,7 +180,7 @@ describe('moveSelectedTo with explicit default coordinate space (peer-sync wire 
         setQueueInPlaybackOrder(true);
         seedShuffledQueue();
 
-        state().moveSelectedTo([song('s4')], 's1', 'top', 'default');
+        state().moveSelectedTo([song('s4')], 's1', 'top', false, 'default');
 
         expect(state().queue.default).toEqual(['s0', 's4', 's1', 's2', 's3']);
         expect(playbackOrderIds()).toEqual(['s2', 's0', 's4', 's1', 's3']);

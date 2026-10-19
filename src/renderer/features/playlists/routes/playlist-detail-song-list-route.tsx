@@ -7,11 +7,12 @@ import { ListContext, useListContext } from '/@/renderer/context/list-context';
 import { ClientSideSongFilters } from '/@/renderer/features/playlists/components/client-side-song-filters';
 import { PlaylistDetailSongListContent } from '/@/renderer/features/playlists/components/playlist-detail-song-list-content';
 import { PlaylistDetailSongListHeader } from '/@/renderer/features/playlists/components/playlist-detail-song-list-header';
-import { PlaylistQueryBuilderRef } from '/@/renderer/features/playlists/components/playlist-query-builder';
-import { PlaylistQueryEditor } from '/@/renderer/features/playlists/components/playlist-query-editor';
+import {
+    PlaylistQueryEditor,
+    PlaylistQueryEditorRef,
+} from '/@/renderer/features/playlists/components/playlist-query-editor';
 import { SaveAsPlaylistForm } from '/@/renderer/features/playlists/components/save-as-playlist-form';
 import { usePlaylistSongListFilters } from '/@/renderer/features/playlists/hooks/use-playlist-song-list-filters';
-import { useDeletePlaylist } from '/@/renderer/features/playlists/mutations/delete-playlist-mutation';
 import { useUpdatePlaylist } from '/@/renderer/features/playlists/mutations/update-playlist-mutation';
 import { usePlaylistDetailSuspenseQuery } from '/@/renderer/features/playlists/queries/playlists-queries';
 import { AnimatedPage } from '/@/renderer/features/shared/components/animated-page';
@@ -28,6 +29,7 @@ import {
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Button } from '/@/shared/components/button/button';
 import { Group } from '/@/shared/components/group/group';
+import { Icon } from '/@/shared/components/icon/icon';
 import { ConfirmModal } from '/@/shared/components/modal/modal';
 import { ScrollArea } from '/@/shared/components/scroll-area/scroll-area';
 import { Spinner } from '/@/shared/components/spinner/spinner';
@@ -81,8 +83,9 @@ const PlaylistDetailSongListRoute = () => {
         query: { id: playlistId },
         serverId: server?.id,
     });
-    const deletePlaylistMutation = useDeletePlaylist({});
     const updatePlaylistMutation = useUpdatePlaylist({});
+    const [mode, setMode] = useState<'edit' | 'view'>('view');
+    const queryEditorRef = useRef<PlaylistQueryEditorRef>(null);
 
     const handleSave = (
         filter: Record<string, any>,
@@ -123,6 +126,7 @@ const PlaylistDetailSongListRoute = () => {
             {
                 onSuccess: () => {
                     toast.success({ message: 'Playlist has been saved' });
+                    setMode('view');
                 },
             },
         );
@@ -177,29 +181,15 @@ const PlaylistDetailSongListRoute = () => {
         });
     };
 
-    const openDeletePlaylistModal = () => {
+    const openSaveAndReplaceModal = () => {
+        const payload = queryEditorRef.current?.getFiltersForSave();
+        if (!payload) return;
+
         openModal({
             children: (
                 <ConfirmModal
                     onConfirm={() => {
-                        if (!detailQuery?.data) return;
-                        deletePlaylistMutation?.mutate(
-                            {
-                                apiClientProps: { serverId: detailQuery.data._serverId },
-                                query: { id: detailQuery.data.id },
-                            },
-                            {
-                                onError: (err) => {
-                                    toast.error({
-                                        message: err.message,
-                                        title: t('error.genericError'),
-                                    });
-                                },
-                                onSuccess: () => {
-                                    navigate(AppRoute.PLAYLISTS, { replace: true });
-                                },
-                            },
-                        );
+                        handleSave(payload.filter, payload.extraFilters);
                         closeAllModals();
                     }}
                 >
@@ -210,26 +200,13 @@ const PlaylistDetailSongListRoute = () => {
                     </Text>
                 </ConfirmModal>
             ),
-            title: t('form.deletePlaylist.title'),
+            title: t('common.saveAndReplace'),
         });
     };
 
     const isSmartPlaylist = Boolean(
         detailQuery?.data?.rules && server?.type === ServerType.NAVIDROME,
     );
-
-    const [showQueryBuilder, setShowQueryBuilder] = useState(false);
-    const [isQueryBuilderExpanded, setIsQueryBuilderExpanded] = useState(false);
-    const queryBuilderRef = useRef<PlaylistQueryBuilderRef>(null);
-
-    const handleToggleExpand = () => {
-        setIsQueryBuilderExpanded((prev) => !prev);
-    };
-
-    const handleToggleShowQueryBuilder = () => {
-        setShowQueryBuilder((prev) => !prev);
-        setIsQueryBuilderExpanded(true);
-    };
 
     const playlistTarget = usePlaylistTarget();
     const displayMode: LibraryItem.ALBUM | LibraryItem.SONG =
@@ -239,7 +216,6 @@ const PlaylistDetailSongListRoute = () => {
 
     const [itemCount, setItemCount] = useState<number | undefined>(undefined);
     const [listData, setListData] = useState<unknown[]>([]);
-    const [mode, setMode] = useState<'edit' | 'view'>('view');
     const [isSidebarOpen, setIsSidebarOpen] = usePageSidebar(listKey);
 
     const providerValue = useMemo(() => {
@@ -293,19 +269,39 @@ const PlaylistDetailSongListRoute = () => {
         );
     }
 
+    const isEditingSmartPlaylist = isSmartPlaylist && mode === 'edit';
+
+    const editActions = isEditingSmartPlaylist && (
+        <>
+            <Button
+                leftSection={<Icon icon="save" />}
+                onClick={() => {
+                    const payload = queryEditorRef.current?.getFiltersForSave();
+                    if (payload) handleSaveAs(payload.filter, payload.extraFilters);
+                }}
+                size="sm"
+                variant="subtle"
+            >
+                {t('common.saveAs')}
+            </Button>
+            <Button
+                leftSection={<Icon color="error" icon="save" />}
+                loading={updatePlaylistMutation.isPending}
+                onClick={openSaveAndReplaceModal}
+                size="sm"
+                variant="subtle"
+            >
+                {t('common.saveAndReplace')}
+            </Button>
+        </>
+    );
+
     return (
         <AnimatedPage key={`playlist-detail-songList-${playlistId}`}>
             <ListContext.Provider value={providerValue}>
                 <PlaylistDetailSongListHeader
+                    editActions={editActions}
                     isSmartPlaylist={!!isSmartPlaylist}
-                    onConvertToSmart={() => {
-                        if (!isSmartPlaylist) {
-                            setShowQueryBuilder(true);
-                            setIsQueryBuilderExpanded(true);
-                        }
-                    }}
-                    onDelete={() => openDeletePlaylistModal()}
-                    onToggleQueryBuilder={handleToggleShowQueryBuilder}
                 />
 
                 <ListWithSidebarContainer>
@@ -318,16 +314,11 @@ const PlaylistDetailSongListRoute = () => {
                         <PlaylistDetailSongListContent />
                     </Suspense>
                 </ListWithSidebarContainer>
-                {(isSmartPlaylist || showQueryBuilder) && (
+                {isEditingSmartPlaylist && (
                     <PlaylistQueryEditor
                         detailQuery={detailQuery}
-                        handleSave={handleSave}
-                        handleSaveAs={handleSaveAs}
-                        isQueryBuilderExpanded={isQueryBuilderExpanded}
-                        onToggleExpand={handleToggleExpand}
                         playlistId={playlistId}
-                        queryBuilderRef={queryBuilderRef}
-                        updatePlaylistMutation={updatePlaylistMutation}
+                        ref={queryEditorRef}
                     />
                 )}
             </ListContext.Provider>
@@ -336,9 +327,11 @@ const PlaylistDetailSongListRoute = () => {
 };
 
 const PlaylistDetailSongListRouteWithBoundary = () => {
+    const { playlistId } = useParams() as { playlistId: string };
+
     return (
         <PageErrorBoundary>
-            <PlaylistDetailSongListRoute />
+            <PlaylistDetailSongListRoute key={playlistId} />
         </PageErrorBoundary>
     );
 };

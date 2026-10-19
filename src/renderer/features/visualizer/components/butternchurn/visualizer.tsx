@@ -269,13 +269,18 @@ const VisualizerInner = ({ chromeless }: { chromeless?: boolean }) => {
                 visualizerRef.current = undefined;
             }
         }
-
-        return () => {
-            // Cleanup on unmount or when webAudio changes
-            cleanupVisualizer();
-        };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [webAudio, playbackType, librariesLoaded, resumeInitGeneration]);
+
+    useEffect(() => {
+        // Cleanup on unmount or when webAudio changes, but not on playback resume
+        // (resumeInitGeneration). The unmount cleanup disconnects the audio nodes;
+        // skipping it leaks a butterchurn Wasm instance per open/close.
+        cleanupVisualizer();
+        return () => {
+            cleanupVisualizer();
+        };
+    }, [webAudio, playbackType]);
 
     // Kill visualizer after 5 seconds of pause
     useEffect(() => {

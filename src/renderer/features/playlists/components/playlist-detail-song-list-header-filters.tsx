@@ -1,5 +1,5 @@
 import { openContextModal } from '@mantine/modals';
-import { useCallback, useMemo } from 'react';
+import { ReactNode, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router';
 
@@ -48,6 +48,7 @@ import { LibraryItem, Song, SongListSort, SortOrder } from '/@/shared/types/doma
 import { ItemListKey } from '/@/shared/types/types';
 
 interface PlaylistDetailSongListHeaderFiltersProps {
+    editActions?: ReactNode;
     isSmartPlaylist?: boolean;
 }
 
@@ -142,6 +143,7 @@ const PlaylistSongListFiltersModal = () => {
 };
 
 export const PlaylistDetailSongListHeaderFilters = ({
+    editActions,
     isSmartPlaylist,
 }: PlaylistDetailSongListHeaderFiltersProps) => {
     const { t } = useTranslation();
@@ -183,7 +185,7 @@ export const PlaylistDetailSongListHeaderFilters = ({
 
     const { ref: containerRef, ...breakpoints } = useContainerQuery();
 
-    const isViewEditMode = !isSmartPlaylist && (breakpoints.isSm || isAlbumMode);
+    const isViewEditMode = breakpoints.isSm || isAlbumMode;
     const isEditMode = mode === 'edit';
 
     const [collapsed, setCollapsed] = useLocalStorage<boolean>({
@@ -229,7 +231,12 @@ export const PlaylistDetailSongListHeaderFilters = ({
                 <MoreButton onClick={handleMore} />
             </Group>
             <Group gap="sm" wrap="nowrap">
-                {isViewEditMode && <SaveAndReplaceButton mode={mode} songIds={tracks} />}
+                {isViewEditMode &&
+                    (isSmartPlaylist ? (
+                        editActions
+                    ) : (
+                        <SaveAndReplaceButton mode={mode} songIds={tracks} />
+                    ))}
                 {isViewEditMode && (
                     <Button
                         onClick={() => setMode?.(mode === 'edit' ? 'view' : 'edit')}

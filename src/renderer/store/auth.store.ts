@@ -157,6 +157,7 @@ export const useCurrentServer = () =>
         }
 
         return {
+            enableAudiobooks: state.currentServer?.enableAudiobooks,
             features: state.currentServer?.features,
             id: state.currentServer?.id,
             isAdmin: state.currentServer?.isAdmin,

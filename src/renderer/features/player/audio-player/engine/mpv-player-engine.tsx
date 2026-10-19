@@ -211,7 +211,9 @@ export const MpvPlayerEngine = (props: MpvPlayerEngineProps) => {
             }
         };
 
-        initializeMpv();
+        // Guard against an unhandled rejection (e.g. a failed getSongUrl / initialize
+        // call); the player simply stays uninitialized and a reload can retry.
+        initializeMpv().catch(() => undefined);
 
         return () => {
             isCancelled = true;

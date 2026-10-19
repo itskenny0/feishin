@@ -792,6 +792,7 @@ export const GeneralSettingsSchema = z.object({
     trackmapStrandCrispAlpha: z.number().min(0).max(100),
     trackmapStrandHaloAlpha: z.number().min(0).max(100),
     trackmapStyle: TrackmapStyleSchema,
+    upNextQueue: z.boolean(),
     useThemeAccentColor: z.boolean(),
     useThemePrimaryShade: z.boolean(),
     volumeWheelStep: z.number(),
@@ -2107,6 +2108,7 @@ const initialState: SettingsState = {
         trackmapOnlyOverLan: false,
         trackmapSensitivity: 50,
         trackmapStyle: 'glow',
+        upNextQueue: true,
         useThemeAccentColor: false,
         useThemePrimaryShade: true,
         volumeWheelStep: 5,
@@ -4469,6 +4471,15 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
+                if (version < 81) {
+                    // Upstream's Up Next queue toggle ships without a zod
+                    // default; seed it so pre-v81 installs/imports validate.
+                    const general = state.general;
+                    if (general && general.upNextQueue === undefined) {
+                        general.upNextQueue = initialState.general.upNextQueue;
+                    }
+                }
+
                 if (version < 32) {
                     const tagConfigs = state.tagEditor?.tagConfigs;
                     if (tagConfigs) {
@@ -4494,7 +4505,7 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                 return persistedState;
             },
             name: 'store_settings',
-            version: 80,
+            version: 81,
         },
     ),
 );

@@ -4,15 +4,22 @@ import { createContext, memo, MouseEvent, useCallback, useContext, useMemo, useS
 import { useTranslation } from 'react-i18next';
 import { generatePath, Link } from 'react-router';
 
+import collapsedSidebarItemStyles from './collapsed-sidebar-item.module.css';
 import styles from './sidebar-playlist-list.module.css';
 
 import { ItemImage } from '/@/renderer/components/item-image/item-image';
+import imageColumnStyles from '/@/renderer/components/item-list/item-table-list/columns/image-column.module.css';
 import { ContextMenuController } from '/@/renderer/features/context-menu/context-menu-controller';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
 import { openCreatePlaylistModal } from '/@/renderer/features/playlists/components/create-playlist-form';
 import { useIsMutatingSidebarPlaylistFolderMove } from '/@/renderer/features/playlists/mutations/sidebar-playlist-folder-move-mutation';
 import { usePlaylistListQuery } from '/@/renderer/features/playlists/queries/playlists-queries';
 import { ItemRowPlayControls } from '/@/renderer/features/shared/components/item-row-play-controls';
+import { PlayButton } from '/@/renderer/features/shared/components/play-button';
+import {
+    LONG_PRESS_PLAY_BEHAVIOR,
+    PlayTooltip,
+} from '/@/renderer/features/shared/components/play-button-group';
 import {
     collectFolderPaths,
     PlaylistFolderDragExpandProvider,
@@ -31,6 +38,7 @@ import {
     useCurrentServer,
     useCurrentServerId,
     usePermissions,
+    usePlayButtonBehavior,
     useSidebarPlaylistListFilterRegex,
     useSidebarPlaylistMode,
     useSidebarPlaylistSorting,
@@ -39,10 +47,12 @@ import { formatDurationString } from '/@/renderer/utils';
 import { Accordion } from '/@/shared/components/accordion/accordion';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { ButtonProps } from '/@/shared/components/button/button';
+import { Divider } from '/@/shared/components/divider/divider';
 import { Group } from '/@/shared/components/group/group';
 import { Icon } from '/@/shared/components/icon/icon';
 import { LoadingOverlay } from '/@/shared/components/loading-overlay/loading-overlay';
 import { Text } from '/@/shared/components/text/text';
+import { Tooltip } from '/@/shared/components/tooltip/tooltip';
 import { useLocalStorage } from '/@/shared/hooks/use-local-storage';
 import { useMediaQuery } from '/@/shared/hooks/use-media-query';
 import {
@@ -91,6 +101,8 @@ export const useSidebarPlaylistAddDragMonitor = () => {
 };
 
 export interface PlaylistRowButtonProps extends Omit<ButtonProps, 'onContextMenu' | 'onPlay'> {
+    // Collapsed sidebar: image only, name in a tooltip, no play controls
+    iconOnly?: boolean;
     item: Playlist;
     name: string;
     onContextMenu: (e: MouseEvent<HTMLAnchorElement>, item: Playlist) => void;
@@ -99,7 +111,7 @@ export interface PlaylistRowButtonProps extends Omit<ButtonProps, 'onContextMenu
 }
 
 export const PlaylistRowButton = memo(
-    ({ item, name, onContextMenu, onReorder, to }: PlaylistRowButtonProps) => {
+    ({ iconOnly, item, name, onContextMenu, onReorder, to }: PlaylistRowButtonProps) => {
         const url = {
             pathname: generatePath(AppRoute.PLAYLISTS_DETAIL_SONGS, { playlistId: to }),
             state: { item },
@@ -251,6 +263,7 @@ export const PlaylistRowButton = memo(
         const serverId = useCurrentServerId();
 
         const permissions = usePermissions();
+        const playButtonBehavior = usePlayButtonBehavior();
 
         // Warm the playlist-detail route chunk while the pointer is on the row
         // so the click navigates without a Suspense flash. Idempotent per
@@ -278,9 +291,10 @@ export const PlaylistRowButton = memo(
             // doesn't allocate a motion node per row.
             <Link
                 className={clsx(styles.row, {
-                    [styles.rowCompact]: isCompact,
+                    [styles.rowCompact]: isCompact && !iconOnly,
                     [styles.rowDraggedOver]: isDraggedOver && !isSmartPlaylist,
-                    [styles.rowHover]: isHovered,
+                    [styles.rowHover]: isHovered && !iconOnly,
+                    [styles.rowIconOnly]: iconOnly,
                 })}
                 onContextMenu={(e: MouseEvent<HTMLAnchorElement>) => {
                     e.preventDefault();
@@ -293,7 +307,41 @@ export const PlaylistRowButton = memo(
                 style={{ opacity: isDimmed ? 0.5 : 1, transition: 'opacity 0.2s ease-in-out' }}
                 to={url}
             >
-                {isCompact ? (
+                {iconOnly ? (
+                    <Tooltip label={name} openDelay={0} position="right">
+                        <div
+                            className={clsx(styles.iconOnlyImage, {
+                                [styles.iconOnlyImageActive]: isActive,
+                            })}
+                        >
+                            <ItemImage
+                                blurHash={item.blurHash}
+                                containerClassName={styles.imageContainer}
+                                dominantColor={item.dominantColor}
+                                id={item.imageId}
+                                itemType={LibraryItem.PLAYLIST}
+                                thumbHash={item.thumbHash}
+                                type="table"
+                            />
+                            {isHovered && (
+                                <div className={imageColumnStyles.playButtonOverlay}>
+                                    <PlayTooltip type={playButtonBehavior}>
+                                        <PlayButton
+                                            fill
+                                            onClick={() => handlePlay(to, playButtonBehavior)}
+                                            onLongPress={() =>
+                                                handlePlay(
+                                                    to,
+                                                    LONG_PRESS_PLAY_BEHAVIOR[playButtonBehavior],
+                                                )
+                                            }
+                                        />
+                                    </PlayTooltip>
+                                </div>
+                            )}
+                        </div>
+                    </Tooltip>
+                ) : isCompact ? (
                     <>
                         <Text
                             className={clsx(styles.compactName, {
@@ -385,9 +433,16 @@ export const PlaylistRowButton = memo(
     },
 );
 
-export const SidebarPlaylistList = () => {
-    const player = usePlayer();
-    const { t } = useTranslation();
+const handlePlaylistContextMenu = (e: MouseEvent<HTMLAnchorElement>, playlist: Playlist) => {
+    e.preventDefault();
+    e.stopPropagation();
+    ContextMenuController.call({
+        cmd: { items: [playlist], type: LibraryItem.PLAYLIST },
+        event: e,
+    });
+};
+
+const useSidebarPlaylistItems = (scope: 'owned' | 'shared') => {
     const server = useCurrentServer();
     const sidebarPlaylistSorting = useSidebarPlaylistSorting();
     const filterRegex = useSidebarPlaylistListFilterRegex();
@@ -401,35 +456,14 @@ export const SidebarPlaylistList = () => {
         serverId: server?.id,
     });
 
-    const handlePlayPlaylist = useCallback(
-        (id: string, playType: Play) => {
-            player.addToQueueByFetch(server.id, [id], LibraryItem.PLAYLIST, playType);
-        },
-        [player, server.id],
-    );
-
-    const handleContextMenu = useCallback(
-        (e: MouseEvent<HTMLAnchorElement>, playlist: Playlist) => {
-            e.preventDefault();
-            e.stopPropagation();
-            ContextMenuController.call({
-                cmd: { items: [playlist], type: LibraryItem.PLAYLIST },
-                event: e,
-            });
-        },
-        [],
-    );
-
     const [playlistOrder, setPlaylistOrder] = useLocalStorage<string[]>({
         defaultValue: [],
-        key: getPlaylistOrderKey(server.id, 'owned'),
+        key: getPlaylistOrderKey(server.id, scope),
     });
 
-    const playlistItems = useMemo(() => {
-        const base = { handlePlay: handlePlayPlaylist };
-
+    const items = useMemo(() => {
         if (!server?.type || !server?.username || !playlistsQuery.data?.items) {
-            return { ...base, items: playlistsQuery.data?.items };
+            return playlistsQuery.data?.items;
         }
 
         let regex: null | RegExp = null;
@@ -441,39 +475,39 @@ export const SidebarPlaylistList = () => {
             }
         }
 
-        const ownedPlaylistItems: Array<Playlist> = [];
+        const scopedPlaylistItems: Array<Playlist> = [];
 
         for (const playlist of playlistsQuery.data?.items ?? []) {
-            if (!playlist.owner || playlist.owner === server.username) {
+            const isOwned = !playlist.owner || playlist.owner === server.username;
+            if (isOwned === (scope === 'owned')) {
                 // Filter out playlists that match the regex
                 if (regex && regex.test(playlist.name)) {
                     continue;
                 }
-                ownedPlaylistItems.push(playlist);
+                scopedPlaylistItems.push(playlist);
             }
         }
 
-        if (!ownedPlaylistItems || !sidebarPlaylistSorting || !playlistOrder) {
-            return { ...base, items: ownedPlaylistItems };
+        if (!scopedPlaylistItems || !sidebarPlaylistSorting || !playlistOrder) {
+            return scopedPlaylistItems;
         }
 
         // Apply saved order, include only playlists that still exist
-        const idMap = new Map(ownedPlaylistItems.map((it) => [it.id, it]));
+        const idMap = new Map(scopedPlaylistItems.map((it) => [it.id, it]));
         const ordered = playlistOrder
             .map((id) => idMap.get(id))
             .filter((it): it is Playlist => it !== undefined);
 
         // Append any new items that weren't in saved order. Use a Set
         // so the membership test is O(1) instead of O(playlistOrder.length)
-        // — large libraries with hundreds of playlists otherwise pay O(N*M)
+        // - large libraries with hundreds of playlists otherwise pay O(N*M)
         // every time playlistsQuery or playlistOrder changes.
         const orderedIdSet = new Set(playlistOrder);
-        const remaining = ownedPlaylistItems.filter((it) => !orderedIdSet.has(it.id));
-        const newPlaylistItems = [...ordered, ...remaining];
-        return { ...base, items: newPlaylistItems };
+        const remaining = scopedPlaylistItems.filter((it) => !orderedIdSet.has(it.id));
+        return [...ordered, ...remaining];
     }, [
-        handlePlayPlaylist,
         playlistsQuery.data?.items,
+        scope,
         server.type,
         server.username,
         sidebarPlaylistSorting,
@@ -486,9 +520,9 @@ export const SidebarPlaylistList = () => {
         targetId: string,
         edge: 'bottom' | 'top' | null,
     ) => {
-        if (!playlistItems?.items || !edge) return;
+        if (!items || !edge) return;
 
-        const currentIds = playlistItems.items.map((p) => p.id);
+        const currentIds = items.map((p) => p.id);
         const targetIndex = currentIds.indexOf(targetId);
         if (targetIndex === -1) return;
 
@@ -514,6 +548,15 @@ export const SidebarPlaylistList = () => {
 
         setPlaylistOrder(reorderedIds);
     };
+
+    return { handleReorder, items };
+};
+
+export const SidebarPlaylistList = () => {
+    const { t } = useTranslation();
+    const server = useCurrentServer();
+    const playlistItems = useSidebarPlaylistItems('owned');
+    const { handleReorder } = playlistItems;
 
     const handleCreatePlaylistModal = (e: MouseEvent<HTMLButtonElement>) => {
         openCreatePlaylistModal(server, e);
@@ -639,7 +682,7 @@ export const SidebarPlaylistList = () => {
                         allPlaylists={playlistItems?.items ?? []}
                         expandedSet={expandedSet}
                         navigation={navigation}
-                        onContextMenu={handleContextMenu}
+                        onContextMenu={handlePlaylistContextMenu}
                         onReorder={handleReorder}
                         onToggleFolder={toggle}
                     />
@@ -650,136 +693,9 @@ export const SidebarPlaylistList = () => {
 };
 
 export const SidebarSharedPlaylistList = () => {
-    const player = usePlayer();
     const { t } = useTranslation();
-    const server = useCurrentServer();
-    const sidebarPlaylistSorting = useSidebarPlaylistSorting();
-    const filterRegex = useSidebarPlaylistListFilterRegex();
-
-    const playlistsQuery = usePlaylistListQuery({
-        query: {
-            sortBy: PlaylistListSort.NAME,
-            sortOrder: SortOrder.ASC,
-            startIndex: 0,
-        },
-        serverId: server?.id,
-    });
-
-    const handlePlayPlaylist = useCallback(
-        (id: string, playType: Play) => {
-            if (!server?.id) return;
-            player.addToQueueByFetch(server.id, [id], LibraryItem.PLAYLIST, playType);
-        },
-        [player, server.id],
-    );
-
-    const handleContextMenu = useCallback(
-        (e: MouseEvent<HTMLAnchorElement>, playlist: Playlist) => {
-            e.preventDefault();
-            e.stopPropagation();
-            ContextMenuController.call({
-                cmd: {
-                    items: [playlist],
-                    type: LibraryItem.PLAYLIST,
-                },
-                event: e,
-            });
-        },
-        [],
-    );
-
-    const [playlistOrder, setPlaylistOrder] = useLocalStorage<string[]>({
-        defaultValue: [],
-        key: getPlaylistOrderKey(server.id, 'shared'),
-    });
-
-    const playlistItems = useMemo(() => {
-        const base = { handlePlay: handlePlayPlaylist };
-
-        if (!server?.type || !server?.username || !playlistsQuery.data?.items) {
-            return { ...base, items: playlistsQuery.data?.items };
-        }
-
-        let regex: null | RegExp = null;
-        if (filterRegex) {
-            try {
-                regex = new RegExp(filterRegex, 'i');
-            } catch {
-                // Invalid regex, ignore filtering
-            }
-        }
-
-        const sharedPlaylistItems: Array<Playlist> = [];
-
-        for (const playlist of playlistsQuery.data?.items ?? []) {
-            if (playlist.owner && playlist.owner !== server.username) {
-                // Filter out playlists that match the regex
-                if (regex && regex.test(playlist.name)) {
-                    continue;
-                }
-                sharedPlaylistItems.push(playlist);
-            }
-        }
-
-        if (!sharedPlaylistItems || !sidebarPlaylistSorting || !playlistOrder) {
-            return { ...base, items: sharedPlaylistItems };
-        }
-
-        // Apply saved order, include only playlists that still exist
-        const idMap = new Map(sharedPlaylistItems.map((it) => [it.id, it]));
-        const ordered = playlistOrder
-            .map((id) => idMap.get(id))
-            .filter((it): it is Playlist => it !== undefined);
-
-        // Append any new items that weren't in saved order. O(1) Set lookup
-        // mirrors the same fix in SidebarPlaylistList for shared playlists.
-        const orderedIdSet = new Set(playlistOrder);
-        const remaining = sharedPlaylistItems.filter((it) => !orderedIdSet.has(it.id));
-        const newPlaylistItems = [...ordered, ...remaining];
-        return { ...base, items: newPlaylistItems };
-    }, [
-        handlePlayPlaylist,
-        playlistsQuery.data?.items,
-        server.type,
-        server.username,
-        sidebarPlaylistSorting,
-        playlistOrder,
-        filterRegex,
-    ]);
-
-    const handleReorder = (
-        sourceIds: string[],
-        targetId: string,
-        edge: 'bottom' | 'top' | null,
-    ) => {
-        if (!playlistItems?.items || !edge) return;
-
-        const currentIds = playlistItems.items.map((p) => p.id);
-        const targetIndex = currentIds.indexOf(targetId);
-        if (targetIndex === -1) return;
-
-        const idsWithoutSources = currentIds.filter((id) => !sourceIds.includes(id));
-
-        const sourcesBeforeTarget = sourceIds.filter((id) => {
-            const sourceIndex = currentIds.indexOf(id);
-            return sourceIndex !== -1 && sourceIndex < targetIndex;
-        }).length;
-
-        const insertIndexInFiltered =
-            edge === 'top'
-                ? targetIndex - sourcesBeforeTarget
-                : targetIndex - sourcesBeforeTarget + 1;
-
-        const insertIndex = Math.max(0, Math.min(insertIndexInFiltered, idsWithoutSources.length));
-
-        const reorderedIds = [
-            ...idsWithoutSources.slice(0, insertIndex),
-            ...sourceIds,
-            ...idsWithoutSources.slice(insertIndex),
-        ];
-
-        setPlaylistOrder(reorderedIds);
-    };
+    const playlistItems = useSidebarPlaylistItems('shared');
+    const { handleReorder } = playlistItems;
 
     const folderViewState = usePlaylistFolderViewState(playlistItems?.items ?? []);
     const navigation = usePlaylistNavigationState();
@@ -828,12 +744,84 @@ export const SidebarSharedPlaylistList = () => {
                         allPlaylists={playlistItems?.items ?? []}
                         expandedSet={expandedSet}
                         navigation={navigation}
-                        onContextMenu={handleContextMenu}
+                        onContextMenu={handlePlaylistContextMenu}
                         onReorder={handleReorder}
                         onToggleFolder={toggle}
                     />
                 </PlaylistFolderDragExpandProvider>
             </Accordion.Panel>
         </Accordion.Item>
+    );
+};
+
+export const CollapsedSidebarPlaylistList = () => {
+    const { t } = useTranslation();
+    const server = useCurrentServer();
+    const [isOpen, setIsOpen] = useState(true);
+    const isAddDragActive = useSidebarPlaylistAddDragMonitor();
+    const owned = useSidebarPlaylistItems('owned');
+    const shared = useSidebarPlaylistItems('shared');
+
+    return (
+        <SidebarPlaylistAddDragContext.Provider value={isAddDragActive}>
+            <div className={styles.collapsedList}>
+                <Divider mx="md" />
+                <Link className={styles.collapsedHeader} to={AppRoute.PLAYLISTS}>
+                    <Text
+                        className={collapsedSidebarItemStyles.textWrapper}
+                        fw="600"
+                        isMuted
+                        size="xs"
+                    >
+                        {t('page.sidebar.playlists')}
+                    </Text>
+                </Link>
+                <Group gap="xs" justify="center" wrap="nowrap">
+                    <ActionIcon
+                        icon={isOpen ? 'arrowUpS' : 'arrowDownS'}
+                        iconProps={{ size: 'lg' }}
+                        onClick={() => setIsOpen((open) => !open)}
+                        size="xs"
+                        tooltip={{ label: t(isOpen ? 'common.collapse' : 'common.expand') }}
+                        variant="subtle"
+                    />
+                    <ActionIcon
+                        icon="add"
+                        iconProps={{ size: 'lg' }}
+                        onClick={(e) => openCreatePlaylistModal(server, e)}
+                        size="xs"
+                        tooltip={{ label: t('action.createPlaylist') }}
+                        variant="subtle"
+                    />
+                </Group>
+                {isOpen && (
+                    <>
+                        {owned.items?.map((item) => (
+                            <PlaylistRowButton
+                                iconOnly
+                                item={item}
+                                key={item.id}
+                                name={item.name}
+                                onContextMenu={handlePlaylistContextMenu}
+                                onReorder={owned.handleReorder}
+                                to={item.id}
+                            />
+                        ))}
+                        {shared.items && shared.items.length > 0 && <Divider mx="md" />}
+                        {shared.items?.map((item) => (
+                            <PlaylistRowButton
+                                iconOnly
+                                item={item}
+                                key={item.id}
+                                name={item.name}
+                                onContextMenu={handlePlaylistContextMenu}
+                                onReorder={shared.handleReorder}
+                                to={item.id}
+                            />
+                        ))}
+                    </>
+                )}
+            </div>
+        </SidebarPlaylistAddDragContext.Provider>
     );
 };

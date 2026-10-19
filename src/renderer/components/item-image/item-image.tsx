@@ -44,12 +44,14 @@ const BaseItemImage = (
         id?: null | string;
         itemType: LibraryItem;
         serverId?: null | string;
+        size?: number;
         src?: null | string;
         thumbHash?: null | string;
         type?: keyof z.infer<typeof GeneralSettingsSchema>['imageRes'];
     },
 ) => {
-    const { blurHash, dominantColor, explicitStatus, serverId, src, thumbHash, ...rest } = props;
+    const { blurHash, dominantColor, explicitStatus, serverId, size, src, thumbHash, ...rest } =
+        props;
     const blurExplicitImages = useBlurExplicitImages();
     const imagePlaceholderPriority = useImagePlaceholderPriority();
     const hashUrl = useImageHashUrl(thumbHash, blurHash, dominantColor, imagePlaceholderPriority);
@@ -63,6 +65,7 @@ const BaseItemImage = (
         imageUrl: src,
         itemType: props.itemType,
         serverId: serverId || undefined,
+        size,
         type: props.type,
     });
 

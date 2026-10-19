@@ -3,6 +3,7 @@ import { useCallback } from 'react';
 import {
     playAlbumFromItemListControl,
     playArtistFromItemListControl,
+    playPlaylistFromItemListControl,
     playSongFromItemListControl,
 } from '/@/renderer/components/item-list/helpers/play-row-from-list';
 import { ItemTableListInnerColumn } from '/@/renderer/components/item-list/item-table-list/item-table-list-column';
@@ -14,6 +15,7 @@ import {
     AlbumArtist,
     Artist,
     LibraryItem,
+    Playlist,
     QueueSong,
     Song,
 } from '/@/shared/types/domain-types';
@@ -24,6 +26,7 @@ export const supportsRowPlayControls = (itemType: LibraryItem) =>
     itemType === LibraryItem.ALBUM_ARTIST ||
     itemType === LibraryItem.ARTIST ||
     itemType === LibraryItem.PLAYLIST_SONG ||
+    itemType === LibraryItem.PLAYLIST ||
     itemType === LibraryItem.SONG;
 
 export const supportsTrackNumberRowPlayControls = (itemType: LibraryItem) =>
@@ -52,24 +55,27 @@ export const useRowPlayControl = (props: ItemTableListInnerColumn) => {
     const song = rowItem as QueueSong;
     const album = rowItem as Album;
     const artist = rowItem as AlbumArtist | Artist;
+    const playlist = rowItem as Playlist;
 
     const isActiveFromRow = useIsActiveRow(song?.id, song?._uniqueId);
 
     // Whether this row is the active (currently-loaded) one. For SONG-like rows
     // this comes from the per-row active-row context (no global subscription).
-    // For ALBUM/ALBUM_ARTIST/ARTIST it has to be derived from the current song,
+    // For ALBUM/ALBUM_ARTIST/ARTIST/PLAYLIST it has to be derived from the current song,
     // but we collapse it to a primitive `boolean` inside the store selector so
     // Zustand bails out for every row whose active-ness didn't change — a track
     // change no longer re-renders the whole visible index column.
     const itemType = props.itemType;
     const albumId = album?.id;
     const artistId = artist?.id;
+    const playlistId = playlist?.id;
 
     const isActiveFromStore = usePlayerStoreBase((state): boolean => {
         if (
             itemType !== LibraryItem.ALBUM &&
             itemType !== LibraryItem.ALBUM_ARTIST &&
-            itemType !== LibraryItem.ARTIST
+            itemType !== LibraryItem.ARTIST &&
+            itemType !== LibraryItem.PLAYLIST
         ) {
             return false;
         }
@@ -89,6 +95,8 @@ export const useRowPlayControl = (props: ItemTableListInnerColumn) => {
                     !!artistId &&
                     !!currentSong?.artists?.some((relatedArtist) => relatedArtist.id === artistId)
                 );
+            case LibraryItem.PLAYLIST:
+                return !!playlistId && currentSong?._contextPlaylistId === playlistId;
             default:
                 return false;
         }
@@ -97,7 +105,8 @@ export const useRowPlayControl = (props: ItemTableListInnerColumn) => {
     const isActive =
         itemType === LibraryItem.ALBUM ||
         itemType === LibraryItem.ALBUM_ARTIST ||
-        itemType === LibraryItem.ARTIST
+        itemType === LibraryItem.ARTIST ||
+        itemType === LibraryItem.PLAYLIST
             ? isActiveFromStore
             : isActiveFromRow;
 
@@ -144,6 +153,19 @@ export const useRowPlayControl = (props: ItemTableListInnerColumn) => {
                 return;
             }
 
+            if (props.itemType === LibraryItem.PLAYLIST) {
+                if (!playlist?.id) {
+                    return;
+                }
+
+                playPlaylistFromItemListControl({
+                    meta: { playType },
+                    player,
+                    playlist,
+                });
+                return;
+            }
+
             if (!song) {
                 return;
             }
@@ -154,7 +176,7 @@ export const useRowPlayControl = (props: ItemTableListInnerColumn) => {
                 player,
             });
         },
-        [album, artist, player, props.itemType, song],
+        [album, artist, player, playlist, props.itemType, song],
     );
 
     return {

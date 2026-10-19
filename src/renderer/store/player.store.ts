@@ -38,6 +38,7 @@ interface Actions {
         uniqueId: string,
         edge: 'bottom' | 'top',
         playSongId?: string,
+        pinAboveUpNext?: boolean,
     ) => void;
     clearQueue: () => void;
     clearSelected: (items: QueueSong[]) => void;
@@ -69,6 +70,7 @@ interface Actions {
         items: QueueSong[],
         uniqueId: string,
         edge: 'bottom' | 'top',
+        pinAboveUpNext?: boolean,
         space?: 'default' | 'visible',
     ) => void;
     moveSelectedToBottom: (items: QueueSong[]) => void;
@@ -108,7 +110,6 @@ interface State {
         pauseOnNextSongEnd: boolean;
         playerNum: 1 | 2;
         repeat: PlayerRepeat;
-        seekToTimestamp: string;
         shuffle: PlayerShuffle;
         speed: number;
         status: PlayerStatus;
@@ -220,11 +221,6 @@ export function mapShuffledToQueueIndex(shuffledIndex: number, shuffled: number[
     return shuffledIndex;
 }
 
-// We need to use a unique id so that the equalityFn can work if attempting to set the same timestamp
-export function uniqueSeekToTimestamp(timestamp: number) {
-    return `${timestamp}-${nanoid()}`;
-}
-
 // Helper function to add new indexes to shuffled array after current position
 function addIndexesToShuffled(
     shuffled: number[],
@@ -316,15 +312,14 @@ function emitPlayerPlayEvent(
                     );
                     if (shuffledPosition !== -1) {
                         state.player.index = shuffledPosition;
-                        playIndex = shuffledPosition;
                     } else {
                         state.player.index = queueIndex;
-                        playIndex = queueIndex;
                     }
                 } else {
                     state.player.index = queueIndex;
-                    playIndex = queueIndex;
                 }
+                syncUpNext(state);
+                playIndex = state.player.index;
                 state.player.status = PlayerStatus.PLAYING;
                 setTimestampStore(0);
             }
@@ -391,6 +386,140 @@ function regenerateShuffledIndexesIfNeeded(state: {
     }
 }
 
+const isUpNextQueueEnabled = () => useSettingsStore.getState().general.upNextQueue;
+
+const sameIds = <T>(a: T[], b: T[]) => a.length === b.length && a.every((v, i) => v === b[i]);
+
+// After songs are dragged or moved in the queue: Up Next songs moved out of the section become
+// normal queue items, and moved songs dropped inside it (directly after the current song, after
+// a Queue item pinned above the section, or after another Up Next song) join it.
+function regroupUpNext(
+    state: Pick<State, 'player' | 'queue'>,
+    currentId: string | undefined,
+    movedIds: string[],
+): void {
+    if (state.queue.priority.length === 0) return;
+
+    const moved = new Set(movedIds);
+    const kept = new Set(state.queue.priority.filter((id) => !moved.has(id)));
+
+    // Queue items can be pinned between the current song and the Up Next block (dropped on the
+    // bottom of the first Queue section). While sitting there they keep the Up Next run going,
+    // so a song dropped just above the section still joins it.
+    const lastKeptIndex = [...kept].reduce((last, id) => {
+        const index = state.queue.default.indexOf(id);
+        return index > last ? index : last;
+    }, -1);
+
+    const upNext: string[] = [];
+    let previousIsUpNext = false;
+
+    state.queue.default.forEach((id, index) => {
+        if (id === currentId) {
+            previousIsUpNext = true;
+            return;
+        }
+
+        if (kept.has(id)) {
+            previousIsUpNext = true;
+            upNext.push(id);
+            return;
+        }
+
+        if (moved.has(id)) {
+            if (previousIsUpNext) upNext.push(id);
+            return;
+        }
+
+        previousIsUpNext = previousIsUpNext && index < lastKeptIndex;
+    });
+
+    state.queue.priority = upNext;
+    syncUpNext(state);
+}
+
+// True when a drop on the bottom edge of the row with `targetUniqueId` lands in the first
+// Queue section, above the Up Next block (rows at or below the current song). Dropping there
+// should keep the items in the Queue section instead of joining Up Next.
+export const isUpNextQueueBoundaryDrop = (
+    targetUniqueId: string,
+    edge: 'bottom' | 'top',
+): boolean => {
+    if (edge !== 'bottom') return false;
+
+    const state = usePlayerStoreBase.getState();
+    const upNext = state.queue.priority;
+    if (upNext.length === 0) return false;
+
+    const upNextStart = state.queue.default.indexOf(upNext[0]);
+    const rowIndex = state.queue.default.indexOf(targetUniqueId);
+
+    if (!state.getCurrentSong()?._uniqueId) return false;
+
+    const currentIndex =
+        state.getCurrentSong() !== undefined
+            ? state.queue.default.indexOf(state.getCurrentSong()!._uniqueId)
+            : -1;
+
+    return rowIndex >= currentIndex && rowIndex < upNextStart;
+};
+
+// Keeps the Up Next songs (queue.priority) as a contiguous block after the current song, in
+// both the displayed order and the shuffled play order. Queue items pinned between the current
+// song and the block are left in place. Songs that are playing or were removed from the queue
+// leave Up Next.
+function syncUpNext(state: Pick<State, 'player' | 'queue'>): void {
+    const { player, queue } = state;
+    if (queue.priority.length === 0) return;
+
+    if (!isUpNextQueueEnabled()) {
+        queue.priority = [];
+        return;
+    }
+
+    const shuffle = isShuffleEnabled(state);
+    const playOrder = shuffle ? queue.shuffled.map((i) => queue.default[i]) : queue.default;
+    const currentId: string | undefined = playOrder[player.index];
+    const inQueue = new Set(queue.default);
+    const upNext = queue.priority.filter((id) => id !== currentId && inQueue.has(id));
+    const upNextSet = new Set(upNext);
+
+    const placeAfterCurrent = (ids: string[]) => {
+        const rest = ids.filter((id) => !upNextSet.has(id));
+        const at = currentId === undefined ? 0 : rest.indexOf(currentId) + 1;
+        return [...rest.slice(0, at), ...upNext, ...rest.slice(at)];
+    };
+
+    // The block stays put only while it sits in front of the current song (queue items pinned
+    // between them are allowed). Playing a song at or below the block settles it: the played song
+    // and every queue song above it move in front of Up Next, so Up Next keeps playing next.
+    const blockIsInFrontOfCurrent = (ids: string[]) => {
+        if (upNext.length === 0) return false;
+
+        const start = ids.indexOf(upNext[0]);
+        if (start === -1 || !upNext.every((id, offset) => ids[start + offset] === id)) return false;
+
+        const currentIndex = currentId === undefined ? -1 : ids.indexOf(currentId);
+        return start > currentIndex;
+    };
+    const settle = (ids: string[]) => (blockIsInFrontOfCurrent(ids) ? ids : placeAfterCurrent(ids));
+
+    if (!sameIds(upNext, queue.priority)) queue.priority = upNext;
+
+    const newDefault = settle(queue.default);
+    if (!sameIds(newDefault, queue.default)) queue.default = newDefault;
+
+    if (shuffle) {
+        const newPlayOrder = settle(playOrder);
+        const position = new Map(queue.default.map((id, i) => [id, i]));
+        const newShuffled = newPlayOrder.map((id) => position.get(id)!);
+        if (!sameIds(newShuffled, queue.shuffled)) queue.shuffled = newShuffled;
+        if (currentId !== undefined) player.index = newPlayOrder.indexOf(currentId);
+    } else if (currentId !== undefined) {
+        player.index = newDefault.indexOf(currentId);
+    }
+}
+
 const initialState: State = {
     hydrated: false,
     mpvInitialized: false,
@@ -402,7 +531,6 @@ const initialState: State = {
         pauseOnNextSongEnd: false,
         playerNum: 1,
         repeat: PlayerRepeat.NONE,
-        seekToTimestamp: uniqueSeekToTimestamp(0),
         shuffle: PlayerShuffle.NONE,
         speed: 1,
         status: PlayerStatus.PAUSED,
@@ -411,6 +539,7 @@ const initialState: State = {
     },
     queue: {
         default: [],
+        priority: [],
         shuffled: [],
         songs: {},
     },
@@ -431,6 +560,55 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                     const targetSongUniqueId = playSongId
                         ? newItems.find((item) => item.id === playSongId)?._uniqueId
                         : undefined;
+
+                    if (
+                        (playType === Play.NEXT || playType === Play.NEXT_SHUFFLE) &&
+                        isUpNextQueueEnabled() &&
+                        get().getCurrentSong()
+                    ) {
+                        set((state) => {
+                            newItems.forEach((item) => {
+                                state.queue.songs[item._uniqueId] = item;
+                            });
+
+                            const ids =
+                                playType === Play.NEXT_SHUFFLE
+                                    ? shuffleInPlace([...newUniqueIds])
+                                    : newUniqueIds;
+
+                            const shuffle = isShuffleEnabled(state);
+                            const playOrder = shuffle
+                                ? state.queue.shuffled.map((i) => state.queue.default[i])
+                                : state.queue.default;
+                            const lastUpNext =
+                                state.queue.priority[state.queue.priority.length - 1];
+                            const lastUpNextPos =
+                                lastUpNext === undefined ? -1 : playOrder.indexOf(lastUpNext);
+                            const insertPos =
+                                lastUpNextPos === -1 ? state.player.index + 1 : lastUpNextPos + 1;
+
+                            if (shuffle) {
+                                const oldQueueLength = state.queue.default.length;
+                                const newIndexes = ids.map((_, i) => oldQueueLength + i);
+                                state.queue.default = [...state.queue.default, ...ids];
+                                state.queue.shuffled = [
+                                    ...state.queue.shuffled.slice(0, insertPos),
+                                    ...newIndexes,
+                                    ...state.queue.shuffled.slice(insertPos),
+                                ];
+                            } else {
+                                state.queue.default = [
+                                    ...state.queue.default.slice(0, insertPos),
+                                    ...ids,
+                                    ...state.queue.default.slice(insertPos),
+                                ];
+                            }
+
+                            state.queue.priority = [...state.queue.priority, ...ids];
+                            syncUpNext(state);
+                        });
+                        return;
+                    }
 
                     switch (playType) {
                         case Play.LAST: {
@@ -595,7 +773,8 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                                 state.player.status = PlayerStatus.PLAYING;
                                 state.player.playerNum = 1;
                                 setTimestampStore(0);
-                                state.queue.default = newUniqueIds;
+                                // Up Next carries over to the new queue
+                                state.queue.default = [...newUniqueIds, ...state.queue.priority];
 
                                 if (state.player.shuffle === PlayerShuffle.TRACK) {
                                     // If targetSongUniqueId is provided, ensure it's at position 0 in shuffled array
@@ -633,6 +812,8 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                                         );
                                     }
                                 }
+
+                                syncUpNext(state);
                             });
 
                             emitPlayerPlayEvent(targetSongUniqueId, set, get);
@@ -654,10 +835,12 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                                 state.player.status = PlayerStatus.PLAYING;
                                 state.player.playerNum = 1;
                                 setTimestampStore(0);
-                                state.queue.default = shuffledIds;
+                                // Up Next carries over to the new queue
+                                state.queue.default = [...shuffledIds, ...state.queue.priority];
 
                                 // Always maintain shuffled array when using Play.SHUFFLE
                                 state.queue.shuffled = generateShuffledIndexes(shuffledIds.length);
+                                syncUpNext(state);
                             });
 
                             emitPlayerPlayEvent(targetSongUniqueId, set, get);
@@ -665,7 +848,7 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                         }
                     }
                 },
-                addToQueueByUniqueId: (items, uniqueId, edge, playSongId) => {
+                addToQueueByUniqueId: (items, uniqueId, edge, playSongId, pinAboveUpNext) => {
                     const newItems = items.map(toQueueSong);
                     const newUniqueIds = newItems.map((item) => item._uniqueId);
 
@@ -673,6 +856,7 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                     const targetSongUniqueId = playSongId
                         ? newItems.find((item) => item.id === playSongId)?._uniqueId
                         : undefined;
+                    const currentSongUniqueId = get().getCurrentSong()?._uniqueId;
 
                     set((state) => {
                         // Add new songs to songs object
@@ -742,6 +926,16 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
 
                             recalculatePlayerIndex(state, newQueue);
                         }
+
+                        regroupUpNext(state, currentSongUniqueId, newUniqueIds);
+
+                        // Dropping on the bottom edge of the last row of the first Queue section keeps
+                        // the new songs in Queue, so they must not be pulled into the Up Next block.
+                        if (pinAboveUpNext) {
+                            state.queue.priority = state.queue.priority.filter(
+                                (id) => !newUniqueIds.includes(id),
+                            );
+                        }
                     });
 
                     // If playSongId is provided, find the song and start playback on it
@@ -766,15 +960,14 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                                     );
                                     if (shuffledPosition !== -1) {
                                         state.player.index = shuffledPosition;
-                                        playIndex = shuffledPosition;
                                     } else {
                                         state.player.index = queueIndex;
-                                        playIndex = queueIndex;
                                     }
                                 } else {
                                     state.player.index = queueIndex;
-                                    playIndex = queueIndex;
                                 }
+                                syncUpNext(state);
+                                playIndex = state.player.index;
                                 state.player.status = PlayerStatus.PLAYING;
                                 setTimestampStore(0);
                             }
@@ -793,6 +986,7 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                     set((state) => {
                         state.player.index = -1;
                         state.queue.default = [];
+                        state.queue.priority = [];
                         state.queue.shuffled = [];
                         state.queue.songs = {};
                     });
@@ -835,6 +1029,7 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                         cleanupOrphanedSongs(state);
 
                         recalculatePlayerIndex(state, state.queue.default);
+                        syncUpNext(state);
                     });
                 },
                 decreaseVolume: (value: number) => {
@@ -1070,16 +1265,15 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                         setTimestampStore(0);
                         state.player.status = newStatus;
 
-                        if (shouldStop) {
-                            state.player.seekToTimestamp = uniqueSeekToTimestamp(0);
-                        }
-
                         if (pauseOnNext) {
                             state.player.pauseOnNextSongEnd = false;
                         }
+
+                        syncUpNext(state);
                     });
 
                     if (shouldStop) {
+                        eventEmitter.emit('PLAYER_SEEK_TO_TIMESTAMP', { timestamp: 0 });
                         emitPlayerStop(get, true);
                     }
 
@@ -1174,11 +1368,13 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                             if (isStopped) {
                                 state.player.status = PlayerStatus.PLAYING;
                             }
+
+                            syncUpNext(state);
                         });
 
                         eventEmitter.emit('MEDIA_NEXT', {
                             currentIndex,
-                            nextIndex,
+                            nextIndex: get().player.index,
                         });
                         return;
                     }
@@ -1214,8 +1410,8 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                             state.player.status = PlayerStatus.STOPPED;
                             state.player.playerNum = 1;
                             setTimestampStore(0);
-                            state.player.seekToTimestamp = uniqueSeekToTimestamp(0);
                         });
+                        eventEmitter.emit('PLAYER_SEEK_TO_TIMESTAMP', { timestamp: 0 });
                         emitPlayerStop(get, true);
                         return;
                     }
@@ -1228,11 +1424,13 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                         if (isStopped) {
                             state.player.status = PlayerStatus.PLAYING;
                         }
+
+                        syncUpNext(state);
                     });
 
                     eventEmitter.emit('MEDIA_NEXT', {
                         currentIndex,
-                        nextIndex,
+                        nextIndex: get().player.index,
                     });
                 },
                 mediaPause: () => {
@@ -1268,15 +1466,14 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                                     );
                                     if (shuffledPosition !== -1) {
                                         state.player.index = shuffledPosition;
-                                        playIndex = shuffledPosition;
                                     } else {
                                         state.player.index = queueIndex;
-                                        playIndex = queueIndex;
                                     }
                                 } else {
                                     state.player.index = queueIndex;
-                                    playIndex = queueIndex;
                                 }
+                                syncUpNext(state);
+                                playIndex = state.player.index;
                                 setTimestampStore(0);
                             }
                         }
@@ -1318,12 +1515,13 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                                 index,
                                 state.queue.shuffled,
                             );
-                            playIndex = shuffledPosition !== undefined ? shuffledPosition : index;
-                            state.player.index = playIndex;
+                            state.player.index =
+                                shuffledPosition !== undefined ? shuffledPosition : index;
                         } else {
-                            playIndex = index;
                             state.player.index = index;
                         }
+                        syncUpNext(state);
+                        playIndex = state.player.index;
                         setTimestampStore(0);
 
                         state.player.status = PlayerStatus.PLAYING;
@@ -1345,9 +1543,7 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
 
                     // If timestamp is greater than 10 seconds, restart current song
                     if (currentTimestamp > 10) {
-                        set((state) => {
-                            state.player.seekToTimestamp = uniqueSeekToTimestamp(0);
-                        });
+                        eventEmitter.emit('PLAYER_SEEK_TO_TIMESTAMP', { timestamp: 0 });
                         return;
                     }
 
@@ -1380,20 +1576,20 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                         if (resumeFromStopped) {
                             state.player.status = PlayerStatus.PLAYING;
                         }
+
+                        syncUpNext(state);
                     });
 
                     eventEmitter.emit('MEDIA_PREV', {
                         currentIndex,
-                        prevIndex: previousIndex,
+                        prevIndex: get().player.index,
                     });
                 },
                 mediaSeekToTimestamp: (timestamp: number) => {
                     // See mediaSkipBackward: update the timestamp store right away to
                     // avoid the stale-read left by the ~500ms engine poll.
                     setTimestampStore(timestamp);
-                    set((state) => {
-                        state.player.seekToTimestamp = uniqueSeekToTimestamp(timestamp);
-                    });
+                    eventEmitter.emit('PLAYER_SEEK_TO_TIMESTAMP', { timestamp });
                 },
                 mediaSkipBackward: (offset?: number) => {
                     const offsetFromSettings =
@@ -1407,9 +1603,7 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                     // stale value left by the ~500ms engine poll (otherwise mashing
                     // the seek keys repeatedly lands on the same time).
                     setTimestampStore(newTimestamp);
-                    set((state) => {
-                        state.player.seekToTimestamp = uniqueSeekToTimestamp(newTimestamp);
-                    });
+                    eventEmitter.emit('PLAYER_SEEK_TO_TIMESTAMP', { timestamp: newTimestamp });
                 },
                 mediaSkipForward: (offset?: number) => {
                     const state = get();
@@ -1434,9 +1628,7 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                     // See mediaSkipBackward: update the timestamp store right away to
                     // avoid the stale-read left by the ~500ms engine poll.
                     setTimestampStore(newTimestamp);
-                    set((state) => {
-                        state.player.seekToTimestamp = uniqueSeekToTimestamp(newTimestamp);
-                    });
+                    eventEmitter.emit('PLAYER_SEEK_TO_TIMESTAMP', { timestamp: newTimestamp });
                 },
                 mediaStop: (options?: { reset?: boolean }) => {
                     const reset = options?.reset !== false;
@@ -1444,9 +1636,12 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                         state.player.status = PlayerStatus.STOPPED;
                         if (reset) {
                             setTimestampStore(0);
-                            state.player.seekToTimestamp = uniqueSeekToTimestamp(0);
                         }
                     });
+
+                    if (reset) {
+                        eventEmitter.emit('PLAYER_SEEK_TO_TIMESTAMP', { timestamp: 0 });
+                    }
 
                     emitPlayerStop(get, reset);
                 },
@@ -1477,6 +1672,7 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                     items: QueueSong[],
                     uniqueId: string,
                     edge: 'bottom' | 'top',
+                    pinAboveUpNext = false,
                     // 'visible' (UI drag): reorder whichever order the queue
                     // table currently renders. 'default' (peer-sync wire,
                     // SEV-3): always reorder the default order — remote
@@ -1487,6 +1683,14 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                     const itemUniqueIds = items.map((item) => item._uniqueId);
 
                     set((state) => {
+                        const currentId = get().getCurrentSong()?._uniqueId;
+
+                        // Find the index of the drop target
+                        const index = state.queue.default.findIndex((id) => id === uniqueId);
+
+                        // Get the new index based on the edge
+                        const insertIndex = Math.max(0, edge === 'top' ? index : index + 1);
+
                         const existingIds = new Set(Object.keys(state.queue.songs));
 
                         // Add new songs to songs object (avoiding duplicates)
@@ -1544,16 +1748,16 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                             ];
 
                             recalculatePlayerIndex(state, state.queue.default);
+                            if (pinAboveUpNext) {
+                                state.queue.priority = state.queue.priority.filter(
+                                    (id) => !itemUniqueIds.includes(id),
+                                );
+                            }
+                            syncUpNext(state);
                             return;
                         }
 
                         const oldDefault = [...state.queue.default];
-
-                        // Find the index of the drop target
-                        const index = state.queue.default.findIndex((id) => id === uniqueId);
-
-                        // Get the new index based on the edge
-                        const insertIndex = Math.max(0, edge === 'top' ? index : index + 1);
 
                         const idsBefore = state.queue.default
                             .slice(0, insertIndex)
@@ -1568,6 +1772,13 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                         remapShuffledAfterReorder(state, oldDefault, newQueue);
                         state.queue.default = newQueue;
                         recalculatePlayerIndex(state, newQueue);
+                        regroupUpNext(state, currentId, itemUniqueIds);
+
+                        if (pinAboveUpNext) {
+                            state.queue.priority = state.queue.priority.filter(
+                                (id) => !itemUniqueIds.includes(id),
+                            );
+                        }
                     });
                 },
                 moveSelectedToBottom: (items: QueueSong[]) => {
@@ -1587,6 +1798,7 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                         remapShuffledAfterReorder(state, oldDefault, newQueue);
                         state.queue.default = newQueue;
                         recalculatePlayerIndex(state, newQueue);
+                        regroupUpNext(state, get().getCurrentSong()?._uniqueId, uniqueIds);
                     });
                 },
                 moveSelectedToNext: (items: QueueSong[]) => {
@@ -1620,8 +1832,16 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                         });
 
                         // For every item that is before the current item, subtract one as
-                        // these items will shift the queue up
-                        const insertIndex = Math.max(0, currentIndex + 1 - beforeCurrent);
+                        // these items will shift the queue up. When Queue items are pinned
+                        // above the Up Next block, insert at the top of the block instead so
+                        // the new songs stay inside the section's displayed span.
+                        const upNextFirst = state.queue.priority[0];
+                        const upNextTop =
+                            upNextFirst !== undefined ? filtered.indexOf(upNextFirst) : -1;
+                        const insertIndex =
+                            upNextTop !== -1
+                                ? upNextTop
+                                : Math.max(0, currentIndex + 1 - beforeCurrent);
 
                         const newQueue = [
                             ...filtered.slice(0, insertIndex),
@@ -1663,6 +1883,7 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
 
                         state.queue.default = newQueue;
                         recalculatePlayerIndex(state, newQueue);
+                        regroupUpNext(state, get().getCurrentSong()?._uniqueId, uniqueIds);
                     });
                 },
                 moveSelectedToTop: (items: QueueSong[]) => {
@@ -1682,6 +1903,7 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                         remapShuffledAfterReorder(state, oldDefault, newQueue);
                         state.queue.default = newQueue;
                         recalculatePlayerIndex(state, newQueue);
+                        regroupUpNext(state, get().getCurrentSong()?._uniqueId, uniqueIds);
                     });
                 },
                 setQueue: (items, index, position) => {
@@ -1697,6 +1919,7 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                         state.player.status = PlayerStatus.PLAYING;
                         state.player.playerNum = 1;
                         state.queue.default = newUniqueIds;
+                        syncUpNext(state);
                     });
 
                     eventEmitter.emit('QUEUE_RESTORED', {
@@ -1708,7 +1931,7 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                 ...initialState,
                 setCrossfadeDuration: (duration: number) => {
                     set((state) => {
-                        const normalizedDuration = Math.max(0, Math.min(10, duration));
+                        const normalizedDuration = Math.max(3, Math.min(21, duration));
                         state.player.crossfadeDuration = normalizedDuration;
                     });
                 },
@@ -1766,6 +1989,7 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                             state.queue.shuffled = [];
                         }
                         cleanupOrphanedSongs(state);
+                        syncUpNext(state);
                     });
                 },
                 setSpeed: (speed: number) => {
@@ -1791,6 +2015,7 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                                 state.queue.default.length,
                             );
                         }
+                        syncUpNext(state);
                     });
                 },
                 shuffleAll: () => {
@@ -1829,6 +2054,7 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
 
                         // Regenerate shuffled indexes if shuffle is enabled
                         regenerateShuffledIndexesIfNeeded(state);
+                        syncUpNext(state);
                     });
                 },
                 shuffleSelected: (items: QueueSong[]) => {
@@ -1863,6 +2089,7 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
 
                         // Regenerate shuffled indexes if shuffle is enabled
                         regenerateShuffledIndexesIfNeeded(state);
+                        syncUpNext(state);
                     });
                 },
                 toggleRepeat: () => {
@@ -1928,6 +2155,7 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                             }
                             state.queue.shuffled = [];
                         }
+                        syncUpNext(state);
                     });
                 },
             })),
@@ -1966,10 +2194,10 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
             partialize: (state) => {
                 const shouldRestorePlayQueue = useSettingsStore.getState().general.resume;
 
-                // Exclude playerNum, seekToTimestamp, and status from stored player object
+                // Exclude playerNum and status from stored player object
                 // These are not needed to be stored since they are ephemeral properties
                 // Note: timestamp is now in a separate store and doesn't need to be excluded here
-                const excludedPlayerKeys = ['playerNum', 'seekToTimestamp', 'status'];
+                const excludedPlayerKeys = ['playerNum', 'status'];
 
                 // If we're not restoring the play queue, we don't need the index property
                 // (it is meaningless without the queue)
@@ -2058,6 +2286,7 @@ export type AddToQueueByPlayType = Play;
 
 export type AddToQueueByUniqueId = {
     edge: 'bottom' | 'left' | 'right' | 'top' | null;
+    pinAboveUpNext?: boolean;
     uniqueId: string;
 };
 
@@ -2075,7 +2304,15 @@ export async function addToQueueByData(type: AddToQueueType, data: Song[]) {
         usePlayerStoreBase.getState().addToQueueByType(items, type);
     } else {
         const normalizedEdge = type.edge === 'top' ? 'top' : 'bottom';
-        usePlayerStoreBase.getState().addToQueueByUniqueId(items, type.uniqueId, normalizedEdge);
+        usePlayerStoreBase
+            .getState()
+            .addToQueueByUniqueId(
+                items,
+                type.uniqueId,
+                normalizedEdge,
+                undefined,
+                type.pinAboveUpNext,
+            );
     }
 }
 
@@ -2210,20 +2447,6 @@ export const subscribePlayerStatus = (
         (state) => state.player.status,
         (status, prevStatus) => {
             onChange({ status }, { status: prevStatus });
-        },
-    );
-};
-
-export const subscribePlayerSeekToTimestamp = (
-    onChange: (properties: { timestamp: number }, prev: { timestamp: number }) => void,
-) => {
-    return usePlayerStoreBase.subscribe(
-        (state) => state.player.seekToTimestamp,
-        (timestamp, prevTimestamp) => {
-            onChange(
-                { timestamp: parseUniqueSeekToTimestamp(timestamp) },
-                { timestamp: parseUniqueSeekToTimestamp(prevTimestamp) },
-            );
         },
     );
 };
@@ -2733,10 +2956,6 @@ function findLastAlbumRange(queueItems: QueueSong[]) {
     }
 
     return [rangeStart + 1, rangeEnd];
-}
-
-function parseUniqueSeekToTimestamp(timestamp: string) {
-    return Number(timestamp.split('-')[0]);
 }
 
 function recalculatePlayerIndex(state: any, queue: string[]) {

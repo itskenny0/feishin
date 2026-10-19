@@ -180,9 +180,9 @@ export const AlbumGroupHeader = ({
                     // Songs are cache-keyed by their album cover (own imageId isn't swept).
                     id={song?.albumId ?? song?.imageId}
                     itemType={LibraryItem.SONG}
+                    size={albumImageSize}
                     src={song?.imageUrl}
                     thumbHash={song?.thumbHash}
-                    type="table"
                 />
                 {isImageHovered && onPlay && (
                     <div className={imageColumnStyles.playButtonOverlay}>

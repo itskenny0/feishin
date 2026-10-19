@@ -49,6 +49,10 @@
     overflow-x: hidden;
 }
 
+.disc-group-row-cell {
+    background-color: var(--theme-colors-surface);
+}
+
 .search-text-input {
     background: transparent;
     border: 1px solid var(--theme-colors-border);

@@ -12,6 +12,7 @@ import { CollapsedSidebarButton } from '/@/renderer/features/sidebar/components/
 import { CollapsedSidebarItem } from '/@/renderer/features/sidebar/components/collapsed-sidebar-item';
 import { getCollectionTo } from '/@/renderer/features/sidebar/components/sidebar-collection-list';
 import { SidebarIcon } from '/@/renderer/features/sidebar/components/sidebar-icon';
+import { CollapsedSidebarPlaylistList } from '/@/renderer/features/sidebar/components/sidebar-playlist-list';
 import { AppMenu } from '/@/renderer/features/titlebar/components/app-menu';
 import { AppRoute } from '/@/renderer/router/routes';
 import {
@@ -19,6 +20,7 @@ import {
     useCollections,
     useSidebarCollapsedNavigation,
     useSidebarItems,
+    useSidebarPlaylistList,
     useWindowSettings,
 } from '/@/renderer/store';
 import { DropdownMenu } from '/@/shared/components/dropdown-menu/dropdown-menu';
@@ -40,6 +42,7 @@ export const CollapsedSidebar = () => {
     // Reactive count of downloaded tracks — drives the hidden-when-empty
     // "Available offline" entry below.
     const offlineSongCount = useOfflineSongCount();
+    const sidebarPlaylistList = useSidebarPlaylistList();
     const { isScanning } = useScanStatus();
 
     const translatedSidebarItemMap = useMemo(
@@ -192,6 +195,7 @@ export const CollapsedSidebar = () => {
                         />
                     ),
                 )}
+                {sidebarPlaylistList && <CollapsedSidebarPlaylistList />}
             </ScrollArea>
         </motion.div>
     );

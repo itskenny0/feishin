@@ -524,7 +524,9 @@
             "input_jellyfinSignInMethod": "Inicia sessió amb",
             "input_jellyfinSignInMethodPassword": "Contrasenya",
             "input_jellyfinSignInMethodQuickConnect": "Quick Connect",
-            "input_remoteUrlDescription": "S'utilitza en lloc de l'URL per a funcions externes, com ara enllaços compartits. Deixeu-ho en blanc a menys que el vostre servidor sigui accessible a una adreça diferent de fora de la vostra xarxa."
+            "input_remoteUrlDescription": "S'utilitza en lloc de l'URL per a funcions externes, com ara enllaços compartits. Deixeu-ho en blanc a menys que el vostre servidor sigui accessible a una adreça diferent de fora de la vostra xarxa.",
+            "input_enableAudiobooks": "Activa audiollibres",
+            "input_enableAudiobooksDescription": "Mostra contingut d'audiollibres de biblioteques de \"Llibres\""
         },
         "shareItem": {
             "description": "Descripció",
@@ -627,7 +629,6 @@
         "moveToBottom": "Anar al final",
         "moveToTop": "Anar al principi",
         "setRating": "Qualifica",
-        "toggleSmartPlaylistEditor": "Canvia l'editor $t(entity.smartPlaylist)",
         "downloadStarted": "S'ha iniciat la descàrrega de {{count}} elements",
         "moveUp": "Mou amunt",
         "moveDown": "Mou avall",
@@ -1133,7 +1134,9 @@
         "imagePlaceholderPriority_optionBlurhash": "BlurHash",
         "imagePlaceholderPriority_optionDominantColor": "Color dominant",
         "imagePlaceholderPriority_optionOff": "Desactivat",
-        "imagePlaceholderPriority_optionThumbhash": "ThumbHash"
+        "imagePlaceholderPriority_optionThumbhash": "ThumbHash",
+        "upNextQueue_description": "Reprodueix a continuació afegeix cançons a la secció A continuació després de la cançó actual, en l'ordre en què es van afegir. A continuació es queda següent quan es barreja o se substitueix la cua. Desactiva per inserir cada reproducció directament després de la cançó actual",
+        "upNextQueue": "Cua a continuació"
     },
     "table": {
         "column": {
@@ -1356,7 +1359,9 @@
         "scrobbleForceSubmit": "Força l'scrobble",
         "sleepTimer_endOfAlbum": "Final de l'àlbum actual",
         "nextAlbum": "Alt+clic pel següent àlbum",
-        "previousAlbum": "Alt+clic per l'àlbum anterior"
+        "previousAlbum": "Alt+clic per l'àlbum anterior",
+        "queueSection_queue": "Cua",
+        "queueSection_upNext": "A continuació"
     },
     "error": {
         "credentialsRequired": "Credencials requerides",

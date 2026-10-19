@@ -3,7 +3,10 @@ import { forwardRef, Ref } from 'react';
 
 import styles from './right-sidebar.module.css';
 
-import { SidebarPlayQueue } from '/@/renderer/features/now-playing/components/sidebar-play-queue';
+import {
+    SidebarPlayQueue,
+    useSidebarPanels,
+} from '/@/renderer/features/now-playing/components/sidebar-play-queue';
 import { ResizeHandle } from '/@/renderer/features/shared/components/resize-handle';
 import { useIsBigTablet } from '/@/renderer/hooks/use-breakpoint';
 import {
@@ -65,6 +68,7 @@ export const RightSidebar = forwardRef(
         const { setSideBar } = useAppStoreActions();
         const sideQueueType = useSideQueueType();
         const sideQueueLayout = useSideQueueLayout();
+        const sidebarPanels = useSidebarPanels();
         const isVerticalLayout = sideQueueLayout === 'vertical';
         // On big-tablet (835–1280) the sidebar floats over the main content
         // as an overlay — see right-sidebar.module.css's `position: fixed`
@@ -76,9 +80,12 @@ export const RightSidebar = forwardRef(
 
         const dismiss = () => setSideBar({ rightExpanded: false });
 
+        const showRightSidebar =
+            rightExpanded && sideQueueType === 'sideQueue' && sidebarPanels.length > 0;
+
         return (
             <>
-                {rightExpanded && sideQueueType === 'sideQueue' && (
+                {showRightSidebar && (
                     <>
                         {isOverlay && (
                             <div

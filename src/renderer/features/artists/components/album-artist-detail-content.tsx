@@ -74,6 +74,7 @@ import { sortAlbumList, sortSongList } from '/@/shared/api/utils';
 import { ActionIcon, ActionIconGroup } from '/@/shared/components/action-icon/action-icon';
 import { Badge } from '/@/shared/components/badge/badge';
 import { Button } from '/@/shared/components/button/button';
+import { Center } from '/@/shared/components/center/center';
 import { DropdownMenu } from '/@/shared/components/dropdown-menu/dropdown-menu';
 import { Grid } from '/@/shared/components/grid/grid';
 import { Group } from '/@/shared/components/group/group';
@@ -346,15 +347,28 @@ const AlbumArtistMetadataTopSongsContent = ({
 
     const canStartQuery = server?.type === ServerType.JELLYFIN || !!detailQuery.data?.name;
 
-    const topSongsQuery = useArtistTopSongsQuery({
+    const communityTopSongsQuery = useArtistTopSongsQuery({
         options: { enabled: canStartQuery },
         query: {
             artist: detailQuery.data?.name || '',
             artistId: routeId,
-            type: topSongsQueryType,
+            type: 'community',
         },
-        serverId: serverId,
+        serverId,
     });
+
+    const personalTopSongsQuery = useArtistTopSongsQuery({
+        options: { enabled: canStartQuery },
+        query: {
+            artist: detailQuery.data?.name || '',
+            artistId: routeId,
+            type: 'personal',
+        },
+        serverId,
+    });
+
+    const topSongsQuery =
+        topSongsQueryType === 'personal' ? personalTopSongsQuery : communityTopSongsQuery;
 
     const songs = useMemo(() => topSongsQuery.data?.items || [], [topSongsQuery.data?.items]);
 
@@ -413,10 +427,16 @@ const AlbumArtistMetadataTopSongsContent = ({
         onLongPress: () => handlePlay(LONG_PRESS_PLAY_BEHAVIOR[Play.LAST]),
     });
 
+    const isChecking =
+        (!communityTopSongsQuery.isError && communityTopSongsQuery.isLoading) ||
+        (!personalTopSongsQuery.isError && personalTopSongsQuery.isLoading);
     const isLoading = !topSongsQuery.isError && topSongsQuery.isLoading;
+    const hasAnyTopSongs =
+        (communityTopSongsQuery.data?.items?.length ?? 0) > 0 ||
+        (personalTopSongsQuery.data?.items?.length ?? 0) > 0;
 
     if (!isLoading && !tableConfig) return null;
-    if (!isLoading && songs.length === 0) return null;
+    if (!isChecking && !hasAnyTopSongs) return null;
 
     const currentSongId = currentSong?.id;
 
@@ -433,17 +453,22 @@ const AlbumArtistMetadataTopSongsContent = ({
                         </Group>
                         <div className={styles.albumSectionDividerContainer}>
                             <div className={styles.albumSectionDivider} />
-                            <Button
-                                component={Link}
-                                size="compact-md"
-                                to={generatePath(AppRoute.LIBRARY_ALBUM_ARTISTS_DETAIL_TOP_SONGS, {
-                                    albumArtistId: routeId,
-                                })}
-                                uppercase
-                                variant="subtle"
-                            >
-                                {t('page.albumArtistDetail.viewAll')}
-                            </Button>
+                            {songs.length > 0 && (
+                                <Button
+                                    component={Link}
+                                    size="compact-md"
+                                    to={generatePath(
+                                        AppRoute.LIBRARY_ALBUM_ARTISTS_DETAIL_TOP_SONGS,
+                                        {
+                                            albumArtistId: routeId,
+                                        },
+                                    )}
+                                    uppercase
+                                    variant="subtle"
+                                >
+                                    {t('page.albumArtistDetail.viewAll')}
+                                </Button>
+                            )}
                             {songs.length > 0 && (
                                 <ActionIconGroup>
                                     <PlayTooltip type={Play.NOW}>
@@ -546,35 +571,49 @@ const AlbumArtistMetadataTopSongsContent = ({
                                     tableColumnsData={SONG_TABLE_COLUMNS}
                                 />
                             </Group>
-                            <SongTableListContainer
-                                enableHeader={tableConfig.enableHeader}
-                                itemCount={filteredSongs.length}
-                                maxRows={5}
-                                tableSize={tableConfig.size}
-                            >
-                                <ItemTableList
-                                    activeRowId={currentSongId}
-                                    autoFitColumns={tableConfig.autoFitColumns}
-                                    CellComponent={ItemTableListColumn}
-                                    columns={columns}
-                                    data={filteredSongs}
-                                    enableAlternateRowColors={tableConfig.enableAlternateRowColors}
-                                    enableDrag
-                                    enableDragScroll={false}
-                                    enableExpansion={false}
+                            {filteredSongs.length > 0 ? (
+                                <SongTableListContainer
                                     enableHeader={tableConfig.enableHeader}
-                                    enableHorizontalBorders={tableConfig.enableHorizontalBorders}
-                                    enableRowHoverHighlight={tableConfig.enableRowHoverHighlight}
-                                    enableSelection
-                                    enableSelectionDialog={false}
-                                    enableVerticalBorders={tableConfig.enableVerticalBorders}
-                                    itemType={LibraryItem.SONG}
-                                    onColumnReordered={handleColumnReordered}
-                                    onColumnResized={handleColumnResized}
-                                    overrideControls={overrideControls}
-                                    size={tableConfig.size}
-                                />
-                            </SongTableListContainer>
+                                    itemCount={filteredSongs.length}
+                                    maxRows={5}
+                                    tableSize={tableConfig.size}
+                                >
+                                    <ItemTableList
+                                        activeRowId={currentSongId}
+                                        autoFitColumns={tableConfig.autoFitColumns}
+                                        CellComponent={ItemTableListColumn}
+                                        columns={columns}
+                                        data={filteredSongs}
+                                        enableAlternateRowColors={
+                                            tableConfig.enableAlternateRowColors
+                                        }
+                                        enableDrag
+                                        enableDragScroll={false}
+                                        enableExpansion={false}
+                                        enableHeader={tableConfig.enableHeader}
+                                        enableHorizontalBorders={
+                                            tableConfig.enableHorizontalBorders
+                                        }
+                                        enableRowHoverHighlight={
+                                            tableConfig.enableRowHoverHighlight
+                                        }
+                                        enableSelection
+                                        enableSelectionDialog={false}
+                                        enableVerticalBorders={tableConfig.enableVerticalBorders}
+                                        itemType={LibraryItem.SONG}
+                                        onColumnReordered={handleColumnReordered}
+                                        onColumnResized={handleColumnResized}
+                                        overrideControls={overrideControls}
+                                        size={tableConfig.size}
+                                    />
+                                </SongTableListContainer>
+                            ) : (
+                                <Center py="xl" w="100%">
+                                    <Text fw={500} isMuted isNoSelect size="sm">
+                                        {t('common.noResultsFromQuery')}
+                                    </Text>
+                                </Center>
+                            )}
                         </>
                     ) : null}
                 </Stack>
@@ -641,28 +680,38 @@ const AlbumArtistMetadataFavoriteSongs = ({
     const server = useCurrentServer();
     const showRatings = useShowRatings();
     const showFavorites = useShowFavorites();
-    const showFavoriteAndRatingSegmentControl =
-        server?.type !== ServerType.JELLYFIN && showFavorites && showRatings;
+    const canShowRatings = showRatings && server?.type !== ServerType.JELLYFIN;
+    const showFavoriteAndRatingSegmentControl = showFavorites && canShowRatings;
 
     let favoriteSongsQueryTypeFilter = favoriteSongsQueryType;
-    if (showRatings && !showFavorites) {
+    if (canShowRatings && !showFavorites) {
         favoriteSongsQueryTypeFilter = 'rating';
-    } else if (!showRatings && showFavorites) {
+    } else if (!canShowRatings && showFavorites) {
         favoriteSongsQueryTypeFilter = 'favorite';
     }
 
-    const favoriteSongsQuery = useArtistFavoriteSongsQuery({
+    const favoritesQuery = useArtistFavoriteSongsQuery({
+        options: { enabled: showFavorites },
         query: {
             artistId: routeId,
-            type: favoriteSongsQueryTypeFilter,
+            type: 'favorite',
         },
         serverId: serverId,
     });
 
-    const songs = useMemo(
-        () => favoriteSongsQuery.data?.items || [],
-        [favoriteSongsQuery.data?.items],
-    );
+    const ratingsQuery = useArtistFavoriteSongsQuery({
+        options: { enabled: canShowRatings },
+        query: {
+            artistId: routeId,
+            type: 'rating',
+        },
+        serverId: serverId,
+    });
+
+    const activeSongsQuery =
+        favoriteSongsQueryTypeFilter === 'rating' ? ratingsQuery : favoritesQuery;
+
+    const songs = useMemo(() => activeSongsQuery.data?.items || [], [activeSongsQuery.data?.items]);
 
     const columns = useMemo(() => {
         return tableConfig?.columns || [];
@@ -723,10 +772,16 @@ const AlbumArtistMetadataFavoriteSongs = ({
         onLongPress: () => handlePlay(LONG_PRESS_PLAY_BEHAVIOR[Play.LAST]),
     });
 
-    const isLoading = !favoriteSongsQuery.isError && favoriteSongsQuery.isLoading;
+    const isChecking =
+        (showFavorites && !favoritesQuery.isError && favoritesQuery.isLoading) ||
+        (canShowRatings && !ratingsQuery.isError && ratingsQuery.isLoading);
+    const isLoading = !activeSongsQuery.isError && activeSongsQuery.isLoading;
+    const hasAnyFavoriteSongs =
+        (favoritesQuery.data?.items?.length ?? 0) > 0 ||
+        (ratingsQuery.data?.items?.length ?? 0) > 0;
 
     if (!isLoading && !tableConfig) return null;
-    if (!isLoading && songs.length === 0) return null;
+    if (!isChecking && !hasAnyFavoriteSongs) return null;
 
     const currentSongId = currentSong?.id;
 
@@ -743,20 +798,22 @@ const AlbumArtistMetadataFavoriteSongs = ({
                         </Group>
                         <div className={styles.albumSectionDividerContainer}>
                             <div className={styles.albumSectionDivider} />
-                            <Button
-                                component={Link}
-                                size="compact-md"
-                                to={generatePath(
-                                    AppRoute.LIBRARY_ALBUM_ARTISTS_DETAIL_FAVORITE_SONGS,
-                                    {
-                                        albumArtistId: routeId,
-                                    },
-                                )}
-                                uppercase
-                                variant="subtle"
-                            >
-                                {t('page.albumArtistDetail.viewAll')}
-                            </Button>
+                            {songs.length > 0 && (
+                                <Button
+                                    component={Link}
+                                    size="compact-md"
+                                    to={generatePath(
+                                        AppRoute.LIBRARY_ALBUM_ARTISTS_DETAIL_FAVORITE_SONGS,
+                                        {
+                                            albumArtistId: routeId,
+                                        },
+                                    )}
+                                    uppercase
+                                    variant="subtle"
+                                >
+                                    {t('page.albumArtistDetail.viewAll')}
+                                </Button>
+                            )}
                             {songs.length > 0 && (
                                 <ActionIconGroup>
                                     <PlayTooltip type={Play.NOW}>
@@ -883,35 +940,49 @@ const AlbumArtistMetadataFavoriteSongs = ({
                                     tableColumnsData={SONG_TABLE_COLUMNS}
                                 />
                             </Group>
-                            <SongTableListContainer
-                                enableHeader={tableConfig.enableHeader}
-                                itemCount={filteredSongs.length}
-                                maxRows={5}
-                                tableSize={tableConfig.size}
-                            >
-                                <ItemTableList
-                                    activeRowId={currentSongId}
-                                    autoFitColumns={tableConfig.autoFitColumns}
-                                    CellComponent={ItemTableListColumn}
-                                    columns={columns}
-                                    data={filteredSongs}
-                                    enableAlternateRowColors={tableConfig.enableAlternateRowColors}
-                                    enableDrag
-                                    enableDragScroll={false}
-                                    enableExpansion={false}
+                            {filteredSongs.length > 0 ? (
+                                <SongTableListContainer
                                     enableHeader={tableConfig.enableHeader}
-                                    enableHorizontalBorders={tableConfig.enableHorizontalBorders}
-                                    enableRowHoverHighlight={tableConfig.enableRowHoverHighlight}
-                                    enableSelection
-                                    enableSelectionDialog={false}
-                                    enableVerticalBorders={tableConfig.enableVerticalBorders}
-                                    itemType={LibraryItem.SONG}
-                                    onColumnReordered={handleColumnReordered}
-                                    onColumnResized={handleColumnResized}
-                                    overrideControls={overrideControls}
-                                    size={tableConfig.size}
-                                />
-                            </SongTableListContainer>
+                                    itemCount={filteredSongs.length}
+                                    maxRows={5}
+                                    tableSize={tableConfig.size}
+                                >
+                                    <ItemTableList
+                                        activeRowId={currentSongId}
+                                        autoFitColumns={tableConfig.autoFitColumns}
+                                        CellComponent={ItemTableListColumn}
+                                        columns={columns}
+                                        data={filteredSongs}
+                                        enableAlternateRowColors={
+                                            tableConfig.enableAlternateRowColors
+                                        }
+                                        enableDrag
+                                        enableDragScroll={false}
+                                        enableExpansion={false}
+                                        enableHeader={tableConfig.enableHeader}
+                                        enableHorizontalBorders={
+                                            tableConfig.enableHorizontalBorders
+                                        }
+                                        enableRowHoverHighlight={
+                                            tableConfig.enableRowHoverHighlight
+                                        }
+                                        enableSelection
+                                        enableSelectionDialog={false}
+                                        enableVerticalBorders={tableConfig.enableVerticalBorders}
+                                        itemType={LibraryItem.SONG}
+                                        onColumnReordered={handleColumnReordered}
+                                        onColumnResized={handleColumnResized}
+                                        overrideControls={overrideControls}
+                                        size={tableConfig.size}
+                                    />
+                                </SongTableListContainer>
+                            ) : (
+                                <Center py="xl" w="100%">
+                                    <Text fw={500} isMuted isNoSelect size="sm">
+                                        {t('common.noResultsFromQuery')}
+                                    </Text>
+                                </Center>
+                            )}
                         </>
                     ) : null}
                 </Stack>
@@ -1016,7 +1087,7 @@ const AlbumArtistMetadataExternalLinks = ({
     if (spotify) {
         links.push({
             href: nativeSpotify
-                ? `spotify:search:${encodeURIComponent(artistName || '')}`
+                ? `spotify:search:${encodeURIComponent(artistName || '').replaceAll('%20', '+')}`
                 : `https://open.spotify.com/search/${encodeURIComponent(artistName || '')}`,
             icon: 'brandSpotify',
             key: 'spotify',

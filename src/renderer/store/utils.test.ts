@@ -16,6 +16,7 @@ describe('cleanQueueForPersistence', () => {
     it('drops songs that are not referenced by the default order', () => {
         const queue: QueueData = {
             default: ['a', 'b'],
+            priority: [],
             shuffled: [],
             songs: {
                 a: makeSong('a'),
@@ -33,6 +34,7 @@ describe('cleanQueueForPersistence', () => {
     it('preserves the default order and shuffled arrays', () => {
         const queue: QueueData = {
             default: ['a', 'b'],
+            priority: [],
             shuffled: [1, 0],
             songs: { a: makeSong('a'), b: makeSong('b') },
         };
@@ -46,6 +48,7 @@ describe('cleanQueueForPersistence', () => {
     it('returns an empty songs map when the default order is empty', () => {
         const queue: QueueData = {
             default: [],
+            priority: [],
             shuffled: [],
             songs: { a: makeSong('a') },
         };
@@ -58,6 +61,7 @@ describe('cleanQueueForPersistence', () => {
     it('does not mutate the original queue', () => {
         const queue: QueueData = {
             default: ['a'],
+            priority: [],
             shuffled: [],
             songs: { a: makeSong('a'), orphan: makeSong('orphan') },
         };

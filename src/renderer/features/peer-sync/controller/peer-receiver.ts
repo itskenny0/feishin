@@ -656,6 +656,7 @@ const applyQueueReorder = (fromIdx: number, toIdx: number, from: PeerAddress): A
             [moving],
             anchor._uniqueId,
             toIdx > fromIdx ? 'bottom' : 'top',
+            false,
             'default',
         );
     }

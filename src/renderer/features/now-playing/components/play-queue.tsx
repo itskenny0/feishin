@@ -40,10 +40,13 @@ import {
     usePlayerSong,
     usePlayerStore,
     useQueueInPlaybackOrder,
+    useSettingsStore,
 } from '/@/renderer/store';
+import { logger } from '/@/renderer/utils/logger';
 import { Flex } from '/@/shared/components/flex/flex';
 import { LoadingOverlay } from '/@/shared/components/loading-overlay/loading-overlay';
 import { Skeleton } from '/@/shared/components/skeleton/skeleton';
+import { Text } from '/@/shared/components/text/text';
 import { useDebouncedValue } from '/@/shared/hooks/use-debounced-value';
 import { useFocusWithin } from '/@/shared/hooks/use-focus-within';
 import { useMergedRef } from '/@/shared/hooks/use-merged-ref';
@@ -64,7 +67,9 @@ type QueueProps = {
 
 export const PlayQueue = forwardRef<ItemListHandle, QueueProps>(
     ({ enableScrollShadow = true, listKey, searchTerm }, ref) => {
+        const { t } = useTranslation();
         const { table } = useListSettings(listKey) || {};
+        const upNextQueueEnabled = useSettingsStore((state) => state.general.upNextQueue);
 
         const isFetching = useIsPlayerFetching();
         const tableRef = useRef<ItemListHandle>(null);
@@ -108,7 +113,7 @@ export const PlayQueue = forwardRef<ItemListHandle, QueueProps>(
         const [debouncedSearchTerm] = useDebouncedValue(searchTerm, 200);
 
         const [data, setData] = useState<QueueSong[]>([]);
-        const [groups, setGroups] = useState<TableGroupHeader[]>([]);
+        const [upNextIds, setUpNextIds] = useState<string[]>([]);
 
         // Remote mode: derive a QueueSong[] view from the mirrored Song[].
         // The mirror exposes Song[] (no _uniqueId); the table key is _uniqueId,
@@ -146,7 +151,7 @@ export const PlayQueue = forwardRef<ItemListHandle, QueueProps>(
 
                 setData(queue.items);
 
-                setGroups([]);
+                setUpNextIds(usePlayerStore.getState().queue.priority);
             };
 
             // Resolves the index of the currently-playing song within the visible
@@ -167,10 +172,16 @@ export const PlayQueue = forwardRef<ItemListHandle, QueueProps>(
                 if (!followCurrentSong) return;
                 const index = resolveVisibleCurrentIndex();
                 if (index !== -1) {
-                    tableRef.current?.scrollToIndex(index, {
-                        align: 'center',
-                        behavior: 'auto',
-                    });
+                    // Defer a tick so the scroll applies to the updated queue/groups
+                    // row model, not the pre-change layout. Scrolling immediately
+                    // computes the offset against the stale rows, and the follow
+                    // re-apply after re-render then jumps the viewport a second time.
+                    setTimeout(() => {
+                        tableRef.current?.scrollToIndex(index, {
+                            align: 'center',
+                            behavior: 'auto',
+                        });
+                    }, 0);
                 }
             });
 
@@ -254,6 +265,43 @@ export const PlayQueue = forwardRef<ItemListHandle, QueueProps>(
         // drop-zone affordance only makes sense for a genuinely empty queue.
         const isSearchNoResults = isEmpty && Boolean(debouncedSearchTerm) && visibleData.length > 0;
 
+        // Label the Up Next songs, which always sit directly after the current song
+        const groups: TableGroupHeader[] | undefined = useMemo(() => {
+            if (isRemote || !upNextQueueEnabled || debouncedSearchTerm || upNextIds.length === 0) {
+                return undefined;
+            }
+
+            const start = data.findIndex((item) => item._uniqueId === upNextIds[0]);
+            if (start === -1) return undefined;
+
+            const sections = [
+                { count: start, label: t('player.queueSection_queue') },
+                { count: upNextIds.length, label: t('player.queueSection_upNext') },
+                {
+                    count: data.length - start - upNextIds.length,
+                    label: t('player.queueSection_queue'),
+                },
+            ].filter((section) => section.count > 0);
+
+            return sections.map(({ count, label }) => ({
+                hideRowBorder: true,
+                itemCount: count,
+                render: () => (
+                    <div className={styles.groupRow}>
+                        <Text
+                            className={styles.groupRowLabel}
+                            fw={600}
+                            isNoSelect
+                            overflow="visible"
+                            size="sm"
+                        >
+                            {label}
+                        </Text>
+                    </div>
+                ),
+            }));
+        }, [data, debouncedSearchTerm, isRemote, t, upNextIds, upNextQueueEnabled]);
+
         const { handleColumnReordered } = useItemListColumnReorder({
             itemListKey: listKey,
         });
@@ -282,29 +330,37 @@ export const PlayQueue = forwardRef<ItemListHandle, QueueProps>(
         );
         const currentSongUniqueId = isRemote ? remoteCurrentSongUniqueId : localCurrentSongUniqueId;
 
-        const { focused, ref: containerFocusRef } = useFocusWithin();
+        const { focused, ref: focusWithinRef } = useFocusWithin();
+        const containerRef = useRef<HTMLDivElement>(null);
+        const mergedContainerRef = useMergedRef(containerRef, focusWithinRef);
         const player = usePlayer();
 
+        const handleRemoveSelected = useCallback(() => {
+            const selectedItems = tableRef.current?.internalState.getSelected() as QueueSong[];
+
+            if (!selectedItems || selectedItems.length === 0) {
+                return;
+            }
+
+            const container = containerRef.current;
+            const isFocused = container?.contains(document.activeElement) ?? focused;
+
+            if (!isFocused) {
+                logger.debug('Queue remove hotkey skipped', { selected: selectedItems.length });
+                return;
+            }
+
+            player.clearSelected(selectedItems);
+        }, [focused, player]);
+
+        // Mac keyboards send Backspace for the key labelled delete, so accept both
         useHotkeys([
-            [
-                'delete',
-                () => {
-                    if (focused) {
-                        const selectedItems =
-                            tableRef.current?.internalState.getSelected() as QueueSong[];
-
-                        if (!selectedItems || selectedItems.length === 0) {
-                            return;
-                        }
-
-                        player.clearSelected(selectedItems);
-                    }
-                },
-            ],
+            ['backspace', handleRemoveSelected],
+            ['delete', handleRemoveSelected],
         ]);
 
         return (
-            <div className={styles.container} ref={containerFocusRef}>
+            <div className={styles.container} ref={mergedContainerRef}>
                 <LoadingOverlay pos="absolute" visible={isFetching} />
                 <Suspense fallback={<QueueTableSkeleton />}>
                     <PlayQueueTable
@@ -323,7 +379,7 @@ export const PlayQueue = forwardRef<ItemListHandle, QueueProps>(
                         enableSelectionDialog={false}
                         enableVerticalBorders={table.enableVerticalBorders}
                         getRowId="_uniqueId"
-                        groups={groups.length > 0 ? groups : undefined}
+                        groups={groups}
                         initialTop={{
                             to: 0,
                             type: 'offset',

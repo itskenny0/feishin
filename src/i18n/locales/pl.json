@@ -9,7 +9,6 @@
         "refresh": "$t(common.refresh)",
         "removeFromQueue": "Usuń z kolejki",
         "deselectAll": "Odznacz wszystko",
-        "toggleSmartPlaylistEditor": "Przełącz edytor $t(entity.smartPlaylist)",
         "removeFromFavorites": "Usuń z $t(entity.favorite, {\"count\": 2})",
         "moveToTop": "Przesuń na górę",
         "addToPlaylist": "Dodaj do $t(entity.playlist, {\"count\": 1})",
@@ -370,7 +369,9 @@
             "input_jellyfinSignInMethod": "Zaloguj się za pomocą",
             "input_jellyfinSignInMethodPassword": "Hasła",
             "input_jellyfinSignInMethodQuickConnect": "Szybkiego łączenia",
-            "input_remoteUrlDescription": "Używany w miejscu URL dla zewnętrznych funkcji, takich jak udostępnione linki. Pozostaw puste, chyba że twój serwer jest dostępny pod innym adresem poza twoją siecią."
+            "input_remoteUrlDescription": "Używany w miejscu URL dla zewnętrznych funkcji, takich jak udostępnione linki. Pozostaw puste, chyba że twój serwer jest dostępny pod innym adresem poza twoją siecią.",
+            "input_enableAudiobooks": "Włącz audiobooki",
+            "input_enableAudiobooksDescription": "Pokazuj treść audiobooki z bibliotek \"Książki\""
         },
         "addToPlaylist": {
             "success": "Dodano $t(entity.trackWithCount, {\"count\": {{message}} }) do $t(entity.playlistWithCount, {\"count\": {{numOfPlaylists}} })",
@@ -788,10 +789,12 @@
         "scrobbleForceSubmit": "Wymuś scrobble",
         "sleepTimer_endOfAlbum": "Koniec aktualnego albumu",
         "nextAlbum": "Alt+kliknięcie aby odtworzyć następny album",
-        "previousAlbum": "Alt+kliknięcie aby odtworzyć poprzedni album"
+        "previousAlbum": "Alt+kliknięcie aby odtworzyć poprzedni album",
+        "queueSection_queue": "Kolejka",
+        "queueSection_upNext": "Następne"
     },
     "setting": {
-        "crossfadeStyle_description": "Wybierz styl przenikania, który ma być używany do odtwarzania dźwięku",
+        "crossfadeStyle_description": "Wybierz styl przejścia, który ma być używany do odtwarzania dźwięku",
         "hotkey_skipBackward": "Przeskocz do tyłu",
         "audioDevice_description": "Wybierz urządzenie dźwiękowe używane do odtwarzania",
         "hotkey_playbackPause": "Wstrzymaj",
@@ -836,7 +839,7 @@
         "hotkey_toggleQueue": "Przełącz kolejkę",
         "hotkey_rate5": "Oceń na 5 gwiazdek",
         "hotkey_playbackPrevious": "Poprzedni utwór",
-        "crossfadeDuration_description": "Ustaw czas trwania efektu przenikania",
+        "crossfadeDuration_description": "Ustaw czas trwania efektu przejścia",
         "hotkey_toggleShuffle": "Przełącz kolejność losową",
         "discordRichPresence_description": "Włącz status odtwarzania w {{discord}} (rich presence). Dzięki temu będą wyświetlane informacje takie jak: {{icon}}, {{playing}} i {{paused}}",
         "audioDevice": "Urządzenia dźwiękowe",
@@ -857,7 +860,7 @@
         "globalMediaHotkeys_description": "Włącz lub wyłącz używanie systemowych skrótów klawiszowych do kontroli odtwarzania",
         "customFontPath": "Niestandardowa ścieżka czcionki",
         "followLyric": "Podążaj za tekstem",
-        "crossfadeDuration": "Czas trwania przenikania",
+        "crossfadeDuration": "Czas trwania przejścia",
         "discordIdleStatus": "Pokaż status w stanie bezczynności",
         "audioPlayer": "Odtwarzacz dźwięku",
         "hotkey_zoomOut": "Oddal",
@@ -879,7 +882,7 @@
         "playButtonBehavior_optionAddLast": "$t(player.addLast)",
         "minimizeToTray_description": "Zminimalizuj aplikację do zasobnika systemowego",
         "remotePassword": "Hasło dla serwera zdalnej kontroli",
-        "playbackStyle_optionCrossFade": "Przenikanie",
+        "playbackStyle_optionCrossFade": "Przejście",
         "playbackStyle": "Styl odtwarzania",
         "playbackStyle_description": "Wybierz styl odtwarzania dla odtwarzacza dźwięku",
         "mpvExecutablePath": "Ścieżka pliku wykonywalnego mpv",
@@ -1017,7 +1020,7 @@
         "artistBackground_description": "Dodaje obraz tła do stron wykonawców",
         "artistBackgroundBlur": "Rozmiar rozmazania obrazu tła wykonawców",
         "artistBackgroundBlur_description": "Wybiera poziom rozmazania obrazów tła wykonawców",
-        "crossfadeStyle": "Styl przenikania dźwięku",
+        "crossfadeStyle": "Styl przejścia dźwięku",
         "discordDisplayType_artistname": "Nazwa(y) wykonawców",
         "discordDisplayType_description": "Zmienia co jest pokazywane jako słuchane w twoim statusie",
         "discordDisplayType_songname": "Nazwa piosenki",
@@ -1274,7 +1277,9 @@
         "imagePlaceholderPriority_optionDominantColor": "Kolor dominujący",
         "imagePlaceholderPriority_optionOff": "Wyłączony",
         "imagePlaceholderPriority_optionBlurhash": "BlurHash",
-        "imagePlaceholderPriority_optionThumbhash": "ThumbHash"
+        "imagePlaceholderPriority_optionThumbhash": "ThumbHash",
+        "upNextQueue_description": "Odtwarzaj następnie dodaje piosenki do sekcji Następne po aktualnej piosence, w kolejności w której zostały dodane. Następne zostaje po wymieszaniu kolejki lub jej zamianie. Wyłącz aby, dodawać Odtwarzaj następnie prosto po aktualnej piosence",
+        "upNextQueue": "Kolejka następnych"
     },
     "table": {
         "config": {
@@ -1652,7 +1657,7 @@
         },
         "speakerProperties": {
             "bass": "Bas",
-            "crossfade": "Crossfade",
+            "crossfade": "Przejście",
             "ledState": "Dioda stanu",
             "loadFailed": "Nie udało się załadować właściwości",
             "loading": "Ładowanie…",

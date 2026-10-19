@@ -9,6 +9,7 @@ import styles from './main-content.module.css';
 
 import { ExpandedListContainer } from '/@/renderer/components/item-list/expanded-list-container';
 import { ExpandedListItem } from '/@/renderer/components/item-list/expanded-list-item';
+import { useSidebarPanels } from '/@/renderer/features/now-playing/components/sidebar-play-queue';
 import { RouteSkeleton } from '/@/renderer/features/shared/components/route-skeleton';
 import { ScrollToTopButton } from '/@/renderer/features/shared/components/scroll-to-top-button';
 import { useIsTabletRange } from '/@/renderer/hooks/use-breakpoint';
@@ -77,6 +78,10 @@ export const MainContent = ({ shell }: { shell?: boolean }) => {
     const { setSideBar } = useAppStoreActions();
     const sideQueueType = useSideQueueType();
     const sideQueueLayout = useSideQueueLayout();
+    // Keep in sync with RightSidebar: hide the grid column when no sidebar panels are visible
+    const sidebarPanels = useSidebarPanels();
+    const rightSidebarVisible =
+        rightExpanded && sideQueueType === 'sideQueue' && sidebarPanels.length > 0;
     const [isResizing, setIsResizing] = useState(false);
     const [isResizingRight, setIsResizingRight] = useState(false);
 
@@ -251,15 +256,12 @@ export const MainContent = ({ shell }: { shell?: boolean }) => {
     return (
         <motion.div
             className={clsx(styles.mainContentContainer, {
-                [styles.rightExpanded]: rightExpanded && sideQueueType === 'sideQueue',
+                [styles.rightExpanded]: rightSidebarVisible,
                 [styles.shell]: shell,
                 [styles.sidebarCollapsed]: collapsed,
                 [styles.sidebarExpanded]: !collapsed,
                 [styles.tabletShell]: isTabletRange,
-                [styles.verticalLayout]:
-                    rightExpanded &&
-                    sideQueueType === 'sideQueue' &&
-                    sideQueueLayout === 'vertical',
+                [styles.verticalLayout]: rightSidebarVisible && sideQueueLayout === 'vertical',
             })}
             id="main-content"
             ref={mainContentRef}

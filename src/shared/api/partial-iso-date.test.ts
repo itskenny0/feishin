@@ -17,15 +17,15 @@ describe('coerceYear', () => {
         expect(coerceYear(-5)).toBe(-5);
     });
 
-    it('returns 0 for null and undefined', () => {
-        expect(coerceYear(null)).toBe(0);
-        expect(coerceYear(undefined)).toBe(0);
+    it('returns null for null and undefined', () => {
+        expect(coerceYear(null)).toBeNull();
+        expect(coerceYear(undefined)).toBeNull();
     });
 
-    it('returns 0 for non-finite numbers', () => {
-        expect(coerceYear(NaN)).toBe(0);
-        expect(coerceYear(Infinity)).toBe(0);
-        expect(coerceYear(-Infinity)).toBe(0);
+    it('returns null for non-finite numbers', () => {
+        expect(coerceYear(NaN)).toBeNull();
+        expect(coerceYear(Infinity)).toBeNull();
+        expect(coerceYear(-Infinity)).toBeNull();
     });
 });
 

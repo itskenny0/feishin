@@ -26,6 +26,7 @@ import {
     InitialTimestampRestoreHook,
     QueueRestoreTimestampHook,
 } from '/@/renderer/features/player/hooks/use-queue-restore';
+import { ResumePositionHook } from '/@/renderer/features/player/hooks/use-resume-position';
 import { ScrobbleHook } from '/@/renderer/features/player/hooks/use-scrobble';
 import { UpdateCurrentSongHook } from '/@/renderer/features/player/hooks/use-update-current-song';
 import { useWebAudio } from '/@/renderer/features/player/hooks/use-webaudio';
@@ -267,6 +268,7 @@ export const AudioPlayers = () => {
             <UpcomingCoversPrefetch />
             <QueueRestoreTimestampHook />
             <InitialTimestampRestoreHook />
+            <ResumePositionHook />
             <UpdateCurrentSongHook />
             <RadioAudioInstanceHook />
             <RadioMetadataHook />

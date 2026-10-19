@@ -48,6 +48,7 @@
     inset: 0;
     background-position: center;
     background-size: cover;
+    border-radius: var(--theme-radius-md);
 }
 
 .censored .hash {
