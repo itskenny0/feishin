@@ -81,6 +81,10 @@ jobs:
                   # 'invalid source release: 21'.
                   java-version: '21'
             - uses: android-actions/setup-android@v3
+              with:
+                  # The default also installs the obsolete `tools` package,
+                  # which cmdline-tools 16+ no longer provides.
+                  packages: platform-tools
             - uses: gradle/actions/setup-gradle@v3
             - name: Install dependencies
               run: pnpm install --frozen-lockfile
