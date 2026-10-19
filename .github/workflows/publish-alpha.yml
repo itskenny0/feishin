@@ -15,6 +15,7 @@ on:
 
 jobs:
     check-new-commits:
+        if: github.repository == 'jeffvli/feishin'
         runs-on: ubuntu-latest
         outputs:
             has_new_commits: ${{ steps.manual.outputs.has_new_commits || steps.check.outputs['has-new-commits'] }}
