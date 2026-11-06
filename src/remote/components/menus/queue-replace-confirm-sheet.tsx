@@ -1,7 +1,11 @@
 import { useState } from 'react';
 
 import { ActionSheet } from '/@/remote/components/action-sheet';
-import { useQueueReplaceConfirm, useRemoteLibraryStore } from '/@/remote/store/library';
+import {
+    QueueReplaceConfirmRequest,
+    useQueueReplaceConfirm,
+    useRemoteLibraryStore,
+} from '/@/remote/store/library';
 import { Button } from '/@/shared/components/button/button';
 import { Group } from '/@/shared/components/group/group';
 import { Stack } from '/@/shared/components/stack/stack';
@@ -14,7 +18,10 @@ import { Text } from '/@/shared/components/text/text';
 export const QueueReplaceConfirmSheet = () => {
     const pending = useQueueReplaceConfirm();
     const clear = useRemoteLibraryStore((state) => state.actions.clearQueueReplaceConfirm);
-    const [isExecuting, setIsExecuting] = useState(false);
+    // Tracked per request: the sheet can be dismissed mid-flight and a newer
+    // confirmation shown before the older send settles.
+    const [executing, setExecuting] = useState<null | QueueReplaceConfirmRequest>(null);
+    const isExecuting = executing !== null && executing === pending;
 
     // Declining (Cancel, or dismissing the sheet any other way) still has to
     // settle the acked-send promise this confirmation is blocking on — see
@@ -31,10 +38,13 @@ export const QueueReplaceConfirmSheet = () => {
     // tap, like before, made the ack wait invisible.
     const handleConfirm = () => {
         if (!pending) return;
-        setIsExecuting(true);
-        pending.execute().finally(() => {
-            setIsExecuting(false);
-            clear();
+        const request = pending;
+        setExecuting(request);
+        request.execute().finally(() => {
+            setExecuting((current) => (current === request ? null : current));
+            // Clearing a newer request would close its sheet without ever
+            // settling the send that is waiting on it.
+            if (useRemoteLibraryStore.getState().queueReplaceConfirm === request) clear();
         });
     };
 

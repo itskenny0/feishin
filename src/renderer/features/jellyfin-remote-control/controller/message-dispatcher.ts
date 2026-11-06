@@ -4,11 +4,7 @@ import {
     JellyfinIncomingMessage,
     JellyfinPlayCommand,
 } from '/@/renderer/features/jellyfin-remote-control/types';
-import {
-    addToQueueByData,
-    isShuffleEnabled,
-    usePlayerStoreBase,
-} from '/@/renderer/store/player.store';
+import { isShuffleEnabled, usePlayerStoreBase } from '/@/renderer/store/player.store';
 import { toast } from '/@/shared/components/toast/toast';
 import { Song } from '/@/shared/types/domain-types';
 import { Play, PlayerRepeat, PlayerShuffle } from '/@/shared/types/types';
@@ -251,22 +247,17 @@ export async function dispatchJellyfinMessage(
         const wasIdle = usePlayerStoreBase.getState().queue.default.length === 0;
         const effectivePlayType = wasIdle ? Play.NOW : playType;
 
-        await addToQueueByData(effectivePlayType, songs);
+        // Honor StartIndex for fresh-queue plays too. The remote sends it
+        // relative to ItemIds, whose order fetchSongsByIds preserves, so the
+        // requested track is songs[startIndex]. Starting on it at enqueue time
+        // (like the app's own play-from-track) also keeps it first in a local
+        // shuffle; jumping to it afterwards landed mid-shuffle and skipped
+        // every track shuffled ahead of it.
+        const startSongId =
+            effectivePlayType === Play.NOW && startIndex > 0 ? songs[startIndex]?.id : undefined;
+        usePlayerStoreBase.getState().addToQueueByType(songs, effectivePlayType, startSongId);
 
-        // Honor StartIndex / StartPositionTicks for fresh-queue plays too.
-        //
-        // The remote sends StartIndex relative to ItemIds (i.e. relative to
-        // the order of `songs` after fetchSongsByIds preserves ItemIds
-        // order). For the fresh-queue path we just enqueued `songs` in that
-        // same order, so we want to play `songs[startIndex]`. The default
-        // queue indexing matches songs[] order, so we pass startIndex
-        // directly — NO shuffle-map translation (the fast-path's translation
-        // exists because it's matching against an EXISTING shuffled queue;
-        // here the queue is fresh).
         if (effectivePlayType === Play.NOW) {
-            if (startIndex > 0 && startIndex < songs.length) {
-                usePlayerStoreBase.getState().mediaPlayByIndex(startIndex);
-            }
             if (startPositionTicks > 0) {
                 // Defer so the new song's media element is mounted by the
                 // time the seek lands. A microtask is enough; rAF as belt.

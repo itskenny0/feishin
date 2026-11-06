@@ -70,9 +70,14 @@ async function networkFirst(request: Request): Promise<Response> {
     }
 }
 
+const shellUrls = new Set(resourcesToCache.map((r) => new URL(r, location.href).href));
+
 self.addEventListener('fetch', (e) => {
-    // `cache.put` throws for non-GET requests; this worker only ever needs
-    // to serve the static app shell, so anything else can just pass through.
-    if (e.request.method !== 'GET') return;
+    // This worker only ever needs to serve the static app shell; anything
+    // else passes straight through. Caching every GET also stored the Basic
+    // auth header served by /credentials in Cache Storage, plus one entry
+    // per library artwork URL (cross-origin, so quota-padded opaque
+    // responses) that was never evicted until the next version bump.
+    if (e.request.method !== 'GET' || !shellUrls.has(e.request.url)) return;
     e.respondWith(networkFirst(e.request));
 });

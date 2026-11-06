@@ -548,6 +548,3 @@ export const useRemoteTargetStore = create<RemoteTargetState>((set) => ({
     targetDeviceId: null,
     targetDeviceName: null,
 }));
-
-// Re-export for tests / instrumentation.
-export { valuesAgree };

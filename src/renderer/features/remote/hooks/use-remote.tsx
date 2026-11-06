@@ -21,7 +21,7 @@ export const useRemote = () => {
     // whole player slice. The previous bare `usePlayerStore()` re-rendered
     // this hook on every timestamp tick, queue mutation, and volume change,
     // which tore down and re-bound all the IPC listeners below.
-    const { mediaSeekToTimestamp, mediaSkipForward, setVolume } = usePlayerActions();
+    const { mediaSeekToTimestamp, setVolume } = usePlayerActions();
 
     const remoteSettings = useRemoteSettings();
     const setRating = useSetRating();
@@ -70,11 +70,9 @@ export const useRemote = () => {
             mediaSeekToTimestamp(newTime);
         });
 
-        remote.requestSeek((data: { offset: number }) => {
-            logger.debug('Remote request seek received', { offset: data.offset });
-            mediaSkipForward(data.offset);
-        });
-
+        // No request-seek handler: the remote server never sends it, only
+        // MPRIS does, and use-mpris already applies it - a second handler
+        // here doubled every MPRIS Seek (and the cleanup below wiped MPRIS's).
         remote.requestRating((data: { id: string; rating: number; serverId: string }) => {
             logger.debug('Remote request rating received', {
                 id: data.id,
@@ -107,7 +105,6 @@ export const useRemote = () => {
 
         return () => {
             ipc?.removeAllListeners('request-position');
-            ipc?.removeAllListeners('request-seek');
             ipc?.removeAllListeners('request-volume');
             ipc?.removeAllListeners('request-favorite');
             ipc?.removeAllListeners('request-rating');
@@ -116,7 +113,6 @@ export const useRemote = () => {
         addToFavoritesMutation,
         isRemoteEnabled,
         mediaSeekToTimestamp,
-        mediaSkipForward,
         removeFromFavoritesMutation,
         setVolume,
         setRating,

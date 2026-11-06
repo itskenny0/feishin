@@ -27,6 +27,7 @@ import {
 
 import {
     buildNativeTcpStreamBuilder,
+    createStreamClient,
     normalizeBrokerUrl,
     resolveEffectiveTransport,
 } from '/@/renderer/features/peer-sync/controller/peer-client';
@@ -47,7 +48,6 @@ export interface HaClientArgs {
 }
 
 interface HaSession {
-    args: HaClientArgs;
     client: MqttClient;
     nodeId: string;
     stopArtPublisher?: () => void;
@@ -84,13 +84,17 @@ const publish = (
     payload: string,
     opts: { retain?: boolean } = {},
 ): void => {
+    // mqtt.js stores every QoS-1 publish made while offline (unbounded) and
+    // replays them all on reconnect; the connect handler republishes
+    // availability, discovery, state and art fresh, so skip instead.
+    if (!client.connected) return;
     client.publish(topic, payload, { qos: 1, retain: opts.retain ?? false }, (err) => {
         if (err) warn('publish failed', { err: err.message, topic });
     });
 };
 
 const wire = (client: MqttClient, args: HaClientArgs, nodeId: string): void => {
-    const s: HaSession = { args, client, nodeId };
+    const s: HaSession = { client, nodeId };
     session = s;
 
     client.on('connect', () => {
@@ -127,19 +131,6 @@ const wire = (client: MqttClient, args: HaClientArgs, nodeId: string): void => {
 };
 
 export const startHaClient = (args: HaClientArgs): void => {
-    // Idempotent: a re-start with identical args keeps the live connection.
-    if (
-        session &&
-        session.args.brokerUrl === args.brokerUrl &&
-        session.args.brokerUsername === args.brokerUsername &&
-        session.args.brokerPassword === args.brokerPassword &&
-        session.args.roomKey === args.roomKey &&
-        session.args.deviceName === args.deviceName &&
-        session.args.peerId === args.peerId &&
-        session.args.userId === args.userId
-    ) {
-        return;
-    }
     stopHaClient();
     const myEpoch = ++epoch;
     const nodeId = haNodeId(args.peerId);
@@ -152,16 +143,13 @@ export const startHaClient = (args: HaClientArgs): void => {
         void buildNativeTcpStreamBuilder(args.brokerUrl, args.tls)
             .then((streamBuilder) => {
                 if (epoch !== myEpoch) return; // superseded/stopped during await
-                if (!streamBuilder) {
-                    wire(mqtt.connect(resolvedUrl, opts), args, nodeId);
-                    return;
-                }
-                const Ctor = (
-                    mqtt as unknown as {
-                        MqttClient: new (sb: unknown, o: IClientOptions) => MqttClient;
-                    }
-                ).MqttClient;
-                wire(new Ctor(streamBuilder, opts), args, nodeId);
+                wire(
+                    streamBuilder
+                        ? createStreamClient(streamBuilder, opts)
+                        : mqtt.connect(resolvedUrl, opts),
+                    args,
+                    nodeId,
+                );
             })
             .catch((err) => {
                 warn('native-tcp build failed; using ws', { err: (err as Error).message });
@@ -189,7 +177,12 @@ export const stopHaClient = (): void => {
     } catch (err) {
         warn('stop cleanup failed', { err: (err as Error).message });
     }
-    s.client.end(true);
+    // A forced end() destroys the stream in this same tick, discarding the
+    // publishes above (mqtt-packet corks each write until the next tick). End
+    // gracefully while connected so they reach the broker; stop applying
+    // inbound commands in the meantime.
+    s.client.removeAllListeners('message');
+    s.client.end(!s.client.connected);
 };
 
 export const isHaClientConnected = (): boolean => Boolean(session?.client.connected);

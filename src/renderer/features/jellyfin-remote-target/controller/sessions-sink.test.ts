@@ -124,6 +124,56 @@ describe('sessionsSink truncated-queue caching', () => {
         await new Promise((res) => setTimeout(res, 0));
         expect(hydrateSpy.mock.calls.length).toBe(2);
     });
+
+    it('re-hydrates an unchanged queue when the same device is picked again', async () => {
+        const queueIds = ['a', 'b', 'c'];
+        sessionsSink.apply([session('dev-1', queueIds)], fakeServer);
+        await new Promise((res) => setTimeout(res, 0));
+        expect(useRemoteTargetStore.getState().mirrored.queue).toHaveLength(3);
+
+        // Switch to local playback and back: setTarget installs an empty mirror.
+        const { actions } = useRemoteTargetStore.getState();
+        actions.clearTarget();
+        actions.setTarget({
+            capabilities: [],
+            deviceId: 'dev-1',
+            deviceName: 'Demo Session',
+            sessionId: 'sess-dev-1',
+        });
+        sessionsSink.apply([session('dev-1', queueIds)], fakeServer);
+        await new Promise((res) => setTimeout(res, 0));
+
+        const state = useRemoteTargetStore.getState();
+        expect(state.mirrored.queue.map((s) => s.id)).toEqual(queueIds);
+        expect(state.mirrored.queueIndex).toBe(0);
+    });
+
+    it('drops a queue hydrate that resolves after the user picked a different target', async () => {
+        const apiModule =
+            await import('/@/renderer/features/jellyfin-remote-target/api/remote-target-api');
+        const hydrateSpy = apiModule.remoteTargetApi.hydrateSongs as ReturnType<typeof vi.fn>;
+        let release: (songs: unknown[]) => void = () => {};
+        hydrateSpy.mockImplementationOnce(
+            () =>
+                new Promise((resolve) => {
+                    release = resolve;
+                }),
+        );
+
+        sessionsSink.apply([session('dev-1', ['a', 'b'])], fakeServer);
+        useRemoteTargetStore.getState().actions.setTarget({
+            capabilities: [],
+            deviceId: 'dev-2',
+            deviceName: 'Other',
+            sessionId: 'sess-dev-2',
+        });
+        release([{ id: 'a' }, { id: 'b' }]);
+        await new Promise((res) => setTimeout(res, 0));
+
+        const state = useRemoteTargetStore.getState();
+        expect(state.mirrored.queue).toEqual([]);
+        expect(state.mirrored.queueIndex).toBe(-1);
+    });
 });
 
 /**

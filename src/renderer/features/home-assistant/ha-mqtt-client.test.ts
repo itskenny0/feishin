@@ -10,6 +10,7 @@ const { client, handlers } = vi.hoisted(() => {
             return client;
         }),
         publish: vi.fn((_t: string, _p: string, _o: any, cb?: (e?: Error) => void) => cb?.()),
+        removeAllListeners: vi.fn(),
         subscribe: vi.fn((_t: string, _o: any, cb?: (e?: Error) => void) => cb?.()),
     };
     return { client, handlers };
@@ -29,8 +30,10 @@ vi.mock('./ha-state', () => ({ startHaStatePublisher: vi.fn(() => stopPublisher)
 vi.mock('./ha-art', () => ({ startHaArtPublisher: vi.fn(() => vi.fn()) }));
 vi.mock('./ha-commands', () => ({ applyHaCommand: vi.fn() }));
 
+import { startHaArtPublisher } from './ha-art';
 import { applyHaCommand } from './ha-commands';
 import { isHaClientConnected, startHaClient, stopHaClient } from './ha-mqtt-client';
+import { startHaStatePublisher } from './ha-state';
 
 const args = {
     brokerUrl: 'ws://broker:8083',
@@ -62,6 +65,25 @@ describe('ha-mqtt-client', () => {
             expect.anything(),
         );
         expect(isHaClientConnected()).toBe(true);
+    });
+
+    it('does not queue state/art publishes while the broker is unreachable', () => {
+        startHaClient(args);
+        handlers.connect?.();
+        const publishState = vi.mocked(startHaStatePublisher).mock.calls[0][0];
+        const publishArt = vi.mocked(startHaArtPublisher).mock.calls[0][0];
+        client.publish.mockClear();
+
+        // mqtt.js stores every QoS-1 publish made while offline and replays
+        // them all on reconnect; the connect handler republishes fresh state.
+        client.connected = false;
+        publishState('{"state":"playing"}');
+        publishArt('AAAA');
+        expect(client.publish).not.toHaveBeenCalled();
+
+        client.connected = true;
+        publishState('{"state":"playing"}');
+        expect(client.publish).toHaveBeenCalledTimes(1);
     });
 
     it('routes inbound cmd topics to applyHaCommand', () => {

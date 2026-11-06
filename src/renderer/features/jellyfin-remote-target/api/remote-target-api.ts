@@ -119,26 +119,10 @@ export const remoteTargetApi = {
     },
 
     /**
-     * Fetch every session the current user can control. The Jellyfin API
-     * returns sessions for the *authenticated* user; ControllableByUserId
-     * filters to ones the user has permission to drive.
-     */
-    listSessions: async (args: ServerArg): Promise<RemoteDevice[]> => {
-        const userId = args.server.userId;
-        if (!userId) return [];
-        const res = await jfApiClient({ server: args.server }).getSessions({
-            query: { ControllableByUserId: userId },
-        });
-        assertOk('GET /Sessions', res);
-        if (!Array.isArray(res.body)) return [];
-        return res.body
-            .map((s) => safeSessionToDevice(s))
-            .filter((d): d is RemoteDevice => Boolean(d));
-    },
-
-    /**
-     * Like listSessions but also returns the matching raw session object so
-     * callers can read fields not in RemoteDevice (e.g. NowPlayingQueue).
+     * Fetch every session the current user can control (ControllableByUserId
+     * filters to ones the user has permission to drive), plus each matching
+     * raw session object so callers can read fields not in RemoteDevice (e.g.
+     * NowPlayingQueue).
      *
      * Throws on non-2xx so the poller can show an error banner instead of
      * silently looking like there are simply no devices.
@@ -212,7 +196,6 @@ export const remoteTargetApi = {
     sendPlaystate: async (
         args: ServerArg & {
             command: RemotePlaystateCommand;
-            playlistIndex?: number;
             seekPositionTicks?: number;
             sessionId: string;
         },
@@ -220,10 +203,7 @@ export const remoteTargetApi = {
         const res = await jfApiClient({ server: args.server }).postPlayingCommand({
             body: null,
             params: { command: args.command, sessionId: args.sessionId },
-            query: {
-                PlaylistIndex: args.playlistIndex,
-                SeekPositionTicks: args.seekPositionTicks,
-            },
+            query: { SeekPositionTicks: args.seekPositionTicks },
         });
         assertOk(`Playstate:${args.command}`, res);
     },

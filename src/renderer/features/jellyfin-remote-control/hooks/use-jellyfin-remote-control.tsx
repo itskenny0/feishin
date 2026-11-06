@@ -3,13 +3,9 @@ import { shallow } from 'zustand/shallow';
 
 import packageJson from '../../../../../package.json';
 
-import {
-    createAuthHeader,
-    getDeviceLabel,
-    jfApiClient,
-} from '/@/renderer/api/jellyfin/jellyfin-api';
-import { JF_FIELDS } from '/@/renderer/api/jellyfin/jellyfin-controller';
+import { createAuthHeader, getDeviceLabel } from '/@/renderer/api/jellyfin/jellyfin-api';
 import { JellyfinRemoteController } from '/@/renderer/features/jellyfin-remote-control/controller/jellyfin-remote-controller';
+import { remoteTargetApi } from '/@/renderer/features/jellyfin-remote-target/api/remote-target-api';
 import { sessionsSink } from '/@/renderer/features/jellyfin-remote-target/controller/sessions-sink';
 import { useAuthStore } from '/@/renderer/store/auth.store';
 import { usePlayerActions } from '/@/renderer/store/player.store';
@@ -19,8 +15,7 @@ import {
     useVolumeWheelStep,
 } from '/@/renderer/store/settings.store';
 import { getServerUrl } from '/@/renderer/utils/normalize-server-url';
-import { jfNormalize } from '/@/shared/api/jellyfin/jellyfin-normalize';
-import { ServerType, Song } from '/@/shared/types/domain-types';
+import { ServerType } from '/@/shared/types/domain-types';
 
 const controller = new JellyfinRemoteController();
 
@@ -61,29 +56,9 @@ export const useJellyfinRemoteControl = () => {
         const token = currentServer.credential;
         const authHeader = `${createAuthHeader()}, Token="${token}"`;
 
-        const fetchSongsByIds = async (itemIds: string[]): Promise<Song[]> => {
-            if (!currentServer.userId || itemIds.length === 0) return [];
-            try {
-                const res = await jfApiClient({ server: currentServer }).getSongList({
-                    params: { userId: currentServer.userId },
-                    query: {
-                        Fields: JF_FIELDS.SONG,
-                        Ids: itemIds.join(','),
-                        IncludeItemTypes: 'Audio',
-                        Limit: itemIds.length,
-                        Recursive: true,
-                    },
-                });
-                if (res.status !== 200) return [];
-                const byId = new Map(
-                    res.body.Items.map((item) => [item.Id, jfNormalize.song(item, currentServer)]),
-                );
-                return itemIds.map((id) => byId.get(id)).filter((s): s is Song => Boolean(s));
-            } catch (err) {
-                console.warn('[jellyfin-remote] fetchSongsByIds failed', err);
-                return [];
-            }
-        };
+        // A rejection is logged + toasted by the dispatcher.
+        const fetchSongsByIds = (itemIds: string[]) =>
+            remoteTargetApi.hydrateSongs({ itemIds, server: currentServer });
 
         // Wrap player actions so the dispatcher reads the latest reference at
         // dispatch time, not at start() time — settings/store updates after

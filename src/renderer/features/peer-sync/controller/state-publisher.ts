@@ -196,9 +196,7 @@ const buildCurrentState = () => {
     const qIds = order.slice(0, MAX_QUEUE_IDS).map((s) => s.id);
     // Resolve the now-playing item's position in default order by _uniqueId so
     // shuffle ON doesn't ship a shuffled position.
-    const qIdx = song
-        ? state.getQueueOrder().items.findIndex((s) => s._uniqueId === song._uniqueId)
-        : -1;
+    const qIdx = song ? order.findIndex((s) => s._uniqueId === song._uniqueId) : -1;
 
     // BUG 1: the controller can't derive the ACTUAL next track from `qIds`
     // (default order) when the target has shuffle on — `qIds[qIdx + 1]` is the
@@ -247,7 +245,7 @@ const buildCurrentState = () => {
         qIdx: qIds.length > 0 ? qIdx : undefined,
         rate: state.player.speed,
         rep: repeatToWire(state.player.repeat),
-        shuf: state.player.shuffle === PlayerShuffle.TRACK,
+        shuf: shuffleOn,
         track: toPeerTrack(song),
         vol: state.player.volume,
     });

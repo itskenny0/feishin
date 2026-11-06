@@ -2,25 +2,13 @@ import type { RemoteDevice } from '/@/renderer/features/jellyfin-remote-target/t
 import type { ServerListItemWithCredential } from '/@/shared/types/domain-types';
 
 import { safeSessionToDevice } from '/@/renderer/features/jellyfin-remote-target/api/remote-target-api';
+import { perfConnect } from '/@/renderer/features/jellyfin-remote-target/controller/perf-connect';
 import {
     findSessionForDevice,
     mirrorSession,
 } from '/@/renderer/features/jellyfin-remote-target/controller/remote-state-mirror';
 import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
 import { pickTransportByJellyfinDeviceId } from '/@/renderer/features/peer-sync/controller/transport-selector';
-
-const perfDebug = (): boolean => {
-    try {
-        return typeof localStorage !== 'undefined' && localStorage.getItem('perf.connect') === '1';
-    } catch {
-        return false;
-    }
-};
-
-const perfMark = (label: string, payload: Record<string, unknown>): void => {
-    if (!perfDebug()) return;
-    console.info('[perf.connect]', label, { ts: performance.now(), ...payload });
-};
 
 /**
  * Shared sessions-sink used by BOTH the WS push handler and the poller.
@@ -68,6 +56,14 @@ class SessionsSink {
             // offline" transition because it knows about time. Push just
             // means "the current snapshot doesn't include this device".
             return;
+        }
+
+        // 'connecting' / 'transferring' only follow a fresh pick, whose setTarget
+        // installed an empty mirror. Drop the device's id cache so re-attaching
+        // to a device whose queue is unchanged still hydrates it - otherwise the
+        // queue panel stays empty until the target's queue changes.
+        if (state.status === 'connecting' || state.status === 'transferring') {
+            delete this.prevQueueIdsByDevice[match.deviceId];
         }
 
         if (state.sessionId !== match.sessionId) {
@@ -123,7 +119,7 @@ class SessionsSink {
 
         const raw = rawsBySessionId[match.sessionId];
         const mirror = mirrorSession(raw, server, this.prevQueueIdsByDevice[match.deviceId] ?? []);
-        perfMark('mirror.apply.jellyfin', {
+        perfConnect('mirror.apply.jellyfin', {
             isPaused: mirror.mirrored.playState?.isPaused,
             positionMs: mirror.mirrored.playState?.positionMs,
             volume: mirror.mirrored.playState?.volume,
@@ -157,6 +153,9 @@ class SessionsSink {
             void mirror
                 .hydrateQueue()
                 .then((queue) => {
+                    // The user may have picked another target while this was in
+                    // flight; never paint this device's queue into its mirror.
+                    if (useRemoteTargetStore.getState().targetDeviceId !== match.deviceId) return;
                     // queue list is fresh metadata; queueIndex routes through the
                     // hold-aware path (Finding 1).
                     actions.setMirrored({ queue });

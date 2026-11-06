@@ -45,6 +45,20 @@ const components = (nodeId: string): Component[] => {
         config: { command_topic: haCmdTopic(nodeId, objectId), name, payload_press: 'PRESS' },
         objectId,
     });
+    // HA's Jinja renders a JSON boolean as "True"/"False", which never matches
+    // a lowercase payload_on/off, so the template emits the payloads itself.
+    const toggle = (objectId: HaCommandVerb, name: string, field: string): Component => ({
+        component: 'switch',
+        config: {
+            command_topic: haCmdTopic(nodeId, objectId),
+            name,
+            payload_off: 'false',
+            payload_on: 'true',
+            state_topic: state,
+            value_template: `{{ 'true' if value_json.${field} else 'false' }}`,
+        },
+        objectId,
+    });
     return [
         sensor('state', 'State', 'state'),
         sensor('title', 'Title', 'title'),
@@ -87,30 +101,8 @@ const components = (nodeId: string): Component[] => {
             },
             objectId: 'volume',
         },
-        {
-            component: 'switch',
-            config: {
-                command_topic: haCmdTopic(nodeId, 'mute'),
-                name: 'Mute',
-                payload_off: 'false',
-                payload_on: 'true',
-                state_topic: state,
-                value_template: '{{ value_json.muted }}',
-            },
-            objectId: 'mute',
-        },
-        {
-            component: 'switch',
-            config: {
-                command_topic: haCmdTopic(nodeId, 'shuffle'),
-                name: 'Shuffle',
-                payload_off: 'false',
-                payload_on: 'true',
-                state_topic: state,
-                value_template: '{{ value_json.shuffle }}',
-            },
-            objectId: 'shuffle',
-        },
+        toggle('mute', 'Mute', 'muted'),
+        toggle('shuffle', 'Shuffle', 'shuffle'),
         {
             component: 'select',
             config: {

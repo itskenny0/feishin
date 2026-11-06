@@ -95,7 +95,6 @@ export class JellyfinRemoteController {
      */
     private keepaliveIntervalMs = DEFAULT_KEEPALIVE_INTERVAL_MS;
     private keepaliveTimer: null | ReturnType<typeof setInterval> = null;
-    private lastSocketOpenedAt = 0;
     private reconnectTimer: null | ReturnType<typeof setTimeout> = null;
     private startArgs: ControllerStartArgs | null = null;
     private ws: null | WebSocket = null;
@@ -186,6 +185,10 @@ export class JellyfinRemoteController {
             return;
         }
         this.ws = socket;
+        // Per-socket so a retry that never opens can't inherit the uptime of an
+        // earlier long-lived socket (which reset the ladder on every failed
+        // retry and pinned reconnects at the 1s rung forever).
+        let openedAt = 0;
 
         debug('opening socket', safeUrl(url));
 
@@ -201,7 +204,7 @@ export class JellyfinRemoteController {
                 return;
             }
             info('socket open');
-            this.lastSocketOpenedAt = Date.now();
+            openedAt = Date.now();
             this.attempt = 0;
             this.keepaliveIntervalMs = DEFAULT_KEEPALIVE_INTERVAL_MS;
             this.armKeepalive(socket);
@@ -311,15 +314,11 @@ export class JellyfinRemoteController {
                 this.keepaliveTimer = null;
             }
             this.ws = null;
-            // Sustained uptime resets the backoff so a server returning from
-            // a long outage doesn't get stuck at the 30s cap forever. Guard
-            // against `lastSocketOpenedAt === 0` (socket never opened) so a
-            // stream of pre-open failures doesn't masquerade as "we've been
-            // happily connected for ages, reset the counter".
-            if (
-                this.lastSocketOpenedAt > 0 &&
-                Date.now() - this.lastSocketOpenedAt > MIN_SUCCESS_UPTIME_MS
-            ) {
+            // Sustained uptime of THIS socket resets the backoff so a server
+            // returning from a long outage doesn't get stuck at the 30s cap
+            // forever. A socket that never opened (`openedAt === 0`) must not
+            // masquerade as "we've been happily connected for ages".
+            if (openedAt > 0 && Date.now() - openedAt > MIN_SUCCESS_UPTIME_MS) {
                 this.attempt = 0;
             }
             if (!this.isStopped) this.scheduleReconnect(gen);

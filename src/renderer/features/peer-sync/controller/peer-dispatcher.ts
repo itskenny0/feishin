@@ -212,14 +212,14 @@ export const peerDispatcher = {
         route(
             ctx,
             () => fireMqtt(ctx.peer, buildCommand('next')),
-            () => void commandDispatcher.next({ server: ctx.server, sessionId: ctx.sessionId }),
+            () => void commandDispatcher.next(ctx),
         ),
 
     pause: (ctx: PeerDispatcherCtx): void =>
         route(
             ctx,
             () => fireMqtt(ctx.peer, buildCommand('pause')),
-            () => void commandDispatcher.pause({ server: ctx.server, sessionId: ctx.sessionId }),
+            () => void commandDispatcher.pause(ctx),
         ),
 
     play: (
@@ -239,13 +239,10 @@ export const peerDispatcher = {
                 // the bare-`play` shape (receiver's `case 'play'` handles
                 // both: itemIds present = queue-replace, absent = resume).
                 if (!args) {
-                    void commandDispatcher.unpause({
-                        server: ctx.server,
-                        sessionId: ctx.sessionId,
-                    });
+                    void commandDispatcher.unpause(ctx);
                     return;
                 }
-                void commandDispatcher.play({ server: ctx.server, sessionId: ctx.sessionId }, args);
+                void commandDispatcher.play(ctx, args);
             },
         ),
 
@@ -253,11 +250,7 @@ export const peerDispatcher = {
         route(
             ctx,
             () => fireMqtt(ctx.peer, buildCommand('prev')),
-            () =>
-                void commandDispatcher.previous({
-                    server: ctx.server,
-                    sessionId: ctx.sessionId,
-                }),
+            () => void commandDispatcher.previous(ctx),
         ),
 
     /**
@@ -303,11 +296,7 @@ export const peerDispatcher = {
                 coalesceMqtt(`${ctx.peer.peerId}:seek`, () =>
                     fireMqtt(ctx.peer, buildCommand('seek', { positionMs })),
                 ),
-            () =>
-                commandDispatcher.seek(
-                    { server: ctx.server, sessionId: ctx.sessionId },
-                    positionMs,
-                ),
+            () => commandDispatcher.seek(ctx, positionMs),
         ),
 
     /**
@@ -321,11 +310,7 @@ export const peerDispatcher = {
         route(
             ctx,
             () => fireMqtt(ctx.peer, buildCommand('mute', { mute })),
-            () =>
-                void commandDispatcher.setMute(
-                    { server: ctx.server, sessionId: ctx.sessionId },
-                    mute,
-                ),
+            () => void commandDispatcher.setMute(ctx, mute),
         ),
 
     /**
@@ -339,22 +324,14 @@ export const peerDispatcher = {
         route(
             ctx,
             () => fireMqtt(ctx.peer, buildCommand('repeat', { mode })),
-            () =>
-                void commandDispatcher.setRepeat(
-                    { server: ctx.server, sessionId: ctx.sessionId },
-                    peerToJellyfinRepeat(mode),
-                ),
+            () => void commandDispatcher.setRepeat(ctx, peerToJellyfinRepeat(mode)),
         ),
 
     setShuffle: (ctx: PeerDispatcherCtx, shuffle: boolean): void =>
         route(
             ctx,
             () => fireMqtt(ctx.peer, buildCommand('shuffle', { shuffle })),
-            () =>
-                void commandDispatcher.setShuffle(
-                    { server: ctx.server, sessionId: ctx.sessionId },
-                    shuffle,
-                ),
+            () => void commandDispatcher.setShuffle(ctx, shuffle),
         ),
 
     setVolume: (ctx: PeerDispatcherCtx, volume: number): void =>
@@ -365,11 +342,7 @@ export const peerDispatcher = {
                 coalesceMqtt(`${ctx.peer.peerId}:volume`, () =>
                     fireMqtt(ctx.peer, buildCommand('volume', { volume })),
                 ),
-            () =>
-                commandDispatcher.setVolume(
-                    { server: ctx.server, sessionId: ctx.sessionId },
-                    volume,
-                ),
+            () => commandDispatcher.setVolume(ctx, volume),
         ),
 
     /**
@@ -382,11 +355,7 @@ export const peerDispatcher = {
         route(
             ctx,
             () => fireMqtt(ctx.peer, buildCommand('playIndex', { index })),
-            () =>
-                void commandDispatcher.skipToIndex(
-                    { server: ctx.server, sessionId: ctx.sessionId },
-                    index,
-                ),
+            () => void commandDispatcher.skipToIndex(ctx, index),
         ),
 
     /** Stop playback and clear the queue on the target. */
@@ -394,7 +363,7 @@ export const peerDispatcher = {
         route(
             ctx,
             () => fireMqtt(ctx.peer, buildCommand('stop')),
-            () => void commandDispatcher.stop({ server: ctx.server, sessionId: ctx.sessionId }),
+            () => void commandDispatcher.stop(ctx),
         ),
 
     /**
@@ -407,11 +376,7 @@ export const peerDispatcher = {
         route(
             ctx,
             () => fireMqtt(ctx.peer, buildCommand('togglePause')),
-            () =>
-                void commandDispatcher.togglePause({
-                    server: ctx.server,
-                    sessionId: ctx.sessionId,
-                }),
+            () => void commandDispatcher.togglePause(ctx),
         ),
 
     /**
@@ -422,6 +387,6 @@ export const peerDispatcher = {
         route(
             ctx,
             () => fireMqtt(ctx.peer, buildCommand('play')),
-            () => void commandDispatcher.unpause({ server: ctx.server, sessionId: ctx.sessionId }),
+            () => void commandDispatcher.unpause(ctx),
         ),
 };

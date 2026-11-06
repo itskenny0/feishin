@@ -45,7 +45,12 @@ import { useAuthStore } from '/@/renderer/store/auth.store';
 import { usePlayerStoreBase } from '/@/renderer/store/player.store';
 import { useSettingsStore } from '/@/renderer/store/settings.store';
 import { toast } from '/@/shared/components/toast/toast';
-import { QueueSong, ServerType } from '/@/shared/types/domain-types';
+import {
+    QueueSong,
+    ServerListItemWithCredential,
+    ServerType,
+    Song,
+} from '/@/shared/types/domain-types';
 import { Play, PlayerRepeat, PlayerShuffle } from '/@/shared/types/types';
 
 const log = (...args: unknown[]) => console.info('[peer-sync]', ...args);
@@ -427,78 +432,91 @@ const applyQueueReplace = (
         warn('dropped cmd: no jellyfin session for queue', { from: from.peerId });
         return { reason: 'dropped-unsupported' };
     }
-    // Lazy import to avoid pulling the JF API surface into a unit test
-    // that only exercises the synchronous verb mapping.
+    hydrateThenApply(auth, args.itemIds, from, '', (songs) => {
+        const pc = args.playCommand;
+        const store = usePlayerStoreBase.getState();
+        if (pc === 'PlayNext' || pc === 'PlayLast') {
+            // PlayNext/PlayLast must APPEND (mirroring the Jellyfin
+            // lane's PlayCommand + applyQueueInsert's cold-queue path).
+            // Only PlayNow/undefined performs a full replace.
+            const order = store.getQueueOrder().items;
+            if (order.length === 0) {
+                // Cold queue: nothing to insert after, so fall back to
+                // setQueue (same as applyQueueInsert's cold-queue path).
+                store.setQueue(songs, 0, 0);
+            } else {
+                store.addToQueueByType(songs, pc === 'PlayNext' ? Play.NEXT : Play.LAST);
+            }
+            log('apply cmd queue (append)', {
+                count: songs.length,
+                mode: pc,
+                peerId: from.peerId,
+            });
+        } else {
+            // PlayNow / undefined: REPLACE the queue AND start playback.
+            // BUG 2: the old path called `setQueue`, which loads the
+            // queue and flips status to PLAYING but emits only
+            // QUEUE_RESTORED — it never fires the PLAYER_PLAY event the
+            // engines use to actually (re)load + start the current
+            // track. The result was "remote play only enqueues, doesn't
+            // play". Route through `addToQueueByType(Play.NOW)` — the
+            // exact action a local "Play now" runs — which emits
+            // PLAYER_PLAY via emitPlayerPlayEvent so the target starts
+            // playing the selected track immediately. `startIndex` is
+            // honoured by resolving it to the song id at that position
+            // (Play.NOW seeks to `playSongId`).
+            const startIndex =
+                typeof args.startIndex === 'number' &&
+                Number.isFinite(args.startIndex) &&
+                args.startIndex >= 0 &&
+                args.startIndex < songs.length
+                    ? args.startIndex
+                    : 0;
+            const playSongId = songs[startIndex]?.id;
+            store.addToQueueByType(songs, Play.NOW, playSongId);
+            log('apply cmd queue (play now)', {
+                count: songs.length,
+                peerId: from.peerId,
+                startIndex,
+            });
+        }
+    });
+    return { reason: 'applied' };
+};
+
+/**
+ * Hydrate `itemIds` off the synchronous apply path, then run `apply` inside
+ * the inbound-apply window. Lazy import to avoid pulling the JF API surface
+ * into a unit test that only exercises the synchronous verb mapping.
+ * `suffix` tags the drop warnings with the verb.
+ */
+const hydrateThenApply = (
+    auth: ServerListItemWithCredential,
+    itemIds: string[],
+    from: PeerAddress,
+    suffix: string,
+    apply: (songs: Song[]) => void,
+): void => {
     void import('/@/renderer/features/jellyfin-remote-target/api/remote-target-api')
         .then(async (mod) => {
             try {
-                const songs = await mod.remoteTargetApi.hydrateSongs({
-                    itemIds: args.itemIds,
-                    server: auth,
-                });
+                const songs = await mod.remoteTargetApi.hydrateSongs({ itemIds, server: auth });
                 if (songs.length === 0) {
-                    warn('dropped cmd: hydrate returned empty', { from: from.peerId });
+                    warn(`dropped cmd: hydrate returned empty${suffix}`, { from: from.peerId });
                     return;
                 }
-                const pc = args.playCommand;
                 markInboundApply();
-                const store = usePlayerStoreBase.getState();
-                if (pc === 'PlayNext' || pc === 'PlayLast') {
-                    // PlayNext/PlayLast must APPEND (mirroring the Jellyfin
-                    // lane's PlayCommand + applyQueueInsert's cold-queue path).
-                    // Only PlayNow/undefined performs a full replace.
-                    const order = store.getQueueOrder().items;
-                    if (order.length === 0) {
-                        // Cold queue: nothing to insert after, so fall back to
-                        // setQueue (same as applyQueueInsert's cold-queue path).
-                        store.setQueue(songs, 0, 0);
-                    } else {
-                        store.addToQueueByType(songs, pc === 'PlayNext' ? Play.NEXT : Play.LAST);
-                    }
-                    log('apply cmd queue (append)', {
-                        count: songs.length,
-                        mode: pc,
-                        peerId: from.peerId,
-                    });
-                } else {
-                    // PlayNow / undefined: REPLACE the queue AND start playback.
-                    // BUG 2: the old path called `setQueue`, which loads the
-                    // queue and flips status to PLAYING but emits only
-                    // QUEUE_RESTORED — it never fires the PLAYER_PLAY event the
-                    // engines use to actually (re)load + start the current
-                    // track. The result was "remote play only enqueues, doesn't
-                    // play". Route through `addToQueueByType(Play.NOW)` — the
-                    // exact action a local "Play now" runs — which emits
-                    // PLAYER_PLAY via emitPlayerPlayEvent so the target starts
-                    // playing the selected track immediately. `startIndex` is
-                    // honoured by resolving it to the song id at that position
-                    // (Play.NOW seeks to `playSongId`).
-                    const startIndex =
-                        typeof args.startIndex === 'number' &&
-                        Number.isFinite(args.startIndex) &&
-                        args.startIndex >= 0 &&
-                        args.startIndex < songs.length
-                            ? args.startIndex
-                            : 0;
-                    const playSongId = songs[startIndex]?.id;
-                    store.addToQueueByType(songs, Play.NOW, playSongId);
-                    log('apply cmd queue (play now)', {
-                        count: songs.length,
-                        peerId: from.peerId,
-                        startIndex,
-                    });
-                }
+                apply(songs);
             } catch (err) {
-                warn('dropped cmd: hydrate failed', {
+                warn(`dropped cmd: hydrate failed${suffix}`, {
                     err: (err as Error).message,
                     from: from.peerId,
                 });
             }
         })
         .catch((err) => {
-            warn('dropped cmd: import failed', { err: (err as Error).message });
+            warn(`dropped cmd: import failed${suffix}`, { err: (err as Error).message });
         });
-    return { reason: 'applied' };
 };
 
 /**
@@ -518,58 +536,36 @@ const applyQueueInsert = (index: number, itemIds: string[], from: PeerAddress): 
         warn('dropped cmd: no jellyfin session for queueInsert', { from: from.peerId });
         return { reason: 'dropped-unsupported' };
     }
-    void import('/@/renderer/features/jellyfin-remote-target/api/remote-target-api')
-        .then(async (mod) => {
-            try {
-                const songs = await mod.remoteTargetApi.hydrateSongs({
-                    itemIds,
-                    server: auth,
-                });
-                if (songs.length === 0) {
-                    warn('dropped cmd: hydrate returned empty (queueInsert)', {
-                        from: from.peerId,
-                    });
-                    return;
-                }
-                markInboundApply();
-                const store = usePlayerStoreBase.getState();
-                const order = store.getQueueOrder().items;
-                // Cold queue: just append. addToQueueByUniqueId needs an
-                // existing anchor uniqueId to slot against, which there
-                // isn't one of in an empty queue.
-                if (order.length === 0) {
-                    store.addToQueueByType(songs, Play.LAST);
-                    log('apply cmd queueInsert (cold)', {
-                        count: songs.length,
-                        peerId: from.peerId,
-                    });
-                    return;
-                }
-                // Bound `index` into [0, order.length] — a publisher that
-                // overshoots gets pinned to the tail rather than dropped.
-                const safe = Math.min(Math.max(0, Math.floor(index)), order.length);
-                if (safe >= order.length) {
-                    const anchor = order[order.length - 1];
-                    store.addToQueueByUniqueId(songs, anchor._uniqueId, 'bottom');
-                } else {
-                    const anchor = order[safe];
-                    store.addToQueueByUniqueId(songs, anchor._uniqueId, 'top');
-                }
-                log('apply cmd queueInsert', {
-                    count: songs.length,
-                    index: safe,
-                    peerId: from.peerId,
-                });
-            } catch (err) {
-                warn('dropped cmd: hydrate failed (queueInsert)', {
-                    err: (err as Error).message,
-                    from: from.peerId,
-                });
-            }
-        })
-        .catch((err) => {
-            warn('dropped cmd: import failed (queueInsert)', { err: (err as Error).message });
+    hydrateThenApply(auth, itemIds, from, ' (queueInsert)', (songs) => {
+        const store = usePlayerStoreBase.getState();
+        const order = store.getQueueOrder().items;
+        // Cold queue: just append. addToQueueByUniqueId needs an
+        // existing anchor uniqueId to slot against, which there
+        // isn't one of in an empty queue.
+        if (order.length === 0) {
+            store.addToQueueByType(songs, Play.LAST);
+            log('apply cmd queueInsert (cold)', {
+                count: songs.length,
+                peerId: from.peerId,
+            });
+            return;
+        }
+        // Bound `index` into [0, order.length] — a publisher that
+        // overshoots gets pinned to the tail rather than dropped.
+        const safe = Math.min(Math.max(0, Math.floor(index)), order.length);
+        if (safe >= order.length) {
+            const anchor = order[order.length - 1];
+            store.addToQueueByUniqueId(songs, anchor._uniqueId, 'bottom');
+        } else {
+            const anchor = order[safe];
+            store.addToQueueByUniqueId(songs, anchor._uniqueId, 'top');
+        }
+        log('apply cmd queueInsert', {
+            count: songs.length,
+            index: safe,
+            peerId: from.peerId,
         });
+    });
     return { reason: 'applied' };
 };
 

@@ -83,13 +83,17 @@ export const startHaArtPublisher = (publish: (base64: string) => void): (() => v
         lastKey = key;
         if (!current) return; // nothing playing — leave the last retained art
         void fetchArtBase64(current).then((b64) => {
-            if (b64) {
-                publish(b64);
-                log('art published', { bytes: b64.length });
-            }
+            // A slower fetch for a previous track (or one still in flight at
+            // stop) must not overwrite the retained art for the current one.
+            if (!b64 || key !== lastKey) return;
+            publish(b64);
+            log('art published', { bytes: b64.length });
         });
     };
     const unsub = usePlayerStoreBase.subscribe(run);
     run();
-    return unsub;
+    return () => {
+        unsub();
+        lastKey = '<stopped>';
+    };
 };

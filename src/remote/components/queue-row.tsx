@@ -102,6 +102,13 @@ export const QueueRow = ({
                 dragListener={false}
                 onDrag={(_, info) => dragReorder.updateDrag(info)}
                 onDragEnd={handleReorderDragEnd}
+                // Begin on the pan, not on pointer-down: motion never calls
+                // onDragEnd for a tap, which left the reorder (and the queue
+                // page's freeze on server resyncs) stuck on.
+                onDragStart={() => {
+                    onReorderDragStart();
+                    dragReorder.startDrag(item.uniqueId, index);
+                }}
                 style={{ y }}
             >
                 <div className={styles['delete-background']}>
@@ -173,8 +180,6 @@ export const QueueRow = ({
                             // first, before that listener ever sees the event.
                             onPointerDownCapture={(e) => {
                                 e.stopPropagation();
-                                onReorderDragStart();
-                                dragReorder.startDrag(item.uniqueId, index);
                                 dragControls.start(e);
                             }}
                         >

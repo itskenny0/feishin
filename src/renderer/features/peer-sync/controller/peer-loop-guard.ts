@@ -16,13 +16,10 @@
  * apply, so a rapid burst of inbound commands stays suppressed until
  * the burst itself ends.
  *
- * Status: LATENT but wired. `publishOwnState` (peer-client.ts) — the only
- * state publisher — now consults `isInboundApplyActive` and skips during
- * the window, so the suppression is enforced at the single publish
- * chokepoint. No live caller subscribes the player store to
- * `publishOwnState` yet, so no echo can actually occur today; the moment a
- * follow-up sprint wires that subscription, the guard is already correct
- * regardless of how the subscription is written.
+ * `publishOwnState` (peer-client.ts) - the only state publisher, driven by
+ * state-publisher.ts's player/timestamp store subscriptions - consults
+ * `isInboundApplyActive` and skips during the window, so the suppression is
+ * enforced at the single publish chokepoint.
  *
  * 200ms is well above the round-trip from store mutation → next subscribe
  * callback (sub-millisecond on a modern machine) and well below the

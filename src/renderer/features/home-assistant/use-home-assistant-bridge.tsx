@@ -20,11 +20,12 @@ export const useHomeAssistantBridge = (): void => {
     const deviceName = peerSync.homeAssistant?.deviceName ?? '';
     const brokerUrl = peerSync.brokerUrl?.trim() ?? '';
     const { brokerPassword, brokerUsername, peerId, transport } = peerSync;
-    // A peerSync.roomKeyOverride (when set) REPLACES the room identity — mirror
-    // the peer-sync hook so the HA bridge joins the SAME overridden room
-    // (namespace + broker auth) instead of the signed-in account's default.
+    // Mirror the peer-sync hook's room identity: the namespace is the Jellyfin
+    // user id and the broker auth password is the username (the persisted
+    // `peerSync.roomKey` is vestigial and always ''), unless a
+    // peerSync.roomKeyOverride replaces both.
     const roomKeyOverride = peerSync.roomKeyOverride?.trim() || '';
-    const roomKey = roomKeyOverride || peerSync.roomKey;
+    const roomKey = roomKeyOverride || (server?.username ?? '');
     const userId = roomKeyOverride || (server?.userId ?? '');
 
     useEffect(() => {

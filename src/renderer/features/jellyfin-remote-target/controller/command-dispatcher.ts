@@ -1,4 +1,7 @@
-import type { RemotePlayCommand } from '/@/renderer/features/jellyfin-remote-target/types';
+import type {
+    RemotePlayCommand,
+    RemotePlaystateCommand,
+} from '/@/renderer/features/jellyfin-remote-target/types';
 import type { ServerListItemWithCredential } from '/@/shared/types/domain-types';
 
 import i18n from '/@/i18n/i18n';
@@ -6,6 +9,7 @@ import {
     RemoteCommandError,
     remoteTargetApi,
 } from '/@/renderer/features/jellyfin-remote-target/api/remote-target-api';
+import { perfConnect } from '/@/renderer/features/jellyfin-remote-target/controller/perf-connect';
 import { sessionsPoller } from '/@/renderer/features/jellyfin-remote-target/controller/sessions-poller';
 import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
 import { useSettingsStore } from '/@/renderer/store/settings.store';
@@ -22,25 +26,9 @@ const log = (label: string, payload: unknown) => {
     console.log('[remote-target] →', label, payload);
 };
 
-const perfDebug = (): boolean => {
-    try {
-        return typeof localStorage !== 'undefined' && localStorage.getItem('perf.connect') === '1';
-    } catch {
-        return false;
-    }
-};
-
+// Threads dispatch start -> publish complete perf traces so a burst can be
+// untangled in DevTools.
 let nextDispatchId = 0;
-
-/**
- * Emit a perf trace tied to a single command. The dispatch id threads through
- * dispatch start → publish complete so a burst can be untangled in DevTools.
- * Behind localStorage['perf.connect']==='1' so it's free in normal runs.
- */
-const perfMark = (label: string, payload: Record<string, unknown>): void => {
-    if (!perfDebug()) return;
-    console.info('[perf.connect]', label, { ts: performance.now(), ...payload });
-};
 
 const notifyDispatched = (): void => {
     try {
@@ -133,7 +121,7 @@ const wrap =
         const t0 = performance.now();
         const ctx = args[0];
         const sessionId = ctx?.sessionId ?? '';
-        perfMark('dispatch.start', { id, label, sessionId });
+        perfConnect('dispatch.start', { id, label, sessionId });
         // Tell the poller to flip into fast-poll mode immediately so the
         // truthful state mirror lands well within the optimistic-hold
         // window. We do this BEFORE the await so the bookkeeping is set
@@ -141,7 +129,7 @@ const wrap =
         notifyDispatched();
         try {
             await fn(...args);
-            perfMark('dispatch.done', {
+            perfConnect('dispatch.done', {
                 durMs: Math.round(performance.now() - t0),
                 id,
                 label,
@@ -156,14 +144,14 @@ const wrap =
                 try {
                     await new Promise<void>((res) => setTimeout(res, 250));
                     await fn(...args);
-                    perfMark('dispatch.done.retry', {
+                    perfConnect('dispatch.done.retry', {
                         durMs: Math.round(performance.now() - t0),
                         id,
                         label,
                     });
                     return;
                 } catch (retryErr) {
-                    perfMark('dispatch.error.retry', {
+                    perfConnect('dispatch.error.retry', {
                         durMs: Math.round(performance.now() - t0),
                         id,
                         label,
@@ -172,7 +160,7 @@ const wrap =
                     return;
                 }
             }
-            perfMark('dispatch.error', {
+            perfConnect('dispatch.error', {
                 durMs: Math.round(performance.now() - t0),
                 id,
                 label,
@@ -225,7 +213,7 @@ const coalesceTrailing = <Args extends unknown[]>(
                 const next = slot.pending;
                 slot.pending = null;
                 void run(key, next);
-            } else if (!slot.inFlight) {
+            } else {
                 // Free the slot once it's truly idle so a long-lived process
                 // doesn't accumulate a per-sessionId map entry forever.
                 slots.delete(key);
@@ -246,24 +234,21 @@ const coalesceTrailing = <Args extends unknown[]>(
 
 const ctxKey = (ctx: DispatcherCtx, ..._rest: unknown[]): string => ctx.sessionId;
 
-export const commandDispatcher = {
-    next: wrap('NextTrack', async (ctx: DispatcherCtx): Promise<void> => {
-        log('NextTrack', { sessionId: ctx.sessionId });
+/** An argument-less Playstate verb; the dispatch label is the command name. */
+const playstate = (command: RemotePlaystateCommand) =>
+    wrap(command, async (ctx: DispatcherCtx): Promise<void> => {
+        log(command, { sessionId: ctx.sessionId });
         await remoteTargetApi.sendPlaystate({
-            command: 'NextTrack',
+            command,
             server: ctx.server,
             sessionId: ctx.sessionId,
         });
-    }),
+    });
 
-    pause: wrap('Pause', async (ctx: DispatcherCtx): Promise<void> => {
-        log('Pause', { sessionId: ctx.sessionId });
-        await remoteTargetApi.sendPlaystate({
-            command: 'Pause',
-            server: ctx.server,
-            sessionId: ctx.sessionId,
-        });
-    }),
+export const commandDispatcher = {
+    next: playstate('NextTrack'),
+
+    pause: playstate('Pause'),
 
     play: wrap(
         'Play',
@@ -282,14 +267,7 @@ export const commandDispatcher = {
         },
     ),
 
-    previous: wrap('PreviousTrack', async (ctx: DispatcherCtx): Promise<void> => {
-        log('PreviousTrack', { sessionId: ctx.sessionId });
-        await remoteTargetApi.sendPlaystate({
-            command: 'PreviousTrack',
-            server: ctx.server,
-            sessionId: ctx.sessionId,
-        });
-    }),
+    previous: playstate('PreviousTrack'),
 
     seek: coalesceTrailing(
         wrap('Seek', async (ctx: DispatcherCtx, positionMs: number): Promise<void> => {
@@ -384,30 +362,9 @@ export const commandDispatcher = {
         });
     }),
 
-    stop: wrap('Stop', async (ctx: DispatcherCtx): Promise<void> => {
-        log('Stop', { sessionId: ctx.sessionId });
-        await remoteTargetApi.sendPlaystate({
-            command: 'Stop',
-            server: ctx.server,
-            sessionId: ctx.sessionId,
-        });
-    }),
+    stop: playstate('Stop'),
 
-    togglePause: wrap('PlayPause', async (ctx: DispatcherCtx): Promise<void> => {
-        log('PlayPause', { sessionId: ctx.sessionId });
-        await remoteTargetApi.sendPlaystate({
-            command: 'PlayPause',
-            server: ctx.server,
-            sessionId: ctx.sessionId,
-        });
-    }),
+    togglePause: playstate('PlayPause'),
 
-    unpause: wrap('Unpause', async (ctx: DispatcherCtx): Promise<void> => {
-        log('Unpause', { sessionId: ctx.sessionId });
-        await remoteTargetApi.sendPlaystate({
-            command: 'Unpause',
-            server: ctx.server,
-            sessionId: ctx.sessionId,
-        });
-    }),
+    unpause: playstate('Unpause'),
 };

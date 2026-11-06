@@ -41,6 +41,15 @@ describe('buildDiscovery', () => {
         expect(next.command_topic).toBe('feishin/ha/feishin_p1/cmd/next');
     });
 
+    // HA's Jinja renders a JSON boolean as "True"/"False", which never equals
+    // the switch's lowercase payload_on/payload_off - the template must emit
+    // the payload strings itself or the switch state stays unknown.
+    it.each(['mute', 'shuffle'])('%s switch template renders its own on/off payloads', (id) => {
+        const cfg = JSON.parse(byTopic(`homeassistant/switch/feishin_p1/${id}/config`).payload);
+        const m = /^\{\{ '(\w+)' if value_json\.\w+ else '(\w+)' \}\}$/.exec(cfg.value_template);
+        expect(m?.slice(1)).toEqual([cfg.payload_on, cfg.payload_off]);
+    });
+
     it('repeat select advertises the three modes', () => {
         const repeat = JSON.parse(byTopic('homeassistant/select/feishin_p1/repeat/config').payload);
         expect(repeat.options).toEqual(['off', 'all', 'one']);

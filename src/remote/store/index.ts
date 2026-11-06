@@ -73,6 +73,10 @@ const RECONNECT_DELAY_MS = 2000;
 // pending", and Immer would only complicate scheduling/cancelling a plain
 // timer handle for no benefit.
 let retryTimer: null | ReturnType<typeof setTimeout> = null;
+// Bumped by every reconnect(); one superseded while awaiting credentials
+// must not open its own socket, or the older one is orphaned (never closed,
+// double-applying every broadcast and scheduling its own retries on a drop).
+let reconnectGeneration = 0;
 
 // Requests awaiting an `operation-ack`, keyed by the requestId sent with
 // them — same reasoning as retryTimer above, this is plumbing for
@@ -97,6 +101,7 @@ export const useRemoteStore = createWithEqualityFn<SettingsSlice>()(
                 actions: {
                     reconnect: async () => {
                         logger.info('Reconnect initiated');
+                        const generation = ++reconnectGeneration;
 
                         // A manual tap (or a fresh auto-retry firing) always
                         // supersedes whatever retry was still pending —
@@ -134,6 +139,11 @@ export const useRemoteStore = createWithEqualityFn<SettingsSlice>()(
                             logger.error('Failed to get credentials', { error });
                         }
 
+                        if (generation !== reconnectGeneration) {
+                            logger.debug('Reconnect superseded by a newer attempt');
+                            return;
+                        }
+
                         set((state) => {
                             // Use location.origin, not location.href — HashRouter puts
                             // the current route in the URL fragment (e.g. "#/tracks"),
@@ -146,6 +156,7 @@ export const useRemoteStore = createWithEqualityFn<SettingsSlice>()(
                             const socket = new WebSocket(wsUrl) as StatefulWebSocket;
 
                             socket.natural = false;
+                            let opened = false;
 
                             socket.addEventListener('message', (message) => {
                                 const { data, event } = JSON.parse(message.data) as ServerEvent;
@@ -354,6 +365,7 @@ export const useRemoteStore = createWithEqualityFn<SettingsSlice>()(
                             });
 
                             socket.addEventListener('open', () => {
+                                opened = true;
                                 logger.info('WebSocket opened', {
                                     hasAuthHeader: !!authHeader,
                                     readyState: socket.readyState,
@@ -394,7 +406,10 @@ export const useRemoteStore = createWithEqualityFn<SettingsSlice>()(
                                         message: 'Check the remote password and reconnect manually',
                                         title: 'Authentication failed',
                                     });
-                                } else if (reason.code !== 4001 && !socket.natural) {
+                                } else if (reason.code !== 4001 && !socket.natural && opened) {
+                                    // Only a drop of a live connection: a retry that never
+                                    // opened (desktop unreachable) would otherwise toast
+                                    // again on every 2s auto-retry.
                                     logger.error('Socket closed unexpectedly', {
                                         code: reason.code,
                                         reason: reason.reason,

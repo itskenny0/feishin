@@ -23,6 +23,7 @@ import type { IClientOptions, MqttClient } from 'mqtt';
 import isElectron from 'is-electron';
 import mqtt from 'mqtt';
 
+import { perfConnect } from '/@/renderer/features/jellyfin-remote-target/controller/perf-connect';
 import { isInboundApplyActive } from '/@/renderer/features/peer-sync/controller/peer-loop-guard';
 import {
     forgetPeer,
@@ -355,22 +356,31 @@ const publishWithErrorLog = (
     });
 };
 
-const buildLwt = (selfAddress: PeerAddress, jellyfinDeviceId: string | undefined) => ({
-    // mqtt.js types require a node Buffer (or string) here; Uint8Array
-    // bytes get rejected even though Buffer is itself a Uint8Array.
-    payload: Buffer.from(
+/**
+ * Encoded presence frame. The `dev` field carries our Jellyfin Sessions
+ * deviceId so a receiver can bridge "Jellyfin device X" to "MQTT peer Y" and
+ * upgrade the command lane. mqtt.js wants a node Buffer (or string) here;
+ * plain Uint8Array bytes get rejected even though Buffer is one.
+ */
+const presencePayload = (online: boolean, jellyfinDeviceId: string | undefined): Buffer =>
+    Buffer.from(
         codec.encode({
             ...(jellyfinDeviceId ? { dev: jellyfinDeviceId } : {}),
-            online: false,
+            online,
             t: 'presence',
             ts: Date.now(),
             v: PROTOCOL_VERSION,
         }),
-    ),
-    qos: 1 as const,
-    retain: true,
-    topic: topicFor(selfAddress, 'presence'),
-});
+    );
+
+/** mqtt's MqttClient takes (streamBuilder, options); the published types only
+ *  cover `connect(url, opts)`, so the native-TCP path constructs it via a cast. */
+export const createStreamClient = (streamBuilder: unknown, opts: IClientOptions): MqttClient =>
+    new (
+        mqtt as unknown as {
+            MqttClient: new (sb: unknown, o: IClientOptions) => MqttClient;
+        }
+    ).MqttClient(streamBuilder, opts);
 
 const handleMessage = (s: ActiveSession, topic: string, payload: Uint8Array): void => {
     const parsed = parseTopic(topic);
@@ -590,7 +600,12 @@ export const startPeerClient = (args: PeerClientStartArgs, events: PeerEvents = 
         reconnectPeriod: 4_000,
         rejectUnauthorized: args.tls !== false,
         username: useExternalAuth ? args.brokerUsername : args.userId,
-        will: buildLwt(selfAddress, args.jellyfinDeviceId),
+        will: {
+            payload: presencePayload(false, args.jellyfinDeviceId),
+            qos: 1,
+            retain: true,
+            topic: presenceTopic,
+        },
     };
 
     const resolvedUrl = normalizeBrokerUrl(args.brokerUrl);
@@ -608,21 +623,8 @@ export const startPeerClient = (args: PeerClientStartArgs, events: PeerEvents = 
     // (C3 stale-session guard, presence publish, message routing) is identical
     // regardless of transport.
     const wire = (client: MqttClient): void => {
-        const newSession: ActiveSession = {
-            args,
-            client,
-            events,
-            selfAddress,
-        };
-        session = newSession;
-
-        wireClient(client, newSession, {
-            args,
-            events,
-            loggedUrl,
-            presenceTopic,
-            selfAddress,
-        });
+        session = { args, client, events, selfAddress };
+        wireClient(session, loggedUrl, presenceTopic);
     };
 
     if (effectiveTransport === 'tcp') {
@@ -648,15 +650,7 @@ export const startPeerClient = (args: PeerClientStartArgs, events: PeerEvents = 
                     return;
                 }
                 try {
-                    // mqtt's MqttClient takes (streamBuilder, options). The
-                    // published types only type `connect(url, opts)`, so cast.
-                    const MqttClientCtor = (
-                        mqtt as unknown as {
-                            MqttClient: new (sb: unknown, o: IClientOptions) => MqttClient;
-                        }
-                    ).MqttClient;
-                    const client = new MqttClientCtor(streamBuilder, opts);
-                    wire(client);
+                    wire(createStreamClient(streamBuilder, opts));
                 } catch (err) {
                     warn('native-tcp client construct failed; falling back to ws', {
                         brokerUrl: loggedUrl,
@@ -716,17 +710,9 @@ const connectWsAndWire = (
     wire(client);
 };
 
-interface WireContext {
-    args: PeerClientStartArgs;
-    events: PeerEvents;
-    loggedUrl: string;
-    presenceTopic: string;
-    selfAddress: PeerAddress;
-}
-
 /** Attach the MqttClient event handlers. Behaviour is transport-agnostic. */
-const wireClient = (client: MqttClient, newSession: ActiveSession, ctx: WireContext): void => {
-    const { args, events, loggedUrl, presenceTopic } = ctx;
+const wireClient = (newSession: ActiveSession, loggedUrl: string, presenceTopic: string): void => {
+    const { args, client } = newSession;
 
     client.on('connect', () => {
         // A late CONNACK can fire after stopPeerClient() tore us down (kill
@@ -740,7 +726,7 @@ const wireClient = (client: MqttClient, newSession: ActiveSession, ctx: WireCont
             return;
         }
         log('connected', { brokerUrl: loggedUrl });
-        events.onConnectionChange?.('connected');
+        newSession.events.onConnectionChange?.('connected');
         const sub = userPeersWildcard(args.userId);
         client.subscribe(sub, { qos: 1 }, (err) => {
             if (err) {
@@ -750,20 +736,11 @@ const wireClient = (client: MqttClient, newSession: ActiveSession, ctx: WireCont
             log('subscribed', { topic: sub });
         });
         // Publish our presence as online + retained so peers that arrive
-        // later learn we exist immediately. The `dev` field carries our
-        // Jellyfin Sessions deviceId so the receiver can bridge "Jellyfin
-        // device X" to "MQTT peer Y" and upgrade the command lane.
-        const onlineFrame = codec.encode({
-            ...(args.jellyfinDeviceId ? { dev: args.jellyfinDeviceId } : {}),
-            online: true,
-            t: 'presence',
-            ts: Date.now(),
-            v: PROTOCOL_VERSION,
-        });
+        // later learn we exist immediately.
         publishWithErrorLog(
             client,
             presenceTopic,
-            Buffer.from(onlineFrame),
+            presencePayload(true, args.jellyfinDeviceId),
             { qos: 1, retain: true },
             'presence',
         );
@@ -782,25 +759,12 @@ const wireClient = (client: MqttClient, newSession: ActiveSession, ctx: WireCont
 
     client.on('close', () => {
         log('disconnected', { brokerUrl: loggedUrl });
-        events.onConnectionChange?.('disconnected');
+        newSession.events.onConnectionChange?.('disconnected');
     });
 
     client.on('error', (err) => {
         warn('client error', { err: err.message });
     });
-};
-
-const perfDebug = (): boolean => {
-    try {
-        return typeof localStorage !== 'undefined' && localStorage.getItem('perf.connect') === '1';
-    } catch {
-        return false;
-    }
-};
-
-const perfMark = (label: string, payload: Record<string, unknown>): void => {
-    if (!perfDebug()) return;
-    console.info('[perf.connect]', label, { ts: performance.now(), ...payload });
 };
 
 /**
@@ -835,7 +799,7 @@ export const publishCommand = (target: PeerAddress, command: PeerCommand): void 
         { qos: 0, retain: false },
         (err) => {
             if (err) warn('cmd publish failed', { err: err.message, topic });
-            perfMark('mqtt.publish.cmd', {
+            perfConnect('mqtt.publish.cmd', {
                 durMs: Math.round(performance.now() - t0),
                 k: command.k,
                 ok: !err,
@@ -892,17 +856,10 @@ export const publishOwnState = (state: PeerState): boolean => {
 export const publishPresenceHeartbeat = (): void => {
     const s = session;
     if (!s || !s.client.connected) return;
-    const frame = codec.encode({
-        ...(s.args.jellyfinDeviceId ? { dev: s.args.jellyfinDeviceId } : {}),
-        online: true,
-        t: 'presence',
-        ts: Date.now(),
-        v: PROTOCOL_VERSION,
-    });
     publishWithErrorLog(
         s.client,
         topicFor(s.selfAddress, 'presence'),
-        Buffer.from(frame),
+        presencePayload(true, s.args.jellyfinDeviceId),
         { qos: 1, retain: true },
         'presence-heartbeat',
     );
@@ -1094,12 +1051,7 @@ export const testBrokerConnection = async (
                         return;
                     }
                     try {
-                        const MqttClientCtor = (
-                            mqtt as unknown as {
-                                MqttClient: new (sb: unknown, o: IClientOptions) => MqttClient;
-                            }
-                        ).MqttClient;
-                        wireProbe(new MqttClientCtor(streamBuilder, opts));
+                        wireProbe(createStreamClient(streamBuilder, opts));
                     } catch (err) {
                         finish({ error: (err as Error).message, ok: false });
                     }

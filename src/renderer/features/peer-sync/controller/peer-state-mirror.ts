@@ -11,6 +11,7 @@
  */
 import type { RemoteMirrorInput } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
 
+import { perfConnect } from '/@/renderer/features/jellyfin-remote-target/controller/perf-connect';
 import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
 import {
     getFreshPeerIds,
@@ -26,19 +27,6 @@ import { LibraryItem, ServerType, Song } from '/@/shared/types/domain-types';
 
 const log = (...args: unknown[]) => console.info('[peer-sync]', ...args);
 const warn = (...args: unknown[]) => console.warn('[peer-sync]', ...args);
-
-const perfDebug = (): boolean => {
-    try {
-        return typeof localStorage !== 'undefined' && localStorage.getItem('perf.connect') === '1';
-    } catch {
-        return false;
-    }
-};
-
-const perfMark = (label: string, payload: Record<string, unknown>): void => {
-    if (!perfDebug()) return;
-    console.info('[perf.connect]', label, { ts: performance.now(), ...payload });
-};
 
 /**
  * Convert a PeerState wire frame into a Partial<RemoteMirrored> suitable
@@ -369,10 +357,10 @@ export const applyPeerStateToStore = (from: PeerAddress, state: PeerState): void
         qIdx: state.qIdx,
         trackId: state.track?.id ?? null,
     });
-    perfMark('mirror.apply.mqtt', {
+    perfConnect('mirror.apply.mqtt', {
         paused: state.paused,
         pos: state.pos,
-        // Wire-side timestamp from sender so a perfDebug viewer can compute
+        // Wire-side timestamp from sender so a perf.connect viewer can compute
         // end-to-end on its own clock when both peers have time sync.
         senderTs: state.ts,
         vol: state.vol,

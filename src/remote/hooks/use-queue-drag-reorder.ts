@@ -133,15 +133,9 @@ export function useQueueDragReorder({
         [onDrop, setDropTarget, stopAutoScroll],
     );
 
-    const cancelDrag = useCallback(() => {
-        stopAutoScroll();
-        setDraggingId(null);
-        setDropTarget(null);
-    }, [setDropTarget, stopAutoScroll]);
-
     // Navigating away mid-drag (or any other unmount) would otherwise leave
     // the auto-scroll rAF loop running forever against a detached list.
     useEffect(() => stopAutoScroll, [stopAutoScroll]);
 
-    return { cancelDrag, draggingId, dropTarget, endDrag, startDrag, updateDrag };
+    return { draggingId, dropTarget, endDrag, startDrag, updateDrag };
 }

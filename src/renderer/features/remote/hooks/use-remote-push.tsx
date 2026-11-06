@@ -123,8 +123,3 @@ export const useRemotePush = () => {
         [isRemoteEnabled],
     );
 };
-
-export const RemotePushHook = () => {
-    useRemotePush();
-    return null;
-};

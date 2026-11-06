@@ -244,3 +244,55 @@ describe('SessionsPoller post-await generation guard (C2)', () => {
         expect(serversAppliedTo()).toEqual(['srv-A']);
     });
 });
+
+describe('SessionsPoller offline clock across restarts', () => {
+    let poller: SessionsPoller;
+    let listMock: ReturnType<typeof vi.fn>;
+
+    beforeEach(async () => {
+        vi.useFakeTimers();
+        const mod =
+            await import('/@/renderer/features/jellyfin-remote-target/api/remote-target-api');
+        listMock = mod.remoteTargetApi.listSessionsWithRaw as ReturnType<typeof vi.fn>;
+        listMock.mockReset();
+        // The target is never in the /Sessions snapshot.
+        listMock.mockImplementation(async () => ({ devices: [], raws: {} }));
+        poller = new SessionsPoller();
+        const { actions } = useRemoteTargetStore.getState();
+        actions.setTarget({
+            capabilities: [],
+            deviceId: 'dev-T',
+            deviceName: 'Target',
+            sessionId: 'sess-T',
+        });
+        actions.setStatus('connected');
+    });
+
+    afterEach(() => {
+        poller.stop();
+        useRemoteTargetStore.getState().actions.clearTarget();
+        vi.useRealTimers();
+    });
+
+    it('keeps the 60s offline budget when the poller restarts while the target is reconnecting', async () => {
+        const onOffline = vi.fn();
+        poller.start({ onOffline, server });
+        // Three consecutive misses (immediate tick + two 2s ticks) start the clock.
+        await vi.advanceTimersByTimeAsync(4_100);
+        expect(useRemoteTargetStore.getState().status).toBe('reconnecting');
+
+        // The hook restarts the poller on every picker open/close.
+        poller.stop();
+        poller.start({ onOffline, server });
+        await vi.advanceTimersByTimeAsync(4_100);
+
+        // Still inside the offline budget - the target must survive the restart.
+        expect(onOffline).not.toHaveBeenCalled();
+        expect(useRemoteTargetStore.getState().targetDeviceId).toBe('dev-T');
+
+        // Once the budget is spent the target is dropped exactly once.
+        await vi.advanceTimersByTimeAsync(60_000);
+        expect(onOffline).toHaveBeenCalledTimes(1);
+        expect(useRemoteTargetStore.getState().targetDeviceId).toBeNull();
+    });
+});

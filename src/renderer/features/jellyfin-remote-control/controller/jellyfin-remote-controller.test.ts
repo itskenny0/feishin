@@ -138,7 +138,7 @@ describe('JellyfinRemoteController — keepalive contract', () => {
     });
 
     /**
-     * Regression: `lastSocketOpenedAt` was initialised to 0, so a sequence
+     * Regression: the socket-open timestamp was initialised to 0, so a sequence
      * of sockets that closed BEFORE ever opening (the case for an
      * unreachable / DNS-failed server) saw `Date.now() - 0` always exceed
      * the success-uptime threshold and reset the retry counter on every
@@ -163,6 +163,27 @@ describe('JellyfinRemoteController — keepalive contract', () => {
         // If counter was wrongly reset to 0 here, the 3rd socket would
         // schedule at 1s (rung 0). With correct behavior it schedules at
         // 2s (rung 1).
+        await vi.advanceTimersByTimeAsync(1_500);
+        expect(FakeSocket.instances.length).toBe(2);
+        await vi.advanceTimersByTimeAsync(700);
+        expect(FakeSocket.instances.length).toBe(3);
+        ctl.stop();
+    });
+
+    it('backs off again after a long-lived socket drops and the server stays down', async () => {
+        const ctl = await startCtl();
+        const sock0 = FakeSocket.instances[0];
+        sock0.onopen?.();
+        // Healthy for longer than the success-uptime threshold, then the
+        // server goes away.
+        await vi.advanceTimersByTimeAsync(61_000);
+        sock0.onclose?.({ code: 1006, wasClean: false });
+        // Long uptime resets the ladder: first retry at the 1s rung.
+        await vi.advanceTimersByTimeAsync(1_000);
+        expect(FakeSocket.instances.length).toBe(2);
+        // That retry never opens. The earlier uptime must not reset the
+        // counter again, so the next retry waits the 2s rung.
+        FakeSocket.instances[1].onclose?.({ code: 1006, wasClean: false });
         await vi.advanceTimersByTimeAsync(1_500);
         expect(FakeSocket.instances.length).toBe(2);
         await vi.advanceTimersByTimeAsync(700);
@@ -205,7 +226,6 @@ describe('dispatchJellyfinMessage — E2 fast-path seek deferral + E4 Data guard
         vi.resetModules();
         storeState.mediaPlayByIndex.mockClear();
         vi.doMock('/@/renderer/store/player.store', () => ({
-            addToQueueByData: vi.fn(async () => {}),
             isShuffleEnabled: () => false,
             usePlayerStoreBase: {
                 getState: () => ({
@@ -305,10 +325,10 @@ describe('dispatchJellyfinMessage — E2 fast-path seek deferral + E4 Data guard
     it('E2: fresh-queue path also defers its seek to a rAF tick (symmetry)', async () => {
         // Re-mock player.store so the queue does NOT match -> fresh-queue path.
         vi.doMock('/@/renderer/store/player.store', () => ({
-            addToQueueByData: vi.fn(async () => {}),
             isShuffleEnabled: () => false,
             usePlayerStoreBase: {
                 getState: () => ({
+                    addToQueueByType: vi.fn(),
                     mediaPlayByIndex: storeState.mediaPlayByIndex,
                     player: { muted: false },
                     // Empty default => fresh-queue (and wasIdle), but we seed

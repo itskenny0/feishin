@@ -53,6 +53,14 @@ const isFiniteNumber = (v: unknown): v is number => typeof v === 'number' && Num
  *  frame. Either way, drop. */
 const isValidTimestamp = (v: unknown): v is number => isFiniteNumber(v) && v >= 0;
 
+/** Absent, or an array of strings. The length cap is checked first so a
+ *  million-element array is rejected without iterating every entry. */
+const isOptionalIdList = (v: unknown): boolean =>
+    v === undefined ||
+    (Array.isArray(v) &&
+        v.length <= MAX_DECODE_QUEUE_IDS &&
+        v.every((id) => typeof id === 'string'));
+
 const isValidTrack = (raw: unknown): boolean => {
     if (raw === null) return true;
     if (!isObject(raw)) return false;
@@ -103,24 +111,10 @@ const isValidState = (raw: Record<string, unknown>): raw is PeerState & Record<s
     // Any other type drops the frame so a garbage `nxt` can't poison the
     // controller's next-track resolution.
     if (raw.nxt !== undefined && raw.nxt !== null && typeof raw.nxt !== 'string') return false;
-    // `nxts` (true upcoming-id sequence) is an optional string[]. Absent =
-    // publisher doesn't carry it; present must be an array of strings within
-    // the same length cap as qIds so a hostile sender can't force a huge
-    // allocation. A non-array or a non-string entry drops the whole frame so a
-    // garbage `nxts` can't poison the controller's queue-order resolution.
-    if (raw.nxts !== undefined) {
-        if (!Array.isArray(raw.nxts)) return false;
-        if (raw.nxts.length > MAX_DECODE_QUEUE_IDS) return false;
-        if (raw.nxts.some((id) => typeof id !== 'string')) return false;
-    }
-    if (raw.qIds !== undefined) {
-        if (!Array.isArray(raw.qIds)) return false;
-        // Cap array length up front so a million-element qIds array doesn't
-        // force us to iterate every entry just to reject it.
-        if (raw.qIds.length > MAX_DECODE_QUEUE_IDS) return false;
-        if (raw.qIds.some((id) => typeof id !== 'string')) return false;
-    }
-    return true;
+    // `nxts` (true upcoming-id sequence) and `qIds` are optional string[]s. A
+    // non-array or a non-string entry drops the whole frame so garbage can't
+    // poison the controller's queue-order resolution.
+    return isOptionalIdList(raw.nxts) && isOptionalIdList(raw.qIds);
 };
 
 const isValidPresence = (
@@ -137,19 +131,13 @@ const isValidPresence = (
     return true;
 };
 
-const isValidPing = (raw: Record<string, unknown>): raw is PeerPing & Record<string, unknown> => {
-    if (raw.t !== 'ping') return false;
-    if (typeof raw.id !== 'string') return false;
-    if (!isValidTimestamp(raw.ts)) return false;
-    return true;
-};
-
-const isValidPong = (raw: Record<string, unknown>): raw is PeerPong & Record<string, unknown> => {
-    if (raw.t !== 'pong') return false;
-    if (typeof raw.id !== 'string') return false;
-    if (!isValidTimestamp(raw.ts)) return false;
-    return true;
-};
+/** Ping and pong share a shape: `{ id, t, ts }`. */
+const isValidProbe = (
+    raw: Record<string, unknown>,
+): raw is (PeerPing | PeerPong) & Record<string, unknown> =>
+    (raw.t === 'ping' || raw.t === 'pong') &&
+    typeof raw.id === 'string' &&
+    isValidTimestamp(raw.ts);
 
 const jsonCodec: PeerCodec = {
     decode: (payload) => {
@@ -162,8 +150,7 @@ const jsonCodec: PeerCodec = {
             if (isValidCommand(parsed)) return parsed;
             if (isValidState(parsed)) return parsed;
             if (isValidPresence(parsed)) return parsed;
-            if (isValidPing(parsed)) return parsed;
-            if (isValidPong(parsed)) return parsed;
+            if (isValidProbe(parsed)) return parsed;
             return null;
         } catch {
             return null;
@@ -178,6 +165,3 @@ const jsonCodec: PeerCodec = {
  * this binding, never the json one directly.
  */
 export const codec: PeerCodec = jsonCodec;
-
-/** Exposed for tests / future codec backends. */
-export { jsonCodec };

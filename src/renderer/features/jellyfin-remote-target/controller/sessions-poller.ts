@@ -1,8 +1,8 @@
 import type { RemoteDevice } from '/@/renderer/features/jellyfin-remote-target/types';
 import type { ServerListItemWithCredential } from '/@/shared/types/domain-types';
 
-// src/renderer/features/jellyfin-remote-target/controller/sessions-poller.ts
 import { remoteTargetApi } from '/@/renderer/features/jellyfin-remote-target/api/remote-target-api';
+import { perfConnect } from '/@/renderer/features/jellyfin-remote-target/controller/perf-connect';
 import { findSessionForDevice } from '/@/renderer/features/jellyfin-remote-target/controller/remote-state-mirror';
 import { sessionsSink } from '/@/renderer/features/jellyfin-remote-target/controller/sessions-sink';
 import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
@@ -38,19 +38,6 @@ const OFFLINE_CUTOFF_MS = 60_000;
  */
 const MISS_DEBOUNCE_FRAMES = 3;
 
-const perfDebug = (): boolean => {
-    try {
-        return typeof localStorage !== 'undefined' && localStorage.getItem('perf.connect') === '1';
-    } catch {
-        return false;
-    }
-};
-
-const perfLog = (label: string, payload: Record<string, unknown>): void => {
-    if (!perfDebug()) return;
-    console.info('[perf.connect]', label, { ts: performance.now(), ...payload });
-};
-
 export interface PollerStartArgs {
     onOffline: (deviceName: string) => void; // toast + fallback to local
     server: ServerListItemWithCredential;
@@ -84,7 +71,7 @@ export class SessionsPoller {
      */
     notifyCommandDispatched(): void {
         this.activeUntil = Date.now() + ACTIVE_POLL_WINDOW_MS;
-        perfLog('poller.active', { until: this.activeUntil });
+        perfConnect('poller.active', { until: this.activeUntil });
         if (this.mode !== 'active') {
             this.mode = 'active';
             this.rescheduleSoon();
@@ -126,7 +113,7 @@ export class SessionsPoller {
     setFallbackMode(active: boolean): void {
         if (this.fallbackMode === active) return;
         this.fallbackMode = active;
-        perfLog('poller.fallbackMode', { active });
+        perfConnect('poller.fallbackMode', { active });
         // Reschedule against the new cadence so we don't sit waiting on a 2s
         // timer when the socket just came up (or vice versa).
         if (this.isRunning && this.mode !== 'active') this.rescheduleSoon();
@@ -166,7 +153,7 @@ export class SessionsPoller {
         }
         if (this.mode === 'active') {
             this.mode = 'idle';
-            perfLog('poller.idle', {});
+            perfConnect('poller.idle', {});
         }
         return this.fallbackMode ? FALLBACK_POLL_INTERVAL_MS : POLL_INTERVAL_MS;
     }
@@ -188,8 +175,12 @@ export class SessionsPoller {
         this.consecutiveMisses += 1;
         if (this.consecutiveMisses < MISS_DEBOUNCE_FRAMES) return;
 
-        if (state.status === 'connected' || state.status === 'idle') {
-            actions.setStatus('reconnecting');
+        // `!offlineSince` also starts the clock after a poller restart (the hook
+        // restarts it on every picker open/close): stop() zeroes the clock while
+        // the store stays 'reconnecting', which read as a 60s+ elapsed budget
+        // and dropped the target on the very next sustained miss.
+        if (state.status === 'connected' || state.status === 'idle' || !this.offlineSince) {
+            if (state.status !== 'reconnecting') actions.setStatus('reconnecting');
             this.offlineSince = Date.now();
             return;
         }
@@ -255,7 +246,7 @@ export class SessionsPoller {
         // could mark a server-A device as the connected target.
         if (!this.isRunning || this.startArgs !== args) return;
 
-        perfLog('poller.tick', {
+        perfConnect('poller.tick', {
             durMs: Math.round(performance.now() - t0),
             mode: this.mode,
         });

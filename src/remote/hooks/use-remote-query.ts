@@ -13,8 +13,6 @@ interface RemoteQueryResponse<TItem> {
 interface UseRemoteQueryOptions<TItem> {
     event: 'albums-request' | 'playlists-request' | 'radio-request' | 'tracks-request';
     pageSize?: number;
-    // Radio has no search/pagination — a single one-shot fetch on mount.
-    paginated?: boolean;
     response: RemoteQueryResponse<TItem>;
     searchTerm?: string;
 }
@@ -30,7 +28,6 @@ interface UseRemoteQueryOptions<TItem> {
 export function useRemoteQuery<TItem>({
     event,
     pageSize = 30,
-    paginated = true,
     response,
     searchTerm,
 }: UseRemoteQueryOptions<TItem>) {
@@ -42,11 +39,7 @@ export function useRemoteQuery<TItem>({
 
     const sendRequest = (requestId: string, startIndex: number) => {
         setIsLoading(true);
-        if (paginated) {
-            send({ event, limit: pageSize, requestId, searchTerm, startIndex } as ClientEvent);
-        } else {
-            send({ event, requestId } as ClientEvent);
-        }
+        send({ event, limit: pageSize, requestId, searchTerm, startIndex } as ClientEvent);
     };
 
     // New search (or first mount): reset and fetch from the start.
@@ -68,7 +61,7 @@ export function useRemoteQuery<TItem>({
     }, [response]);
 
     const loadMore = () => {
-        if (!paginated || isLoading) return;
+        if (isLoading) return;
         const requestId = nanoid();
         requestIdRef.current = requestId;
         modeRef.current = 'append';
@@ -76,7 +69,7 @@ export function useRemoteQuery<TItem>({
     };
 
     return {
-        hasMore: paginated ? (response.hasMore ?? false) : false,
+        hasMore: response.hasMore ?? false,
         isLoading,
         items,
         loadMore,
