@@ -6,13 +6,16 @@ describe('localCache.imageVariants settings slice', () => {
     it('defaults imageVariants to the surface-bucket config', () => {
         const { imageVariants } = useSettingsStore.getState().localCache;
 
+        // Sync-only: every size is cached (fullScreen capped at 1080px) and
+        // autoPreset stays off so a sync never tunes the set down. `header`
+        // is served from the pixel-identical itemCard bucket.
         expect(imageVariants).toEqual({
-            autoPreset: true,
+            autoPreset: false,
             format: 'webp',
             mode: 'download',
             quality: 82,
             variants: {
-                fullScreen: { enabled: false, px: 0 },
+                fullScreen: { enabled: true, px: 1080 },
                 header: { enabled: false, px: 300 },
                 itemCard: { enabled: true, px: 300 },
                 sidebar: { enabled: true, px: 400 },

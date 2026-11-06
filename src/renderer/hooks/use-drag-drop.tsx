@@ -44,6 +44,18 @@ interface UseDraggableProps {
     isEnabled: boolean;
 }
 
+const buildDragData = (drag: NonNullable<UseDraggableProps['drag']>) =>
+    dndUtils.generateDragData(
+        {
+            id: drag.getId(),
+            item: drag.getItem(),
+            itemType: drag.itemType,
+            operation: drag.operation,
+            type: drag.target,
+        },
+        drag.metadata,
+    );
+
 export const useDragDrop = <TElement extends HTMLElement>({
     drag,
     drop,
@@ -77,25 +89,7 @@ export const useDragDrop = <TElement extends HTMLElement>({
             functions.push(
                 draggable({
                     element,
-                    getInitialData: () => {
-                        const currentDrag = dragRef.current;
-                        if (!currentDrag) return {};
-
-                        const id = currentDrag.getId();
-                        const item = currentDrag.getItem();
-
-                        const data = dndUtils.generateDragData(
-                            {
-                                id,
-                                item,
-                                itemType: currentDrag.itemType,
-                                operation: currentDrag.operation,
-                                type: currentDrag.target,
-                            },
-                            currentDrag.metadata,
-                        );
-                        return data;
-                    },
+                    getInitialData: () => (dragRef.current ? buildDragData(dragRef.current) : {}),
                     onDragStart: () => {
                         setIsDragging(true);
                         dragRef.current?.onDragStart?.();
@@ -112,16 +106,7 @@ export const useDragDrop = <TElement extends HTMLElement>({
                             return currentDrag.onGenerateDragPreview(data);
                         }
 
-                        const dragData = dndUtils.generateDragData(
-                            {
-                                id: currentDrag.getId(),
-                                item: currentDrag.getItem(),
-                                itemType: currentDrag.itemType,
-                                operation: currentDrag.operation,
-                                type: currentDrag.target,
-                            },
-                            currentDrag.metadata,
-                        ) as DragData;
+                        const dragData = buildDragData(currentDrag) as DragData;
 
                         disableNativeDragPreview({ nativeSetDragImage: data.nativeSetDragImage });
                         setCustomNativeDragPreview({

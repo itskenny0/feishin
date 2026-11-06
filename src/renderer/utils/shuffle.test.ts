@@ -31,9 +31,12 @@ describe('shuffle', () => {
     });
 
     it('produces a deterministic result for a fixed random sequence', () => {
-        // Math.random() === 0 forces j = floor(0 * (i+1)) = 0 for every swap,
+        // A zero random draw forces j = floor(0 * (i+1)) = 0 for every swap,
         // so each element from the end is swapped with index 0 in turn.
-        vi.spyOn(Math, 'random').mockReturnValue(0);
+        vi.spyOn(crypto, 'getRandomValues').mockImplementation((array) => {
+            (array as Uint32Array).fill(0);
+            return array;
+        });
         expect(shuffle([1, 2, 3])).toEqual([2, 3, 1]);
     });
 });

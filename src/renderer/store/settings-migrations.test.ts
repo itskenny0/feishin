@@ -141,143 +141,50 @@ describe('settings migrations', { timeout: 20_000 }, () => {
         expect(store.getState().peerSync.enabled).toBe(false);
     });
 
-    // v70→71: server-resize ("download") becomes the default thumbnail mode.
-    // Existing installs persisted at the legacy client-side "downscale" mode
-    // are flipped so their resync uses the fast no-client-encode path.
-    it('flips an existing downscale install to download mode (v70→71)', async () => {
-        seed(
-            {
-                localCache: {
-                    enabled: true,
-                    imageVariants: {
-                        format: 'webp',
-                        mode: 'downscale',
-                        quality: 82,
-                        variants: {
-                            fullScreen: { enabled: false, px: 0 },
-                            header: { enabled: true, px: 300 },
-                            itemCard: { enabled: true, px: 300 },
-                            sidebar: { enabled: true, px: 400 },
-                            table: { enabled: true, px: 80 },
+    // v73->74: every pre-v74 variant config (legacy downscale mode, a custom
+    // header bucket, autoPreset on, originals off, ...) is reset to the
+    // canonical full set, superseding the older per-field tweaks (v55-v72).
+    it.each([55, 70, 71, 72, 73])(
+        'resets a customized variant config to the canonical set (from v%i)',
+        async (version) => {
+            seed(
+                {
+                    localCache: {
+                        enabled: true,
+                        imageVariants: {
+                            autoPreset: true,
+                            format: 'webp',
+                            mode: 'downscale',
+                            quality: 82,
+                            variants: {
+                                fullScreen: { enabled: false, px: 0 },
+                                header: { enabled: true, px: 600 },
+                                itemCard: { enabled: true, px: 300 },
+                                sidebar: { enabled: false, px: 400 },
+                                table: { enabled: true, px: 80 },
+                            },
                         },
+                        resyncOnStartup: false,
                     },
                 },
-            },
-            70,
-        );
+                version,
+            );
+
+            const store = await loadStore();
+            const { DEFAULT_IMAGE_VARIANTS } = await import('/@/renderer/store/settings.store');
+            expect(store.getState().localCache.imageVariants).toEqual(DEFAULT_IMAGE_VARIANTS);
+            // A sibling value survived, so the migration did not throw (a
+            // throwing migrate wipes ALL settings back to defaults).
+            expect(store.getState().localCache.resyncOnStartup).toBe(false);
+        },
+    );
+
+    it('survives a sparse localCache without imageVariants (v72->74)', async () => {
+        seed({ localCache: { enabled: true, resyncOnStartup: false } }, 72);
 
         const store = await loadStore();
-        expect(store.getState().localCache.imageVariants?.mode).toBe('download');
-        // The rest of the user's variant config is preserved (only mode flips).
-        expect(store.getState().localCache.imageVariants?.variants.table).toEqual({
-            enabled: true,
-            px: 80,
-        });
-    });
-
-    it('survives a sparse blob without the imageVariants slice (v70→71)', async () => {
-        seed({ localCache: { enabled: true } }, 70);
-
-        // Migration must not throw (a throwing migrate wipes ALL settings).
-        const store = await loadStore();
-        // Falls back to the shipped default, which is download.
-        expect(store.getState().localCache.imageVariants?.mode).toBe('download');
-    });
-
-    // v71→72: disable the redundant `header` bucket (same px as itemCard) to cut
-    // ~25% of thumbnail-sync work; header surfaces serve from the cached itemCard.
-    it('disables the redundant header bucket when it matches itemCard px (v71→72)', async () => {
-        seed(
-            {
-                localCache: {
-                    enabled: true,
-                    imageVariants: {
-                        format: 'webp',
-                        mode: 'download',
-                        quality: 82,
-                        variants: {
-                            fullScreen: { enabled: false, px: 0 },
-                            header: { enabled: true, px: 300 },
-                            itemCard: { enabled: true, px: 300 },
-                            sidebar: { enabled: true, px: 400 },
-                            table: { enabled: true, px: 80 },
-                        },
-                    },
-                },
-            },
-            71,
-        );
-
-        const store = await loadStore();
-        const vs = store.getState().localCache.imageVariants?.variants;
-        expect(vs?.header.enabled).toBe(false);
-        // The others are untouched.
-        expect(vs?.itemCard.enabled).toBe(true);
-        expect(vs?.sidebar.enabled).toBe(true);
-        expect(vs?.table.enabled).toBe(true);
-    });
-
-    // v72→73: auto-tune ships ON for new installs; existing installs get it OFF
-    // so a later sync never silently re-tunes their chosen preset.
-    it('turns autoPreset OFF for existing installs (v72→73)', async () => {
-        seed(
-            {
-                localCache: {
-                    enabled: true,
-                    imageVariants: {
-                        format: 'webp',
-                        mode: 'download',
-                        quality: 82,
-                        variants: {
-                            fullScreen: { enabled: false, px: 0 },
-                            header: { enabled: false, px: 300 },
-                            itemCard: { enabled: true, px: 300 },
-                            sidebar: { enabled: true, px: 400 },
-                            table: { enabled: true, px: 80 },
-                        },
-                    },
-                },
-            },
-            72,
-        );
-
-        const store = await loadStore();
-        expect(store.getState().localCache.imageVariants?.autoPreset).toBe(false);
-        // Their variant set is untouched.
-        expect(store.getState().localCache.imageVariants?.variants.itemCard.enabled).toBe(true);
-    });
-
-    it('survives a sparse blob without imageVariants (v72→73)', async () => {
-        seed({ localCache: { enabled: true } }, 72);
-        const store = await loadStore();
-        // Migration must not throw; default applies (autoPreset on for new state).
-        expect(store.getState().localCache.imageVariants?.autoPreset).toBe(true);
-    });
-
-    it('KEEPS a header bucket the user set to a DISTINCT px (v71→72)', async () => {
-        seed(
-            {
-                localCache: {
-                    enabled: true,
-                    imageVariants: {
-                        format: 'webp',
-                        mode: 'download',
-                        quality: 82,
-                        variants: {
-                            fullScreen: { enabled: false, px: 0 },
-                            header: { enabled: true, px: 600 }, // distinct from itemCard
-                            itemCard: { enabled: true, px: 300 },
-                            sidebar: { enabled: true, px: 400 },
-                            table: { enabled: true, px: 80 },
-                        },
-                    },
-                },
-            },
-            71,
-        );
-
-        const store = await loadStore();
-        // A header at a distinct size is a real bucket — left enabled.
-        expect(store.getState().localCache.imageVariants?.variants.header.enabled).toBe(true);
+        const { DEFAULT_IMAGE_VARIANTS } = await import('/@/renderer/store/settings.store');
+        expect(store.getState().localCache.imageVariants).toEqual(DEFAULT_IMAGE_VARIANTS);
+        expect(store.getState().localCache.resyncOnStartup).toBe(false);
     });
 });

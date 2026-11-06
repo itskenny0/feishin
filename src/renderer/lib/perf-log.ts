@@ -43,28 +43,6 @@ export const perfLog = (event: string, data?: Record<string, unknown>): void => 
     }
 };
 
-// Start a span; call the returned fn to emit `[perf] <event>` with `ms` (plus
-// any extra fields supplied at stop time). Returns the elapsed ms.
-export const perfStart = (event: string, data?: Record<string, unknown>) => {
-    const t0 = perfNow();
-    return (extra?: Record<string, unknown>): number => {
-        const ms = Math.round(perfNow() - t0);
-        perfLog(event, { ...data, ...extra, ms });
-        return ms;
-    };
-};
-
-// Emit only when `ms` crosses `thresholdMs` — for hot paths where logging every
-// call would flood (image resolves, per-row work).
-export const perfLogSlow = (
-    event: string,
-    ms: number,
-    thresholdMs: number,
-    data?: Record<string, unknown>,
-): void => {
-    if (ms >= thresholdMs) perfLog(event, { ...data, ms: Math.round(ms) });
-};
-
 // Compact a react-query key into a readable `[perf]` label: the string segments
 // plus a couple of identifying scalar fields from any filter object (so e.g.
 // `[server, 'albumArtist', 'topSongs', {id, type}]` becomes

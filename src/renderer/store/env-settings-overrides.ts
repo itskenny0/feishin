@@ -1,6 +1,7 @@
 import type { PlayerFilter, SettingsState } from './settings.store';
 
 import { sanitizeCss } from '/@/renderer/utils/sanitize';
+import { AppTheme } from '/@/shared/themes/app-theme-types';
 import { IMAGE_PLACEHOLDER_PRIORITIES } from '/@/shared/utils/image-hash';
 
 const PLAYER_FILTER_FIELDS = new Set([
@@ -69,39 +70,7 @@ function parsePlaybackFiltersJson(raw: string): unknown {
     }
 }
 
-const APP_THEMES = new Set([
-    'ayuDark',
-    'ayuLight',
-    'catppuccinLatte',
-    'catppuccinMocha',
-    'defaultDark',
-    'defaultLight',
-    'dracula',
-    'everforestDark',
-    'everforestLight',
-    'githubDark',
-    'githubLight',
-    'glassyDark',
-    'gruvboxDark',
-    'gruvboxLight',
-    'highContrastDark',
-    'highContrastLight',
-    'materialDark',
-    'materialLight',
-    'monokai',
-    'nightOwl',
-    'nord',
-    'oneDark',
-    'rosePine',
-    'rosePineDawn',
-    'rosePineMoon',
-    'shadesOfPurple',
-    'solarizedDark',
-    'solarizedLight',
-    'tokyoNight',
-    'vscodeDarkPlus',
-    'vscodeLightPlus',
-]);
+const APP_THEMES = new Set<string>(Object.values(AppTheme));
 
 const DISCORD_DISPLAY_TYPES = new Set(['artist', 'feishin', 'song']);
 const DISCORD_LINK_TYPES = new Set(['last_fm', 'musicbrainz', 'musicbrainz_last_fm', 'none']);

@@ -1125,9 +1125,8 @@ const LocalCacheImageVariantSchema = z.object({
  */
 const LocalCacheImageVariantsSchema = z.object({
     // When true, the thumbnail preset is auto-selected by device + library size
-    // at sync time (new installs). A throwing migrate wipes all settings, so the
-    // v72->73 migration sets this false for existing installs (preserve their
-    // chosen config). NOT part of variantConfigHash → can't invalidate rows.
+    // at sync time. Off in DEFAULT_IMAGE_VARIANTS (sync-only caches every size).
+    // NOT part of variantConfigHash → can't invalidate rows.
     autoPreset: z.boolean().default(true),
     format: z.enum(['webp', 'jpeg']).default('webp'),
     mode: z.enum(['download', 'downscale']).default('downscale'),
@@ -1188,7 +1187,7 @@ const LocalCacheSettingsSchema = z.object({
 
 /**
  * Canonical default for `localCache.imageVariants`. Surface buckets mirror the
- * `general.imageRes` names. Shared by the initial state and the v55→56
+ * `general.imageRes` names. Shared by the initial state and the v73->74
  * migration so they can't drift.
  */
 export const DEFAULT_IMAGE_VARIANTS: z.infer<typeof LocalCacheImageVariantsSchema> = {
@@ -1633,7 +1632,6 @@ export type ItemListSettings = {
     table: DataTableProps;
 };
 
-export type LocalCacheImageVariant = z.infer<typeof LocalCacheImageVariantSchema>;
 export type LocalCacheImageVariants = z.infer<typeof LocalCacheImageVariantsSchema>;
 export type LocalCacheSettings = z.infer<typeof LocalCacheSettingsSchema>;
 
@@ -3975,39 +3973,6 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     delete (state.window as { releaseChannel?: unknown }).releaseChannel;
                 }
 
-                if (version <= 55) {
-                    // Seed the new multi-resolution artwork variant config under
-                    // the existing localCache slice. Inert until the thumbnail
-                    // sweep / resolver read it; gated behind localCache.enabled
-                    // like the rest of the cache. Mirrors DEFAULT_IMAGE_VARIANTS
-                    // so the upgrade default can't drift from the initial state.
-                    if (state.localCache && typeof state.localCache === 'object') {
-                        if (
-                            !state.localCache.imageVariants ||
-                            typeof state.localCache.imageVariants !== 'object'
-                        ) {
-                            state.localCache.imageVariants = DEFAULT_IMAGE_VARIANTS;
-                        }
-                    }
-                }
-
-                if (version <= 56) {
-                    // The first artwork-variant build shipped with fullScreen
-                    // (full-resolution original) pre-caching ENABLED by default,
-                    // which made the thumbnail sweep download multi-megabyte
-                    // originals per item (hours-long syncs). Flip it off for
-                    // anyone still on that exact default; users who want it can
-                    // re-enable it, and a custom px (an intentional change) is
-                    // left untouched.
-                    const iv = state.localCache?.imageVariants;
-                    if (
-                        iv?.variants?.fullScreen?.enabled === true &&
-                        iv.variants.fullScreen.px === 0
-                    ) {
-                        iv.variants.fullScreen.enabled = false;
-                    }
-                }
-
                 if (version <= 57) {
                     // Seed the remote-debug log shipper slice (disabled).
                     if (!state.remoteDebug || typeof state.remoteDebug !== 'object') {
@@ -4166,24 +4131,6 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
-                if (version <= 68) {
-                    // Thumbnail autosync now covers every bounded thumbnail size
-                    // by default (sync-only — artwork fully available offline).
-                    // Enable the previously-off `sidebar` variant for existing
-                    // installs so they get all four. `fullScreen` (originals) is
-                    // left untouched — that one stays an explicit opt-in.
-                    // Guarded: a sparse blob may lack the variants slice, and a
-                    // throwing migrate discards ALL persisted settings.
-                    const variants = state.localCache?.imageVariants?.variants;
-                    if (variants && typeof variants === 'object') {
-                        for (const key of ['header', 'itemCard', 'sidebar', 'table']) {
-                            if (variants[key] && typeof variants[key] === 'object') {
-                                variants[key].enabled = true;
-                            }
-                        }
-                    }
-                }
-
                 if (version <= 69) {
                     // Sync is now mandatory/local-first — no per-entity opt-out.
                     // Force every entity ON for existing installs that had some
@@ -4206,57 +4153,6 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
-                if (version <= 70) {
-                    // Server-resize ("download") is now the default thumbnail
-                    // mode: the client no longer decodes + re-encodes covers
-                    // (the dominant mobile sync cost + the ANR source) — it
-                    // fetches each size pre-resized by the server, like the fast
-                    // competing clients. Flip existing installs off the legacy
-                    // client-side "downscale" mode so their resync uses the fast
-                    // path. A user who later needs downscale (weak server) can
-                    // switch it back in Settings. Guarded: a sparse blob may
-                    // lack the imageVariants slice, and a throwing migrate
-                    // discards ALL persisted settings.
-                    const iv = state.localCache?.imageVariants;
-                    if (iv && typeof iv === 'object' && iv.mode === 'downscale') {
-                        iv.mode = 'download';
-                    }
-                }
-
-                if (version <= 71) {
-                    // `header` ships at the same 300px as `itemCard`, so a
-                    // separate header bucket is a redundant per-item fetch/encode
-                    // with zero visual difference — header surfaces serve from
-                    // the cached itemCard via nearest-larger fallback. Disable it
-                    // when it matches itemCard's px (the shipped default) to cut
-                    // ~25% of thumbnail-sync work; a user who set header to a
-                    // DISTINCT size keeps it. Guarded: a sparse blob may lack the
-                    // variants slice, and a throwing migrate discards ALL
-                    // persisted settings.
-                    const vs = state.localCache?.imageVariants?.variants;
-                    if (
-                        vs &&
-                        typeof vs === 'object' &&
-                        vs.header &&
-                        vs.itemCard &&
-                        vs.header.px === vs.itemCard.px
-                    ) {
-                        vs.header.enabled = false;
-                    }
-                }
-
-                if (version <= 72) {
-                    // Auto-tune ships ON for new installs only. Existing installs
-                    // keep the preset they already have (default or hand-tuned) —
-                    // turn auto OFF so a later sync never silently re-tunes them.
-                    // Guarded: a sparse blob may lack the imageVariants slice, and
-                    // a throwing migrate discards ALL persisted settings.
-                    const iv = state.localCache?.imageVariants;
-                    if (iv && typeof iv === 'object') {
-                        iv.autoPreset = false;
-                    }
-                }
-
                 if (version <= 73) {
                     // All thumbnail sizes are now always cached (sync-only): there
                     // is no longer a UI to deselect sizes and covers are never
@@ -4265,8 +4161,9 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     // `fullScreen`, now capped to a bounded hi-res (1080px) instead
                     // of multi-MB originals. Resetting the whole slice (vs patching)
                     // guarantees no variant is missing and the config hash matches a
-                    // fresh install. Guarded: a throwing migrate discards ALL
-                    // persisted settings.
+                    // fresh install; it also supersedes the earlier per-field
+                    // imageVariants migrations (v55-v72), which were dropped as dead.
+                    // Guarded: a throwing migrate discards ALL persisted settings.
                     if (state.localCache && typeof state.localCache === 'object') {
                         state.localCache.imageVariants = JSON.parse(
                             JSON.stringify(DEFAULT_IMAGE_VARIANTS),
@@ -4397,64 +4294,39 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
+                // Upstream-merge settings that shipped without zod defaults:
+                // seed the fresh-install values so existing installs (and
+                // imported older settings files) validate instead of failing on
+                // the missing keys. Guarded: a sparse blob may lack `general`,
+                // and a throwing migrate discards ALL persisted settings.
+                const seedGeneralDefaults = (keys: (keyof SettingsState['general'])[]) => {
+                    const general = state.general as Record<string, unknown> | undefined;
+                    if (!general) return;
+                    for (const key of keys) {
+                        if (general[key] === undefined) general[key] = initialState.general[key];
+                    }
+                };
+
                 if (version < 76) {
-                    // Seed the upstream-merge settings (album-group cover size in
-                    // the queue/table header, microtonal pitch controls). These
-                    // shipped without zod defaults, so existing installs must be
-                    // given the fresh-install values explicitly — a throwing
-                    // migrate discards ALL persisted settings.
-                    if (state.general.albumGroupImageSize === undefined) {
-                        state.general.albumGroupImageSize =
-                            initialState.general.albumGroupImageSize;
-                    }
-                    if (state.general.microtonalPitchControls === undefined) {
-                        state.general.microtonalPitchControls =
-                            initialState.general.microtonalPitchControls;
-                    }
+                    seedGeneralDefaults(['albumGroupImageSize', 'microtonalPitchControls']);
                 }
 
                 if (version < 77) {
-                    // Upstream's album-group metadata rows + favorite-rating
-                    // toggle also shipped without zod defaults; seed them so an
-                    // existing install (and any imported pre-v77 settings file)
-                    // validates instead of failing on the missing keys.
-                    if (state.general.albumGroupItems === undefined) {
-                        state.general.albumGroupItems = initialState.general.albumGroupItems;
-                    }
-                    if (state.general.albumGroupShowFavoriteRating === undefined) {
-                        state.general.albumGroupShowFavoriteRating =
-                            initialState.general.albumGroupShowFavoriteRating;
-                    }
+                    seedGeneralDefaults(['albumGroupItems', 'albumGroupShowFavoriteRating']);
                 }
 
                 if (version < 78) {
-                    // Upstream v1.15.x additions that ship without zod
-                    // defaults: the queue-change confirmation, the
-                    // fullscreen auto-open timeout, the share-expiration
-                    // defaults block, the favorites visibility toggle and
-                    // the sidebar album-art switch. Seed them so an existing
-                    // install (and any imported pre-v78 settings file)
-                    // validates instead of failing on the missing keys.
-                    for (const key of [
+                    seedGeneralDefaults([
                         'confirmQueueChanges',
                         'fullscreenAutoOpenTimeout',
                         'shareExpiration',
                         'showFavorites',
                         'sidebarImageEnabled',
-                    ] as const) {
-                        if (state.general[key] === undefined) {
-                            (state.general as Record<string, unknown>)[key] =
-                                initialState.general[key];
-                        }
-                    }
+                    ]);
                 }
 
                 if (version < 79) {
-                    // Upstream's scrobble minimum-mode setting ships without a
-                    // zod default, so an existing install (or an imported
-                    // pre-v79 settings file) would fail validation on the
-                    // missing key. Guarded: a sparse blob may lack the scrobble
-                    // object, and a throwing migrate discards ALL settings.
+                    // Guarded: a sparse blob may lack the scrobble object.
                     const scrobble = state.playback?.scrobble;
                     if (scrobble && scrobble.minimumMode === undefined) {
                         scrobble.minimumMode = initialState.playback.scrobble.minimumMode;
@@ -4462,22 +4334,11 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                 }
 
                 if (version < 80) {
-                    // Upstream's image placeholder priority ships without a zod
-                    // default; seed it so pre-v80 installs/imports validate.
-                    const general = state.general;
-                    if (general && general.imagePlaceholderPriority === undefined) {
-                        general.imagePlaceholderPriority =
-                            initialState.general.imagePlaceholderPriority;
-                    }
+                    seedGeneralDefaults(['imagePlaceholderPriority']);
                 }
 
                 if (version < 81) {
-                    // Upstream's Up Next queue toggle ships without a zod
-                    // default; seed it so pre-v81 installs/imports validate.
-                    const general = state.general;
-                    if (general && general.upNextQueue === undefined) {
-                        general.upNextQueue = initialState.general.upNextQueue;
-                    }
+                    seedGeneralDefaults(['upNextQueue']);
                 }
 
                 if (version < 32) {
@@ -4513,15 +4374,6 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
 export const useSettingsStoreActions = () => useSettingsStore((state) => state.actions);
 
 export const usePlaybackSettings = () => useSettingsStore((state) => state.playback, shallow);
-
-export const useRemoteTargetSetting = () =>
-    useSettingsStore(
-        (state) => ({
-            deviceId: state.playback.remoteTargetDeviceId ?? null,
-            deviceName: state.playback.remoteTargetDeviceName ?? null,
-        }),
-        shallow,
-    );
 
 export const useTableSettings = (type: ItemListKey) =>
     useSettingsStore((state) => state.lists[type as keyof typeof state.lists]);
@@ -4724,14 +4576,8 @@ export const useSidebarPlaylistList = () =>
 export const useSidebarBottomSection = () =>
     useSettingsStore((state) => state.general.sidebarBottomSection, shallow);
 
-export const useMobileLibraryDestination = () =>
-    useSettingsStore((state) => state.general.mobileLibraryDestination, shallow);
-
 export const useMobilePlayerbarShowNavButtons = () =>
     useSettingsStore((state) => state.general.mobilePlayerbarShowNavButtons, shallow);
-
-export const useMobileShellForce = () =>
-    useSettingsStore((state) => state.general.mobileShellForce, shallow);
 
 // `defaultCollapsed` applies only when the user hasn't explicitly toggled this
 // section yet (no stored value). Callers pass `isMobileShell` so detail-header
@@ -4853,9 +4699,6 @@ export const useGridMetadataRows = () =>
 export const useShowRatingBadge = () =>
     useSettingsStore((state) => state.general.showRatingBadge, shallow);
 
-export const useHomeGreetingVisible = () =>
-    useSettingsStore((state) => state.general.homeGreetingVisible, shallow);
-
 export const useHomeCarouselItemsPerPage = () =>
     useSettingsStore((state) => state.general.homeCarouselItemsPerPage, shallow);
 
@@ -4872,9 +4715,6 @@ export const useHomeFeatureContent = () =>
 
 export const useHomeFeatureStyle = () =>
     useSettingsStore((state) => state.general.homeFeatureStyle);
-
-export const useHomeFeelingLucky = () =>
-    useSettingsStore((state) => state.general.homeFeelingLucky);
 
 export const useSleepTimerFadeSeconds = () =>
     useSettingsStore((state) => state.playback.sleepTimerFadeSeconds ?? 0);

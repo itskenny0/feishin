@@ -1,9 +1,10 @@
 import isElectron from 'is-electron';
+import merge from 'lodash/merge';
 import { create } from 'zustand';
 
 import { logger } from '/@/renderer/utils/logger';
-import { setCustomThemeRegistry } from '/@/shared/themes/app-theme';
-import { AppThemeConfiguration } from '/@/shared/themes/app-theme-types';
+import { appTheme, setCustomThemeRegistry } from '/@/shared/themes/app-theme';
+import { AppTheme, AppThemeConfiguration } from '/@/shared/themes/app-theme-types';
 
 export interface CustomThemeMeta {
     error?: string;
@@ -49,24 +50,20 @@ const toRegistry = (rawThemes: RawCustomTheme[]): Record<string, AppThemeConfigu
     for (const raw of rawThemes) {
         if (raw.error) continue;
 
-        registry[raw.id] = {
-            app: raw.app as AppThemeConfiguration['app'],
-            colors: raw.colors as AppThemeConfiguration['colors'],
-            mantineOverride: raw.mantineOverride as AppThemeConfiguration['mantineOverride'],
-            mode: raw.mode,
-            stylesheets: raw.stylesheetContents,
-        };
+        // If the theme extends a built-in theme id, merge it on top of that
+        // base. Custom-on-custom extension is already flattened by the main
+        // process (which then reports only the built-in id, if any, here).
+        const base: Partial<AppThemeConfiguration> =
+            (raw.extends && appTheme[raw.extends as AppTheme]) || {};
+        const stylesheets = [...(base.stylesheets ?? []), ...(raw.stylesheetContents ?? [])];
 
-        // If the theme extends a built-in theme id, merge that in as the
-        // base. Custom-on-custom extension is already flattened by the
-        // main process before it reaches here.
-        if (raw.extends) {
-            registry[raw.id] = {
-                ...registry[raw.id],
-                app: { ...registry[raw.id].app },
-                colors: { ...registry[raw.id].colors },
-            };
-        }
+        registry[raw.id] = {
+            app: merge({}, base.app, raw.app),
+            colors: merge({}, base.colors, raw.colors),
+            mantineOverride: merge({}, base.mantineOverride, raw.mantineOverride),
+            mode: raw.mode,
+            stylesheets: stylesheets.length > 0 ? stylesheets : undefined,
+        };
     }
 
     return registry;

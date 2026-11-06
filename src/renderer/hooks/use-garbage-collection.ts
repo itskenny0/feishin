@@ -1,5 +1,5 @@
 import isElectron from 'is-electron';
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 
 const GARBAGE_COLLECTION_INTERVAL = 1000 * 60 * 5;
 
@@ -23,8 +23,6 @@ const scheduleGarbageCollection = () => {
 };
 
 export const useGarbageCollection = () => {
-    const intervalIdRef = useRef<NodeJS.Timeout | null>(null);
-
     // Periodically nudge V8 to release retained memory. The navigation-triggered
     // GC was removed: forcing a full synchronous heap collection on every route
     // change stalled the transition frame. The periodic sweep now runs through
@@ -34,15 +32,7 @@ export const useGarbageCollection = () => {
             return undefined;
         }
 
-        intervalIdRef.current = setInterval(() => {
-            scheduleGarbageCollection();
-        }, GARBAGE_COLLECTION_INTERVAL);
-
-        return () => {
-            if (intervalIdRef.current) {
-                clearInterval(intervalIdRef.current);
-                intervalIdRef.current = null;
-            }
-        };
+        const intervalId = setInterval(scheduleGarbageCollection, GARBAGE_COLLECTION_INTERVAL);
+        return () => clearInterval(intervalId);
     }, []);
 };

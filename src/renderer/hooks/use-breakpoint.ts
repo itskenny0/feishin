@@ -129,9 +129,6 @@ export const useIsMobileShell = () => {
  */
 export const useIsSmallPhone = () => useMediaQuery('(max-width: 360px)');
 
-/** True for phone-sized screens only — use sparingly, prefer useBreakpoint. */
-export const useIsPhone = () => useMediaQuery(BREAKPOINT_QUERIES.phone);
-
 /**
  * True for the big-phone tier (361–430px). Flagship phones in portrait —
  * iPhone 13/14/15, Pro Max, Pixel 7/8/8 Pro, Galaxy S24, etc. Use this to
@@ -140,9 +137,6 @@ export const useIsPhone = () => useMediaQuery(BREAKPOINT_QUERIES.phone);
  * cramped sub-360 viewports or phablets ≥431.
  */
 export const useIsBigPhone = () => useMediaQuery(BIG_PHONE_QUERY);
-
-/** True for tablet or smaller — useful for hiding the queue sidebar. */
-export const useIsTabletOrSmaller = () => useMediaQuery('(max-width: 1199px)');
 
 /** True for genuine pointer:coarse devices (touch). Pair with breakpoint checks. */
 export const useIsTouch = () => useMediaQuery('(pointer: coarse)');

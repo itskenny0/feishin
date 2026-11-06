@@ -1,3 +1,5 @@
+import type { TFunction } from 'i18next';
+
 import { openConfirmModal } from '@mantine/modals';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import isElectron from 'is-electron';
@@ -134,6 +136,50 @@ const dismissTag = (tag: string) => {
     }
 };
 
+const showUpdateToast = (t: TFunction, release: GithubRelease) => {
+    const latestTag = release.tag_name;
+    const target = pickDownloadTarget(release);
+
+    toast.info({
+        autoClose: false,
+        // Stable id → a newer release REPLACES the existing toast instead of
+        // stacking a second persistent one (the wrapper hides-before-show
+        // for id'd toasts). Short message so the toast stays small - the long
+        // version tag used to wrap to half the screen.
+        id: 'github-update-available',
+        message: t('common.updateAvailableBody', {
+            defaultValue: target.isApk
+                ? 'A new version is available. Tap to install.'
+                : 'A new version is available. Tap to open the release page.',
+        }),
+        onClick: () => {
+            // Confirm before downloading: tapping the toast body used to
+            // launch the OS installer immediately, so a mis-tap (aiming for
+            // the ✕) yanked the user out of the app. Gate it behind an
+            // explicit Install/Later choice.
+            openConfirmModal({
+                children: t('common.updateConfirmBody', {
+                    defaultValue: target.isApk
+                        ? 'Download {{tag}} and install it now? The system installer will take over.'
+                        : 'Open the release page for {{tag}} in your browser?',
+                    tag: latestTag,
+                }),
+                labels: {
+                    cancel: t('common.later', { defaultValue: 'Later' }),
+                    confirm: t('common.install', { defaultValue: 'Install' }),
+                },
+                onConfirm: () => {
+                    triggerDownload(target.url, target.filename);
+                    dismissTag(latestTag);
+                },
+                title: t('common.updateAvailable', { defaultValue: 'Update available' }),
+            });
+        },
+        onClose: () => dismissTag(latestTag),
+        title: t('common.updateAvailable', { defaultValue: 'Update available' }),
+    });
+};
+
 /**
  * Hook used by the AppEffects layer: arms the background polling and pops
  * a toast when a newer release is detected.
@@ -175,46 +221,7 @@ export const useGithubReleasesUpdater = () => {
             // ignore
         }
 
-        const target = pickDownloadTarget(data);
-
-        toast.info({
-            autoClose: false,
-            // Stable id → a newer release REPLACES the existing toast instead of
-            // stacking a second persistent one (the wrapper hides-before-show
-            // for id'd toasts). Short message so the toast stays small — the long
-            // version tag used to wrap to half the screen.
-            id: 'github-update-available',
-            message: t('common.updateAvailableBody', {
-                defaultValue: target.isApk
-                    ? 'A new version is available. Tap to install.'
-                    : 'A new version is available. Tap to open the release page.',
-            }),
-            onClick: () => {
-                // Confirm before downloading: tapping the toast body used to
-                // launch the OS installer immediately, so a mis-tap (aiming for
-                // the ✕) yanked the user out of the app. Gate it behind an
-                // explicit Install/Later choice.
-                openConfirmModal({
-                    children: t('common.updateConfirmBody', {
-                        defaultValue: target.isApk
-                            ? 'Download {{tag}} and install it now? The system installer will take over.'
-                            : 'Open the release page for {{tag}} in your browser?',
-                        tag: latestTag,
-                    }),
-                    labels: {
-                        cancel: t('common.later', { defaultValue: 'Later' }),
-                        confirm: t('common.install', { defaultValue: 'Install' }),
-                    },
-                    onConfirm: () => {
-                        triggerDownload(target.url, target.filename);
-                        dismissTag(latestTag);
-                    },
-                    title: t('common.updateAvailable', { defaultValue: 'Update available' }),
-                });
-            },
-            onClose: () => dismissTag(latestTag),
-            title: t('common.updateAvailable', { defaultValue: 'Update available' }),
-        });
+        showUpdateToast(t, data);
     }, [data, currentVersion, isEnabled, t]);
 };
 
@@ -240,12 +247,11 @@ export const useGithubReleasesUpdaterControls = () => {
                 defaultValue: 'Checking for updates…',
             }),
         });
-        // Force a re-fetch by invalidating the cache; the
-        // useGithubReleasesUpdater effect will pop the standard
-        // update-available toast if a newer release shows up.
+        // Refresh the poller's cache, then answer from the fresh data. The
+        // update toast is shown here too: the poller only announces a tag
+        // once (never after a dismiss), so relying on it left a manual check
+        // silent exactly when an update was available.
         await queryClient.invalidateQueries({ queryKey: QUERY_KEY });
-        // Look at the data we just refetched directly so we can give the
-        // user clear feedback when they're already on the latest release.
         const fresh =
             queryClient.getQueryData<GithubRelease | null>([...QUERY_KEY, currentVersion]) ??
             (await fetchLatestRelease());
@@ -257,14 +263,16 @@ export const useGithubReleasesUpdaterControls = () => {
             });
             return;
         }
-        if (!isNewerVersion(fresh.tag_name, currentVersion)) {
-            toast.success({
-                message: t('common.upToDate', {
-                    defaultValue: 'You are on the latest version ({{tag}}).',
-                    tag: fresh.tag_name,
-                }),
-            });
+        if (isNewerVersion(fresh.tag_name, currentVersion)) {
+            showUpdateToast(t, fresh);
+            return;
         }
+        toast.success({
+            message: t('common.upToDate', {
+                defaultValue: 'You are on the latest version ({{tag}}).',
+                tag: fresh.tag_name,
+            }),
+        });
     }, [queryClient, t, currentVersion]);
 
     const installLatest = useCallback(async () => {

@@ -27,16 +27,9 @@ export const isLocalUrl = (value: string): boolean => {
             if (a === 172 && b >= 16 && b <= 31) return true;
         }
 
-        // IPv6 unique local / link-local (fc00::/7, fe80::/10)
-        const normalized = hostname.replace(/^\[|\]$/g, '').toLowerCase();
-        if (normalized.startsWith('fc') || normalized.startsWith('fd')) {
-            return true;
-        }
-        if (/^fe[89ab]/.test(normalized)) {
-            return true;
-        }
-
-        return false;
+        // IPv6 unique local / link-local (fc00::/7, fe80::/10). URL hostnames
+        // keep IPv6 literals bracketed, so only those are checked here.
+        return /^\[(f[cd]|fe[89ab])/i.test(hostname);
     } catch {
         return false;
     }

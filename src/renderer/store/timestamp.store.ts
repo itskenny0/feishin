@@ -156,13 +156,3 @@ export const usePlayerTimestamp = () => {
 export const setTimestamp = (timestamp: number) => {
     useTimestampStoreBase.getState().setTimestamp(timestamp);
 };
-
-/**
- * Force any throttled timestamp write to flush to storage immediately.
- * Exposed for callers that know they're at a durable boundary (e.g. just
- * before navigating away). Pause/track-change already flush automatically via
- * the timestamp-0 path in the storage adapter.
- */
-export const flushTimestamp = () => {
-    flushPendingPersist();
-};

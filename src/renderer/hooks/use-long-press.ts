@@ -93,6 +93,10 @@ export const useLongPress = ({ disabled, onLongPress, onPress }: UseLongPressOpt
 
     const onPointerDown = useCallback(
         (event: React.PointerEvent<HTMLElement>) => {
+            // A new gesture voids any pending suppression: a long-press whose
+            // release produced no trailing click would otherwise swallow the
+            // click of the next, unrelated tap.
+            suppressNextClick.current = false;
             if (disabled) return;
             // Only react to touch-shaped events; mouse keeps using the
             // browser's native right-click → contextmenu pipeline so we

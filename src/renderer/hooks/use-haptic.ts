@@ -1,5 +1,3 @@
-import { useCallback } from 'react';
-
 /**
  * Tiny haptic-feedback utility that uses the standard navigator.vibrate
  * Web API. Available in every modern Android WebView (so it works inside
@@ -45,11 +43,5 @@ export const triggerHaptic = (intensity: HapticIntensity | null = 'selection') =
     }
 };
 
-/**
- * Stable callback hook for use inside components.
- */
-export const useHaptic = () => {
-    return useCallback((intensity: HapticIntensity | null = 'selection') => {
-        triggerHaptic(intensity);
-    }, []);
-};
+/** Hook form for components; `triggerHaptic` is already a stable module function. */
+export const useHaptic = () => triggerHaptic;

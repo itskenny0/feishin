@@ -2,6 +2,7 @@ import type { ItemListStateItem } from '/@/renderer/components/item-list/helpers
 import type { LibraryItem } from '/@/shared/types/domain-types';
 
 import merge from 'lodash/merge';
+import omit from 'lodash/omit';
 import semverGt from 'semver/functions/gt';
 import semverValid from 'semver/functions/valid';
 import { devtools, persist } from 'zustand/middleware';
@@ -277,9 +278,10 @@ export const useAppStore = createWithEqualityFn<AppSlice>()(
             { name: 'store_app' },
         ),
         {
-            merge: (persistedState, currentState) => {
-                return merge(currentState, persistedState);
-            },
+            // The command palette is a transient overlay: never restore it (older
+            // blobs persisted `opened`, relaunching with it open).
+            merge: (persistedState, currentState) =>
+                merge(currentState, omit(persistedState as object, 'commandPalette')),
             migrate: (persistedState, version) => {
                 if (version <= 2) {
                     return {} as AppSlice;
@@ -295,6 +297,7 @@ export const useAppStore = createWithEqualityFn<AppSlice>()(
             name: 'store_app',
             partialize: (state) => {
                 const {
+                    commandPalette: _commandPalette,
                     globalExpanded: _,
                     latestVersion: __,
                     mobileDrawer: _mobileDrawer,

@@ -98,6 +98,32 @@ describe('useLongPress', () => {
         expect(second.preventDefault).not.toHaveBeenCalled();
     });
 
+    it("does not swallow the next gesture's click when a long-press had no trailing click", () => {
+        const onLongPress = vi.fn();
+        const { result } = renderHook(() => useLongPress({ onLongPress }));
+
+        // Long-press whose release produces no click (e.g. the WebView turned
+        // the hold into a context-menu gesture).
+        act(() => {
+            result.current.onPointerDown(pointerEvent({ pointerId: 1 }));
+            vi.advanceTimersByTime(500);
+            result.current.onPointerUp(pointerEvent({ pointerId: 1 }));
+        });
+        expect(onLongPress).toHaveBeenCalledTimes(1);
+
+        // A later, ordinary tap must keep its click.
+        act(() => {
+            result.current.onPointerDown(pointerEvent({ pointerId: 2 }));
+            result.current.onPointerUp(pointerEvent({ pointerId: 2 }));
+        });
+        const click = mouseEvent();
+        act(() => {
+            result.current.onClickCapture(click.event);
+        });
+        expect(click.preventDefault).not.toHaveBeenCalled();
+        expect(click.stopPropagation).not.toHaveBeenCalled();
+    });
+
     it('cancels the long-press when the finger drifts past tolerance', () => {
         const onLongPress = vi.fn();
         const onPress = vi.fn();

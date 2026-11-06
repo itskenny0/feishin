@@ -35,8 +35,15 @@ describe('keyboardCodeToHotkeyKey', () => {
         expect(keyboardCodeToHotkeyKey('Numpad5')).toBe('numpad5');
     });
 
+    it('maps function keys F1-F24', () => {
+        expect(keyboardCodeToHotkeyKey('F1')).toBe('f1');
+        expect(keyboardCodeToHotkeyKey('F13')).toBe('f13');
+        expect(keyboardCodeToHotkeyKey('F24')).toBe('f24');
+    });
+
     it('returns null for unrecognised codes', () => {
-        expect(keyboardCodeToHotkeyKey('F13')).toBeNull();
+        expect(keyboardCodeToHotkeyKey('F25')).toBeNull();
+        expect(keyboardCodeToHotkeyKey('F0')).toBeNull();
         expect(keyboardCodeToHotkeyKey('Unidentified')).toBeNull();
         expect(keyboardCodeToHotkeyKey('NumpadParenLeft')).toBeNull();
         expect(keyboardCodeToHotkeyKey('')).toBeNull();
