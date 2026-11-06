@@ -8,6 +8,7 @@ import {
     ReactNode,
     useEffect,
     useMemo,
+    useRef,
     useState,
 } from 'react';
 
@@ -150,14 +151,21 @@ export function BaseImage({
         request: effectiveImageRequest,
     });
 
+    // On a cacheKey change this first runs with the PREVIOUS cover's loaded
+    // state (useNativeImage resets in its own effect); skip that run so the
+    // new key isn't recorded as loaded before it actually is.
+    const cacheKey = effectiveImageRequest?.cacheKey;
+    const lastCacheKeyRef = useRef(cacheKey);
     useEffect(() => {
-        if (!nativeImage.isLoaded || !effectiveImageRequest?.cacheKey) {
+        const keyChanged = lastCacheKeyRef.current !== cacheKey;
+        lastCacheKeyRef.current = cacheKey;
+        if (keyChanged || !nativeImage.isLoaded || !cacheKey) {
             return;
         }
 
-        loadedImageCacheKeys.add(effectiveImageRequest.cacheKey);
+        loadedImageCacheKeys.add(cacheKey);
         setHasLoadedInInstance(true);
-    }, [effectiveImageRequest?.cacheKey, nativeImage.isLoaded]);
+    }, [cacheKey, nativeImage.isLoaded, nativeImage.displaySrc]);
 
     return (
         <ImageContainer

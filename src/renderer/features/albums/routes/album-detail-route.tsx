@@ -4,6 +4,7 @@ import { useParams } from 'react-router';
 
 import { useCachedItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { NativeScrollArea } from '/@/renderer/components/native-scroll-area/native-scroll-area';
+import { useNativeScrollPersist } from '/@/renderer/components/native-scroll-area/use-native-scroll-persist';
 import { AlbumDetailContent } from '/@/renderer/features/albums/components/album-detail-content';
 import { AlbumDetailHeader } from '/@/renderer/features/albums/components/album-detail-header';
 import { useAlbumDetailSuspenseQuery } from '/@/renderer/features/albums/queries/albums-queries';
@@ -35,6 +36,9 @@ const AlbumDetailRoute = () => {
         query: { id: albumId },
         serverId,
     });
+
+    // The scroll area only mounts once data exists, so re-arm then.
+    useNativeScrollPersist({ enabled: !!detailQuery.data, scrollRef: scrollAreaRef });
 
     const imageUrl =
         useCachedItemImageUrl({
@@ -94,7 +98,6 @@ const AlbumDetailRoute = () => {
                     target: headerRef,
                 }}
                 ref={scrollAreaRef}
-                scrollKey={`album-detail-${albumId}`}
             >
                 {showBlurredImage ? (
                     <LibraryBackgroundImage

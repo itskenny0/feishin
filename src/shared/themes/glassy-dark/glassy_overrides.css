@@ -203,10 +203,6 @@ table {
     }
 }
 
-.fs-feature-carousel-module-image-column {
-    align-items: normal !important;
-}
-
 .mantine-Badge-root {
     background: rgb(1 1 5 / 45%);
 }

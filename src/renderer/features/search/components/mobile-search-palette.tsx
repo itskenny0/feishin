@@ -30,13 +30,7 @@ import { Text } from '/@/shared/components/text/text';
 import { useDebouncedValue } from '/@/shared/hooks/use-debounced-value';
 import { LibraryItem, ServerListItemWithCredential } from '/@/shared/types/domain-types';
 import { Play } from '/@/shared/types/types';
-
-const folderNameFromAlbumPath = (path?: null | string): null | string => {
-    if (!path) return null;
-    const segments = path.split(/[/\\]/).filter(Boolean);
-    if (segments.length === 0) return null;
-    return segments[segments.length - 1];
-};
+import { lastPathSegment } from '/@/shared/utils/album-folder-from-path';
 
 interface MobileSearchPaletteProps {
     handleClose: () => void;
@@ -455,9 +449,7 @@ function AlbumResults({ debouncedQuery, onSelectResult, query }: ResultsSectionP
                         onSelectResult();
                     }}
                     subtitle={album.albumArtists.map((artist) => artist.name).join(', ')}
-                    title={
-                        (useFsForAlbums ? folderNameFromAlbumPath(album.path) : null) || album.name
-                    }
+                    title={(useFsForAlbums ? lastPathSegment(album.path) : null) || album.name}
                 />
             ))}
         </>

@@ -34,15 +34,9 @@ import { Stack } from '/@/shared/components/stack/stack';
 import { Text } from '/@/shared/components/text/text';
 import { ExplicitStatus, LibraryItem, ServerType } from '/@/shared/types/domain-types';
 import { Play } from '/@/shared/types/types';
+import { lastPathSegment } from '/@/shared/utils/album-folder-from-path';
 
 const ARTIST_COLLAPSE_THRESHOLD = 7;
-
-const filesystemNameFromPath = (path?: null | string): null | string => {
-    if (!path) return null;
-    const segments = path.split(/[/\\]/).filter(Boolean);
-    if (segments.length === 0) return null;
-    return segments[segments.length - 1];
-};
 
 export const AlbumDetailHeader = forwardRef<HTMLDivElement>((_props, ref) => {
     const { albumId } = useParams() as { albumId: string };
@@ -283,7 +277,7 @@ export const AlbumDetailHeader = forwardRef<HTMLDivElement>((_props, ref) => {
         : albumArtists;
     const hiddenArtistCount = albumArtists.length - artistThreshold;
 
-    const filesystemTitle = useFilesystemName ? filesystemNameFromPath(album?.path) : null;
+    const filesystemTitle = useFilesystemName ? lastPathSegment(album?.path) : null;
     const displayTitle = filesystemTitle || album?.name || '';
 
     return (

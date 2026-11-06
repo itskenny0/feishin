@@ -25,13 +25,6 @@ import { useFastAverageColor } from '/@/renderer/hooks';
 import { useDragDrop } from '/@/renderer/hooks/use-drag-drop';
 import { useSetGlobalExpanded } from '/@/renderer/store';
 import { useShowFilesystemNameForAlbums } from '/@/renderer/store/settings.store';
-
-const filesystemNameFromAlbumPath = (path?: null | string): null | string => {
-    if (!path) return null;
-    const segments = path.split(/[/\\]/).filter(Boolean);
-    if (segments.length === 0) return null;
-    return segments[segments.length - 1];
-};
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Group } from '/@/shared/components/group/group';
 import { ScrollArea } from '/@/shared/components/scroll-area/scroll-area';
@@ -43,6 +36,7 @@ import { useMergedRef } from '/@/shared/hooks/use-merged-ref';
 import { LibraryItem, RelatedArtist, Song } from '/@/shared/types/domain-types';
 import { DragOperation, DragTarget, DragTargetMap } from '/@/shared/types/drag-and-drop';
 import { Play } from '/@/shared/types/types';
+import { lastPathSegment } from '/@/shared/utils/album-folder-from-path';
 
 interface AlbumTracksTableProps {
     isDark?: boolean;
@@ -233,8 +227,7 @@ interface ExpandedAlbumListItemContentProps {
 const ExpandedAlbumListItemContent = ({ albumData }: ExpandedAlbumListItemContentProps) => {
     const player = usePlayer();
     const useFsName = useShowFilesystemNameForAlbums();
-    const albumDisplayName =
-        (useFsName ? filesystemNameFromAlbumPath(albumData.path) : null) || albumData.name;
+    const albumDisplayName = (useFsName ? lastPathSegment(albumData.path) : null) || albumData.name;
 
     const imageUrl = useCachedItemImageUrl({
         id: albumData.imageId || undefined,

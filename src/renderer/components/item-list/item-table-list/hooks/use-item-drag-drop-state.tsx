@@ -7,6 +7,7 @@ import { useItemDraggingState } from '/@/renderer/components/item-list/helpers/i
 import { ItemListStateActions } from '/@/renderer/components/item-list/helpers/item-list-state';
 import { eventEmitter } from '/@/renderer/events/event-emitter';
 import { PlayerContext } from '/@/renderer/features/player/context/player-context';
+import { playlistEntryId } from '/@/renderer/features/playlists/utils';
 import { useDragDrop } from '/@/renderer/hooks/use-drag-drop';
 import { isUpNextQueueBoundaryDrop } from '/@/renderer/store/player.store';
 import { Folder, LibraryItem, QueueSong, Song } from '/@/shared/types/domain-types';
@@ -387,8 +388,8 @@ export const useItemDragDropState = <TElement extends HTMLElement = HTMLDivEleme
                                   eventEmitter.emit('PLAYLIST_REORDER', {
                                       edge: args.edge,
                                       playlistId,
-                                      sourceIds: args.source.id,
-                                      targetId: targetItem.id,
+                                      sourceIds: sourceItems.map(playlistEntryId),
+                                      targetId: playlistEntryId(targetItem),
                                   });
                               }
                           }

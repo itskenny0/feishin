@@ -18,13 +18,7 @@ import { Tooltip } from '/@/shared/components/tooltip/tooltip';
 import { useMergedRef } from '/@/shared/hooks/use-merged-ref';
 import { Folder, LibraryItem } from '/@/shared/types/domain-types';
 import { DragOperation, DragTarget } from '/@/shared/types/drag-and-drop';
-
-const folderFilesystemName = (path?: null | string): null | string => {
-    if (!path) return null;
-    const segments = path.split(/[/\\]/).filter(Boolean);
-    if (segments.length === 0) return null;
-    return segments[segments.length - 1];
-};
+import { lastPathSegment } from '/@/shared/utils/album-folder-from-path';
 
 interface FlattenedNode {
     depth: number;
@@ -624,7 +618,7 @@ const RowComponent = ({
     };
 
     const displayName = useFsName
-        ? folderFilesystemName(item.folder.path) || item.folder.name
+        ? lastPathSegment(item.folder.path) || item.folder.name
         : item.folder.name;
 
     return (

@@ -35,6 +35,7 @@ import {
     RelatedArtist,
     Song,
 } from '/@/shared/types/domain-types';
+import { parentPathSegment } from '/@/shared/utils/album-folder-from-path';
 
 export type ItemDetailsModalProps = {
     item?: Album | AlbumArtist | Artist | Playlist | Song;
@@ -143,16 +144,9 @@ const FormatGenre = (item: Album | AlbumArtist | Playlist | Song) => {
 const BoolField = (key: boolean) =>
     key ? <Icon color="success" icon="check" /> : <Icon color="error" icon="x" />;
 
-const folderNameFromSongPath = (path?: null | string): null | string => {
-    if (!path) return null;
-    const segments = path.split(/[/\\]/).filter(Boolean);
-    if (segments.length < 2) return null;
-    return segments[segments.length - 2] ?? null;
-};
-
 const SongAlbumLink = ({ song }: { song: Song }) => {
     const useFs = useShowFilesystemNameForAlbums();
-    const fsName = useFs ? folderNameFromSongPath(song.path) : null;
+    const fsName = useFs ? parentPathSegment(song.path) : null;
     const display = fsName || song.album || '';
     return (
         <Text

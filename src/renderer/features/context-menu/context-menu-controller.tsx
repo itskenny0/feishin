@@ -65,7 +65,9 @@ export const ContextMenuController = createCallable<ContextMenuControllerProps, 
         }, [call, cmd, event, event.clientX, event.clientY, libraryId, queryClient]);
 
         return (
-            <ContextMenu>
+            // Each call() mounts a new instance; end it on close so closed
+            // menus (and the items they hold) don't pile up in the Root.
+            <ContextMenu onOpenChange={(open) => !open && call.end()}>
                 <ContextMenu.Target>
                     <div
                         ref={triggerRef}

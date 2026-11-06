@@ -4,19 +4,11 @@ import {
     TableColumnTextContainer,
 } from '/@/renderer/components/item-list/item-table-list/item-table-list-column';
 import { LibraryItem } from '/@/shared/types/domain-types';
+import { lastPathSegment, parentPathSegment } from '/@/shared/utils/album-folder-from-path';
 
-const folderNameFromPath = (item: { _itemType?: LibraryItem; path?: null | string }): string => {
-    const path = item.path;
-    if (!path) return '';
-    const segments = path.split(/[/\\]/).filter(Boolean);
-    if (segments.length === 0) return '';
-    // For a song the path ends in a filename, so the containing folder is the
-    // second-to-last segment. For a folder the path ends in the folder itself.
-    if (item._itemType === LibraryItem.SONG) {
-        return segments[segments.length - 2] || '';
-    }
-    return segments[segments.length - 1] || '';
-};
+// A song's path ends in its filename; a folder's path ends in the folder itself.
+const folderNameFromPath = (item: { _itemType?: LibraryItem; path?: null | string }) =>
+    item._itemType === LibraryItem.SONG ? parentPathSegment(item.path) : lastPathSegment(item.path);
 
 export const FolderNameColumn = (props: ItemTableListInnerColumn) => {
     const rowItem = props.getRowItem?.(props.rowIndex) ?? (props.data as any[])[props.rowIndex];

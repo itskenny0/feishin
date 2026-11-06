@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { albumFolderFromSongPath } from '/@/shared/utils/album-folder-from-path';
+import {
+    albumFolderFromSongPath,
+    lastPathSegment,
+    parentPathSegment,
+} from '/@/shared/utils/album-folder-from-path';
 
 describe('albumFolderFromSongPath', () => {
     it('returns null for nullish or empty input', () => {
@@ -46,5 +50,26 @@ describe('albumFolderFromSongPath', () => {
 
     it('ignores trailing and repeated separators', () => {
         expect(albumFolderFromSongPath('/Music//Artist///Album/01.flac')).toBe('Album');
+    });
+});
+
+describe('lastPathSegment / parentPathSegment', () => {
+    it('returns null for nullish, empty or separator-only input', () => {
+        for (const path of [undefined, null, '', '/', '\\']) {
+            expect(lastPathSegment(path)).toBeNull();
+            expect(parentPathSegment(path)).toBeNull();
+        }
+    });
+
+    it('handles POSIX and Windows separators and trailing separators', () => {
+        expect(lastPathSegment('/Music/Artist/Album/')).toBe('Album');
+        expect(lastPathSegment('C:\\Music\\Album\\01.flac')).toBe('01.flac');
+        expect(parentPathSegment('C:\\Music\\Album\\01.flac')).toBe('Album');
+        expect(parentPathSegment('/Music/Album/01.flac')).toBe('Album');
+    });
+
+    it('returns null for the parent of a single-segment path', () => {
+        expect(lastPathSegment('track.flac')).toBe('track.flac');
+        expect(parentPathSegment('/track.flac')).toBeNull();
     });
 });

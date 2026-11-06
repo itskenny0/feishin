@@ -9,12 +9,6 @@ import { useMergedRef } from '/@/shared/hooks/use-merged-ref';
 import { useThrottledCallback } from '/@/shared/hooks/use-throttled-callback';
 import { Platform } from '/@/shared/types/types';
 
-// Module-level cache keyed by `scrollKey` so navigating back into a list
-// restores the position the user left it at. Bounded only by the number of
-// distinct routes visited — fine for a music app, and entries are tiny
-// (number per key).
-const scrollPositionCache = new Map<string, number>();
-
 interface NativeScrollAreaProps {
     children: ReactNode;
     debugScrollPosition?: boolean;
@@ -22,26 +16,12 @@ interface NativeScrollAreaProps {
     pageHeaderProps?: PageHeaderProps & { offset: number; target?: any };
     scrollBarOffset?: string;
     scrollHideDelay?: number;
-    /**
-     * Stable per-route identifier (e.g. the route path or a list pageKey).
-     * When provided, the scroll position is persisted across mounts so
-     * back-navigation restores the user's place in long lists. Without it
-     * the scroll area behaves as before (no persistence).
-     */
-    scrollKey?: string;
     style?: CSSProperties;
 }
 
 const BaseNativeScrollArea = forwardRef(
     (
-        {
-            children,
-            noHeader,
-            pageHeaderProps,
-            scrollHideDelay,
-            scrollKey,
-            ...props
-        }: NativeScrollAreaProps,
+        { children, noHeader, pageHeaderProps, scrollHideDelay, ...props }: NativeScrollAreaProps,
         ref: Ref<HTMLDivElement>,
     ) => {
         const { windowBarStyle } = useWindowSettings();
@@ -54,12 +34,6 @@ const BaseNativeScrollArea = forwardRef(
         const scrollHandler = useThrottledCallback((e: Event) => {
             const scrollElement = e?.target as HTMLDivElement;
             if (!scrollElement) return;
-
-            // Persist position for back-navigation restore. Throttled (100ms)
-            // so a fast scroll doesn't write every frame.
-            if (scrollKey) {
-                scrollPositionCache.set(scrollKey, scrollElement.scrollTop);
-            }
 
             if (noHeader || !pageHeaderProps) {
                 return;
@@ -112,22 +86,8 @@ const BaseNativeScrollArea = forwardRef(
                 if (hasPageHeader) {
                     containerRef.current.setAttribute('data-scrolled', 'false');
                 }
-                // Restore the saved scroll position for this route once
-                // children have laid out. rAF gives the browser one frame
-                // to paint the initial content so the scrollTop assignment
-                // doesn't snap to 0 before the inner content has height.
-                if (scrollKey) {
-                    const saved = scrollPositionCache.get(scrollKey);
-                    if (saved && saved > 0) {
-                        requestAnimationFrame(() => {
-                            if (containerRef.current) {
-                                containerRef.current.scrollTop = saved;
-                            }
-                        });
-                    }
-                }
             }
-        }, [hasPageHeader, initialize, scrollKey]);
+        }, [hasPageHeader, initialize]);
 
         const mergedRef = useMergedRef(ref, containerRef);
 

@@ -29,13 +29,7 @@ import { Icon } from '/@/shared/components/icon/icon';
 import { Text } from '/@/shared/components/text/text';
 import { Folder, LibraryItem, QueueSong } from '/@/shared/types/domain-types';
 import { Play } from '/@/shared/types/types';
-
-const folderFilesystemName = (path?: null | string): null | string => {
-    if (!path) return null;
-    const segments = path.split(/[/\\]/).filter(Boolean);
-    if (segments.length === 0) return null;
-    return segments[segments.length - 1];
-};
+import { lastPathSegment } from '/@/shared/utils/album-folder-from-path';
 
 export const DefaultTitleCombinedColumn = (props: ItemTableListInnerColumn) => {
     const rowItem = props.getRowItem?.(props.rowIndex) ?? (props.data as any[])[props.rowIndex];
@@ -46,7 +40,7 @@ export const DefaultTitleCombinedColumn = (props: ItemTableListInnerColumn) => {
     const useFsForAlbums = useShowFilesystemNameForAlbums();
     const albumFsName =
         useFsForAlbums && item?._itemType === LibraryItem.ALBUM
-            ? folderFilesystemName(item?.path)
+            ? lastPathSegment(item?.path)
             : null;
     const displayName = albumFsName || (item?.name as string | undefined) || '';
 
@@ -397,7 +391,7 @@ export const QueueSongTitleCombinedColumn = (props: ItemTableListInnerColumn) =>
             : {};
 
         const folderItem = rowItem as unknown as Folder;
-        const fsName = useFsForFolders ? folderFilesystemName(folderItem?.path) : null;
+        const fsName = useFsForFolders ? lastPathSegment(folderItem?.path) : null;
         const title = fsName || folderItem?.name;
 
         return (

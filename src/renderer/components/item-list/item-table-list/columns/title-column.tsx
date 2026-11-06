@@ -19,11 +19,7 @@ import {
 import { ExplicitIndicator } from '/@/shared/components/explicit-indicator/explicit-indicator';
 import { Text } from '/@/shared/components/text/text';
 import { LibraryItem, QueueSong } from '/@/shared/types/domain-types';
-
-const filesystemNameFromPath = (path: string): string => {
-    const segments = path.split(/[/\\]/).filter(Boolean);
-    return segments[segments.length - 1] || '';
-};
+import { lastPathSegment } from '/@/shared/utils/album-folder-from-path';
 
 const useFilesystemDisplayName = (item: any, fallback: string): string => {
     const useFsForFolders = useShowFilesystemNameForFolders();
@@ -33,7 +29,7 @@ const useFilesystemDisplayName = (item: any, fallback: string): string => {
         (item._itemType === LibraryItem.FOLDER && useFsForFolders) ||
         (item._itemType === LibraryItem.ALBUM && useFsForAlbums);
     if (!apply) return fallback;
-    return filesystemNameFromPath(item.path) || fallback;
+    return lastPathSegment(item.path) || fallback;
 };
 
 const TitleColumnBase = (props: ItemTableListInnerColumn) => {

@@ -17,14 +17,23 @@
  */
 const DISC_FOLDER_RE = /^(?:disc|cd|disk|vol(?:ume)?\.?)\s*[\d]+$/i;
 
+const pathSegments = (path?: null | string): string[] =>
+    path ? path.split(/[/\\]/).filter(Boolean) : [];
+
 export const albumFolderFromSongPath = (path?: null | string): null | string => {
-    if (!path) return null;
-    const segments = path.split(/[/\\]/).filter(Boolean);
-    if (segments.length < 2) return null;
-    const parent = segments[segments.length - 2] ?? null;
+    const segments = pathSegments(path);
+    const parent = segments.at(-2) ?? null;
     if (parent && DISC_FOLDER_RE.test(parent)) {
         // Walk up past the disc folder if there's another level above.
-        return segments[segments.length - 3] ?? parent;
+        return segments.at(-3) ?? parent;
     }
     return parent;
 };
+
+/** File or folder name at the end of a POSIX or Windows path, ignoring trailing separators. */
+export const lastPathSegment = (path?: null | string): null | string =>
+    pathSegments(path).at(-1) ?? null;
+
+/** Name of the folder containing the file at the end of `path` (e.g. a song's folder). */
+export const parentPathSegment = (path?: null | string): null | string =>
+    pathSegments(path).at(-2) ?? null;

@@ -17,13 +17,7 @@ import { Button } from '/@/shared/components/button/button';
 import { Spinner } from '/@/shared/components/spinner/spinner';
 import { Text } from '/@/shared/components/text/text';
 import { LibraryItem } from '/@/shared/types/domain-types';
-
-const folderNameFromAlbumPath = (path?: null | string): null | string => {
-    if (!path) return null;
-    const segments = path.split(/[/\\]/).filter(Boolean);
-    if (segments.length === 0) return null;
-    return segments[segments.length - 1];
-};
+import { lastPathSegment } from '/@/shared/utils/album-folder-from-path';
 
 interface SearchAlbumsSectionProps {
     debouncedQuery: string;
@@ -141,9 +135,8 @@ export function SearchAlbumsSection({
                                         .map((artist) => artist.name)
                                         .join(', ')}
                                     title={
-                                        (useFsForAlbums
-                                            ? folderNameFromAlbumPath(album.path)
-                                            : null) || album.name
+                                        (useFsForAlbums ? lastPathSegment(album.path) : null) ||
+                                        album.name
                                     }
                                 />
                             )}

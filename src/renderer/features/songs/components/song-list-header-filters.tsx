@@ -1,9 +1,9 @@
-import { useCallback, useMemo } from 'react';
+import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { SONG_TABLE_COLUMNS } from '/@/renderer/components/item-list/item-table-list/default-columns';
 import { useListContext } from '/@/renderer/context/list-context';
-import { useAlbumListFilters } from '/@/renderer/features/albums/hooks/use-album-list-filters';
+import { useToggleGenreTarget } from '/@/renderer/features/genres/hooks/use-toggle-genre-target';
 import {
     ListConfigMenu,
     SONG_DISPLAY_TYPES,
@@ -18,7 +18,7 @@ import { ListSortByDropdown } from '/@/renderer/features/shared/components/list-
 import { ListSortOrderToggleButton } from '/@/renderer/features/shared/components/list-sort-order-toggle-button';
 import { FILTER_KEYS } from '/@/renderer/features/shared/utils';
 import { useSongListFilters } from '/@/renderer/features/songs/hooks/use-song-list-filters';
-import { GenreTarget, useGenreTarget, useSettingsStoreActions } from '/@/renderer/store';
+import { GenreTarget, useGenreTarget } from '/@/renderer/store';
 import { Button } from '/@/shared/components/button/button';
 import { Divider } from '/@/shared/components/divider/divider';
 import { Flex } from '/@/shared/components/flex/flex';
@@ -30,20 +30,11 @@ import { ItemListKey } from '/@/shared/types/types';
 export const SongListHeaderFilters = ({ toggleGenreTarget }: { toggleGenreTarget?: boolean }) => {
     const { t } = useTranslation();
     const target = useGenreTarget();
-    const { setGenreBehavior } = useSettingsStoreActions();
-    const albumFilters = useAlbumListFilters();
     const songFilters = useSongListFilters();
 
     const { pageKey } = useListContext();
 
-    const handleToggleGenreTarget = useCallback(() => {
-        // Clear all filter query states
-        albumFilters.clear();
-        songFilters.clear();
-
-        // Toggle the genre target
-        setGenreBehavior(target === GenreTarget.ALBUM ? GenreTarget.TRACK : GenreTarget.ALBUM);
-    }, [target, setGenreBehavior, albumFilters, songFilters]);
+    const handleToggleGenreTarget = useToggleGenreTarget();
 
     const choice = useMemo(() => {
         return target === GenreTarget.ALBUM

@@ -31,6 +31,11 @@ export const BaseTextScrolling = ({ children, gap, pause, speed, ...rest }: Text
     const [isOverflowing, setIsOverflowing] = useState(false);
     const [scrollDistance, setScrollDistance] = useState(0);
 
+    // Remount the track per title so scroll state (overflow flag, distance,
+    // transform) from a previous title can never leak into the next one. The
+    // scroll loop below depends on it so it restarts on the new track node.
+    const trackKey = typeof children === 'string' ? children : 'text-scrolling-track';
+
     useLayoutEffect(() => {
         const checkOverflow = () => {
             const container = containerRef.current;
@@ -136,11 +141,7 @@ export const BaseTextScrolling = ({ children, gap, pause, speed, ...rest }: Text
             cancelled = true;
             track.getAnimations().forEach((a) => a.cancel());
         };
-    }, [isOverflowing, scrollDistance, gap, pause, speed]);
-
-    // Remount the track per title so scroll state (overflow flag, distance,
-    // transform) from a previous title can never leak into the next one.
-    const trackKey = typeof children === 'string' ? children : 'text-scrolling-track';
+    }, [isOverflowing, scrollDistance, gap, pause, speed, trackKey]);
 
     return (
         <div className={styles.scrollingTextContainer} ref={containerRef}>

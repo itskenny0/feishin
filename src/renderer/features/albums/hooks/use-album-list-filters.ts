@@ -18,6 +18,19 @@ import { runInUrlTransition } from '/@/renderer/utils/url-transition';
 import { AlbumListSort, SortOrder } from '/@/shared/types/domain-types';
 import { ItemListKey } from '/@/shared/types/types';
 
+export const ALBUM_FILTER_RESET = {
+    [FILTER_KEYS.ALBUM._CUSTOM]: null,
+    [FILTER_KEYS.ALBUM.ARTIST_IDS]: null,
+    [FILTER_KEYS.ALBUM.COMPILATION]: null,
+    [FILTER_KEYS.ALBUM.FAVORITE]: null,
+    [FILTER_KEYS.ALBUM.GENRE_ID]: null,
+    [FILTER_KEYS.ALBUM.HAS_RATING]: null,
+    [FILTER_KEYS.ALBUM.MAX_YEAR]: null,
+    [FILTER_KEYS.ALBUM.MIN_YEAR]: null,
+    [FILTER_KEYS.ALBUM.RECENTLY_PLAYED]: null,
+    [FILTER_KEYS.SHARED.SEARCH_TERM]: null,
+};
+
 export const useAlbumListFilters = (listKey?: ItemListKey) => {
     const resolvedListKey = listKey ?? ItemListKey.ALBUM;
     const isMainAlbumView = resolvedListKey === ItemListKey.ALBUM;
@@ -230,18 +243,7 @@ export const useAlbumListFilters = (listKey?: ItemListKey) => {
                 (prev) =>
                     setMultipleSearchParams(
                         prev,
-                        {
-                            [FILTER_KEYS.ALBUM._CUSTOM]: null,
-                            [FILTER_KEYS.ALBUM.ARTIST_IDS]: null,
-                            [FILTER_KEYS.ALBUM.COMPILATION]: null,
-                            [FILTER_KEYS.ALBUM.FAVORITE]: null,
-                            [FILTER_KEYS.ALBUM.GENRE_ID]: null,
-                            [FILTER_KEYS.ALBUM.HAS_RATING]: null,
-                            [FILTER_KEYS.ALBUM.MAX_YEAR]: null,
-                            [FILTER_KEYS.ALBUM.MIN_YEAR]: null,
-                            [FILTER_KEYS.ALBUM.RECENTLY_PLAYED]: null,
-                            [FILTER_KEYS.SHARED.SEARCH_TERM]: null,
-                        },
+                        ALBUM_FILTER_RESET,
                         new Set([FILTER_KEYS.ALBUM._CUSTOM]),
                     ),
                 { replace: true },

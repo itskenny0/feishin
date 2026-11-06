@@ -6,6 +6,7 @@ import styles from './home-route.module.css';
 import { HydrationBanner, SyncChip } from '/@/renderer/cache';
 import { useGridCarouselContainerQuery } from '/@/renderer/components/grid-carousel/grid-carousel-v2';
 import { NativeScrollArea } from '/@/renderer/components/native-scroll-area/native-scroll-area';
+import { useNativeScrollPersist } from '/@/renderer/components/native-scroll-area/use-native-scroll-persist';
 import { AlbumInfiniteCarousel } from '/@/renderer/features/albums/components/album-infinite-carousel';
 import { FeaturedGenres } from '/@/renderer/features/home/components/featured-genres';
 import {
@@ -68,6 +69,7 @@ let hasPlayedHomeEntrance = false;
 const HomeRoute = () => {
     const { t } = useTranslation();
     const scrollAreaRef = useRef<HTMLDivElement>(null);
+    useNativeScrollPersist({ enabled: true, scrollRef: scrollAreaRef });
     const server = useCurrentServer();
     const { windowBarStyle } = useWindowSettings();
     const isMobileShell = useIsMobileShell();
@@ -296,7 +298,6 @@ const HomeRoute = () => {
                     offset: 200,
                 }}
                 ref={scrollAreaRef}
-                scrollKey="home"
             >
                 <LibraryContainer>
                     <Stack

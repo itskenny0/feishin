@@ -18,6 +18,17 @@ import { runInUrlTransition } from '/@/renderer/utils/url-transition';
 import { SongListSort, SortOrder } from '/@/shared/types/domain-types';
 import { ItemListKey } from '/@/shared/types/types';
 
+export const SONG_FILTER_RESET = {
+    [FILTER_KEYS.SHARED.SEARCH_TERM]: null,
+    [FILTER_KEYS.SONG._CUSTOM]: null,
+    [FILTER_KEYS.SONG.ARTIST_IDS]: null,
+    [FILTER_KEYS.SONG.FAVORITE]: null,
+    [FILTER_KEYS.SONG.GENRE_ID]: null,
+    [FILTER_KEYS.SONG.HAS_RATING]: null,
+    [FILTER_KEYS.SONG.MAX_YEAR]: null,
+    [FILTER_KEYS.SONG.MIN_YEAR]: null,
+};
+
 export const useSongListFilters = (listKey?: ItemListKey) => {
     const resolvedListKey = listKey ?? ItemListKey.SONG;
 
@@ -194,16 +205,7 @@ export const useSongListFilters = (listKey?: ItemListKey) => {
                 (prev) =>
                     setMultipleSearchParams(
                         prev,
-                        {
-                            [FILTER_KEYS.SHARED.SEARCH_TERM]: null,
-                            [FILTER_KEYS.SONG._CUSTOM]: null,
-                            [FILTER_KEYS.SONG.ARTIST_IDS]: null,
-                            [FILTER_KEYS.SONG.FAVORITE]: null,
-                            [FILTER_KEYS.SONG.GENRE_ID]: null,
-                            [FILTER_KEYS.SONG.HAS_RATING]: null,
-                            [FILTER_KEYS.SONG.MAX_YEAR]: null,
-                            [FILTER_KEYS.SONG.MIN_YEAR]: null,
-                        },
+                        SONG_FILTER_RESET,
                         new Set([FILTER_KEYS.SONG._CUSTOM]),
                     ),
                 { replace: true },

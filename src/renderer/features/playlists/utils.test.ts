@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
     convertNDQueryToQueryGroup,
     convertQueryGroupToNDQuery,
+    playlistEntryId,
     playlistSongsToAlbums,
     reorderPlaylistItems,
 } from '/@/renderer/features/playlists/utils';
@@ -335,5 +336,16 @@ describe('reorderPlaylistItems', () => {
         const input = make(['A', 'B', 'C']);
         const result = reorderPlaylistItems(input, ['A'], 'ZZZ', 'bottom');
         expect(result).toBe(input);
+    });
+
+    it('moves only the dragged entry when a song appears in the playlist twice', () => {
+        const input = [
+            { id: 'A', playlistItemId: 'e1' },
+            { id: 'B', playlistItemId: 'e2' },
+            { id: 'A', playlistItemId: 'e3' },
+        ];
+        const result = reorderPlaylistItems(input, ['e1'], 'e2', 'bottom');
+        expect(result.map(playlistEntryId)).toEqual(['e2', 'e1', 'e3']);
+        expect(ids(result)).toEqual(['B', 'A', 'A']);
     });
 });

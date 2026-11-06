@@ -13,6 +13,7 @@ import { Icon } from '/@/shared/components/icon/icon';
 import { Text } from '/@/shared/components/text/text';
 import { useImageHashUrl } from '/@/shared/hooks/use-image-hash-url';
 import { LibraryItem } from '/@/shared/types/domain-types';
+import { lastPathSegment } from '/@/shared/utils/album-folder-from-path';
 
 interface ContextMenuPreviewProps {
     items: unknown[];
@@ -42,17 +43,6 @@ const getItemPath = (item: unknown): null | string => {
         return item.path;
     }
     return null;
-};
-
-const filesystemNameFromPath = (path: string, isFolderItem: boolean): null | string => {
-    const segments = path.split(/[/\\]/).filter(Boolean);
-    if (segments.length === 0) return null;
-    // Songs end with the audio filename, so the containing folder is the
-    // segment before that. Albums and folders already point at the folder.
-    if (isFolderItem) {
-        return segments[segments.length - 1];
-    }
-    return segments[segments.length - 2] ?? null;
 };
 
 const getItemImage = (item: unknown): null | string => {
@@ -100,8 +90,8 @@ export const ContextMenuPreview = ({ items, itemType }: ContextMenuPreviewProps)
     const useFsName =
         (itemType === LibraryItem.ALBUM && useFsForAlbums) ||
         (itemType === LibraryItem.FOLDER && useFsForFolders);
-    const isFolderItem = itemType === LibraryItem.ALBUM || itemType === LibraryItem.FOLDER;
-    const filesystemName = useFsName && path ? filesystemNameFromPath(path, isFolderItem) : null;
+    // Only albums and folders opt in, and their path is the folder itself.
+    const filesystemName = useFsName ? lastPathSegment(path) : null;
     const itemName = filesystemName || metadataName;
 
     const itemImage = firstItem ? getItemImage(firstItem) : null;

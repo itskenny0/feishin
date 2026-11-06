@@ -79,6 +79,7 @@ import { useMergedRef } from '/@/shared/hooks/use-merged-ref';
 import { Album, LibraryItem, Song, SongListSort, SortOrder } from '/@/shared/types/domain-types';
 import { dndUtils, DragData, DragOperation, DragTarget } from '/@/shared/types/drag-and-drop';
 import { ItemListKey, Play, TableColumn } from '/@/shared/types/types';
+import { lastPathSegment } from '/@/shared/utils/album-folder-from-path';
 
 const DEFAULT_ROW_HEIGHT = 300;
 
@@ -97,13 +98,6 @@ const HOVER_DEPENDENT_COLUMNS = new Set<TableColumn>([
     TableColumn.USER_FAVORITE,
     TableColumn.USER_RATING,
 ]);
-
-const albumFolderNameFromPath = (path?: null | string): null | string => {
-    if (!path) return null;
-    const segments = path.split(/[/\\]/).filter(Boolean);
-    if (segments.length === 0) return null;
-    return segments[segments.length - 1];
-};
 
 interface ItemDetailListProps {
     currentPage?: number;
@@ -512,7 +506,7 @@ const MetadataSection = memo(
 
         const displayName =
             (useFsForAlbums && item?._itemType === LibraryItem.ALBUM
-                ? albumFolderNameFromPath(item?.path)
+                ? lastPathSegment(item?.path)
                 : null) ||
             item?.name ||
             '';
@@ -1558,9 +1552,7 @@ export const ItemDetailList = ({
             const album = (
                 getItem ? getItem(range.startIndex) : dataSourceRef.current[range.startIndex]
             ) as Album | undefined;
-            const fsName = useFilesystemNameRef.current
-                ? albumFolderNameFromPath(album?.path)
-                : null;
+            const fsName = useFilesystemNameRef.current ? lastPathSegment(album?.path) : null;
             const name = fsName || album?.name || '';
             const nameToShow = name || lastHeaderNameRef.current;
             if (name) {

@@ -53,6 +53,7 @@ import {
 import { DragOperation, DragTarget } from '/@/shared/types/drag-and-drop';
 import { Play } from '/@/shared/types/types';
 import { albumFolderFromSongPath } from '/@/shared/utils/album-folder-from-path';
+import { lastPathSegment } from '/@/shared/utils/album-folder-from-path';
 import { stringToColor } from '/@/shared/utils/string-to-color';
 
 export type DataRow = {
@@ -1268,11 +1269,6 @@ const SongAlbumName = ({ song }: { song: Song }) => {
     return <>{display}</>;
 };
 
-const filesystemNameFromAlbumPath = (path: string): string => {
-    const segments = path.split(/[/\\]/).filter(Boolean);
-    return segments[segments.length - 1] || '';
-};
-
 const preloadAlbumDetail = () => preloadRoute(AppRoute.LIBRARY_ALBUMS_DETAIL);
 const preloadAlbumArtistDetail = () => preloadRoute(AppRoute.LIBRARY_ALBUM_ARTISTS_DETAIL);
 const preloadGenreDetail = () => preloadRoute(AppRoute.LIBRARY_GENRES_DETAIL);
@@ -1280,8 +1276,7 @@ const preloadPlaylistDetail = () => preloadRoute(AppRoute.PLAYLISTS_DETAIL_SONGS
 
 const AlbumCardName = ({ data }: { data: Album }) => {
     const useFs = useShowFilesystemNameForAlbums();
-    const displayName =
-        useFs && data.path ? filesystemNameFromAlbumPath(data.path) || data.name : data.name;
+    const displayName = useFs && data.path ? lastPathSegment(data.path) || data.name : data.name;
     return (
         <Link
             onFocus={preloadAlbumDetail}

@@ -16,6 +16,8 @@ const albumFolderPathFromSongPath = (path?: null | string): null | string => {
     return segments.slice(0, -1).join('/');
 };
 
+type PlaylistEntry = { id: string; playlistItemId?: string };
+
 export function playlistSongsToAlbums(songs: Song[]): PlaylistAlbumRow[] {
     if (songs.length === 0) return [];
 
@@ -97,19 +99,21 @@ export function playlistSongsToAlbums(songs: Song[]): PlaylistAlbumRow[] {
     return rows;
 }
 
+// Per-entry id of a playlist row. A song can appear in a playlist more than
+// once, so `id` alone does not identify the row; the backend's entry id does.
+export const playlistEntryId = (item: PlaylistEntry): string => item.playlistItemId || item.id;
+
 // Pure reorder helper shared by the playlist edit-mode tracklist. Given the
-// current ordered list of items (matched by `id`), a set of source ids being
-// moved, the drop target id and the drop edge, returns the new ordering.
-// Multi-select moves keep the relative order of the sources. The math mirrors
-// what the PLAYLIST_REORDER handler needs; extracted here so it can be unit
-// tested in isolation.
-export function reorderPlaylistItems<T extends { id: string }>(
+// current ordered list of items (matched by `playlistEntryId`), a set of source
+// entry ids being moved, the drop target entry id and the drop edge, returns
+// the new ordering. Multi-select moves keep the relative order of the sources.
+export function reorderPlaylistItems<T extends PlaylistEntry>(
     items: T[],
     sourceIds: string[],
     targetId: string,
     edge: 'bottom' | 'top',
 ): T[] {
-    const currentIds = items.map((item) => item.id);
+    const currentIds = items.map(playlistEntryId);
 
     const targetIndex = currentIds.indexOf(targetId);
     if (targetIndex === -1) {
@@ -134,7 +138,7 @@ export function reorderPlaylistItems<T extends { id: string }>(
         ...idsWithoutSources.slice(insertIndex),
     ];
 
-    const itemMap = new Map(items.map((item) => [item.id, item]));
+    const itemMap = new Map(items.map((item) => [playlistEntryId(item), item]));
 
     return reorderedIds
         .map((id) => itemMap.get(id))

@@ -11,9 +11,9 @@ import { Skeleton } from '/@/shared/components/skeleton/skeleton';
  * because its top-level hooks are non-suspending Zustand reads. Only the
  * data-driven sections suspend, so these skeletons are used as:
  *
- *   - per-section Suspense fallbacks inside `home-route.tsx` (feature banner,
- *     genre grid), so each section fills in independently instead of one
- *     spinner gating the whole page, and
+ *   - per-section Suspense fallbacks inside `home-route.tsx` (genre grid),
+ *     so each section fills in independently instead of one spinner gating
+ *     the whole page, and
  *   - the route-level Suspense fallback (`HomeSkeleton`) so even the lazy
  *     route-chunk load paints a shaped skeleton rather than a centered spinner.
  *
@@ -27,12 +27,8 @@ import { Skeleton } from '/@/shared/components/skeleton/skeleton';
 const SKELETON_RADIUS = 'var(--theme-radius-md)';
 const SKELETON_RADIUS_SM = 'var(--theme-radius-sm)';
 
-/**
- * Banner-shaped fallback for the feature card / feature carousel (the
- * `FeatureCard`, `AlbumInfiniteFeatureCarousel`, and
- * `AlbumInfiniteSingleFeatureCarousel` slots). Matches their 280–300px height.
- */
-export const FeatureCardSkeleton = memo(() => {
+// Banner-shaped placeholder below the greeting.
+const FeatureCardSkeleton = memo(() => {
     return (
         <Skeleton borderRadius={SKELETON_RADIUS} className={styles.featureCard} enableAnimation />
     );

@@ -25,15 +25,9 @@ import { Icon } from '/@/shared/components/icon/icon';
 import { Stack } from '/@/shared/components/stack/stack';
 import { LibraryItem, SongListSort, SortOrder } from '/@/shared/types/domain-types';
 import { ItemListKey, ListDisplayType } from '/@/shared/types/types';
+import { lastPathSegment } from '/@/shared/utils/album-folder-from-path';
 
 const MAX_BREADCRUMB_TEXT_LENGTH = 26;
-
-const filesystemNameFromPath = (path?: null | string): null | string => {
-    if (!path) return null;
-    const segments = path.split(/[/\\]/).filter(Boolean);
-    if (segments.length === 0) return null;
-    return segments[segments.length - 1];
-};
 
 export const FolderListHeaderFilters = () => {
     const { t } = useTranslation();
@@ -78,8 +72,7 @@ export const FolderListHeaderFilters = () => {
         });
 
         folderPath.forEach((folder, index) => {
-            const displayName =
-                (useFsName ? filesystemNameFromPath(folder.path) : null) || folder.name;
+            const displayName = (useFsName ? lastPathSegment(folder.path) : null) || folder.name;
             items.push({
                 fullLabel: displayName,
                 id: `folder-${folder.id}`,

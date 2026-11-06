@@ -30,13 +30,7 @@ import { Icon } from '/@/shared/components/icon/icon';
 import { Text } from '/@/shared/components/text/text';
 import { Album, AlbumListSort, LibraryItem, SortOrder } from '/@/shared/types/domain-types';
 import { Play } from '/@/shared/types/types';
-
-const filesystemNameFromAlbumPath = (path?: null | string): null | string => {
-    if (!path) return null;
-    const segments = path.split(/[/\\]/).filter(Boolean);
-    if (segments.length === 0) return null;
-    return segments[segments.length - 1];
-};
+import { lastPathSegment } from '/@/shared/utils/album-folder-from-path';
 
 interface AlbumRowButtonProps extends Omit<ButtonProps, 'onContextMenu' | 'onPlay'> {
     item: Album;
@@ -291,7 +285,7 @@ export const SidebarFavoriteAlbumsList = () => {
             </Accordion.Control>
             <Accordion.Panel>
                 {items.map((item) => {
-                    const fsName = useFsName ? filesystemNameFromAlbumPath(item.path) : null;
+                    const fsName = useFsName ? lastPathSegment(item.path) : null;
                     return (
                         <AlbumRowButton
                             item={item}
