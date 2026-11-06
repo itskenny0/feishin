@@ -176,7 +176,18 @@ export const usePullToRefresh = (
             reset();
         };
 
+        // Pointer events alone lose the pull: on a touch drag the browser
+        // claims the gesture for scrolling / overscroll after the first move
+        // and fires pointercancel, so the pull never reached triggerPx.
+        // Cancelling touchmove while a pull is in progress (one finger moving
+        // down from the top) keeps the gesture ours; moving up still scrolls.
+        const handleTouchMove = (event: TouchEvent) => {
+            if (!active || event.touches.length !== 1 || !event.cancelable) return;
+            if (event.touches[0].clientY - startY > 0) event.preventDefault();
+        };
+
         el.addEventListener('pointerdown', handlePointerDown, { passive: true });
+        el.addEventListener('touchmove', handleTouchMove, { passive: false });
         el.addEventListener('pointermove', handlePointerMove, { passive: true });
         el.addEventListener('pointerup', handlePointerUp, { passive: true });
         el.addEventListener('pointercancel', handlePointerCancel, { passive: true });
@@ -184,6 +195,7 @@ export const usePullToRefresh = (
         return () => {
             disposed = true;
             el.removeEventListener('pointerdown', handlePointerDown);
+            el.removeEventListener('touchmove', handleTouchMove);
             el.removeEventListener('pointermove', handlePointerMove);
             el.removeEventListener('pointerup', handlePointerUp);
             el.removeEventListener('pointercancel', handlePointerCancel);
