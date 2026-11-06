@@ -39,7 +39,14 @@ describe('active backend', () => {
         await setActiveVolume(null);
     });
 
-    it('defaults to the idb backend when no volume is chosen', () => {
+    it('defaults to the fs backend on the internal volume when no volume is chosen', () => {
+        expect(getActiveVolume()?.id).toBe('internal');
+        expect(getActiveBackend().id).toBe('capacitor-fs');
+    });
+
+    it('falls back to idb before any volume is enumerated', async () => {
+        state.volumes = [];
+        await refreshVolumes();
         expect(getActiveBackend().id).toBe('idb');
     });
 

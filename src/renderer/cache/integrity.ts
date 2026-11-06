@@ -158,12 +158,15 @@ export const runIntegrityCheck = async (
 
     const [albums, songs] = await Promise.all([db.albums.count(), db.songs.count()]);
     const metas = await db.syncMeta.toArray();
-    const stateByEntity = new Map(metas.map((m) => [m.EntityType as string, m.hydrationState]));
+    const metaByEntity = new Map(metas.map((m) => [m.EntityType as string, m]));
     const entityCounts: Partial<Record<GateEntity, number>> = {};
     const entityFull: Partial<Record<GateEntity, boolean>> = {};
     for (const e of enabledEntities) {
         entityCounts[e] = await tableFor(db, e).count();
-        entityFull[e] = stateByEntity.get(e) === 'full';
+        // A sweep that saw an empty server list (no favourites / playlists /
+        // genres) legitimately leaves its table empty - that is not drift.
+        const meta = metaByEntity.get(e);
+        entityFull[e] = meta?.hydrationState === 'full' && meta.totalCount !== 0;
     }
 
     const verdict = computeIntegrityVerdict({
@@ -192,7 +195,7 @@ export const runIntegrityCheck = async (
 
     if (verdict.action === 'heal') {
         for (const e of verdict.healEntities) {
-            const meta = metas.find((m) => (m.EntityType as string) === e);
+            const meta = metaByEntity.get(e);
             await db.syncMeta.put({
                 EntityType: e,
                 hydrationState: 'none',

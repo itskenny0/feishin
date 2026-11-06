@@ -1,6 +1,6 @@
 // Durable optimistic mutation queue for the local-first cache.
 //
-// All writes to the server go through enqueueMutation(): we apply an
+// Favourite / rating / play-count writes go through enqueueMutation(): we apply an
 // optimistic patch to the Dexie cache, persist a queued row so the work
 // survives reloads, and then drain the queue in FIFO order with retry and
 // rollback. The store's pendingMutations counter is kept in sync so the UI
@@ -14,8 +14,6 @@ import type {
     CachedArtist,
     CachedFavorite,
     CachedFavoriteKind,
-    CachedPlaylist,
-    CachedPlaylistSong,
     CachedSong,
     MutationOp,
     MutationRow,
@@ -26,24 +24,16 @@ import { markRowCacheDirty } from './local-cache';
 import { useCacheStore } from './store';
 
 import { controller } from '/@/renderer/api/controller';
-import { collectAdaptivePaged } from '/@/renderer/api/paged-fetch';
 import { queryKeys } from '/@/renderer/api/query-keys';
 import { CONNECTIVITY_EVENT } from '/@/renderer/lib/network-status';
 import { queryClient } from '/@/renderer/lib/react-query';
 import { useAuthStore } from '/@/renderer/store';
 import { toast } from '/@/shared/components/toast/toast';
 import {
-    AddToPlaylistArgs,
-    CreatePlaylistArgs,
-    DeletePlaylistArgs,
     FavoriteArgs,
     LibraryItem,
-    MoveItemArgs,
-    RemoveFromPlaylistArgs,
     ScrobbleArgs,
     SetRatingArgs,
-    Song,
-    UpdatePlaylistArgs,
 } from '/@/shared/types/domain-types';
 
 // ---------------------------------------------------------------------------
@@ -255,17 +245,6 @@ interface OpHandler<TArgs, TSnapshot> {
     rollback: (db: LibraryCacheDb, snapshot: TSnapshot) => Promise<void>;
 }
 
-interface PlaylistRowSnapshot {
-    delete: boolean;
-    previous: CachedPlaylist | undefined;
-    songs?: CachedPlaylistSong[];
-}
-
-interface PlaylistSongsSnapshot {
-    playlistId: string;
-    previous: CachedPlaylistSong[];
-}
-
 // All op handlers accept the existing controller-style args (e.g.
 // FavoriteArgs, SetRatingArgs). The queue stores them as `unknown` and we
 // type-narrow inside each handler — callers MUST hand in the matching
@@ -430,54 +409,6 @@ const invalidateFavoriteScopes = (args: FavoriteArgs): void => {
 };
 
 // ---------------------------------------------------------------------------
-// Playlist helpers
-// ---------------------------------------------------------------------------
-
-const snapshotPlaylistSongs = async (
-    db: LibraryCacheDb,
-    playlistId: string,
-): Promise<PlaylistSongsSnapshot> => {
-    const previous = await db.playlistSongs
-        .where('PlaylistId')
-        .equals(playlistId)
-        .sortBy('ListOrder');
-    return { playlistId, previous };
-};
-
-const restorePlaylistSongs = async (
-    db: LibraryCacheDb,
-    snapshot: PlaylistSongsSnapshot,
-): Promise<void> => {
-    const current = await db.playlistSongs
-        .where('PlaylistId')
-        .equals(snapshot.playlistId)
-        .toArray();
-    await db.playlistSongs.bulkDelete(
-        current.map((row) => [row.PlaylistId, row.ListOrder] as [string, number]),
-    );
-    if (snapshot.previous.length > 0) {
-        await db.playlistSongs.bulkPut(snapshot.previous);
-    }
-};
-
-const invalidatePlaylistScopes = (serverId: string, playlistId?: string): void => {
-    queryClient.invalidateQueries({
-        exact: false,
-        queryKey: queryKeys.playlists.root(serverId),
-    });
-    if (playlistId) {
-        queryClient.invalidateQueries({
-            exact: false,
-            queryKey: queryKeys.playlists.detail(serverId, playlistId),
-        });
-        queryClient.invalidateQueries({
-            exact: false,
-            queryKey: queryKeys.playlists.songList(serverId, playlistId),
-        });
-    }
-};
-
-// ---------------------------------------------------------------------------
 // Op handlers
 // ---------------------------------------------------------------------------
 
@@ -602,195 +533,13 @@ const incrementPlayCountHandler: OpHandler<ScrobbleArgs, FavoriteSnapshot> = {
     rollback: rollbackFavorite,
 };
 
-const addToPlaylistHandler: OpHandler<AddToPlaylistArgs, PlaylistSongsSnapshot> = {
-    apply: async (db, args) => {
-        const playlistId = args.query.id;
-        const snapshot = await snapshotPlaylistSongs(db, playlistId);
-        const now = Date.now();
-        let nextOrder =
-            snapshot.previous.length > 0
-                ? snapshot.previous[snapshot.previous.length - 1].ListOrder + 1
-                : 0;
-        const newRows: CachedPlaylistSong[] = [];
-        for (const songId of args.body.songId) {
-            const songRow = await db.songs.get(songId);
-            if (!songRow) {
-                continue;
-            }
-            newRows.push({
-                __cachedAt: now,
-                ListOrder: nextOrder++,
-                PlaylistId: playlistId,
-                SongId: songId,
-                SongPayload: songRow.Payload,
-            });
-        }
-        if (newRows.length > 0) {
-            await db.playlistSongs.bulkPut(newRows);
-        }
-        return snapshot;
-    },
-    invalidate: (args) => invalidatePlaylistScopes(args.apiClientProps.serverId, args.query.id),
-    remote: (args) => controller.addToPlaylist(args),
-    rollback: restorePlaylistSongs,
-};
-
-const removeFromPlaylistHandler: OpHandler<RemoveFromPlaylistArgs, PlaylistSongsSnapshot> = {
-    apply: async (db, args) => {
-        const playlistId = args.query.id;
-        const snapshot = await snapshotPlaylistSongs(db, playlistId);
-        const removeSet = new Set(args.query.songId);
-        const keep = snapshot.previous.filter((row) => !removeSet.has(row.SongId));
-        // Recompute ListOrder densely so the indexes don't have gaps.
-        const reindexed: CachedPlaylistSong[] = keep.map((row, idx) => ({
-            ...row,
-            ListOrder: idx,
-        }));
-        const toDelete = snapshot.previous.map(
-            (row) => [row.PlaylistId, row.ListOrder] as [string, number],
-        );
-        await db.playlistSongs.bulkDelete(toDelete);
-        if (reindexed.length > 0) {
-            await db.playlistSongs.bulkPut(reindexed);
-        }
-        return snapshot;
-    },
-    invalidate: (args) => invalidatePlaylistScopes(args.apiClientProps.serverId, args.query.id),
-    remote: (args) => controller.removeFromPlaylist(args),
-    rollback: restorePlaylistSongs,
-};
-
-const reorderPlaylistHandler: OpHandler<MoveItemArgs, PlaylistSongsSnapshot> = {
-    apply: async (db, args) => {
-        const playlistId = args.query.playlistId;
-        const snapshot = await snapshotPlaylistSongs(db, playlistId);
-        const { endingIndex, startingIndex } = args.query;
-        if (
-            startingIndex < 0 ||
-            endingIndex < 0 ||
-            startingIndex >= snapshot.previous.length ||
-            endingIndex >= snapshot.previous.length ||
-            startingIndex === endingIndex
-        ) {
-            return snapshot;
-        }
-        const reordered = snapshot.previous.slice();
-        const [moved] = reordered.splice(startingIndex, 1);
-        reordered.splice(endingIndex, 0, moved);
-        const reindexed: CachedPlaylistSong[] = reordered.map((row, idx) => ({
-            ...row,
-            __cachedAt: Date.now(),
-            ListOrder: idx,
-        }));
-        const toDelete = snapshot.previous.map(
-            (row) => [row.PlaylistId, row.ListOrder] as [string, number],
-        );
-        await db.playlistSongs.bulkDelete(toDelete);
-        if (reindexed.length > 0) {
-            await db.playlistSongs.bulkPut(reindexed);
-        }
-        return snapshot;
-    },
-    invalidate: (args) =>
-        invalidatePlaylistScopes(args.apiClientProps.serverId, args.query.playlistId),
-    remote: (args) => {
-        const fn = controller.movePlaylistItem;
-        if (!fn) {
-            throw new Error('movePlaylistItem is not supported by the active server');
-        }
-        return fn(args);
-    },
-    rollback: restorePlaylistSongs,
-};
-
-const createPlaylistHandler: OpHandler<CreatePlaylistArgs, PlaylistRowSnapshot> = {
-    apply: async (db, args) => {
-        // We can't know the server-assigned id yet, so we don't optimistically
-        // insert a row — that would surface a phantom row that disappears on
-        // success. Instead, leave the cache as-is and rely on invalidate to
-        // refresh the playlist list once the server responds.
-        void db;
-        void args;
-        return { delete: false, previous: undefined };
-    },
-    invalidate: (args) => invalidatePlaylistScopes(args.apiClientProps.serverId),
-    remote: (args) => controller.createPlaylist(args),
-    rollback: async () => {
-        // Nothing to undo since apply was a no-op.
-    },
-};
-
-const renamePlaylistHandler: OpHandler<UpdatePlaylistArgs, PlaylistRowSnapshot> = {
-    apply: async (db, args) => {
-        const playlistId = args.query.id;
-        const prev = await db.playlists.get(playlistId);
-        if (!prev) {
-            return { delete: false, previous: undefined };
-        }
-        const now = Date.now();
-        await db.playlists.put({
-            ...prev,
-            __cachedAt: now,
-            Payload: {
-                ...prev.Payload,
-                name: args.body.name,
-            },
-            SortName: args.body.name,
-        });
-        return { delete: false, previous: prev };
-    },
-    invalidate: (args) => invalidatePlaylistScopes(args.apiClientProps.serverId, args.query.id),
-    remote: (args) => controller.updatePlaylist(args),
-    rollback: async (db, snapshot) => {
-        if (snapshot.previous) {
-            await db.playlists.put(snapshot.previous);
-        }
-    },
-};
-
-const deletePlaylistHandler: OpHandler<DeletePlaylistArgs, PlaylistRowSnapshot> = {
-    apply: async (db, args) => {
-        const playlistId = args.query.id;
-        const prev = await db.playlists.get(playlistId);
-        const songs = await db.playlistSongs
-            .where('PlaylistId')
-            .equals(playlistId)
-            .sortBy('ListOrder');
-        if (prev) {
-            await db.playlists.delete(playlistId);
-        }
-        if (songs.length > 0) {
-            await db.playlistSongs.bulkDelete(
-                songs.map((row) => [row.PlaylistId, row.ListOrder] as [string, number]),
-            );
-        }
-        return { delete: true, previous: prev, songs };
-    },
-    invalidate: (args) => invalidatePlaylistScopes(args.apiClientProps.serverId, args.query.id),
-    remote: (args) => controller.deletePlaylist(args),
-    rollback: async (db, snapshot) => {
-        if (snapshot.previous) {
-            await db.playlists.put(snapshot.previous);
-        }
-        if (snapshot.songs && snapshot.songs.length > 0) {
-            await db.playlistSongs.bulkPut(snapshot.songs);
-        }
-    },
-};
-
 // Cast through unknown — the queue stores args as `unknown` and we
 // type-narrow at each handler boundary; the runtime contract is enforced
 // by the caller passing the matching shape for the op.
 const handlers: Record<MutationOp, OpHandler<any, any>> = {
-    addToPlaylist: addToPlaylistHandler,
     createFavorite: createFavoriteHandler,
-    createPlaylist: createPlaylistHandler,
     deleteFavorite: deleteFavoriteHandler,
-    deletePlaylist: deletePlaylistHandler,
     incrementPlayCount: incrementPlayCountHandler,
-    removeFromPlaylist: removeFromPlaylistHandler,
-    renamePlaylist: renamePlaylistHandler,
-    reorderPlaylist: reorderPlaylistHandler,
     setRating: setRatingHandler,
 };
 
@@ -901,122 +650,17 @@ const refetchFavoriteEntity = async (
     }
 };
 
-const refetchPlaylistEntity = async (
-    db: LibraryCacheDb,
-    serverId: string,
-    playlistId: string,
-): Promise<void> => {
-    try {
-        const playlist = await controller.getPlaylistDetail({
-            apiClientProps: { serverId },
-            query: { id: playlistId },
-        });
-        const now = Date.now();
-        if (playlist) {
-            await db.playlists.put({
-                __cachedAt: now,
-                DateLastSaved: '',
-                Id: playlistId,
-                Payload: playlist,
-                SortName: playlist.name,
-            });
-        } else {
-            // Server says it's gone — remove our cached row.
-            await db.playlists.delete(playlistId);
-        }
-    } catch (err) {
-        console.error('[mutations] 409 playlist detail refetch failed', {
-            error: String(err),
-            playlistId,
-        });
-    }
-
-    try {
-        // Adaptive-paged instead of one fixed `limit: 5000` request — a single
-        // oversized request can hang on a slow/overloaded server. Not every
-        // server type actually honors limit/startIndex on this endpoint (some
-        // always return the whole playlist); if a page comes back larger than
-        // requested, treat it as the complete list and stop instead of
-        // looping on a startIndex that never advances.
-        let paginationUnsupported = false;
-        const songs = await collectAdaptivePaged<Song>(
-            async (startIndex, limit) => {
-                if (paginationUnsupported) return [];
-                const page = await controller.getPlaylistSongList({
-                    apiClientProps: { serverId },
-                    query: { id: playlistId, limit, startIndex },
-                });
-                const items = page?.items ?? [];
-                if (items.length > limit) paginationUnsupported = true;
-                return items;
-            },
-            { label: `playlist-songs-refetch:${playlistId}` },
-        );
-        const fresh: CachedPlaylistSong[] = songs.map((song, idx) => ({
-            __cachedAt: Date.now(),
-            ListOrder: idx,
-            PlaylistId: playlistId,
-            SongId: song.id,
-            SongPayload: song,
-        }));
-        // Wipe current rows for this playlist, then write the fresh slice.
-        const current = await db.playlistSongs.where('PlaylistId').equals(playlistId).toArray();
-        await db.playlistSongs.bulkDelete(
-            current.map((row) => [row.PlaylistId, row.ListOrder] as [string, number]),
-        );
-        if (fresh.length > 0) {
-            await db.playlistSongs.bulkPut(fresh);
-        }
-    } catch (err) {
-        console.error('[mutations] 409 playlist songs refetch failed', {
-            error: String(err),
-            playlistId,
-        });
-    }
-};
-
 const handleConflict = async (db: LibraryCacheDb, op: MutationOp, args: unknown): Promise<void> => {
     try {
-        switch (op) {
-            case 'addToPlaylist':
-            case 'removeFromPlaylist': {
-                const a = args as AddToPlaylistArgs | RemoveFromPlaylistArgs;
-                await refetchPlaylistEntity(db, a.apiClientProps.serverId, a.query.id);
-                break;
-            }
-            case 'createFavorite':
-            case 'deleteFavorite':
-            case 'incrementPlayCount':
-            case 'setRating': {
-                if (op === 'incrementPlayCount') {
-                    const a = args as ScrobbleArgs;
-                    // Treat the scrobbled item as a song for favorite-table purposes.
-                    await refetchFavoriteEntity(db, {
-                        apiClientProps: a.apiClientProps,
-                        query: { id: [a.query.id], type: LibraryItem.SONG },
-                    } as FavoriteArgs);
-                } else {
-                    await refetchFavoriteEntity(db, args as FavoriteArgs | SetRatingArgs);
-                }
-                break;
-            }
-            case 'createPlaylist': {
-                // No specific id to refetch — invalidate alone is enough.
-                break;
-            }
-            case 'deletePlaylist':
-            case 'renamePlaylist': {
-                const a = args as DeletePlaylistArgs | UpdatePlaylistArgs;
-                await refetchPlaylistEntity(db, a.apiClientProps.serverId, a.query.id);
-                break;
-            }
-            case 'reorderPlaylist': {
-                const a = args as MoveItemArgs;
-                await refetchPlaylistEntity(db, a.apiClientProps.serverId, a.query.playlistId);
-                break;
-            }
-            default:
-                break;
+        if (op === 'incrementPlayCount') {
+            const a = args as ScrobbleArgs;
+            // Treat the scrobbled item as a song for favorite-table purposes.
+            await refetchFavoriteEntity(db, {
+                apiClientProps: a.apiClientProps,
+                query: { id: [a.query.id], type: LibraryItem.SONG },
+            } as FavoriteArgs);
+        } else {
+            await refetchFavoriteEntity(db, args as FavoriteArgs | SetRatingArgs);
         }
     } catch (err) {
         console.error('[mutations] conflict refetch failed', { error: String(err), op });
@@ -1259,9 +903,3 @@ if (typeof window !== 'undefined') {
         }
     });
 }
-
-// React hook that subscribes the consumer to the live pending count.
-export const useMutationQueueCount = (): number => useCacheStore((s) => s.pendingMutations);
-
-// Test/internal helper to recompute the pending count on demand.
-export const refreshPendingMutationCount = setPendingCount;

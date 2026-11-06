@@ -13,7 +13,6 @@ export {
     resetCacheDb,
     setActiveCacheDb,
 } from './db';
-export { EnableCacheModal } from './enable-cache-modal';
 export { clearThumbnails } from './eviction';
 export { formatBytes, formatCount } from './format';
 export {
@@ -81,17 +80,9 @@ export {
 export { enqueueMutation } from './mutations';
 export { OfflineDownloadBanner } from './offline-download-banner';
 export {
-    addAndSyncOfflineTarget,
-    addOfflineTarget,
     cancelOfflineSync,
-    enumerateTargetSongs,
-    isSyncing as isOfflineSyncing,
     refreshOfflineAvailability,
     refreshOfflineStats,
-    removeAllTargets,
-    removeOfflineTarget,
-    syncAllTargets,
-    syncTarget,
 } from './offline-media';
 export {
     toCachedAlbumRow,
@@ -105,10 +96,8 @@ export {
     resetSearchIndexes,
     searchAlbumsLocal,
     searchArtistsLocal,
-    searchLocal,
     searchSongsLocal,
 } from './search';
-export type { SearchLocalResult } from './search';
 export {
     dropSnapshotsForEntity,
     dropSnapshotsForServer,

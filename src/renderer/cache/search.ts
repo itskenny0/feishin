@@ -1,7 +1,7 @@
 // Local-first global search backed by fuse.js indexes built lazily from
-// the Dexie tables. The indexes are constructed on the first searchLocal()
-// call after init (and rebuilt whenever the underlying table is marked
-// dirty), reused for the rest of the session.
+// the Dexie tables. The indexes are constructed on the first search call
+// after init (and rebuilt whenever the underlying table is marked dirty),
+// reused for the rest of the session.
 //
 // Index strategy
 // --------------
@@ -17,102 +17,41 @@
 // -------------
 // Whenever a write-through path (hook `apply`) lands fresh rows in Dexie
 // or a hydration sweep completes, callers invoke `markSearchDirty(entity)`.
-// The next ensureXIndex() call rebuilds from the current Dexie contents.
+// The next ensure() call rebuilds from the current Dexie contents.
 // Rebuilds happen at most once per stale-marker, not per-row; the cost of
 // rebuilding on every write would dominate the wall-clock budget.
 
-import type { Album, AlbumArtist, Playlist, Song } from '/@/shared/types/domain-types';
+import type { Album, AlbumArtist, Song } from '/@/shared/types/domain-types';
 
 import Fuse, { type IFuseOptions } from 'fuse.js';
+
+import type { LibraryCacheDb } from './db';
 
 import { isCacheAvailableSync } from './capability';
 import { getActiveCacheDb } from './db';
 import { markRowsChanged } from './local-cache';
 import { useCacheStore } from './store';
 
-export interface SearchLocalResult {
-    albums: Album[];
-    artists: AlbumArtist[];
-    playlists: Playlist[];
-    songs: Song[];
-}
+type IndexedEntity = 'albums' | 'artists' | 'songs';
 
-// Slim search-index entries. We hold a reference to the original Payload
-// so result mapping is a single property read — but the Fuse index itself
-// only walks the `name` / `artist` fields, which keeps the indexing cost
-// proportional to the number of indexed bytes, not to the full row
-// payload (artwork URLs, lyrics, genres array, etc).
-interface AlbumSearchEntry {
-    artist: string;
+// Slim search-index entry. We hold a reference to the original Payload so
+// result mapping is a single property read, but the Fuse index itself only
+// walks the `name` / `artist` fields, which keeps the indexing cost
+// proportional to the indexed bytes, not to the full row payload.
+interface SearchEntry<P> {
+    artist?: string;
     name: string;
-    payload: Album;
+    payload: P;
 }
 
-interface ArtistSearchEntry {
-    name: string;
-    payload: AlbumArtist;
-}
-
-type Entity = 'albums' | 'artists' | 'playlists' | 'songs';
-
-interface PlaylistSearchEntry {
-    name: string;
-    payload: Playlist;
-}
-
-interface SongSearchEntry {
-    artist: string;
-    name: string;
-    payload: Song;
-}
-
-// Per-entity index state. Each index is paired with a "dirty" flag so the
-// next access rebuilds when the underlying rows have changed.
-let albumsIndex: Fuse<AlbumSearchEntry> | undefined;
-let albumsDirty = true;
-let artistsIndex: Fuse<ArtistSearchEntry> | undefined;
-let artistsDirty = true;
-let playlistsIndex: Fuse<PlaylistSearchEntry> | undefined;
-let playlistsDirty = true;
-let songsIndex: Fuse<SongSearchEntry> | undefined;
-let songsDirty = true;
-
-// Fuse options operate on the projected slim entry, not the cached row.
-// `keys` reference `name` / `artist` directly so Fuse never walks the
-// Payload object — only the indexed strings.
-const albumFuseOptions: IFuseOptions<AlbumSearchEntry> = {
+const fuseOptions = <P>(
+    keys: IFuseOptions<SearchEntry<P>>['keys'],
+): IFuseOptions<SearchEntry<P>> => ({
     ignoreLocation: true,
-    keys: [
-        { name: 'name', weight: 0.7 },
-        { name: 'artist', weight: 0.3 },
-    ],
+    keys,
     threshold: 0.3,
     useExtendedSearch: false,
-};
-
-const artistFuseOptions: IFuseOptions<ArtistSearchEntry> = {
-    ignoreLocation: true,
-    keys: [{ name: 'name', weight: 1 }],
-    threshold: 0.3,
-    useExtendedSearch: false,
-};
-
-const playlistFuseOptions: IFuseOptions<PlaylistSearchEntry> = {
-    ignoreLocation: true,
-    keys: [{ name: 'name', weight: 1 }],
-    threshold: 0.3,
-    useExtendedSearch: false,
-};
-
-const songFuseOptions: IFuseOptions<SongSearchEntry> = {
-    ignoreLocation: true,
-    keys: [
-        { name: 'name', weight: 0.6 },
-        { name: 'artist', weight: 0.4 },
-    ],
-    threshold: 0.3,
-    useExtendedSearch: false,
-};
+});
 
 // Load an entire (possibly very large) table/collection in chunks, yielding to
 // the event loop between chunks. A 14k-artist library used to build its Fuse
@@ -121,19 +60,19 @@ const songFuseOptions: IFuseOptions<SongSearchEntry> = {
 // search (the cost is the deserialization, not Fuse). Chunking the read and
 // yielding between chunks keeps input + paint responsive; the background
 // prewarm (see schedulePrewarm) then moves the work off the search path
-// entirely. Returns null if the active cache DB switched mid-load — the rows
-// would belong to the previous server, so the caller must discard and let the
-// next caller rebuild against the new DB.
-type ActiveCacheDb = NonNullable<ReturnType<typeof getActiveCacheDb>>;
+// entirely. Returns null if the active cache DB switched mid-load (checked
+// after every chunk, including the last) - the rows would belong to the
+// previous server, so the caller must discard and let the next caller rebuild
+// against the new DB.
 const INDEX_BUILD_CHUNK = 1000;
 const loadAllChunked = async <T>(
-    db: ActiveCacheDb,
+    db: LibraryCacheDb,
     queryChunk: (offset: number, limit: number) => Promise<T[]>,
 ): Promise<null | T[]> => {
     const rows: T[] = [];
     for (let offset = 0; ; offset += INDEX_BUILD_CHUNK) {
-        if (db !== getActiveCacheDb()) return null;
         const batch = await queryChunk(offset, INDEX_BUILD_CHUNK);
+        if (db !== getActiveCacheDb()) return null;
         for (let i = 0; i < batch.length; i += 1) rows.push(batch[i]);
         if (batch.length < INDEX_BUILD_CHUNK) break;
         // Yield so a queued search keystroke / paint can interleave between
@@ -145,145 +84,115 @@ const loadAllChunked = async <T>(
     return rows;
 };
 
-const ensureAlbumsIndex = async (): Promise<Fuse<AlbumSearchEntry> | undefined> => {
-    if (albumsIndex && !albumsDirty) return albumsIndex;
-    const db = isCacheAvailableSync() ? getActiveCacheDb() : undefined;
-    if (!db) return undefined;
-    const start = performance.now();
-    // Chunked + yielding load (see loadAllChunked) — a single toArray() over a
-    // large table froze the UI for seconds. The mid-load DB-switch identity
-    // check (rows would belong to the previous server) is folded into the
-    // helper, which returns null on a switch.
-    const rows = await loadAllChunked(db, (offset, limit) =>
-        db.albums.offset(offset).limit(limit).toArray(),
-    );
-    if (!rows) {
-        console.info('[cache] search: albums index discarded, active db changed mid-build');
-        return undefined;
-    }
-    const entries: AlbumSearchEntry[] = new Array(rows.length);
-    for (let i = 0; i < rows.length; i += 1) {
-        const r = rows[i];
-        entries[i] = {
-            artist: r.Payload.albumArtists?.[0]?.name ?? '',
-            name: r.Payload.name ?? '',
-            payload: r.Payload,
-        };
-    }
-    albumsIndex = new Fuse(entries, albumFuseOptions);
-    albumsDirty = false;
-    console.info('[cache] search: index built', {
-        entity: 'albums',
-        ms: Math.round(performance.now() - start),
-        rows: rows.length,
-    });
-    return albumsIndex;
+// One lazily-built Fuse index per entity, rebuilt on the next access after a
+// dirty mark. Concurrent callers (a search + the background prewarm) share a
+// single in-flight build, and a build that a dirty mark / reset overtook is
+// still returned to its callers but not installed, so the next access
+// rebuilds from the fresh rows.
+const createIndex = <P>(
+    entity: IndexedEntity,
+    queryChunk: (db: LibraryCacheDb, offset: number, limit: number) => Promise<{ Payload: P }[]>,
+    toEntry: (payload: P) => SearchEntry<P>,
+    options: IFuseOptions<SearchEntry<P>>,
+) => {
+    let index: Fuse<SearchEntry<P>> | undefined;
+    let building: Promise<Fuse<SearchEntry<P>> | undefined> | undefined;
+    let dirty = true;
+    let generation = 0;
+
+    const build = async (): Promise<Fuse<SearchEntry<P>> | undefined> => {
+        const db = isCacheAvailableSync() ? getActiveCacheDb() : undefined;
+        if (!db) return undefined;
+        const gen = generation;
+        const start = performance.now();
+        const rows = await loadAllChunked(db, (offset, limit) => queryChunk(db, offset, limit));
+        if (!rows) {
+            console.info(`[cache] search: ${entity} index discarded, active db changed mid-build`);
+            return undefined;
+        }
+        const built = new Fuse(
+            rows.map((r) => toEntry(r.Payload)),
+            options,
+        );
+        if (gen === generation) {
+            index = built;
+            dirty = false;
+        }
+        console.info('[cache] search: index built', {
+            entity,
+            ms: Math.round(performance.now() - start),
+            rows: rows.length,
+        });
+        return built;
+    };
+
+    const ensure = (): Promise<Fuse<SearchEntry<P>> | undefined> => {
+        if (index && !dirty) return Promise.resolve(index);
+        building ??= build().finally(() => {
+            building = undefined;
+        });
+        return building;
+    };
+
+    const search = async (query: string, limit: number): Promise<P[]> => {
+        const trimmed = (query ?? '').trim();
+        if (!trimmed) return [];
+        const idx = await ensure();
+        return idx ? idx.search(trimmed, { limit }).map((r) => r.item.payload) : [];
+    };
+
+    const markDirty = (): void => {
+        dirty = true;
+        generation += 1;
+    };
+
+    const reset = (): void => {
+        markDirty();
+        index = undefined;
+    };
+
+    return { ensure, markDirty, reset, search };
 };
 
-const ensureArtistsIndex = async (): Promise<Fuse<ArtistSearchEntry> | undefined> => {
-    if (artistsIndex && !artistsDirty) return artistsIndex;
-    const db = isCacheAvailableSync() ? getActiveCacheDb() : undefined;
-    if (!db) return undefined;
-    const start = performance.now();
-    const rows = await loadAllChunked(db, (offset, limit) =>
-        db.artists.where('Kind').equals('AlbumArtist').offset(offset).limit(limit).toArray(),
-    );
-    if (!rows) {
-        console.info('[cache] search: artists index discarded, active db changed mid-build');
-        return undefined;
-    }
-    const entries: ArtistSearchEntry[] = new Array(rows.length);
-    for (let i = 0; i < rows.length; i += 1) {
-        const r = rows[i];
-        entries[i] = {
-            name: r.Payload.name ?? '',
-            payload: r.Payload,
-        };
-    }
-    artistsIndex = new Fuse(entries, artistFuseOptions);
-    artistsDirty = false;
-    console.info('[cache] search: index built', {
-        entity: 'artists',
-        ms: Math.round(performance.now() - start),
-        rows: rows.length,
-    });
-    return artistsIndex;
+const indexes = {
+    albums: createIndex<Album>(
+        'albums',
+        (db, offset, limit) => db.albums.offset(offset).limit(limit).toArray(),
+        (p) => ({ artist: p.albumArtists?.[0]?.name ?? '', name: p.name ?? '', payload: p }),
+        fuseOptions([
+            { name: 'name', weight: 0.7 },
+            { name: 'artist', weight: 0.3 },
+        ]),
+    ),
+    artists: createIndex<AlbumArtist>(
+        'artists',
+        (db, offset, limit) =>
+            db.artists.where('Kind').equals('AlbumArtist').offset(offset).limit(limit).toArray(),
+        (p) => ({ name: p.name ?? '', payload: p }),
+        fuseOptions([{ name: 'name', weight: 1 }]),
+    ),
+    songs: createIndex<Song>(
+        'songs',
+        (db, offset, limit) => db.songs.offset(offset).limit(limit).toArray(),
+        (p) => ({ artist: p.albumArtists?.[0]?.name ?? '', name: p.name ?? '', payload: p }),
+        fuseOptions([
+            { name: 'name', weight: 0.6 },
+            { name: 'artist', weight: 0.4 },
+        ]),
+    ),
 };
-
-const ensurePlaylistsIndex = async (): Promise<Fuse<PlaylistSearchEntry> | undefined> => {
-    if (playlistsIndex && !playlistsDirty) return playlistsIndex;
-    const db = isCacheAvailableSync() ? getActiveCacheDb() : undefined;
-    if (!db) return undefined;
-    const start = performance.now();
-    const rows = await loadAllChunked(db, (offset, limit) =>
-        db.playlists.offset(offset).limit(limit).toArray(),
-    );
-    if (!rows) {
-        console.info('[cache] search: playlists index discarded, active db changed mid-build');
-        return undefined;
-    }
-    const entries: PlaylistSearchEntry[] = new Array(rows.length);
-    for (let i = 0; i < rows.length; i += 1) {
-        const r = rows[i];
-        entries[i] = {
-            name: r.Payload?.name ?? '',
-            payload: r.Payload,
-        };
-    }
-    playlistsIndex = new Fuse(entries, playlistFuseOptions);
-    playlistsDirty = false;
-    console.info('[cache] search: index built', {
-        entity: 'playlists',
-        ms: Math.round(performance.now() - start),
-        rows: rows.length,
-    });
-    return playlistsIndex;
-};
-
-const ensureSongsIndex = async (): Promise<Fuse<SongSearchEntry> | undefined> => {
-    if (songsIndex && !songsDirty) return songsIndex;
-    const db = isCacheAvailableSync() ? getActiveCacheDb() : undefined;
-    if (!db) return undefined;
-    const start = performance.now();
-    const rows = await loadAllChunked(db, (offset, limit) =>
-        db.songs.offset(offset).limit(limit).toArray(),
-    );
-    if (!rows) {
-        console.info('[cache] search: songs index discarded, active db changed mid-build');
-        return undefined;
-    }
-    const entries: SongSearchEntry[] = new Array(rows.length);
-    for (let i = 0; i < rows.length; i += 1) {
-        const r = rows[i];
-        entries[i] = {
-            artist: r.Payload.albumArtists?.[0]?.name ?? '',
-            name: r.Payload.name ?? '',
-            payload: r.Payload,
-        };
-    }
-    songsIndex = new Fuse(entries, songFuseOptions);
-    songsDirty = false;
-    console.info('[cache] search: index built', {
-        entity: 'songs',
-        ms: Math.round(performance.now() - start),
-        rows: rows.length,
-    });
-    return songsIndex;
-};
+const INDEXED_ENTITIES = Object.keys(indexes) as IndexedEntity[];
 
 // Background prewarm: after rows are marked dirty (a sync/apply/sweep landed
 // fresh data) rebuild the indexes OFF the search path so the user's first
 // search is instant rather than paying the (now-chunked, but still non-zero)
 // build cost inline. Debounced so a burst of per-entity markSearchDirty calls
 // during a sweep coalesces into ONE rebuild, and run on idle so it never
-// competes with foreground work. ensureXIndex() is a no-op when its index is
+// competes with foreground work. ensure() is a no-op when its index is
 // already clean, so a redundant schedule is cheap.
 let prewarmTimer: ReturnType<typeof setTimeout> | undefined;
 const runPrewarm = (): void => {
-    void ensureAlbumsIndex();
-    void ensureArtistsIndex();
-    void ensurePlaylistsIndex();
-    void ensureSongsIndex();
+    for (const entity of INDEXED_ENTITIES) void indexes[entity].ensure();
 };
 const schedulePrewarm = (): void => {
     if (!isCacheAvailableSync()) return;
@@ -299,11 +208,12 @@ const schedulePrewarm = (): void => {
 };
 
 /**
- * Mark an entity's local search index as stale. The next call into
- * searchLocal() that touches that entity will rebuild it from the current
- * Dexie contents. Coarse-grained on purpose: write-through paths call this
- * once at the end of an `apply` rather than per-row, and a sweep completion
- * marks every affected entity at once.
+ * Mark an entity's local search index as stale. The next search that
+ * touches that entity will rebuild it from the current Dexie contents.
+ * Coarse-grained on purpose: write-through paths call this once at the end
+ * of an `apply` rather than per-row, and a sweep completion marks every
+ * affected entity at once. Playlists have no search index (global search
+ * never queries them locally), so marking them is a no-op.
  *
  * IMPORTANT (perf fix #1): this is now FUSE-ONLY. It deliberately does NOT
  * touch the grid row cache / sorted LRU (`local-cache.ts`). A background
@@ -315,19 +225,9 @@ const schedulePrewarm = (): void => {
  * deletes / wipes). Callers that mutate rows must invalidate the row cache
  * explicitly; `markSearchDirty` alone no longer refreshes the grid.
  */
-export const markSearchDirty = (entity: 'all' | Entity): void => {
-    if (entity === 'all') {
-        albumsDirty = true;
-        artistsDirty = true;
-        playlistsDirty = true;
-        songsDirty = true;
-        schedulePrewarm();
-        return;
-    }
-    if (entity === 'albums') albumsDirty = true;
-    if (entity === 'artists') artistsDirty = true;
-    if (entity === 'playlists') playlistsDirty = true;
-    if (entity === 'songs') songsDirty = true;
+export const markSearchDirty = (entity: 'all' | 'playlists' | IndexedEntity): void => {
+    if (entity === 'playlists') return;
+    for (const e of entity === 'all' ? INDEXED_ENTITIES : [entity]) indexes[e].markDirty();
     schedulePrewarm();
 };
 
@@ -341,106 +241,24 @@ export const resetSearchIndexes = (): void => {
         clearTimeout(prewarmTimer);
         prewarmTimer = undefined;
     }
-    albumsIndex = undefined;
-    artistsIndex = undefined;
-    playlistsIndex = undefined;
-    songsIndex = undefined;
-    albumsDirty = true;
-    artistsDirty = true;
-    playlistsDirty = true;
-    songsDirty = true;
+    for (const entity of INDEXED_ENTITIES) indexes[entity].reset();
 };
 
 const DEFAULT_LIMIT = 50;
 
 /**
- * Run a fuzzy search against the local Dexie-backed indexes for every
- * entity. Returns the top N (default 50) matches per entity. When the
- * cache is unavailable or the query is empty, returns an empty shape so
- * callers can fall through to the network without branching.
+ * Fuzzy-search one entity's local Dexie-backed index. Returns the top N
+ * (default 50) matches, or an empty list when the query is blank or the
+ * cache is unavailable so callers can fall through to the network.
  */
-export const searchLocal = async (
-    query: string,
-    limit: number = DEFAULT_LIMIT,
-): Promise<SearchLocalResult> => {
-    const trimmed = (query ?? '').trim();
-    if (!trimmed) {
-        return { albums: [], artists: [], playlists: [], songs: [] };
-    }
+export const searchAlbumsLocal = (query: string, limit = DEFAULT_LIMIT): Promise<Album[]> =>
+    indexes.albums.search(query, limit);
 
-    const start = performance.now();
-    const [albumsIdx, artistsIdx, songsIdx, playlistsIdx] = await Promise.all([
-        ensureAlbumsIndex(),
-        ensureArtistsIndex(),
-        ensureSongsIndex(),
-        ensurePlaylistsIndex(),
-    ]);
+export const searchArtistsLocal = (query: string, limit = DEFAULT_LIMIT): Promise<AlbumArtist[]> =>
+    indexes.artists.search(query, limit);
 
-    const albums = albumsIdx ? albumsIdx.search(trimmed, { limit }).map((r) => r.item.payload) : [];
-    const artists = artistsIdx
-        ? artistsIdx.search(trimmed, { limit }).map((r) => r.item.payload)
-        : [];
-    const songs = songsIdx ? songsIdx.search(trimmed, { limit }).map((r) => r.item.payload) : [];
-    const playlists = playlistsIdx
-        ? playlistsIdx.search(trimmed, { limit }).map((r) => r.item.payload)
-        : [];
-
-    console.info('[cache] search: query', {
-        hits: {
-            albums: albums.length,
-            artists: artists.length,
-            playlists: playlists.length,
-            songs: songs.length,
-        },
-        ms: Math.round(performance.now() - start),
-        q: trimmed,
-    });
-
-    return { albums, artists, playlists, songs };
-};
-
-/**
- * Convenience for a single-entity search; reuses the same indexes.
- */
-export const searchAlbumsLocal = async (
-    query: string,
-    limit: number = DEFAULT_LIMIT,
-): Promise<Album[]> => {
-    const trimmed = (query ?? '').trim();
-    if (!trimmed) return [];
-    const idx = await ensureAlbumsIndex();
-    return idx ? idx.search(trimmed, { limit }).map((r) => r.item.payload) : [];
-};
-
-export const searchArtistsLocal = async (
-    query: string,
-    limit: number = DEFAULT_LIMIT,
-): Promise<AlbumArtist[]> => {
-    const trimmed = (query ?? '').trim();
-    if (!trimmed) return [];
-    const idx = await ensureArtistsIndex();
-    return idx ? idx.search(trimmed, { limit }).map((r) => r.item.payload) : [];
-};
-
-export const searchSongsLocal = async (
-    query: string,
-    limit: number = DEFAULT_LIMIT,
-): Promise<Song[]> => {
-    const trimmed = (query ?? '').trim();
-    if (!trimmed) return [];
-    const idx = await ensureSongsIndex();
-    return idx ? idx.search(trimmed, { limit }).map((r) => r.item.payload) : [];
-};
-
-export const searchPlaylistsLocal = async (
-    query: string,
-    limit: number = DEFAULT_LIMIT,
-): Promise<Playlist[]> => {
-    const trimmed = (query ?? '').trim();
-    if (!trimmed) return [];
-    const idx = await ensurePlaylistsIndex();
-    return idx ? idx.search(trimmed, { limit }).map((r) => r.item.payload) : [];
-};
+export const searchSongsLocal = (query: string, limit = DEFAULT_LIMIT): Promise<Song[]> =>
+    indexes.songs.search(query, limit);
 
 // Module-level wiring -----------------------------------------------------
 //
@@ -449,8 +267,11 @@ export const searchPlaylistsLocal = async (
 //   1. `activeServer` changes  → the entire Dexie DB switches under us,
 //      every index is invalid. Drop them all.
 //   2. `sweep` going from defined → undefined  → a hydration sweep just
-//      finished, so the corresponding entity got fresh rows. Mark it
-//      dirty so the next search rebuilds.
+//      finished, so the corresponding entity got fresh rows. Mark it dirty
+//      and schedule an idle rebuild so the first user search after a sweep
+//      is instant rather than paying a 1-4s build cost. The sweep also left
+//      the grid row cache + sorted LRU genuinely stale: drop them via
+//      markRowsChanged (markSearchDirty alone is fuse-only).
 //
 // Both subscriptions only fire on the renderer; in the main process the
 // store is never instantiated and these lines are dead code.
@@ -464,41 +285,15 @@ if (typeof window !== 'undefined') {
             resetSearchIndexes();
         }
         const next = state.sweep;
-        if (prevSweep && !next) {
-            // The just-completed sweep targeted `prevSweep.entity`. Map
-            // sync entity types to search-index entities and mark dirty,
-            // then schedule a background index build so the first user
-            // search after a sweep is instant rather than paying a 1-4s
-            // build cost. Uses requestIdleCallback when available so the
-            // build happens during browser idle time.
-            const entity = prevSweep.entity;
-            let buildFn: (() => Promise<unknown>) | undefined;
-            // A completed sweep wrote a fresh batch of rows into Dexie, so
-            // the grid row cache + sorted LRU are genuinely stale: drop them
-            // via markRowsChanged (markSearchDirty alone is now fuse-only).
-            if (entity === 'albums') {
-                markSearchDirty('albums');
-                markRowsChanged('albums');
-                buildFn = ensureAlbumsIndex;
-            } else if (entity === 'artists') {
-                markSearchDirty('artists');
-                markRowsChanged('artists');
-                buildFn = ensureArtistsIndex;
-            } else if (entity === 'songs') {
-                markSearchDirty('songs');
-                markRowsChanged('songs');
-                buildFn = ensureSongsIndex;
-            } else if (entity === 'playlists') {
-                markSearchDirty('playlists');
-                buildFn = ensurePlaylistsIndex;
-            }
-            if (buildFn) {
-                const fn = buildFn;
-                if (typeof requestIdleCallback !== 'undefined') {
-                    requestIdleCallback(() => void fn());
-                } else {
-                    setTimeout(() => void fn(), 500);
-                }
+        const entity = prevSweep?.entity;
+        if (!next && (entity === 'albums' || entity === 'artists' || entity === 'songs')) {
+            markSearchDirty(entity);
+            markRowsChanged(entity);
+            const { ensure } = indexes[entity];
+            if (typeof requestIdleCallback !== 'undefined') {
+                requestIdleCallback(() => void ensure());
+            } else {
+                setTimeout(() => void ensure(), 500);
             }
         }
         prevSweep = next;

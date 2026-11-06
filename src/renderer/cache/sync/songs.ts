@@ -2,6 +2,7 @@ import type { LibraryCacheDb } from '../db';
 import type { CachedSong } from '../types';
 import type { SweepContext } from './sweep';
 
+import { toCachedSongRow } from '../row-mappers';
 import { runSweep } from './sweep';
 
 import { controller } from '/@/renderer/api/controller';
@@ -43,20 +44,8 @@ const fetchSongsPage =
             },
         });
 
-        const now = Date.now();
-        const items: CachedSong[] = (result?.items ?? []).map((song) => ({
-            __cachedAt: now,
-            AlbumArtistId: song.albumArtists?.[0]?.id,
-            AlbumId: song.albumId,
-            DateLastSaved: song.updatedAt,
-            Id: song.id,
-            IndexNumber: song.trackNumber,
-            ParentIndexNumber: song.discNumber,
-            Payload: song,
-        }));
-
         return {
-            items,
+            items: (result?.items ?? []).map(toCachedSongRow),
             total: result?.totalRecordCount ?? 0,
         };
     };

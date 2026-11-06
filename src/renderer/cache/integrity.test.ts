@@ -147,6 +147,26 @@ describe('runIntegrityCheck (side effects)', () => {
         expect(useSettingsStore.getState().localCache.firstSyncComplete?.[server.id]).toBeDefined();
     });
 
+    it('ok: a sweep that saw an empty server list is not stale (no favourites/playlists/genres)', async () => {
+        const db = await openCacheDb(server.id, server.userId as string);
+        if (!db) throw new Error('db did not open');
+        await db.albums.bulkPut([{ Id: 'a1' } as never]);
+        await db.songs.bulkPut([{ Id: 's1' } as never]);
+        for (const e of ['favorites', 'genres', 'playlists']) {
+            await db.syncMeta.put({
+                EntityType: e,
+                hydrationState: 'full',
+                totalCount: 0,
+            } as never);
+        }
+        useSettingsStore.getState().actions.setFirstSyncComplete(server.id, false);
+
+        const verdict = await runIntegrityCheck(db, server);
+
+        expect(verdict.action).toBe('ok');
+        expect((await db.syncMeta.get('favorites'))?.hydrationState).toBe('full');
+    });
+
     it('reset: clears the flag when the flag lies about an empty DB', async () => {
         const db = await openCacheDb(server.id, server.userId as string);
         if (!db) throw new Error('db did not open');

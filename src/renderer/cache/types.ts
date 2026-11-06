@@ -234,17 +234,7 @@ export type EntityType =
 
 export type HydrationState = 'full' | 'lazy' | 'none' | 'partial';
 
-export type MutationOp =
-    | 'addToPlaylist'
-    | 'createFavorite'
-    | 'createPlaylist'
-    | 'deleteFavorite'
-    | 'deletePlaylist'
-    | 'incrementPlayCount'
-    | 'removeFromPlaylist'
-    | 'renamePlaylist'
-    | 'reorderPlaylist'
-    | 'setRating';
+export type MutationOp = 'createFavorite' | 'deleteFavorite' | 'incrementPlayCount' | 'setRating';
 
 export interface MutationRow {
     args: unknown;

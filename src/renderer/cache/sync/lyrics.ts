@@ -189,6 +189,10 @@ export const runLyricsSweep = async (
                     async (songRow): Promise<CachedLyrics | undefined> => {
                         if (!songRow || signal.aborted) return undefined;
                         const result = await fetchLyrics(songRow.Payload, signal);
+                        // The fetcher swallows errors into `null`; a fetch cut
+                        // short by a cancel or a dropped connection is not an
+                        // authoritative "no lyrics" - write nothing so it retries.
+                        if (signal.aborted || !getIsOnline()) return undefined;
                         const row = toLyricsRow(songRow.Id, result, now());
                         bytesDownloaded += row.Lyrics.length;
                         return row;

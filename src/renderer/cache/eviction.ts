@@ -403,8 +403,7 @@ export const clearAllCacheData = async (): Promise<void> => {
 };
 
 /**
- * Wipe only the thumbnails table. Public counterpart to the
- * lower-level `clearThumbnailsTable` in `images.ts`.
+ * Wipe only the thumbnails table.
  */
 export const clearThumbnails = async (): Promise<void> => {
     const db = getActiveCacheDb();

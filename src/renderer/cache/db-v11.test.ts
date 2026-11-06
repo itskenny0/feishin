@@ -17,7 +17,7 @@ import { LibraryCacheDb } from '/@/renderer/cache/db';
 // The v10 thumbnails schema (single `ItemId` PK). We stand up a bare Dexie at
 // version 10 with just the tables this test touches, seed a row + the
 // thumbnails sync marker, then close it and reopen via LibraryCacheDb (which
-// declares up to v11) to trigger the upgrade.
+// declares v11 and later) to trigger the upgrade.
 const seedV10 = async (name: string): Promise<void> => {
     const legacy = new Dexie(name);
     legacy.version(10).stores({
@@ -79,8 +79,9 @@ describe('Dexie v11 thumbnails migration', () => {
         // The rekey is implemented as a delete-then-recreate across v11
         // (drop the single-keyed table) and v12 (recreate compound), because
         // Dexie can't change a primary key in a single version. The resulting
-        // schema is the artwork-variant `[ItemId+Variant]` key.
-        expect(db.verno).toBe(12);
+        // schema is the artwork-variant `[ItemId+Variant]` key. Later versions
+        // carry the thumbnails table forward unchanged.
+        expect(db.verno).toBeGreaterThanOrEqual(12);
         expect(db.table('thumbnails').schema.primKey.keyPath).toEqual(['ItemId', 'Variant']);
 
         db.close();

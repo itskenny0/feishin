@@ -132,4 +132,20 @@ describe('runLyricsSweep', () => {
             nextStartIndex: undefined,
         });
     });
+
+    it('does not record a fetch cut short by a cancel as "no lyrics"', async () => {
+        const { db, lyrics } = makeDb(['a']);
+        const controller = new AbortController();
+        await runLyricsSweep({ db, entity: 'lyrics', signal: controller.signal }, server, {
+            // The real fetcher swallows the AbortError into `null`.
+            fetchLyrics: async () => {
+                controller.abort();
+                return null;
+            },
+            now: () => 1,
+        });
+
+        // No permanent negative marker - the next sweep must retry the song.
+        expect(lyrics.has('a')).toBe(false);
+    });
 });

@@ -45,21 +45,13 @@ import {
 // the same upstream resize the resolver does.
 export const MAX_CACHE_SIZE = 1024;
 
-// The variant served to callers that haven't (yet) declared a surface
-// bucket — the original/full-resolution cover. Task 6 wires `ItemImage`'s
-// surface `type` through as the real variant; until then (and for the
-// legacy `<CachedImage>` / lifecycle resolver path) we resolve against the
-// full-size bucket. `0` px in the config means "original", which matches
-// the historical single-blob-at-MAX_CACHE_SIZE behaviour closely enough.
-export const DEFAULT_VARIANT = 'fullScreen';
-
 // Normalise the resolver's 2nd argument. Historically this was the caller's
 // numeric display `size` (ignored for keying); the variant cache (schema
 // v11) keys on the surface bucket instead. Legacy callers that still pass a
 // number — or anything non-string — collapse to the full-size variant so
 // they keep working until Task 6 threads the real bucket through.
 const normaliseVariant = (variant: number | string | undefined): string =>
-    typeof variant === 'string' && variant.length > 0 ? variant : DEFAULT_VARIANT;
+    typeof variant === 'string' && variant.length > 0 ? variant : 'fullScreen';
 
 // Normalises the resolver's request argument so callers can pass either a
 // bare URL (legacy callers like `<CachedImage>`) OR a full `ImageRequest`
@@ -154,6 +146,10 @@ export interface ResolverResult {
     noArtwork?: boolean;
 }
 const inFlight = new Map<string, Promise<ResolverResult>>();
+// Display-path tasks (cache-only: they never fetch an uncached bounded cover).
+// A fetching caller (sweep / background regenerate) must not join one, or it
+// inherits a zero-byte "pending" result instead of fetching.
+const displayTasks = new WeakSet<Promise<ResolverResult>>();
 
 // Consecutive image-fetch transport timeouts across the whole resolver. A
 // SINGLE slow cover (one 20s stall) used to flip the global offline latch and
@@ -219,8 +215,6 @@ const variantKey = (itemId: string, variant: string): string => `${itemId}::${va
 // them into memory (rather than using convertFileSrc) keeps the existing
 // shared-object-URL refcount machinery intact.
 
-const thumbBackendKey = (itemId: string, variant: string): string => `${itemId}::${variant}`;
-
 // Fill `row.Blob` from the filesystem backend for fs-backed rows that carry a
 // Path but no inline Blob. Mutates and returns the row. Negative-cache markers
 // (no Path, no Blob) and idb rows pass through untouched.
@@ -251,15 +245,8 @@ export const persistThumbnailFields = async (
     variant: string,
     blob: Blob,
 ): Promise<Partial<CachedThumbnail>> => {
-    const ref = await getActiveBackend().store('image', thumbBackendKey(itemId, variant), blob);
+    const ref = await getActiveBackend().store('image', variantKey(itemId, variant), blob);
     return rowFieldsForRef(ref) as Partial<CachedThumbnail>;
-};
-
-// Reclaim a thumbnail row's backing file (no-op for idb rows / negative-cache
-// markers).
-export const reclaimThumbnailBytes = async (row: CachedThumbnail): Promise<void> => {
-    const ref = refForRow(row);
-    if (ref) await backendForRef(ref).remove(ref);
 };
 
 // ---------------------------------------------------------------------------
@@ -1000,7 +987,8 @@ export const getCachedThumbnailDataUrl = async (itemId: string): Promise<null | 
         let smallestSize = Number.POSITIVE_INFINITY;
         for (const row of rows) {
             if (!row?.Blob) continue;
-            const size = typeof row.Size === 'number' ? row.Size : row.Blob.size;
+            // Byte size: `row.Size` is the stored PIXEL size, not bytes.
+            const size = row.Blob.size;
             if (size <= MAX_PREFERRED_BYTES && size > bestUnderCapSize) {
                 bestUnderCap = row.Blob;
                 bestUnderCapSize = size;
@@ -1129,45 +1117,6 @@ const serveFallbackPick = (
     return undefined;
 };
 
-// The largest cached cover blob for an item, across every NON-fullScreen
-// variant. `fullScreen` (the on-demand hi-res now-playing cover) is never
-// bulk-swept and is the largest variant, so `nearestLargerVariant` finds no
-// substitute and the player used to block on a cold server fetch (the >10s
-// "fullscreen cover loads slowly" report). This lets the player paint the
-// already-cached itemCard/table cover INSTANTLY (upscaled) while the real
-// fullScreen bucket fetches in the background — what upstream's bare <img>
-// effectively does, but served from Dexie. Excludes negative-cache markers.
-const largestCachedSubVariantPick = async (
-    itemId: string,
-): Promise<undefined | { blob?: Blob; fileUrl?: string }> => {
-    const db = getActiveCacheDb();
-    if (!db) return undefined;
-    try {
-        // RAW rows — see resolveFallbackPick: never base64-load fs rows here.
-        const rows = await db.thumbnails.where('ItemId').equals(itemId).toArray();
-        const cfg = getImageVariantsConfig();
-        let bestRow: CachedThumbnail | undefined;
-        let bestPx = -1;
-        for (const row of rows) {
-            if (!row?.Variant || row.Variant === 'fullScreen' || !(row.Blob || row.Path)) continue;
-            const px = effectivePx(cfg.variants[row.Variant as VariantName]?.px ?? 0);
-            if (px > bestPx) {
-                bestPx = px;
-                bestRow = row;
-            }
-        }
-        if (!bestRow) return undefined;
-        const ref = refForRow(bestRow);
-        const fileUrl =
-            bestRow.Path && !bestRow.Blob && ref ? backendForRef(ref).resolveUrl?.(ref) : undefined;
-        if (fileUrl) return { fileUrl };
-        if (bestRow.Blob) return { blob: bestRow.Blob };
-        return undefined;
-    } catch {
-        return undefined;
-    }
-};
-
 /**
  * Resolve a thumbnail to a `blob:` URL backed by the local cache. Accepts
  * either a bare URL (legacy callers) or a full `ImageRequest` so the
@@ -1246,7 +1195,8 @@ export const resolveThumbnail = async (
 
     const wantsDisplayBlob = !options?._skipBlobUrl;
 
-    const existing = inFlight.get(dedupKey);
+    let existing = inFlight.get(dedupKey);
+    if (existing && !wantsDisplayBlob && displayTasks.has(existing)) existing = undefined;
     if (existing) {
         // A DISPLAY resolve must NOT block on the in-flight task when the cache
         // can paint now. That task may be a background GENERATE fetching the
@@ -1530,7 +1480,8 @@ export const resolveThumbnail = async (
                 // placeholder). A cover already in Dexie — in ANY variant —
                 // always beats a loading skeleton or an on-demand network
                 // round-trip. `resolveFallbackPick` returns the nearest-LARGER
-                // cached variant and ALREADY records a degraded serve +
+                // cached variant (else the largest smaller one, upscaled - so
+                // any cached cover for the item wins) and ALREADY records a degraded serve +
                 // schedules regeneration of the exact bucket when its pick is
                 // stale or under-sized, so we serve it UNCONDITIONALLY and the
                 // exact size upgrades silently.
@@ -1548,28 +1499,6 @@ export const resolveThumbnail = async (
                     return fallback.fileUrl
                         ? { blob: undefined, bytes: 0, fileUrl: fallback.fileUrl }
                         : { blob: fallback.blob, bytes: 0 };
-                }
-                // No nearest-LARGER variant cached. Serve the largest cached
-                // SMALLER sibling (upscaled) — still this item's album art,
-                // still instant — and regenerate the exact bucket in the
-                // background. `fullScreen` (the largest variant, never
-                // bulk-swept → the now-playing hi-res cover) is the canonical
-                // case, but this now applies to EVERY variant, so no surface
-                // skeletons while ANY cover for the item exists.
-                if (getIsOnline()) {
-                    const subVariant = await largestCachedSubVariantPick(itemId);
-                    if (subVariant) {
-                        recordDegradedServe(itemId, resolvedVariant, request);
-                        imageVariantsInternals.scheduleVariantGenerate(
-                            itemId,
-                            resolvedVariant,
-                            request,
-                        );
-                        recordStat('blobHit');
-                        return subVariant.fileUrl
-                            ? { blob: undefined, bytes: 0, fileUrl: subVariant.fileUrl }
-                            : { blob: subVariant.blob, bytes: 0 };
-                    }
                 }
                 // Genuinely nothing cached for this item in any variant. Offline:
                 // bail without a doomed fetch (a hung LAN host burns the full 20s
@@ -1855,7 +1784,6 @@ export const resolveThumbnail = async (
             return { blob: undefined, bytes: 0 };
         } finally {
             if (gated) releaseResolveSlot();
-            inFlight.delete(dedupKey);
             if (wantsTiming) {
                 const totalMs = Math.round(performance.now() - tStart);
                 if (totalMs > 1000) {
@@ -1871,7 +1799,14 @@ export const resolveThumbnail = async (
         }
     })();
 
+    // Release the dedup entry on EVERY exit path (the fs fast path and the
+    // early abort return before the try/finally above), but only if it is
+    // still ours.
     inFlight.set(dedupKey, task);
+    if (wantsDisplayBlob) displayTasks.add(task);
+    void task.finally(() => {
+        if (inFlight.get(dedupKey) === task) inFlight.delete(dedupKey);
+    });
     const result = await task;
 
     // FS fast path: a native file URL (convertFileSrc) renders directly — no
@@ -1954,7 +1889,8 @@ export const resolveThumbnailWithBytes = async (
     // same per-variant inFlight entry. Reading only `result.bytes` means we
     // never createObjectURL on this path, so the sweep can no longer
     // leak per-item blob URLs.
-    if (!inFlight.has(dedupKey)) {
+    const current = inFlight.get(dedupKey);
+    if (!current || displayTasks.has(current)) {
         // Pass _skipBlobUrl so resolveThumbnail does not call
         // URL.createObjectURL — the returned string is discarded but the
         // browser URL registry would hold the Blob indefinitely, causing
@@ -1977,16 +1913,6 @@ export const resolveThumbnailWithBytes = async (
     // skip. Without this both look identical (`bytes: 0`) and a network blip
     // mid-sweep silently strands items as "no artwork" for the rest of the run.
     return { bytes: result.bytes, noArtwork: result.noArtwork, url };
-};
-
-/**
- * Empty the thumbnails table. Used by `Clear cache → thumbnails`.
- */
-export const clearThumbnailsTable = async (): Promise<void> => {
-    const db = getActiveCacheDb();
-    if (!db) return;
-    await db.thumbnails.clear();
-    console.info('[cache] thumbnails cleared');
 };
 
 // Bridge the refcounted shared-URL cache into the shared `useNativeImage`

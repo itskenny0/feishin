@@ -28,11 +28,6 @@ export const SOFT_MISS_TTL_MS = 30 * 60 * 1000; // 30 min
 // retries keeps the table small without forcing a manual clear after a re-tag.
 export const HARD_MISS_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
-// Back-compat alias for the old flat constant name (previously 7 days
-// everywhere). Kept so any future importer of the old name resolves to the
-// hard window; the per-row helper below is what code should actually use.
-export const MISS_TTL_MS = HARD_MISS_TTL_MS;
-
 /**
  * Per-row miss freshness window. A row's first 404 (MissCount 1 / undefined)
  * is only honoured for `SOFT_MISS_TTL_MS` so the next sweep re-checks it; a

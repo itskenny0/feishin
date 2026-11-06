@@ -137,6 +137,24 @@ describe('local-cache row layer', () => {
         expect(rows).toHaveLength(1);
         expect(loader).toHaveBeenCalledTimes(2);
     });
+
+    it('does not cache a load that was invalidated while in flight', async () => {
+        // A load started before a dirty mark (sweep write, server switch) read
+        // the PRE-change rows; it must not become the cached copy afterwards.
+        let resolveStale!: (rows: CachedAlbum[]) => void;
+        const staleLoader = vi.fn(
+            () => new Promise<CachedAlbum[]>((resolve) => (resolveStale = resolve)),
+        );
+        const pending = loadEntityRows<CachedAlbum>('albums', FAKE_DB, staleLoader);
+        markRowCacheDirty('albums');
+        resolveStale([fakeRow('old')]);
+        await pending;
+
+        const freshLoader = vi.fn(async () => [fakeRow('new')]);
+        const rows = await loadEntityRows<CachedAlbum>('albums', FAKE_DB, freshLoader);
+        expect(freshLoader).toHaveBeenCalledTimes(1);
+        expect(rows.map((r) => r.Id)).toEqual(['new']);
+    });
 });
 
 describe('local-cache sorted layer', () => {

@@ -421,10 +421,15 @@ export const clearLastOpenError = (): void => {
     lastOpenError = undefined;
 };
 
+// Bumped by every open / active-clear so an open that resolves after a newer
+// request (a fast server switch, a sign-out) can't steal `active` back.
+let activeSeq = 0;
+
 export const openCacheDb = async (
     serverId: string,
     userId: string,
 ): Promise<LibraryCacheDb | undefined> => {
+    const seq = (activeSeq += 1);
     if (!(await isCacheAvailable())) return undefined;
 
     const k = keyFor(serverId, userId);
@@ -440,6 +445,7 @@ export const openCacheDb = async (
         }
         handles.set(k, db);
     }
+    if (seq !== activeSeq) return db;
     active = { db, key: k };
     lastOpenError = undefined;
     resolveActiveDbWaiters(db);
@@ -560,6 +566,7 @@ export const setActiveCacheDb = async (
     userId: string | undefined,
 ): Promise<LibraryCacheDb | undefined> => {
     if (!serverId || !userId) {
+        activeSeq += 1;
         active = undefined;
         return undefined;
     }

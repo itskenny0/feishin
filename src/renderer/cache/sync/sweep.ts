@@ -624,13 +624,20 @@ export const runSweep = async <TItem>(args: RunSweepArgs<TItem>): Promise<void> 
         // OR skip rows that the writer thought were persisted (data
         // loss). The transaction boundary now exactly matches the
         // checkpoint boundary the resume logic depends on.
+        //
+        // A delta pass walks newest-first and always restarts from page 0, so
+        // its offsets must never become the resume cursor of a full (name-
+        // ordered) sweep - an interrupted delta would otherwise make the next
+        // full sweep skip its first N rows, including any newly-added items
+        // the delta hadn't reached yet. Keep the entity `full` instead so the
+        // next run re-runs the delta with the same cutoff.
         const nextStart = startIndex + pageItems.length;
         const metaRow = {
             EntityType: entity,
-            hydrationState: 'partial' as const,
+            hydrationState: isDelta ? ('full' as const) : ('partial' as const),
             lastFullSyncAt: existingMeta?.lastFullSyncAt,
             lastSweepAt: pageStartedAt,
-            nextStartIndex: nextStart,
+            nextStartIndex: isDelta ? 0 : nextStart,
             pausedUntil: undefined,
             totalCount: total,
         };

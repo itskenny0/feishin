@@ -110,7 +110,9 @@ class TableShim<T extends Record<string, any>> {
 const makeDb = () => {
     const mediaBlobs = new TableShim<CachedMediaBlob>('Key', MULTI_ENTRY.mediaBlobs);
     const offlineTargets = new TableShim<OfflineTargetRow>('Key');
-    return { mediaBlobs, offlineTargets } as unknown as LibraryCacheDb;
+    // Single-threaded shim: a transaction just runs its scope.
+    const transaction = async (...args: unknown[]) => (args[args.length - 1] as () => unknown)();
+    return { mediaBlobs, offlineTargets, transaction } as unknown as LibraryCacheDb;
 };
 
 const blob = (size: number): Blob => new Blob([new Uint8Array(size)]);

@@ -182,3 +182,57 @@ describe('runSweep transient-failure retry', () => {
         expect(syncMeta.put).not.toHaveBeenCalled();
     });
 });
+
+describe('runSweep delta checkpoint', () => {
+    it('never persists a newest-first delta offset as the full-sweep resume cursor', async () => {
+        const { db, syncMeta } = makeDb();
+        const lastFullSyncAt = Date.now() - 2 * 86_400_000;
+        syncMeta.get = vi.fn(
+            async () =>
+                ({
+                    EntityType: 'albums',
+                    hydrationState: 'full',
+                    lastFullSyncAt,
+                    nextStartIndex: 0,
+                    totalCount: 2000,
+                }) as never,
+        );
+        const fresh = new Date().toISOString();
+        let calls = 0;
+        const ctrl = new AbortController();
+        // Page 1 is entirely newer than the cutoff (so it commits a checkpoint);
+        // page 2 fails every retry, leaving the delta pass interrupted.
+        await runSweep<{ created: string; id: string }>({
+            ctx: { db, entity: 'albums', signal: ctrl.signal },
+            deltaCutoffMs: lastFullSyncAt,
+            fetchPage: async () => {
+                calls += 1;
+                if (calls === 1) {
+                    return {
+                        items: Array.from({ length: 50 }, (_, i) => ({
+                            created: fresh,
+                            id: `n${i}`,
+                        })),
+                        total: 2000,
+                    };
+                }
+                throw new Error('Failed to get album list');
+            },
+            itemDateMs: (it) => Date.parse(it.created),
+            pageSize: 50,
+            writePage: vi.fn(async () => undefined),
+        });
+
+        const puts = syncMeta.put.mock.calls as unknown as Array<
+            [{ hydrationState?: string; nextStartIndex?: number }]
+        >;
+        expect(puts.length).toBeGreaterThan(0);
+        // A full (name-ordered) sweep resumes from nextStartIndex, so a delta
+        // pass must leave it at 0 and keep the entity `full` - the next run then
+        // re-runs the delta from page 0 with the same cutoff.
+        for (const [row] of puts) {
+            expect(row.nextStartIndex).toBe(0);
+            expect(row.hydrationState).toBe('full');
+        }
+    });
+});

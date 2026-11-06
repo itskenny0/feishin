@@ -353,11 +353,24 @@ export class LocalMediaStore {
 
     // --- offline targets -------------------------------------------------
 
-    async patchTarget(key: string, patch: Partial<OfflineTargetRow>): Promise<void> {
+    /**
+     * Merge `patch` into a target row atomically (one rw transaction), so a
+     * worker's progress write can't resurrect a stale Status over a concurrent
+     * pause. With `onlyIf`, the patch applies only when the CURRENT row passes
+     * it. Returns whether the row was written.
+     */
+    async patchTarget(
+        key: string,
+        patch: Partial<OfflineTargetRow>,
+        onlyIf?: (row: OfflineTargetRow) => boolean,
+    ): Promise<boolean> {
         const db = this.db();
-        const existing = await db.offlineTargets.get(key);
-        if (!existing) return;
-        await db.offlineTargets.put({ ...existing, ...patch, UpdatedAt: Date.now() });
+        return db.transaction('rw', db.offlineTargets, async () => {
+            const existing = await db.offlineTargets.get(key);
+            if (!existing || (onlyIf && !onlyIf(existing))) return false;
+            await db.offlineTargets.put({ ...existing, ...patch, UpdatedAt: Date.now() });
+            return true;
+        });
     }
 
     async putTarget(row: OfflineTargetRow): Promise<void> {

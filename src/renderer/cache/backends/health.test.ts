@@ -27,7 +27,7 @@ describe('reconcileVolumeHealth', () => {
         await setActiveVolume(null);
     });
 
-    it('reports available on the idb backend (no volume chosen)', async () => {
+    it('reports available on the default volume (no volume chosen)', async () => {
         expect(await reconcileVolumeHealth()).toBe(true);
         expect(useCacheStore.getState().volumeAvailable).toBe(true);
     });

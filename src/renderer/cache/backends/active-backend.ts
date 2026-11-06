@@ -32,8 +32,6 @@ export const refreshVolumes = async (): Promise<VolumeInfo[]> => {
     return volumes;
 };
 
-export const getKnownVolumes = (): VolumeInfo[] => volumes;
-
 const androidSlice = () => useSettingsStore.getState().localCache?.android;
 
 const configuredVolumeId = (): null | string => androidSlice()?.storageVolumeId ?? null;
@@ -58,21 +56,15 @@ export const getActiveVolume = (): undefined | VolumeInfo => {
 const fsBackend = new CapacitorFsBackend(getActiveVolume);
 
 /**
- * The backend that owns byte storage right now. The Capacitor filesystem
- * backend is used on Android once a non-null volume is configured — even when
- * that volume is currently absent (card removed), so reads attempt and fail
- * gracefully and health() reports unavailable to drive the Task 10 banner.
- * Everywhere else (web, Electron, iOS, or Android with no volume chosen) the
- * IndexedDB backend is used.
+ * The backend that owns byte storage right now. Android native uses the
+ * Capacitor filesystem backend whenever a volume is configured (even when that
+ * volume is currently absent - card removed - so reads attempt and fail
+ * gracefully and health() reports unavailable to drive the banner) or a default
+ * internal volume resolves. Everywhere else (web, Electron, iOS, or Android
+ * before volumes are enumerated) the IndexedDB backend is used.
  */
-export const getActiveBackend = (): MediaBlobBackend => {
-    // Android native always uses the filesystem backend (defaulting to the
-    // internal volume via getActiveVolume) so covers/bytes are stored as files
-    // and read back as instant file URLs. Only when no volume can be resolved
-    // at all (volumes not yet enumerated) do we fall back to idb.
-    if (isAndroidNative() && getActiveVolume()) return fsBackend;
-    return idbBackend;
-};
+export const getActiveBackend = (): MediaBlobBackend =>
+    isAndroidNative() && (configuredVolumeId() || getActiveVolume()) ? fsBackend : idbBackend;
 
 /**
  * The backend that owns an EXISTING ref's bytes, chosen by the ref's kind —

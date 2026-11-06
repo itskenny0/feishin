@@ -174,10 +174,6 @@ export const clearAllSnapshots = (): void => {
     schedulePersist();
 };
 
-export const dropSnapshot = (key: QueryKey): void => {
-    if (snapshots.delete(hash(key))) schedulePersist();
-};
-
 /**
  * Drop everything keyed under a specific serverId. Used on server switch.
  *
@@ -195,16 +191,7 @@ export const dropSnapshot = (key: QueryKey): void => {
  * quote of the needle isn't present at that position.
  */
 export const dropSnapshotsForServer = (serverId: string): void => {
-    if (!serverId) return;
-    const needle = JSON.stringify(serverId);
-    let dropped = 0;
-    for (const k of snapshots.keys()) {
-        if (k.includes(needle)) {
-            snapshots.delete(k);
-            dropped += 1;
-        }
-    }
-    if (dropped > 0) schedulePersist();
+    dropSnapshotsForEntity(serverId);
 };
 
 /**

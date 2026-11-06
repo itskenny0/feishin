@@ -189,13 +189,3 @@ export const downscaleVariantsPooled = async (
         else queue.push(job);
     });
 };
-
-/** Tear the pool down (e.g. on teardown / tests). Idempotent. */
-export const terminateDownscalePool = (): void => {
-    if (!pool) return;
-    for (const pw of pool) pw.worker.terminate();
-    pool = null;
-    idle.length = 0;
-    queue.length = 0;
-    pending.clear();
-};

@@ -185,4 +185,50 @@ describe('processTarget', () => {
         expect(t?.DownloadedCount).toBe(1);
         expect(t?.LastError).toBe('Storage cap reached');
     });
+
+    it('concurrent target patches never drop each other (pause vs progress)', async () => {
+        await mgrSeed(store, 'downloading');
+        // A worker's progress write racing the pause control's status write.
+        await Promise.all([
+            store.patchTarget('s:album:a1', { Bytes: 5, DownloadedCount: 1 }),
+            store.patchTarget('s:album:a1', { Status: 'paused' }),
+        ]);
+        const t = await store.getTarget('s:album:a1');
+        expect(t?.Status).toBe('paused');
+        expect(t?.Bytes).toBe(5);
+    });
+
+    it('does not start a target that a control paused after it was dequeued', async () => {
+        // The pump re-validated the target as queued, then a pause landed before
+        // processTarget flipped it to enumerating.
+        getAlbumDetail.mockReset();
+        getAlbumDetail.mockResolvedValue({ songs: [song('s1')] });
+        await mgrSeed(store, 'queued');
+        const queued = (await store.getTarget('s:album:a1'))!;
+        await store.patchTarget('s:album:a1', { Status: 'paused' });
+        class Probe extends OfflineDownloadManager {
+            run(t: typeof queued) {
+                return this.processTarget(t);
+            }
+        }
+        await new Probe(() => store).run(queued);
+        expect(getAlbumDetail).not.toHaveBeenCalled();
+        expect((await store.getTarget('s:album:a1'))?.Status).toBe('paused');
+    });
 });
+
+const mgrSeed = (store: LocalMediaStore, status: 'downloading' | 'queued') =>
+    store.putTarget({
+        AddedAt: 0,
+        Bytes: 0,
+        DownloadedCount: 0,
+        EntityId: 'a1',
+        EntityType: 'album',
+        Key: 's:album:a1',
+        LastError: undefined,
+        Name: 'A',
+        ServerId: 's',
+        SongCount: undefined,
+        Status: status,
+        UpdatedAt: 0,
+    });

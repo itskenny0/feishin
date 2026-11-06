@@ -65,21 +65,18 @@ const sortedCache: Record<RowEntity, SortedEntry<unknown>[]> = {
     songs: [],
 };
 
+const ROW_ENTITIES = Object.keys(rowCache) as RowEntity[];
+
 /**
  * Drop the cached row array (and every sorted derivative) for the given
  * entity. Callers should invoke this whenever fresh rows land in Dexie
  * (write-through apply, completed sweep, mutation rollback).
  */
 export const markRowCacheDirty = (entity: 'all' | RowEntity): void => {
-    if (entity === 'all') {
-        for (const key of Object.keys(rowCache) as RowEntity[]) {
-            rowCache[key] = {};
-            sortedCache[key] = [];
-        }
-        return;
+    for (const key of entity === 'all' ? ROW_ENTITIES : [entity]) {
+        rowCache[key] = {};
+        sortedCache[key] = [];
     }
-    rowCache[entity] = {};
-    sortedCache[entity] = [];
 };
 
 /**
@@ -194,15 +191,7 @@ export const markRowsChangedFromPage = (
     page: PageRowRef[],
 ): boolean => {
     const slots = entity === 'artists' ? (['albumArtists', 'artists'] as const) : [entity];
-    let changed = false;
-    for (const slot of slots) {
-        if (slotPageChanged(slot as RowEntity, page)) {
-            changed = true;
-            break;
-        }
-    }
-
-    if (changed) {
+    if (slots.some((slot) => slotPageChanged(slot as RowEntity, page))) {
         for (const slot of slots) markRowCacheDirty(slot as RowEntity);
         return true;
     }
@@ -248,10 +237,13 @@ export const loadEntityRows = async <TRow>(
     if (entry.rows) return entry.rows as TRow[];
     if (entry.promise) return entry.promise as Promise<TRow[]>;
 
+    // Settle into the captured `entry`, not `rowCache[entity]`: a dirty mark or
+    // server switch while the load is in flight replaces the slot, and these
+    // pre-change rows (possibly another server's) must not land in the new one.
     const start = performance.now();
     entry.promise = loader(db).then((rows) => {
-        rowCache[entity].rows = rows;
-        rowCache[entity].promise = undefined;
+        entry.rows = rows;
+        entry.promise = undefined;
         console.info('[cache] local-cache: loaded rows', {
             entity,
             ms: Math.round(performance.now() - start),
@@ -263,8 +255,7 @@ export const loadEntityRows = async <TRow>(
         return (await entry.promise) as TRow[];
     } catch (err) {
         // Loader threw — clear so the next caller retries from Dexie.
-        rowCache[entity].promise = undefined;
-        rowCache[entity].rows = undefined;
+        entry.promise = undefined;
         throw err;
     }
 };
@@ -386,29 +377,14 @@ export interface LocalCacheDebugSnapshot {
     sorted: Record<RowEntity, { signatures: string[] }>;
 }
 
-export const debugLocalCache = (): LocalCacheDebugSnapshot => ({
-    rows: {
-        albumArtists: {
-            count: rowCache.albumArtists.rows?.length,
-            inFlight: rowCache.albumArtists.promise !== undefined,
-        },
-        albums: {
-            count: rowCache.albums.rows?.length,
-            inFlight: rowCache.albums.promise !== undefined,
-        },
-        artists: {
-            count: rowCache.artists.rows?.length,
-            inFlight: rowCache.artists.promise !== undefined,
-        },
-        songs: {
-            count: rowCache.songs.rows?.length,
-            inFlight: rowCache.songs.promise !== undefined,
-        },
-    },
-    sorted: {
-        albumArtists: { signatures: sortedCache.albumArtists.map((e) => e.signature) },
-        albums: { signatures: sortedCache.albums.map((e) => e.signature) },
-        artists: { signatures: sortedCache.artists.map((e) => e.signature) },
-        songs: { signatures: sortedCache.songs.map((e) => e.signature) },
-    },
-});
+export const debugLocalCache = (): LocalCacheDebugSnapshot => {
+    const snap = { rows: {}, sorted: {} } as LocalCacheDebugSnapshot;
+    for (const e of ROW_ENTITIES) {
+        snap.rows[e] = {
+            count: rowCache[e].rows?.length,
+            inFlight: rowCache[e].promise !== undefined,
+        };
+        snap.sorted[e] = { signatures: sortedCache[e].map((x) => x.signature) };
+    }
+    return snap;
+};

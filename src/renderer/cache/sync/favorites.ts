@@ -1,7 +1,7 @@
 import type { CachedFavorite } from '../types';
 import type { SweepContext } from './sweep';
 
-import { markSearchDirty } from '../search';
+import { markRowsChanged } from '../local-cache';
 import { useCacheStore } from '../store';
 import { isSweepNetworkError } from './sweep';
 
@@ -241,7 +241,7 @@ export const runFavoritesSweep = async (
             // memo. Without this the sidebar stayed empty until a server
             // switch. (The album-api fromCache guard handles the cold path;
             // this covers a memo that landed before these rows were written.)
-            markSearchDirty('albums');
+            markRowsChanged('albums');
             emitFavoritesProgress(acc);
             await checkpoint(1);
         }
@@ -288,7 +288,7 @@ export const runFavoritesSweep = async (
             trackFresh(artists);
             // Same rationale as the albums phase: drop any favourite-filtered
             // artist memo computed before these favourite rows landed.
-            markSearchDirty('artists');
+            markRowsChanged('artists');
             emitFavoritesProgress(acc);
             await checkpoint(2);
         }
@@ -335,7 +335,7 @@ export const runFavoritesSweep = async (
             trackFresh(songs);
             // Same rationale as the albums phase: drop any favourite-filtered
             // song memo computed before these favourite rows landed.
-            markSearchDirty('songs');
+            markRowsChanged('songs');
             emitFavoritesProgress(acc);
             await checkpoint(3);
         }
@@ -370,9 +370,9 @@ export const runFavoritesSweep = async (
                 // Pruning favourite rows can change every favourite-filtered
                 // list result; drop the row/sorted memos so the next read
                 // recomputes against the reconciled favourites set.
-                markSearchDirty('albums');
-                markSearchDirty('artists');
-                markSearchDirty('songs');
+                markRowsChanged('albums');
+                markRowsChanged('artists');
+                markRowsChanged('songs');
                 console.info('[cache] sweep:favorites reconciled stale rows', {
                     fresh: freshKeys.size,
                     removed: stale.length,

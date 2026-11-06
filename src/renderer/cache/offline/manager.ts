@@ -200,18 +200,16 @@ export class OfflineDownloadManager {
         }
     }
 
-    isRunning(): boolean {
-        return this.pumping;
-    }
-
     /** Pause a target: stop its in-flight download and drop it from the queue. */
     async pause(key: string): Promise<void> {
+        // Abort first so no worker builds a 'downloading' status write after
+        // the pause has been recorded.
+        this.abortTarget(key);
         await this.getStore().patchTarget(key, {
             EnqueuedAt: undefined,
             Preempt: false,
             Status: 'paused',
         });
-        this.abortTarget(key);
         console.info(`${TAG} paused`, { key });
     }
 
@@ -221,13 +219,6 @@ export class OfflineDownloadManager {
             (t) => t.Status === 'downloading' || t.Status === 'enumerating',
         );
         if (active) await this.pause(active.Key);
-    }
-
-    /** Pause every active/queued target. */
-    async pauseAll(): Promise<void> {
-        for (const t of await this.getStore().listTargets()) {
-            if (READY.has(t.Status)) await this.pause(t.Key);
-        }
     }
 
     /**
@@ -280,15 +271,6 @@ export class OfflineDownloadManager {
             Status: 'queued',
         });
         void this.kick();
-    }
-
-    /** Re-queue every paused/partial/error target. */
-    async resumeAll(): Promise<void> {
-        for (const t of await this.getStore().listTargets()) {
-            if (t.Status === 'paused' || t.Status === 'partial' || t.Status === 'error') {
-                await this.resume(t.Key);
-            }
-        }
     }
 
     /**
@@ -468,7 +450,18 @@ export class OfflineDownloadManager {
         this.aborts.set(key, abort);
         const startedAt = Date.now();
 
-        await store.patchTarget(key, { LastError: undefined, Status: 'enumerating' });
+        // Conditional on the row still being ready: a pause/remove landing
+        // between the pump's re-validation read and here must not be clobbered.
+        const started = await store.patchTarget(
+            key,
+            { LastError: undefined, Status: 'enumerating' },
+            (t) => READY.has(t.Status),
+        );
+        if (!started || abort.signal.aborted) {
+            this.aborts.delete(key);
+            console.info(`${TAG} skip stale dequeue`, { key });
+            return;
+        }
 
         // Songs whose bytes are already counted in THIS target's footprint, so
         // a re-download's byte delta is reconciled correctly on the cap.

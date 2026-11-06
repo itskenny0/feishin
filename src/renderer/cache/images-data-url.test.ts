@@ -25,10 +25,13 @@ vi.mock('/@/renderer/cache/db', () => ({
 
 import { getCachedThumbnailDataUrl } from '/@/renderer/cache/images';
 
-const row = (variant: string, size: number) => ({
-    Blob: new Blob(['x'.repeat(size)], { type: 'image/jpeg' }),
+// `Size` is the stored PIXEL size (as the resolver/sweep write it); the cap
+// is on bytes, so it must be judged by the blob, not by `Size`.
+const PX: Record<string, number> = { fullScreen: 1080, itemCard: 300, table: 80 };
+const row = (variant: string, bytes: number) => ({
+    Blob: new Blob(['x'.repeat(bytes)], { type: 'image/jpeg' }),
     ItemId: 'item-1',
-    Size: size,
+    Size: PX[variant],
     Variant: variant,
 });
 

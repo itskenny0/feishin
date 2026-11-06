@@ -33,6 +33,15 @@ import { toast } from '/@/shared/components/toast/toast';
 // Per-session de-dup so the "Cache unavailable" toast fires once per
 // (serverId, userId) rather than re-firing on every effect re-run.
 let lastToastedErrorKey: string | undefined;
+const toastCorruptedOnce = (key: string): void => {
+    if (lastToastedErrorKey === key) return;
+    lastToastedErrorKey = key;
+    toast.error({
+        autoClose: 8000,
+        message: 'Local cache database is corrupted. Go to Settings → Library sync to reset it.',
+        title: 'Cache unavailable',
+    });
+};
 
 // Auto-reset a hard-broken DB at most once per (serverId, userId) per session so
 // a failed schema upgrade self-heals instead of stranding the user on the manual
@@ -158,7 +167,7 @@ const runThumbnailMissPurgeOnce = async (db: LibraryCacheDb): Promise<void> => {
 
 /**
  * Mount-once renderer hook that wires the Dexie-backed cache to the
- * current auth-store server. It performs four jobs, one per effect:
+ * current auth-store server. Its main jobs, one per effect:
  *
  *  1. Probes IndexedDB capability once at startup and writes the result
  *     into `useCacheStore.cacheAvailable`.
@@ -172,14 +181,18 @@ const runThumbnailMissPurgeOnce = async (db: LibraryCacheDb): Promise<void> => {
  *  4. Subscribes to the `feishin:server-deleted` window event so the
  *     matching Dexie DB is dropped when the user removes a server.
  *
- * All four effects short-circuit when `localCache.enabled !== true` so the
- * subsystem stays inert until the user opts in via the first-launch modal
- * or the dashboard master toggle. Flipping the toggle off cleanly closes
+ * The effects short-circuit when `localCache.enabled !== true` so the
+ * subsystem stays inert while disabled. Flipping the toggle off cleanly closes
  * the active DB; flipping it back on re-runs every effect because `enabled`
  * is in their dep arrays.
  */
 export const useCacheLifecycle = (): void => {
-    const currentServer = useAuthStore((s) => s.currentServer);
+    // Primitive fields only: updateServer() stores a fresh currentServer object
+    // on every write (e.g. `{ isAdmin }` on each authenticated launch), which
+    // would otherwise tear down and re-run the per-server jobs below.
+    const serverId = useAuthStore((s) => s.currentServer?.id);
+    const serverType = useAuthStore((s) => s.currentServer?.type);
+    const serverUserId = useAuthStore((s) => s.currentServer?.userId);
     const enabled = useSettingsStore((s) => s.localCache?.enabled === true);
     const actions = useCacheActions();
 
@@ -260,18 +273,22 @@ export const useCacheLifecycle = (): void => {
             return;
         }
         // Jellyfin-only. For non-Jellyfin servers (or no server) the
-        // cache stays inactive.
-        if (!currentServer || currentServer.type !== 'jellyfin') {
+        // cache stays inactive - and the previous server's DB must stop being
+        // the active one, or every cache reader keeps serving its rows.
+        const currentServer = useAuthStore.getState().currentServer;
+        if (!serverId || serverType !== 'jellyfin' || !currentServer) {
             actions.setActiveServer(undefined);
+            void setActiveCacheDb(undefined, undefined);
             console.info('[cache] lifecycle: no jellyfin server active');
             return;
         }
-        const { id: serverId, userId } = currentServer;
+        const userId = serverUserId;
         if (!userId) {
             console.warn(
                 '[cache] lifecycle: current jellyfin server has no userId; cache inactive',
             );
             actions.setActiveServer(undefined);
+            void setActiveCacheDb(undefined, undefined);
             return;
         }
 
@@ -303,27 +320,11 @@ export const useCacheLifecycle = (): void => {
                             actions.setActiveServer({ serverId, userId });
                         } catch (err) {
                             console.warn('[integrity] auto-reset failed; manual toast', err);
-                            if (lastToastedErrorKey !== key) {
-                                lastToastedErrorKey = key;
-                                toast.error({
-                                    autoClose: 8000,
-                                    message:
-                                        'Local cache database is corrupted. Go to Settings → Library sync to reset it.',
-                                    title: 'Cache unavailable',
-                                });
-                            }
+                            toastCorruptedOnce(key);
                         }
                         return;
                     }
-                    if (openErr && lastToastedErrorKey !== key) {
-                        lastToastedErrorKey = key;
-                        toast.error({
-                            autoClose: 8000,
-                            message:
-                                'Local cache database is corrupted. Go to Settings → Library sync to reset it.',
-                            title: 'Cache unavailable',
-                        });
-                    }
+                    if (openErr) toastCorruptedOnce(key);
                     return;
                 }
                 console.info('[cache] lifecycle: db ready', { serverId, userId });
@@ -475,7 +476,7 @@ export const useCacheLifecycle = (): void => {
             // handled by Job 5; closure on opt-out is handled by the
             // disabled branch above.
         };
-    }, [actions, currentServer, enabled]);
+    }, [actions, enabled, serverId, serverType, serverUserId]);
 
     // Job 4 — daily auto-resync: if any fully-hydrated entity is more than
     // 24 hours stale, trigger a fresh full hydration once on mount.
@@ -484,7 +485,7 @@ export const useCacheLifecycle = (): void => {
             console.info('[cache] lifecycle: subsystem disabled (enabled !== true)');
             return;
         }
-        if (!currentServer || currentServer.type !== 'jellyfin') return;
+        if (!serverId || serverType !== 'jellyfin') return;
 
         let cancelled = false;
         void (async () => {
@@ -492,7 +493,7 @@ export const useCacheLifecycle = (): void => {
                 // Await the DB so the daily auto-resync isn't silently skipped
                 // by the boot race: at mount getActiveCacheDb() can be null
                 // before the DB finishes opening, and this effect (deps:
-                // [currentServer, enabled]) never re-runs to retry — so the
+                // [serverId, serverType, enabled]) never re-runs to retry - so the
                 // resync would never fire.
                 const db = await awaitActiveCacheDb(15_000);
                 if (!db || cancelled) return;
@@ -525,7 +526,8 @@ export const useCacheLifecycle = (): void => {
                                 oldestAt: oldest,
                             },
                         );
-                        void hydrate(currentServer, 'full');
+                        const server = useAuthStore.getState().currentServer;
+                        if (server?.id === serverId) void hydrate(server, 'full');
                     } else {
                         console.info('[cache] lifecycle: full sync still fresh', {
                             ageHours: Math.round(ageMs / (60 * 60 * 1000)),
@@ -543,7 +545,7 @@ export const useCacheLifecycle = (): void => {
         return () => {
             cancelled = true;
         };
-    }, [currentServer, enabled]);
+    }, [enabled, serverId, serverType]);
 
     // Job 5 — listen for the server-delete event.
     useEffect(() => {

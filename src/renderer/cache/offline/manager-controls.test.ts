@@ -64,9 +64,9 @@ describe('manager controls', () => {
 
     it('retry re-queues an errored target', async () => {
         const mgr = new OfflineDownloadManager(() => store);
-        mgr.setProcessHook(async (t) =>
-            store.patchTarget(t.Key, { EnqueuedAt: undefined, Status: 'complete' }),
-        );
+        mgr.setProcessHook(async (t) => {
+            await store.patchTarget(t.Key, { EnqueuedAt: undefined, Status: 'complete' });
+        });
         await seed(store, 'a1', 'error');
         await mgr.retry('s:album:a1');
         await mgr.whenIdle();
@@ -80,7 +80,7 @@ describe('manager controls', () => {
         expect(await store.getTarget('s:album:a1')).toBeUndefined();
     });
 
-    it('resumeAll re-queues paused/partial/error, syncAll skips complete', async () => {
+    it('syncAll re-queues paused/partial/error and skips complete', async () => {
         const mgr = new OfflineDownloadManager(() => store);
         const processed: string[] = [];
         mgr.setProcessHook(async (t) => {
@@ -90,7 +90,7 @@ describe('manager controls', () => {
         await seed(store, 'a1', 'paused');
         await seed(store, 'a2', 'error');
         await seed(store, 'a3', 'complete');
-        await mgr.resumeAll();
+        await mgr.syncAll();
         await mgr.whenIdle();
         expect(processed.sort()).toEqual(['s:album:a1', 's:album:a2']);
     });

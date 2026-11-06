@@ -12,11 +12,11 @@
 //     letting the album-artist match score below a name match.
 //  3. An empty query returns an empty result without touching the index.
 //
-// We don't drive Dexie here — instead we exercise the searchLocal /
-// searchXLocal entry points through a mocked `getActiveCacheDb()` that
+// We don't drive Dexie here - instead we exercise the searchXLocal
+// entry points through a mocked `getActiveCacheDb()` that
 // returns a tiny in-memory table-shim.
 
-import type { Album, AlbumArtist, Playlist, Song } from '/@/shared/types/domain-types';
+import type { Album, AlbumArtist, Song } from '/@/shared/types/domain-types';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -25,12 +25,11 @@ import {
     resetSearchIndexes,
     searchAlbumsLocal,
     searchArtistsLocal,
-    searchLocal,
     searchSongsLocal,
 } from '/@/renderer/cache/search';
 
 // Mock the capability + DB helpers so search.ts thinks the cache is
-// available and the four ensureXIndex() loaders can pull from our
+// available and the index loaders can pull from our
 // in-memory shim.
 const ROWS = {
     albums: [
@@ -55,10 +54,6 @@ const ROWS = {
         // An Artist (song-artist) kind should be filtered out of the
         // album-artist index by the where('Kind') hop.
         { Kind: 'Artist', Payload: { id: 'a3', name: 'John Lennon' } as AlbumArtist },
-    ],
-    playlists: [
-        { Payload: { id: 'pl1', name: 'Workout Mix' } as Playlist },
-        { Payload: { id: 'pl2', name: 'Coding Tunes' } as Playlist },
     ],
     songs: [
         {
@@ -113,7 +108,6 @@ vi.mock('/@/renderer/cache/capability', () => ({
 const mockDb = {
     albums: tableShim(ROWS.albums),
     artists: tableShim(ROWS.artists),
-    playlists: tableShim(ROWS.playlists),
     songs: tableShim(ROWS.songs),
 };
 vi.mock('/@/renderer/cache/db', () => ({
@@ -156,16 +150,10 @@ describe('search projection', () => {
         expect(results.find((a) => a.id === 'a3')).toBeUndefined();
     });
 
-    it('returns an empty envelope for an empty query without touching the index', async () => {
-        const result = await searchLocal('   ');
-        expect(result).toEqual({ albums: [], artists: [], playlists: [], songs: [] });
-    });
-
-    it('searchLocal returns hits across every entity in a single call', async () => {
-        const result = await searchLocal('beatles');
-        expect(result.albums.some((a) => a.id === 'al1')).toBe(true);
-        expect(result.artists.some((a) => a.id === 'aa1')).toBe(true);
-        expect(result.songs.some((s) => s.id === 's1')).toBe(true);
+    it('returns an empty list for a blank query without touching the index', async () => {
+        const spy = vi.spyOn(mockDb.albums, 'offset');
+        expect(await searchAlbumsLocal('   ')).toEqual([]);
+        expect(spy).not.toHaveBeenCalled();
     });
 
     it('does NOT drop the grid row cache (search-dirty is fuse-only)', async () => {
@@ -207,6 +195,36 @@ describe('search projection', () => {
         expect(second.some((a) => a.id === 'al3')).toBe(true);
 
         // Restore the array for other tests
+        ROWS.albums.pop();
+        markSearchDirty('albums');
+    });
+
+    it('shares one in-flight build and does not install it after a dirty mark overtook it', async () => {
+        const spy = vi.spyOn(mockDb.albums, 'offset');
+        const [a, b] = await Promise.all([
+            searchAlbumsLocal('Abbey Road'),
+            searchAlbumsLocal('Abbey Road'),
+        ]);
+        expect(a).toHaveLength(1);
+        expect(b).toHaveLength(1);
+        // Concurrent callers coalesced into a single table read.
+        expect(spy).toHaveBeenCalledTimes(1);
+
+        // A dirty mark landing while a rebuild is in flight: the build read the
+        // pre-change rows, so it must not be installed as the clean index.
+        markSearchDirty('albums');
+        const inFlight = searchAlbumsLocal('OK Computer');
+        ROWS.albums.push({
+            Payload: {
+                albumArtists: [{ id: 'aa3', name: 'Radiohead' }],
+                id: 'al3',
+                name: 'OK Computer',
+            } as Album,
+        });
+        markSearchDirty('albums');
+        expect(await inFlight).toHaveLength(0);
+        expect((await searchAlbumsLocal('OK Computer')).some((x) => x.id === 'al3')).toBe(true);
+
         ROWS.albums.pop();
         markSearchDirty('albums');
     });
