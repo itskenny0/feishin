@@ -1,7 +1,7 @@
 // Cached query hooks for the playlists feature.
 //
-// These wrap the controller calls with `useCachedQuery` (plus a hand-rolled
-// suspense variant) so the IndexedDB cache primes the snapshot map before
+// These wrap the controller calls with `useCachedQuery` (plus hand-rolled
+// suspense variants) so the IndexedDB cache primes the snapshot map before
 // the network round-trip lands. Same pattern as `genres-queries.ts`.
 //
 // Playlist sweeps prime `db.playlists` for the list query. The detail row
@@ -11,7 +11,7 @@
 // a playlist its songs land in `db.playlistSongs` and subsequent mounts
 // paint instantly.
 
-import type { QueryKey } from '@tanstack/react-query';
+import type { QueryFunctionContext, QueryKey } from '@tanstack/react-query';
 
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
 
@@ -21,7 +21,9 @@ import {
     cachedSwr,
     filterPlaylistsLocal,
     getActiveCacheDb,
+    LibraryCacheDb,
     markSearchDirty,
+    prepareExplicitRefresh,
     readSnapshot,
     useCachedQuery,
 } from '/@/renderer/cache';
@@ -63,25 +65,16 @@ interface PlaylistListQueryArgs {
     serverId: string | undefined;
 }
 
-interface PlaylistListSuspenseQueryArgs extends PlaylistListQueryArgs {
-    queryKey?: QueryKey;
-}
-
-interface PlaylistSongListQueryArgs {
+interface PlaylistSongListSuspenseQueryArgs {
     options?: CachedQueryHookOptions;
     playlistId: string;
     query?: Omit<PlaylistSongListQuery, 'id'>;
+    queryKey?: QueryKey;
     serverId: string | undefined;
 }
 
-interface PlaylistSongListSuspenseQueryArgs extends PlaylistSongListQueryArgs {
-    queryKey?: QueryKey;
-}
-
-const nowMs = () => Date.now();
-
 const toCachedPlaylistRow = (playlist: Playlist) => ({
-    __cachedAt: nowMs(),
+    __cachedAt: Date.now(),
     DateLastSaved: '',
     Id: playlist.id,
     Payload: playlist,
@@ -89,7 +82,7 @@ const toCachedPlaylistRow = (playlist: Playlist) => ({
 });
 
 // ---------------------------------------------------------------------------
-// List — non-suspense
+// List
 // ---------------------------------------------------------------------------
 
 export const usePlaylistListQuery = (args: PlaylistListQueryArgs) => {
@@ -119,47 +112,28 @@ export const usePlaylistListQuery = (args: PlaylistListQueryArgs) => {
 };
 
 // ---------------------------------------------------------------------------
-// List — suspense
+// Detail
 // ---------------------------------------------------------------------------
 
-export const usePlaylistListSuspenseQuery = (args: PlaylistListSuspenseQueryArgs) => {
-    const { options, query, queryKey: queryKeyOverride, serverId } = args;
-
-    const queryKey = queryKeyOverride ?? queryKeys.playlists.list(serverId ?? '', query);
-
-    return useSuspenseQuery<PlaylistListResponse>({
-        initialData: () => readSnapshot<PlaylistListResponse>(queryKey),
-        initialDataUpdatedAt: 0,
-        queryFn: (ctx) =>
-            cachedSwr<PlaylistListResponse>({
-                apply: async (db, fresh) => {
-                    const items = fresh?.items ?? [];
-                    if (items.length > 0) {
-                        await db.playlists.bulkPut(items.map(toCachedPlaylistRow));
-                        markSearchDirty('playlists');
-                    }
-                },
-                ctx,
-                fromCache: async (db) => {
-                    const rows = await db.playlists.toArray();
-                    if (rows.length === 0) return undefined;
-                    return filterPlaylistsLocal({ query, rows }) ?? undefined;
-                },
-                queryKey,
-                remote: (ctx) =>
-                    controller.getPlaylistList({
-                        apiClientProps: { serverId: serverId ?? '', signal: ctx.signal },
-                        query,
-                    }) as Promise<PlaylistListResponse>,
-            }),
-        queryKey,
-        staleTime: options?.staleTime,
-    });
-};
-
-// ---------------------------------------------------------------------------
-// Detail — non-suspense
-// ---------------------------------------------------------------------------
+const playlistDetailQueryFn =
+    (query: PlaylistDetailQuery, queryKey: QueryKey, serverId: string | undefined) =>
+    (ctx: QueryFunctionContext) =>
+        cachedSwr<PlaylistDetailResponse>({
+            apply: async (db, fresh) => {
+                if (!fresh) return;
+                await db.playlists.put(toCachedPlaylistRow(fresh));
+                markSearchDirty('playlists');
+            },
+            ctx,
+            fromCache: async (db) =>
+                (await db.playlists.get(query.id))?.Payload as PlaylistDetailResponse | undefined,
+            queryKey,
+            remote: ({ signal }) =>
+                controller.getPlaylistDetail({
+                    apiClientProps: { serverId: serverId ?? '', signal },
+                    query,
+                }) as Promise<PlaylistDetailResponse>,
+        });
 
 export const usePlaylistDetailQuery = (args: PlaylistDetailQueryArgs) => {
     const { options, query, serverId } = args;
@@ -177,36 +151,11 @@ export const usePlaylistDetailQuery = (args: PlaylistDetailQueryArgs) => {
             if (callerPlaceholder !== undefined) return callerPlaceholder;
             return readSnapshot<PlaylistDetailResponse>(queryKey);
         }) as never,
-        queryFn: (ctx) =>
-            cachedSwr<PlaylistDetailResponse>({
-                apply: async (db, fresh) => {
-                    if (!fresh) return;
-                    await db.playlists.put(toCachedPlaylistRow(fresh));
-                    markSearchDirty('playlists');
-                },
-                ctx,
-                fromCache: async (db) => {
-                    const row = await db.playlists.get(query.id);
-                    if (row?.Payload !== undefined) {
-                        return row.Payload as PlaylistDetailResponse;
-                    }
-                    return undefined;
-                },
-                queryKey,
-                remote: (ctx) =>
-                    controller.getPlaylistDetail({
-                        apiClientProps: { serverId: serverId ?? '', signal: ctx.signal },
-                        query,
-                    }) as Promise<PlaylistDetailResponse>,
-            }),
+        queryFn: playlistDetailQueryFn(query, queryKey, serverId),
         queryKey,
         staleTime: options?.staleTime,
     });
 };
-
-// ---------------------------------------------------------------------------
-// Detail — suspense
-// ---------------------------------------------------------------------------
 
 export const usePlaylistDetailSuspenseQuery = (args: PlaylistDetailSuspenseQueryArgs) => {
     const { options, query, queryKey: queryKeyOverride, serverId } = args;
@@ -220,46 +169,24 @@ export const usePlaylistDetailSuspenseQuery = (args: PlaylistDetailSuspenseQuery
             return readSnapshot<PlaylistDetailResponse>(queryKey);
         },
         initialDataUpdatedAt: 0,
-        queryFn: (ctx) =>
-            cachedSwr<PlaylistDetailResponse>({
-                apply: async (db, fresh) => {
-                    if (!fresh) return;
-                    await db.playlists.put(toCachedPlaylistRow(fresh));
-                    markSearchDirty('playlists');
-                },
-                ctx,
-                fromCache: async (db) => {
-                    const row = await db.playlists.get(query.id);
-                    if (row?.Payload !== undefined) {
-                        return row.Payload as PlaylistDetailResponse;
-                    }
-                    return undefined;
-                },
-                queryKey,
-                remote: (ctx) =>
-                    controller.getPlaylistDetail({
-                        apiClientProps: { serverId: serverId ?? '', signal: ctx.signal },
-                        query,
-                    }) as Promise<PlaylistDetailResponse>,
-            }),
+        queryFn: playlistDetailQueryFn(query, queryKey, serverId),
         queryKey,
         staleTime: options?.staleTime,
     });
 };
 
 // ---------------------------------------------------------------------------
-// Song list — non-suspense
+// Song list
 // ---------------------------------------------------------------------------
 
 const replacePlaylistSongs = async (
-    db: ReturnType<typeof getActiveCacheDb>,
+    db: LibraryCacheDb,
     playlistId: string,
     fresh: PlaylistSongListResponse | undefined,
 ) => {
-    if (!db) return;
     await db.transaction('rw', db.playlistSongs, async () => {
         await db.playlistSongs.where('PlaylistId').equals(playlistId).delete();
-        const now = nowMs();
+        const now = Date.now();
         const items = fresh?.items ?? [];
         if (items.length === 0) return;
         await db.playlistSongs.bulkPut(
@@ -274,48 +201,17 @@ const replacePlaylistSongs = async (
     });
 };
 
-export const usePlaylistSongListQuery = (args: PlaylistSongListQueryArgs) => {
-    const { options, playlistId, query, serverId } = args;
-    const fullQuery: PlaylistSongListQuery = { id: playlistId, ...(query ?? {}) };
-
-    return useCachedQuery<PlaylistSongListResponse>({
-        apply: async (db, fresh) => {
-            await replacePlaylistSongs(db, playlistId, fresh);
-            console.info('[cache] playlists: songList applied', {
-                id: playlistId,
-                songs: fresh?.items?.length ?? 0,
-            });
-        },
-        enabled: options?.enabled ?? Boolean(serverId && playlistId),
-        fromCache: async (db) => {
-            const rows = await db.playlistSongs
-                .where('PlaylistId')
-                .equals(playlistId)
-                .sortBy('ListOrder');
-            if (rows.length === 0) return undefined;
-            console.info('[cache] playlists: songList cache hit', {
-                id: playlistId,
-                songs: rows.length,
-            });
-            return {
-                items: rows.map((r) => r.SongPayload),
-                startIndex: 0,
-                totalRecordCount: rows.length,
-            };
-        },
-        queryKey: queryKeys.playlists.songList(serverId ?? '', playlistId),
-        remote: (ctx) =>
-            controller.getPlaylistSongList({
-                apiClientProps: { serverId: serverId ?? '', signal: ctx.signal },
-                query: fullQuery,
-            }) as Promise<PlaylistSongListResponse>,
-        staleTime: options?.staleTime,
-    });
+// Playlist edits call the server directly, so the cached copy goes stale.
+// Drop the tracklist and open the refresh window, else sync-first keeps
+// serving the pre-edit songs, name and count until the next sweep.
+export const dropCachedPlaylistSongs = async (playlistId: string): Promise<void> => {
+    prepareExplicitRefresh('playlists');
+    try {
+        await getActiveCacheDb()?.playlistSongs.where('PlaylistId').equals(playlistId).delete();
+    } catch (err) {
+        console.warn('[cache] playlists: drop songs failed', { id: playlistId }, err);
+    }
 };
-
-// ---------------------------------------------------------------------------
-// Song list — suspense
-// ---------------------------------------------------------------------------
 
 export const usePlaylistSongListSuspenseQuery = (args: PlaylistSongListSuspenseQueryArgs) => {
     const { options, playlistId, query, queryKey: queryKeyOverride, serverId } = args;

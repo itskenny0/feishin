@@ -50,7 +50,7 @@ import {
     useSettingsStore,
     useSocialLinksDisplay,
 } from '/@/renderer/store/settings.store';
-import { sentenceCase, titleCase } from '/@/renderer/utils';
+import { sentenceCase } from '/@/renderer/utils';
 import { replaceURLWithHTMLLinks } from '/@/renderer/utils/linkify';
 import { normalizeReleaseTypes } from '/@/renderer/utils/normalize-release-types';
 import { setJsonSearchParam } from '/@/renderer/utils/query-params';
@@ -133,9 +133,11 @@ const AlbumMetadataTags = ({ album }: AlbumMetadataTagsProps) => {
             releaseTypes.push('compilation');
         }
 
+        // Already translated (and unknown types title-cased); title-casing
+        // again mangles "EP" / "DJ Mix" into "Ep" / "Dj Mix".
         const releaseTypeItems = normalizeReleaseTypes(releaseTypes, t).map((type) => ({
             id: type,
-            value: titleCase(type),
+            value: type,
         }));
 
         const releaseCountries =
@@ -319,39 +321,6 @@ const AlbumMetadataGenres = ({ genres }: AlbumMetadataGenresProps) => {
         </Stack>
     );
 };
-
-// interface AlbumMetadataArtistsProps {
-//     artists?: Array<{ id: string; name: string }>;
-// }
-
-// const AlbumMetadataArtists = ({ artists }: AlbumMetadataArtistsProps) => {
-//     const { t } = useTranslation();
-
-//     if (!artists || artists.length === 0) return null;
-
-//     return (
-//         <Stack gap="xs">
-//             <Text fw={600} isNoSelect size="sm" tt="uppercase">
-//                 {t('entity.albumArtist', {
-//                     count: artists.length,
-//                 })}
-//             </Text>
-//             <Pill.Group>
-//                 {artists.map((artist) => (
-//                     <PillLink
-//                         key={`artist-${artist.id}`}
-//                         size="md"
-//                         to={generatePath(AppRoute.LIBRARY_ALBUM_ARTISTS_DETAIL, {
-//                             albumArtistId: artist.id,
-//                         })}
-//                     >
-//                         {artist.name}
-//                     </PillLink>
-//                 ))}
-//             </Pill.Group>
-//         </Stack>
-//     );
-// };
 
 interface AlbumMetadataExternalLinksProps {
     albumArtist?: string;

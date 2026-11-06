@@ -9,6 +9,7 @@ import {
     cacheFavoriteCount,
     filterAlbumArtistsLocal,
     filterArtistsLocal,
+    LibraryCacheDb,
     readSnapshot,
     snapshotSwr,
     toCachedArtistRow,
@@ -32,6 +33,40 @@ import {
     TopSongListQuery,
     TopSongListResponse,
 } from '/@/shared/types/domain-types';
+
+// Offline approximation of an artist's top songs: every cached song by the
+// artist ranked by playCount. The server uses richer ranking we can't
+// reproduce, but cold-offline should render something rather than spin.
+export const readTopSongsFromCache = async (
+    db: LibraryCacheDb,
+    query: TopSongListQuery,
+): Promise<TopSongListResponse | undefined> => {
+    if (!query?.artistId) return undefined;
+    const rows = await db.songs.where('AlbumArtistId').equals(query.artistId).toArray();
+    if (rows.length === 0) return undefined;
+    const items = rows
+        .map((r) => r.Payload)
+        .sort((a, b) => (b.playCount ?? 0) - (a.playCount ?? 0))
+        .slice(0, query.limit ?? 20);
+    return { items, startIndex: 0, totalRecordCount: items.length };
+};
+
+// Every cached song by the artist that is flagged favorite. Approximate
+// offline: the live query uses server-side ranking we can't reproduce. The
+// 'rating' variant ranks by star rating, which the favorites table can't
+// reproduce at all, so leave that one to the network.
+export const readArtistFavoriteSongsFromCache = async (
+    db: LibraryCacheDb,
+    query: FavoriteSongListQuery,
+): Promise<SongListResponse | undefined> => {
+    if (!query?.artistId || query.type === 'rating') return undefined;
+    const songRows = await db.songs.where('AlbumArtistId').equals(query.artistId).toArray();
+    if (songRows.length === 0) return undefined;
+    const favs = await db.favorites.where('ItemType').equals('Song').toArray();
+    const favSet = new Set(favs.filter((f) => f.IsFavorite).map((f) => f.ItemId));
+    const items = songRows.filter((r) => favSet.has(r.Id)).map((r) => r.Payload);
+    return { items, startIndex: 0, totalRecordCount: items.length };
+};
 
 export const artistsQueries = {
     albumArtistDetail: (args: QueryHookArgs<AlbumArtistDetailQuery>) => {
@@ -284,18 +319,22 @@ export const artistsQueries = {
                         }
                         // Serve favorite-only count from Dexie so the favorites artists
                         // list is not empty offline (virtual scroll needs a count > 0).
+                        // Must match the list (artistList / resolveArtistPage): artist
+                        // rows whose id is in the 'AlbumArtist' favourites bucket - the
+                        // only bucket the favourites sweep writes.
                         if (args.query.favorite !== undefined && !args.query._custom) {
-                            const favRows = await db.favorites
-                                .where('ItemType')
-                                .equals('Artist')
-                                .toArray();
-                            const favoriteCount = favRows.filter((f) => f.IsFavorite).length;
+                            const [favRows, artistIds] = await Promise.all([
+                                db.favorites.where('ItemType').equals('AlbumArtist').toArray(),
+                                db.artists.where('Kind').equals('Artist').primaryKeys(),
+                            ]);
+                            const favSet = new Set(
+                                favRows.filter((f) => f.IsFavorite).map((f) => f.ItemId),
+                            );
                             return cacheFavoriteCount({
                                 favorite: args.query.favorite,
-                                favoriteCount,
-                                totalCount: args.query.favorite
-                                    ? 0
-                                    : await db.artists.where('Kind').equals('Artist').count(),
+                                favoriteCount: artistIds.filter((id) => favSet.has(String(id)))
+                                    .length,
+                                totalCount: artistIds.length,
                             });
                         }
                         if (args.query._custom) {
@@ -348,34 +387,7 @@ export const artistsQueries = {
                         }
                     },
                     ctx,
-                    fromCache: async (db) => {
-                        // Pull every song by this artist that's flagged
-                        // favorite in db.favorites. Approximate offline
-                        // — the live query uses server-side ranking we
-                        // can't reproduce — but at least the section
-                        // renders something instead of spinning. The
-                        // 'rating' variant ranks by star rating, which the
-                        // favorites table can't reproduce at all, so leave
-                        // that one to the network.
-                        if (args.query.type === 'rating') return undefined;
-                        const songRows = await db.songs
-                            .where('AlbumArtistId')
-                            .equals(args.query.artistId)
-                            .toArray();
-                        if (songRows.length === 0) return undefined;
-                        const favs = await db.favorites
-                            .filter((f) => f.ItemType === 'Song' && f.IsFavorite)
-                            .toArray();
-                        const favSet = new Set(favs.map((f) => f.ItemId));
-                        const items = songRows
-                            .filter((r) => favSet.has(r.Id))
-                            .map((r) => r.Payload);
-                        return {
-                            items,
-                            startIndex: 0,
-                            totalRecordCount: items.length,
-                        } as SongListResponse;
-                    },
+                    fromCache: (db) => readArtistFavoriteSongsFromCache(db, args.query),
                     queryKey: key,
                     remote: ({ signal }) =>
                         api.controller.getFavoriteSongs({
@@ -401,31 +413,7 @@ export const artistsQueries = {
                         }
                     },
                     ctx,
-                    fromCache: async (db) => {
-                        // Approximate "top songs" from cached rows: take
-                        // every song by this artist sorted by playCount
-                        // desc. Server uses richer ranking we can't
-                        // reproduce, but cold-offline should render
-                        // SOMETHING rather than spinning forever.
-                        const rows = await db.songs
-                            .where('AlbumArtistId')
-                            .equals(args.query.artistId)
-                            .toArray();
-                        if (rows.length === 0) return undefined;
-                        const items = rows
-                            .map((r) => r.Payload)
-                            .sort(
-                                (a, b) =>
-                                    ((b as { playCount?: number }).playCount ?? 0) -
-                                    ((a as { playCount?: number }).playCount ?? 0),
-                            )
-                            .slice(0, args.query.limit ?? 20);
-                        return {
-                            items,
-                            startIndex: 0,
-                            totalRecordCount: items.length,
-                        } as TopSongListResponse;
-                    },
+                    fromCache: (db) => readTopSongsFromCache(db, args.query),
                     queryKey: key,
                     remote: ({ signal }) =>
                         api.controller.getTopSongs({

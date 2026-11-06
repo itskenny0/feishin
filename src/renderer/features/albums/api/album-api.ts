@@ -201,8 +201,10 @@ export const albumQueries = {
                         if (sorted === undefined) return undefined;
                         const startIndex = args.query?.startIndex ?? 0;
                         const limit = args.query?.limit;
+                        // A negative limit (-1) means "no limit", as in the
+                        // controllers (the artist page asks for every album).
                         const items =
-                            limit === undefined
+                            limit === undefined || limit < 0
                                 ? sorted.slice(startIndex)
                                 : sorted.slice(startIndex, startIndex + limit);
                         return {

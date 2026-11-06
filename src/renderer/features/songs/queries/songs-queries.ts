@@ -1,18 +1,12 @@
-// Cached query hooks for the songs feature.
+// Cached query hook for the songs feature.
 //
-// These wrap `controller.getSongList` / `controller.getSongDetail` with
-// `useCachedQuery` so the IndexedDB cache primes the snapshot map before
-// the network round-trip lands. The radio / random / similar / queue
-// endpoints are intentionally NOT migrated here -- they fetch
-// non-deterministic or server-owned data where caching would defeat the
-// caller's intent (auto-DJ wants fresh picks every play). Those continue
-// to live on `songsQueries` as plain `queryOptions` consumed by raw
-// `useQuery`.
-//
-// Mirrors the layout introduced for albums/artists -- the existing
-// `songsQueries` object in `../api/songs-api.ts` stays intact so that
-// in-flight consumers continue to work, and components migrate over to
-// these hooks at their own pace.
+// Wraps `controller.getSongList` with `useCachedQuery` so the IndexedDB
+// cache primes the snapshot map before the network round-trip lands. The
+// radio / random / similar / queue endpoints are intentionally NOT migrated
+// here -- they fetch non-deterministic or server-owned data where caching
+// would defeat the caller's intent (auto-DJ wants fresh picks every play).
+// Those continue to live on `songsQueries` as plain `queryOptions` consumed
+// by raw `useQuery`.
 
 import { controller } from '/@/renderer/api/controller';
 import { queryKeys } from '/@/renderer/api/query-keys';
@@ -24,52 +18,15 @@ import {
     markRowsChangedFromPage,
     markSearchDirty,
     pageRefsFromItems,
+    toCachedSongRow,
     useCachedQuery,
 } from '/@/renderer/cache';
-import {
-    Song,
-    SongDetailQuery,
-    SongDetailResponse,
-    SongListQuery,
-    SongListResponse,
-    SongListSort,
-} from '/@/shared/types/domain-types';
-
-// ---------------------------------------------------------------------------
-// Shared helpers
-// ---------------------------------------------------------------------------
+import { Song, SongListQuery, SongListResponse, SongListSort } from '/@/shared/types/domain-types';
 
 interface CachedQueryHookOptions {
     enabled?: boolean;
     staleTime?: number;
 }
-
-interface SongsQueryArgs<TQuery> {
-    options?: CachedQueryHookOptions;
-    query: TQuery;
-    serverId: string | undefined;
-}
-
-const nowMs = () => Date.now();
-
-// Project a Song payload into the row-shape expected by `db.songs`. Field
-// names mirror `src/renderer/cache/types.ts:CachedSong`, with nullable
-// domain fields coalesced to `undefined` because Dexie indexes treat
-// missing better than null.
-const songToRow = (song: Song) => ({
-    __cachedAt: nowMs(),
-    AlbumArtistId: song.albumArtists?.[0]?.id ?? undefined,
-    AlbumId: song.albumId ?? undefined,
-    DateLastSaved: song.updatedAt ?? '',
-    Id: song.id,
-    IndexNumber: song.trackNumber ?? undefined,
-    ParentIndexNumber: song.discNumber ?? undefined,
-    Payload: song,
-});
-
-// ---------------------------------------------------------------------------
-// Song list (paginated)
-// ---------------------------------------------------------------------------
 
 interface SongListHookArgs {
     imageSize?: number;
@@ -96,7 +53,7 @@ export const useSongListQuery = (args: SongListHookArgs) => {
         apply: async (db, fresh) => {
             const items = fresh?.items ?? [];
             if (items.length === 0) return;
-            await db.songs.bulkPut(items.map(songToRow));
+            await db.songs.bulkPut(items.map(toCachedSongRow));
             markSearchDirty('songs');
             markRowsChangedFromPage('songs', pageRefsFromItems(items));
         },
@@ -138,10 +95,6 @@ export const useSongListQuery = (args: SongListHookArgs) => {
                 const needsFavorites =
                     query.favorite !== undefined || query.sortBy === SongListSort.FAVORITED;
                 if (needsFavorites) {
-                    // Schema v8 promoted `ItemType` to a standalone
-                    // index, so this rides an IDB cursor over the
-                    // Song-only rows instead of a JS-side `.filter()`
-                    // walk over the entire favorites table.
                     const favs = await db.favorites.where('ItemType').equals('Song').toArray();
                     favoriteSongIds = new Set(
                         favs.filter((f) => f.IsFavorite).map((f) => f.ItemId),
@@ -158,8 +111,9 @@ export const useSongListQuery = (args: SongListHookArgs) => {
             if (sorted === undefined) return undefined;
             const startIndex = query.startIndex ?? 0;
             const limit = query.limit;
+            // A negative limit (-1) means "no limit", as in the controllers.
             const items =
-                limit === undefined
+                limit === undefined || limit < 0
                     ? sorted.slice(startIndex)
                     : sorted.slice(startIndex, startIndex + limit);
             return {
@@ -174,36 +128,6 @@ export const useSongListQuery = (args: SongListHookArgs) => {
                 apiClientProps: { serverId: serverId ?? '', signal: ctx.signal },
                 query: effectiveQuery,
             }) as Promise<SongListResponse>,
-        staleTime: options?.staleTime,
-    });
-};
-
-// ---------------------------------------------------------------------------
-// Song detail
-// ---------------------------------------------------------------------------
-
-export const useSongDetailQuery = (args: SongsQueryArgs<SongDetailQuery>) => {
-    const { options, query, serverId } = args;
-
-    return useCachedQuery<SongDetailResponse>({
-        apply: async (db, fresh) => {
-            if (!fresh) return;
-            await db.songs.put(songToRow(fresh));
-            markSearchDirty('songs');
-            markRowsChangedFromPage('songs', pageRefsFromItems([fresh]));
-        },
-        enabled: options?.enabled ?? Boolean(serverId && query?.id),
-        fromCache: async (db) => {
-            if (!query?.id) return undefined;
-            const row = await db.songs.get(query.id);
-            return row?.Payload ?? undefined;
-        },
-        queryKey: queryKeys.songs.detail(serverId ?? '', query),
-        remote: (ctx) =>
-            controller.getSongDetail({
-                apiClientProps: { serverId: serverId ?? '', signal: ctx.signal },
-                query,
-            }) as Promise<SongDetailResponse>,
         staleTime: options?.staleTime,
     });
 };

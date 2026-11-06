@@ -57,6 +57,13 @@ describe('playlistSongsToAlbums', () => {
         expect(rows[1]._playlistSongs).toHaveLength(1);
     });
 
+    // Covers are cached by album id; a song's own cover id (Navidrome
+    // `mf-...`) misses the cache and renders a placeholder.
+    it('keys the album row cover on the album id', () => {
+        const rows = playlistSongsToAlbums([song({ albumId: 'a', imageId: 'mf-1' })]);
+        expect(rows[0].imageId).toBe('a');
+    });
+
     it('does not merge identical albumIds that are not adjacent (preserves playlist order)', () => {
         const songs = [
             song({ albumId: 'a', id: '1' }),
@@ -136,6 +143,25 @@ describe('convertQueryGroupToNDQuery / convertNDQueryToQueryGroup', () => {
 
         const nd = convertQueryGroupToNDQuery(filter) as Record<string, unknown[]>;
         expect(nd.any).toEqual([{ is: { loved: true } }]);
+    });
+
+    it('coerces boolean fields inside nested groups too', () => {
+        const filter: QueryBuilderGroup = {
+            group: [
+                {
+                    group: [],
+                    rules: [{ field: 'loved', operator: 'is', uniqueId: 'r2', value: 'false' }],
+                    type: 'all',
+                    uniqueId: 'g2',
+                },
+            ],
+            rules: [],
+            type: 'any',
+            uniqueId: 'g1',
+        };
+
+        const nd = convertQueryGroupToNDQuery(filter) as Record<string, unknown[]>;
+        expect(nd.any).toEqual([{ all: [{ is: { loved: false } }] }]);
     });
 
     it('round-trips a non-boolean rule back into a query group', () => {

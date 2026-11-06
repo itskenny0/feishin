@@ -15,6 +15,11 @@ export type GroupingType = 'all' | 'primary';
 
 const PRIMARY_RELEASE_TYPES = ['album', 'broadcast', 'ep', 'other', 'single'];
 
+// Joins the release types of an "all" grouping key. Not '/': the
+// 'mixtape/street' type contains it, so it would be split into pieces that
+// match no setting (always shown, labelled "Mixtape • Street").
+const COMBINED_TYPE_SEPARATOR = '|';
+
 const getNormalizedReleaseTypes = (album: Album): string[] => {
     const rawReleaseTypes = [...(album.releaseTypes || []), album.releaseType || ''];
     const normalizedReleaseTypes = rawReleaseTypes
@@ -66,7 +71,7 @@ export const groupAlbumsByReleaseType = (
                         .sort();
                     const sortedTypes = [...primaryTypes, ...secondaryTypes];
 
-                    const combinedKey = sortedTypes.join('/');
+                    const combinedKey = sortedTypes.join(COMBINED_TYPE_SEPARATOR);
                     if (!acc[combinedKey]) {
                         acc[combinedKey] = [];
                     }
@@ -227,8 +232,8 @@ export const getArtistAlbumsGrouped = (
     };
 
     const getPriority = (releaseType: string) => {
-        if (releaseType.includes('/')) {
-            const types = releaseType.split('/');
+        if (releaseType.includes(COMBINED_TYPE_SEPARATOR)) {
+            const types = releaseType.split(COMBINED_TYPE_SEPARATOR);
             // Check if there's a primary type in the joined types
             const primaryTypes = types.filter((type) => PRIMARY_RELEASE_TYPES.includes(type));
 
@@ -248,8 +253,8 @@ export const getArtistAlbumsGrouped = (
     };
 
     const getSecondaryTypePriorityKey = (releaseType: string): string => {
-        if (releaseType.includes('/')) {
-            const types = releaseType.split('/');
+        if (releaseType.includes(COMBINED_TYPE_SEPARATOR)) {
+            const types = releaseType.split(COMBINED_TYPE_SEPARATOR);
             const secondaryTypes = types.filter((type) => !PRIMARY_RELEASE_TYPES.includes(type));
 
             if (secondaryTypes.length > 0) {
@@ -265,8 +270,8 @@ export const getArtistAlbumsGrouped = (
     };
 
     const isReleaseTypeEnabled = (releaseType: string): boolean => {
-        if (releaseType.includes('/')) {
-            const types = releaseType.split('/');
+        if (releaseType.includes(COMBINED_TYPE_SEPARATOR)) {
+            const types = releaseType.split(COMBINED_TYPE_SEPARATOR);
             return types.some((type) => {
                 const enumValue = releaseTypeToEnumMap[type];
                 return enumValue ? enabledReleaseTypeEnums.has(enumValue) : true;
@@ -281,8 +286,8 @@ export const getArtistAlbumsGrouped = (
         .map(([releaseType, albums]) => {
             let displayName: React.ReactNode | string;
 
-            if (releaseType.includes('/')) {
-                const types = releaseType.split('/');
+            if (releaseType.includes(COMBINED_TYPE_SEPARATOR)) {
+                const types = releaseType.split(COMBINED_TYPE_SEPARATOR);
                 const displayNames = types.map((type) => getDisplayNameForType(type));
                 displayName = displayNames.join(SEPARATOR_STRING);
             } else {
@@ -299,8 +304,8 @@ export const getArtistAlbumsGrouped = (
                 return priorityA - priorityB;
             }
 
-            const isCombinedA = a.releaseType.includes('/');
-            const isCombinedB = b.releaseType.includes('/');
+            const isCombinedA = a.releaseType.includes(COMBINED_TYPE_SEPARATOR);
+            const isCombinedB = b.releaseType.includes(COMBINED_TYPE_SEPARATOR);
 
             if (isCombinedA && isCombinedB) {
                 const secondaryKeyA = getSecondaryTypePriorityKey(a.releaseType);

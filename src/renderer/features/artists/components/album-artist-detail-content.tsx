@@ -1321,7 +1321,9 @@ export const AlbumArtistDetailContent = ({
                             routeId={routeId}
                         />
                     )}
-                    <ArtistAlbums albumsQuery={albumsQuery} order={itemOrder.recentAlbums} />
+                    {enabledItem.recentAlbums && (
+                        <ArtistAlbums albumsQuery={albumsQuery} order={itemOrder.recentAlbums} />
+                    )}
                     {enabledItem.similarArtists && (
                         <AlbumArtistMetadataSimilarArtists
                             order={itemOrder.similarArtists}
@@ -1367,7 +1369,6 @@ const getItemsPerRow = (cq: ReturnType<typeof useContainerQuery>) => {
     if (cq.isLg) return 5;
     if (cq.isMd) return 4;
     if (cq.isSm) return 3;
-    if (cq.isXs) return 2;
     return 2;
 };
 

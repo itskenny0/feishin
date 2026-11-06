@@ -2,6 +2,7 @@ import { ChangeEvent, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { getItemImageUrl } from '/@/renderer/components/item-image/item-image';
+import { useListContext } from '/@/renderer/context/list-context';
 import { useAlbumListFilters } from '/@/renderer/features/albums/hooks/use-album-list-filters';
 import { useAlbumArtistListQuery } from '/@/renderer/features/artists/queries/artists-queries';
 import { useGenreListQuery } from '/@/renderer/features/genres/queries/genres-queries';
@@ -26,6 +27,7 @@ import {
     LibraryItem,
     SortOrder,
 } from '/@/shared/types/domain-types';
+import { ItemListKey } from '/@/shared/types/types';
 
 interface SubsonicAlbumFiltersProps {
     disableArtistFilter?: boolean;
@@ -36,12 +38,13 @@ export const SubsonicAlbumFilters = ({
     disableArtistFilter,
     disableGenreFilter,
 }: SubsonicAlbumFiltersProps) => {
+    const { pageKey } = useListContext();
     const { t } = useTranslation();
 
     const serverId = useCurrentServerId();
 
     const { query, setAlbumArtist, setFavorite, setGenreId, setMaxYear, setMinYear } =
-        useAlbumListFilters();
+        useAlbumListFilters(pageKey as ItemListKey);
 
     const albumArtistListQuery = useAlbumArtistListQuery({
         options: {

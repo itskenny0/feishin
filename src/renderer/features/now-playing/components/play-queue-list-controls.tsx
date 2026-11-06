@@ -30,7 +30,7 @@ import { Divider } from '/@/shared/components/divider/divider';
 import { DropdownMenu } from '/@/shared/components/dropdown-menu/dropdown-menu';
 import { Group } from '/@/shared/components/group/group';
 import { Icon } from '/@/shared/components/icon/icon';
-import { ConfirmModal, openModal } from '/@/shared/components/modal/modal';
+import { closeAllModals, ConfirmModal, openModal } from '/@/shared/components/modal/modal';
 import { Text } from '/@/shared/components/text/text';
 import { ServerFeature } from '/@/shared/types/features-types';
 import { ItemListKey, ListDisplayType } from '/@/shared/types/types';
@@ -110,7 +110,10 @@ export const PlayQueueListControls = ({
             children: (
                 <ConfirmModal
                     onConfirm={() => {
-                        player.clearQueue();
+                        // ConfirmModal doesn't close itself, and this dialog
+                        // is the confirmation: skip clearQueue's own prompt.
+                        closeAllModals();
+                        player.clearQueue(true);
                     }}
                 >
                     <Text>

@@ -306,7 +306,13 @@ const PlaylistPropertyMapping: ItemDetailRow<Playlist>[] = [
 
 const SongPropertyMapping: ItemDetailRow<Song>[] = [
     { key: 'name', label: 'common.title' },
-    { key: 'path', label: 'common.path', render: SongPath },
+    // An element, not a direct call: SongPath has hooks, and rows are built
+    // inside the modal's `body` useMemo.
+    {
+        key: 'path',
+        label: 'common.path',
+        render: (song) => (song.path ? <SongPath path={song.path} /> : null),
+    },
     { count: 1, label: 'entity.albumArtist', render: (item) => formatArtists(item.albumArtists) },
     {
         count: 2,

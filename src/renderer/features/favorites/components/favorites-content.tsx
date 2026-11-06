@@ -10,6 +10,7 @@ import {
     AlbumArtistListView,
     OverrideAlbumArtistListQuery,
 } from '/@/renderer/features/artists/components/album-artist-list-content';
+import { useAlbumArtistListFilters } from '/@/renderer/features/artists/hooks/use-album-artist-list-filters';
 import { useAlbumArtistListQuery } from '/@/renderer/features/artists/queries/artists-queries';
 import {
     ListGridSkeleton,
@@ -148,12 +149,14 @@ const ArtistFavorites = () => {
         ...(customFilters as OverrideAlbumArtistListQuery),
     };
 
-    // AlbumArtistListView (unlike the album/song views) never reports its count
-    // back through setItemCount, so the header badge would spin forever on the
-    // artist tab. Probe the count at the feature level (cheap limit-1 query,
-    // de-duped against the list's own count probe) and push it into context.
+    // AlbumArtistListView renders an EmptyState instead of its loader (which
+    // is what reports the count) when there are no results, so the badge
+    // would spin forever. Probe the count here and push it into context. Same
+    // query as the view's own probe (search term included), so the two
+    // de-dupe and a search can't leave the unfiltered count in the badge.
+    const { query } = useAlbumArtistListFilters();
     const countQuery = useAlbumArtistListQuery({
-        query: { ...albumArtistQuery, limit: 1, startIndex: 0 } as AlbumArtistListQuery,
+        query: { ...query, ...albumArtistQuery, limit: 1, startIndex: 0 } as AlbumArtistListQuery,
         serverId: server.id,
     });
 

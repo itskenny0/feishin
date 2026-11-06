@@ -15,6 +15,7 @@ import { GenreTarget, useGenreTarget } from '/@/renderer/store';
 import { Group } from '/@/shared/components/group/group';
 import { Stack } from '/@/shared/components/stack/stack';
 import { LibraryItem } from '/@/shared/types/domain-types';
+import { ItemListKey } from '/@/shared/types/types';
 
 interface GenreDetailHeaderProps {
     title?: string;
@@ -79,8 +80,10 @@ const PlayButton = () => {
 };
 
 const AlbumPlayButton = () => {
-    const { query } = useAlbumListFilters();
-    const { id } = useListContext();
+    // GENRE_ALBUM, as the list uses: the default key would apply the
+    // main Albums view's saved sort and favourite filter.
+    const { id, pageKey } = useListContext();
+    const { query } = useAlbumListFilters(pageKey as ItemListKey);
     const fuzzyIds = useFuzzyGenreIds(id ?? '');
 
     const mergedQuery = useMemo(() => {
@@ -106,8 +109,8 @@ const AlbumPlayButton = () => {
 };
 
 const SongPlayButton = () => {
-    const { query } = useSongListFilters();
-    const { id } = useListContext();
+    const { id, pageKey } = useListContext();
+    const { query } = useSongListFilters(pageKey as ItemListKey);
     const fuzzyIds = useFuzzyGenreIds(id ?? '');
 
     const mergedQuery = useMemo(() => {

@@ -157,22 +157,18 @@ export const JellyfinSongFilters = ({
     const handleGenresFilter = useCallback(
         (e: null | string[]) => {
             setCustom((prev) => {
-                const current = prev ?? {};
+                // `_custom` is spread over the controller's params, so an
+                // IncludeItemTypes here would override its audiobook-aware
+                // value; drop any one an older build stored.
+                const rest = { ...prev };
+                delete rest.GenreIds;
+                delete rest.IncludeItemTypes;
 
                 if (!e || e.length === 0) {
-                    // Remove GenreIds and IncludeItemTypes if genres are cleared
-                    const rest = { ...current };
-                    delete rest.GenreIds;
-                    delete rest.IncludeItemTypes;
-                    // Return null if object is empty, otherwise return the rest
                     return Object.keys(rest).length === 0 ? null : rest;
                 }
 
-                return {
-                    ...current,
-                    GenreIds: e.join(','),
-                    IncludeItemTypes: 'Audio',
-                };
+                return { ...rest, GenreIds: e.join(',') };
             });
         },
         [setCustom],

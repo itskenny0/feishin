@@ -1,21 +1,18 @@
 // Cached query hooks for the albums feature.
 //
-// Albums are the most-browsed surface in the app, so every list / detail /
-// infinite-carousel mount went straight to the network until now. These
-// hooks wrap the controller calls with `useCachedQuery` /
-// `useSuspenseQuery` so the IndexedDB cache primes the snapshot map before
-// the network round-trip lands. Same pattern as `playlists-queries.ts` and
-// `genres-queries.ts`.
+// These wrap the controller calls with `useQuery` / `useSuspenseQuery` /
+// `useSuspenseInfiniteQuery` + `cachedSwr` so the IndexedDB cache primes the
+// snapshot map before the network round-trip lands. Same pattern as
+// `playlists-queries.ts` and `genres-queries.ts`.
 //
-// The albums sweep writes `CachedAlbum` rows into `db.albums` via
-// `runAlbumsSweep`. These hooks read those rows back through
-// `filterAlbumsLocal` (which handles sort + filter + paginate) and bulk-put
-// fresh items back into the table after the remote call so subsequent
-// mounts can paint from cache instantly. The detail apply also writes the
-// album's nested `songs` array into `db.songs` so the album-detail page
-// hydrates twice over.
+// The albums sweep writes `CachedAlbum` rows into `db.albums`. These hooks
+// read them back (detail by id, counts via `filterAlbumsLocal`, carousel
+// pages via `resolveAlbumPage`) and bulk-put fresh items back into the table
+// after the remote call so subsequent mounts can paint from cache instantly.
+// The detail apply also writes the album's nested `songs` array into
+// `db.songs` so the album-detail page hydrates twice over.
 
-import type { CachedAlbum, CachedSong } from '/@/renderer/cache/types';
+import type { CachedSong } from '/@/renderer/cache/types';
 import type { InfiniteData, QueryFunctionContext, QueryKey } from '@tanstack/react-query';
 
 import { useQuery, useSuspenseInfiniteQuery, useSuspenseQuery } from '@tanstack/react-query';
@@ -28,6 +25,7 @@ import {
     filterAlbumsLocal,
     getActiveCacheDb,
     isCacheAvailableSync,
+    LibraryCacheDb,
     markRowsChangedFromPage,
     markSearchDirty,
     mergePage,
@@ -36,25 +34,20 @@ import {
     readSnapshot,
     resolveAlbumPage,
     shouldRevalidateFromNetwork,
-    toCachedAlbumRow as toCachedAlbumRowBase,
-    useCachedQuery,
+    toCachedAlbumRow,
+    toCachedSongRow,
     useCacheStore,
     writeSnapshot,
 } from '/@/renderer/cache';
 import { queryClient } from '/@/renderer/lib/react-query';
 import {
+    Album,
     AlbumDetailQuery,
     AlbumDetailResponse,
     AlbumListQuery,
     AlbumListResponse,
-    AlbumListSort,
     ListCountQuery,
-    Song,
 } from '/@/shared/types/domain-types';
-
-// ---------------------------------------------------------------------------
-// Argument types
-// ---------------------------------------------------------------------------
 
 interface AlbumDetailHookOptions extends CachedQueryHookOptions {
     // Some entry points seed the detail query with a route-state hand-off
@@ -88,39 +81,10 @@ interface AlbumListCountQueryArgs {
     serverId: string | undefined;
 }
 
-interface AlbumListQueryArgs {
-    options?: CachedQueryHookOptions;
-    query: AlbumListQuery;
-    serverId: string | undefined;
-}
-
-interface AlbumListSuspenseQueryArgs extends AlbumListQueryArgs {
-    queryKey?: QueryKey;
-}
-
 interface CachedQueryHookOptions {
     enabled?: boolean;
     staleTime?: number;
 }
-
-// ---------------------------------------------------------------------------
-// Row mapping helpers
-// ---------------------------------------------------------------------------
-
-const nowMs = () => Date.now();
-
-const toCachedAlbumRow = toCachedAlbumRowBase;
-
-const toCachedSongRow = (song: Song): CachedSong => ({
-    __cachedAt: nowMs(),
-    AlbumArtistId: song.albumArtists?.[0]?.id,
-    AlbumId: song.albumId,
-    DateLastSaved: song.updatedAt ?? '',
-    Id: song.id,
-    IndexNumber: song.trackNumber,
-    ParentIndexNumber: song.discNumber,
-    Payload: song,
-});
 
 // Sample-rate the "cache hit" console log so a busy infinite scroll doesn't
 // spam devtools. Counter is module-scoped so every list/detail/carousel
@@ -133,152 +97,26 @@ const logCacheHitSampled = (label: string): void => {
     }
 };
 
-const logApplied = (count: number): void => {
-    if (count > 0) {
-        console.info(`[cache] albums: applied ${count} rows`);
-    }
+const writeAlbumRows = async (db: LibraryCacheDb, items: Album[]): Promise<void> => {
+    if (items.length === 0) return;
+    await db.albums.bulkPut(items.map(toCachedAlbumRow));
+    markSearchDirty('albums');
+    // Change-aware: a background revalidate that re-applies the same rows
+    // keeps the grid row cache; only a genuine change drops it.
+    markRowsChangedFromPage('albums', pageRefsFromItems(items));
+    console.info(`[cache] albums: applied ${items.length} rows`);
 };
 
 // ---------------------------------------------------------------------------
-// List — non-suspense
-// ---------------------------------------------------------------------------
-
-// Bug fix (cache plumbing): the previous implementation never read the
-// favorites table, so `filterAlbumsLocal` always saw `favoriteAlbumIds ===
-// undefined` and silently returned undefined whenever the user enabled
-// the favourites filter — falling back to a network round-trip that the
-// user perceives as a spinner. We now read favourites whenever the query
-// opts into them, off the same `.filter()` walk used in artists-queries
-// (the favorites table is small by design).
-const readFavoriteAlbumIds = async (
-    db: NonNullable<ReturnType<typeof getActiveCacheDb>>,
-): Promise<Set<string>> => {
-    // Schema v8 promoted `ItemType` to a standalone index, so this is
-    // an IDB cursor scan over the (much smaller) Album-only slice
-    // rather than the table-wide `.filter()` walk the prior schemas
-    // forced us into.
-    const rows = await db.favorites.where('ItemType').equals('Album').toArray();
-    return new Set(rows.filter((r) => r.IsFavorite).map((r) => r.ItemId));
-};
-
-const readAlbumsFromCache = async (
-    db: ReturnType<typeof getActiveCacheDb>,
-    query: AlbumListQuery,
-): Promise<AlbumListResponse | undefined> => {
-    if (!db) return undefined;
-    // Use the indexed `[AlbumArtistId+SortName]` compound index when the
-    // query filters by exactly one artist; otherwise scan the full table.
-    // `filterAlbumsLocal` is responsible for the in-memory filter + sort +
-    // paginate pass and returns undefined for queries the cache can't
-    // answer (compilation flag, recently-played, custom backend filters).
-    let rows: CachedAlbum[];
-    if (query.artistIds && query.artistIds.length === 1) {
-        const artistId = query.artistIds[0];
-        rows = await db.albums.where('AlbumArtistId').equals(artistId).toArray();
-    } else {
-        rows = await db.albums.toArray();
-    }
-    const needsFavorites = query.favorite !== undefined || query.sortBy === AlbumListSort.FAVORITED;
-    const favoriteAlbumIds = needsFavorites ? await readFavoriteAlbumIds(db) : undefined;
-    return filterAlbumsLocal({ favoriteAlbumIds, query, rows });
-};
-
-export const useAlbumListQuery = (args: AlbumListQueryArgs) => {
-    const { options, query, serverId } = args;
-
-    return useCachedQuery<AlbumListResponse>({
-        apply: async (db, fresh) => {
-            const items = fresh?.items ?? [];
-            if (items.length === 0) return;
-            await db.albums.bulkPut(items.map(toCachedAlbumRow));
-            markSearchDirty('albums');
-            // Change-aware: a background revalidate that re-applies the same
-            // rows keeps the grid row cache; only a genuine change drops it.
-            markRowsChangedFromPage('albums', pageRefsFromItems(items));
-            logApplied(items.length);
-        },
-        enabled: options?.enabled ?? Boolean(serverId),
-        fromCache: async (db) => {
-            const result = await readAlbumsFromCache(db, query);
-            if (result !== undefined) logCacheHitSampled('list');
-            return result;
-        },
-        queryKey: queryKeys.albums.list(
-            serverId ?? '',
-            query,
-            query?.artistIds?.length === 1 ? query.artistIds[0] : undefined,
-        ),
-        remote: (ctx) =>
-            controller.getAlbumList({
-                apiClientProps: { serverId: serverId ?? '', signal: ctx.signal },
-                query,
-            }) as Promise<AlbumListResponse>,
-        staleTime: options?.staleTime,
-    });
-};
-
-// ---------------------------------------------------------------------------
-// List — suspense
-// ---------------------------------------------------------------------------
-
-export const useAlbumListSuspenseQuery = (args: AlbumListSuspenseQueryArgs) => {
-    const { options, query, queryKey: queryKeyOverride, serverId } = args;
-
-    const queryKey =
-        queryKeyOverride ??
-        queryKeys.albums.list(
-            serverId ?? '',
-            query,
-            query?.artistIds?.length === 1 ? query.artistIds[0] : undefined,
-        );
-
-    return useSuspenseQuery<AlbumListResponse>({
-        initialData: () => readSnapshot<AlbumListResponse>(queryKey),
-        initialDataUpdatedAt: 0,
-        queryFn: (ctx) =>
-            cachedSwr<AlbumListResponse>({
-                apply: async (db, fresh) => {
-                    const items = fresh?.items ?? [];
-                    if (items.length > 0) {
-                        await db.albums.bulkPut(items.map(toCachedAlbumRow));
-                        markSearchDirty('albums');
-                        markRowsChangedFromPage('albums', pageRefsFromItems(items));
-                        logApplied(items.length);
-                    }
-                },
-                ctx,
-                fromCache: async (db) => {
-                    const cached = await readAlbumsFromCache(db, query);
-                    if (cached !== undefined) logCacheHitSampled('list-suspense');
-                    return cached;
-                },
-                queryKey,
-                remote: (ctx) =>
-                    controller.getAlbumList({
-                        apiClientProps: { serverId: serverId ?? '', signal: ctx.signal },
-                        query,
-                    }) as Promise<AlbumListResponse>,
-            }),
-        queryKey,
-        staleTime: options?.staleTime,
-    });
-};
-
-// ---------------------------------------------------------------------------
-// Detail — non-suspense
+// Detail
 // ---------------------------------------------------------------------------
 
 const applyAlbumDetail = async (
-    db: ReturnType<typeof getActiveCacheDb>,
+    db: LibraryCacheDb,
     fresh: AlbumDetailResponse | undefined,
 ): Promise<void> => {
-    if (!db || !fresh) return;
-    await db.albums.put(toCachedAlbumRow(fresh));
-    markSearchDirty('albums');
-    // Detail apply writes the freshest single-album payload; treat as a
-    // genuine row change so the grid reflects edits (rating, art, etc).
-    markRowsChangedFromPage('albums', pageRefsFromItems([fresh]));
-    logApplied(1);
+    if (!fresh) return;
+    await writeAlbumRows(db, [fresh]);
 
     // The detail response usually includes the album's tracklist. Bulk-put
     // it into `db.songs` so the songs cache is primed for downstream
@@ -291,6 +129,75 @@ const applyAlbumDetail = async (
     }
 };
 
+const byDiscThenTrack = (a: CachedSong, b: CachedSong): number =>
+    (a.ParentIndexNumber ?? 0) - (b.ParentIndexNumber ?? 0) ||
+    (a.IndexNumber ?? 0) - (b.IndexNumber ?? 0);
+
+// Shared by the suspense and non-suspense detail hooks: they use the same
+// React Query key, so they must agree on what a cache hit is. Three-tier
+// song resolution: nested in album payload -> db.songs.where('AlbumId') ->
+// snapshot. The album sweep writes plain Album rows with no songs; without
+// the fallbacks a cache hit would return songs:[] and erase a tracklist the
+// snapshot already painted.
+const readAlbumDetailFromCache = async (
+    db: LibraryCacheDb,
+    id: string,
+    queryKey: QueryKey,
+): Promise<AlbumDetailResponse | undefined> => {
+    const payload = (await db.albums.get(id))?.Payload as AlbumDetailResponse | undefined;
+    if (!payload) {
+        console.info('[cache] albums: detail miss (no db row)', { id });
+        return undefined;
+    }
+    let songs = payload.songs ?? [];
+    let songsSource = 'payload';
+    if (songs.length === 0) {
+        const songRows = await db.songs
+            .where('AlbumId')
+            .equals(id)
+            .toArray()
+            .catch(() => []);
+        songs = songRows.sort(byDiscThenTrack).map((r) => r.Payload);
+        songsSource = 'db.songs';
+    }
+    if (songs.length === 0) {
+        songs = readSnapshot<AlbumDetailResponse>(queryKey)?.songs ?? [];
+        songsSource = songs.length > 0 ? 'snapshot' : 'empty';
+    }
+    // Don't serve a PARTIAL tracklist as an authoritative hit. When the
+    // sweep has cached only some of the album's tracks, `db.songs` returns
+    // fewer rows than the album's real `songCount` (e.g. 4 of 131). Serving
+    // that pins the truncated list forever because sync-first suppresses
+    // the background revalidate, so treat it as a miss and fetch the album.
+    const expectedSongs = payload.songCount ?? 0;
+    if (expectedSongs > 0 && songs.length < expectedSongs) {
+        console.info('[cache] albums: detail incomplete tracklist - fetching full', {
+            have: songs.length,
+            id,
+            source: songsSource,
+            want: expectedSongs,
+        });
+        return undefined;
+    }
+    console.info('[cache] albums: detail cache hit', { id, songs: songs.length, songsSource });
+    return { ...payload, songs };
+};
+
+const albumDetailQueryFn =
+    (query: AlbumDetailQuery, queryKey: QueryKey, serverId: string | undefined) =>
+    (ctx: QueryFunctionContext) =>
+        cachedSwr<AlbumDetailResponse>({
+            apply: applyAlbumDetail,
+            ctx,
+            fromCache: (db) => readAlbumDetailFromCache(db, query.id, queryKey),
+            queryKey,
+            remote: ({ signal }) =>
+                controller.getAlbumDetail({
+                    apiClientProps: { serverId: serverId ?? '', signal },
+                    query,
+                }) as Promise<AlbumDetailResponse>,
+        });
+
 export const useAlbumDetailQuery = (args: AlbumDetailQueryArgs) => {
     const { options, query, serverId } = args;
     const queryKey = queryKeys.albums.detail(serverId ?? '', query);
@@ -302,86 +209,11 @@ export const useAlbumDetailQuery = (args: AlbumDetailQueryArgs) => {
             if (callerPlaceholder !== undefined) return callerPlaceholder;
             return readSnapshot<AlbumDetailResponse>(queryKey);
         }) as never,
-        queryFn: (ctx) =>
-            cachedSwr<AlbumDetailResponse>({
-                apply: async (db, fresh) => {
-                    await applyAlbumDetail(db, fresh);
-                },
-                ctx,
-                fromCache: async (db) => {
-                    const row = await db.albums.get(query.id);
-                    const payload = row?.Payload as AlbumDetailResponse | undefined;
-                    if (!payload) return undefined;
-                    // Mirror the three-tier song resolution from useAlbumDetailSuspenseQuery.
-                    // Without this the album sweep (which writes plain Album rows with no
-                    // songs) overwrites the Dexie payload and this fromCache returns
-                    // songs:[] — which propagates through the shared React Query key and
-                    // erases the tracklist rendered by the suspense query in the content
-                    // component, even though that query has the correct song fallbacks.
-                    let songs = payload.songs ?? [];
-                    if (songs.length === 0) {
-                        try {
-                            const songRows = await db.songs
-                                .where('AlbumId')
-                                .equals(query.id)
-                                .toArray();
-                            if (songRows.length > 0) {
-                                songs = songRows
-                                    .sort(
-                                        (a, b) =>
-                                            (a.ParentIndexNumber ?? 0) -
-                                                (b.ParentIndexNumber ?? 0) ||
-                                            (a.IndexNumber ?? 0) - (b.IndexNumber ?? 0),
-                                    )
-                                    .map((r) => r.Payload);
-                            }
-                        } catch {
-                            /* swallow */
-                        }
-                    }
-                    if (songs.length === 0) {
-                        const snap = readSnapshot<AlbumDetailResponse>(queryKey);
-                        if (snap?.songs && snap.songs.length > 0) {
-                            songs = snap.songs;
-                        }
-                    }
-                    // Don't serve a PARTIAL tracklist as an authoritative hit.
-                    // The album row often has no embedded songs, and when the
-                    // sweep has cached only some of the album's tracks,
-                    // `db.songs` returns fewer rows than the album's real
-                    // `songCount` (e.g. 4 of 131). Serving that pins the
-                    // truncated list forever because sync-first suppresses the
-                    // background revalidate. Treat it as a miss so cachedSwr
-                    // fetches the full album from the network.
-                    const expectedSongs = payload.songCount ?? 0;
-                    if (expectedSongs > 0 && songs.length < expectedSongs) {
-                        console.info(
-                            '[cache] albums: detail incomplete tracklist — fetching full',
-                            { have: songs.length, id: query.id, want: expectedSongs },
-                        );
-                        return undefined;
-                    }
-                    console.info('[cache] albums: detail cache hit', {
-                        id: query.id,
-                        songs: songs.length,
-                    });
-                    return { ...payload, songs } as AlbumDetailResponse;
-                },
-                queryKey,
-                remote: (ctx) =>
-                    controller.getAlbumDetail({
-                        apiClientProps: { serverId: serverId ?? '', signal: ctx.signal },
-                        query,
-                    }) as Promise<AlbumDetailResponse>,
-            }),
+        queryFn: albumDetailQueryFn(query, queryKey, serverId),
         queryKey,
         staleTime: options?.staleTime,
     });
 };
-
-// ---------------------------------------------------------------------------
-// Detail — suspense
-// ---------------------------------------------------------------------------
 
 export const useAlbumDetailSuspenseQuery = (args: AlbumDetailSuspenseQueryArgs) => {
     const { options, query, queryKey: queryKeyOverride, serverId } = args;
@@ -394,94 +226,7 @@ export const useAlbumDetailSuspenseQuery = (args: AlbumDetailSuspenseQueryArgs) 
             return readSnapshot<AlbumDetailResponse>(queryKey);
         },
         initialDataUpdatedAt: 0,
-        queryFn: (ctx) =>
-            cachedSwr<AlbumDetailResponse>({
-                apply: async (db, fresh) => {
-                    await applyAlbumDetail(db, fresh);
-                },
-                ctx,
-                fromCache: async (db) => {
-                    const row = await db.albums.get(query.id);
-                    const payload = row?.Payload as AlbumDetailResponse | undefined;
-                    if (!payload) {
-                        console.info('[cache] albums: detail-suspense miss (no db row)', {
-                            id: query.id,
-                        });
-                        return undefined;
-                    }
-                    // Three-tier song resolution: nested in album payload →
-                    // db.songs.where('AlbumId') → snapshot. The third tier
-                    // protects against the "tracklist draws then erases"
-                    // case the user surfaced — initialData paints songs
-                    // from the snapshot, but if Dexie has 0 song rows for
-                    // this album (sweep partial or AlbumId mismatch), the
-                    // queryFn would otherwise return empty songs and
-                    // erase the tracklist on its first render after
-                    // initialData. By falling back to the snapshot here
-                    // we keep the visible state.
-                    let songs = payload.songs ?? [];
-                    let songsSource = 'payload';
-                    if (songs.length === 0) {
-                        try {
-                            const songRows = await db.songs
-                                .where('AlbumId')
-                                .equals(query.id)
-                                .toArray();
-                            if (songRows.length > 0) {
-                                songs = songRows
-                                    .sort(
-                                        (a, b) =>
-                                            (a.ParentIndexNumber ?? 0) -
-                                                (b.ParentIndexNumber ?? 0) ||
-                                            (a.IndexNumber ?? 0) - (b.IndexNumber ?? 0),
-                                    )
-                                    .map((r) => r.Payload);
-                                songsSource = 'db.songs';
-                            }
-                        } catch {
-                            /* swallow */
-                        }
-                    }
-                    if (songs.length === 0) {
-                        const snap = readSnapshot<AlbumDetailResponse>(queryKey);
-                        if (snap?.songs && snap.songs.length > 0) {
-                            songs = snap.songs;
-                            songsSource = 'snapshot';
-                        } else {
-                            songsSource = 'empty';
-                        }
-                    }
-                    // Incomplete-tracklist guard (see the non-suspense sibling):
-                    // when the cache holds fewer songs than the album's real
-                    // `songCount`, it's a partial sweep — return a miss so the
-                    // full album is fetched instead of pinning e.g. 4/131.
-                    const expectedSongs = payload.songCount ?? 0;
-                    if (expectedSongs > 0 && songs.length < expectedSongs) {
-                        console.info(
-                            '[cache] albums: detail-suspense incomplete tracklist — fetching full',
-                            {
-                                have: songs.length,
-                                id: query.id,
-                                source: songsSource,
-                                want: expectedSongs,
-                            },
-                        );
-                        return undefined;
-                    }
-                    console.info('[cache] albums: detail-suspense cache hit', {
-                        id: query.id,
-                        songs: songs.length,
-                        songsSource,
-                    });
-                    return { ...payload, songs } as AlbumDetailResponse;
-                },
-                queryKey,
-                remote: (ctx) =>
-                    controller.getAlbumDetail({
-                        apiClientProps: { serverId: serverId ?? '', signal: ctx.signal },
-                        query,
-                    }) as Promise<AlbumDetailResponse>,
-            }),
+        queryFn: albumDetailQueryFn(query, queryKey, serverId),
         queryKey,
         staleTime: options?.staleTime,
     });
@@ -660,6 +405,27 @@ export const useAlbumInfiniteListSuspenseQuery = (args: AlbumInfiniteListSuspens
                 startIndex,
             };
 
+            // Network page: write the rows through to Dexie and merge the page
+            // into the snapshot so the next mount's initialData includes it.
+            const fetchPage = async () => {
+                const fresh = (await controller.getAlbumList({
+                    apiClientProps: { serverId: serverId ?? '', signal: ctx.signal },
+                    query: pageQuery,
+                })) as AlbumListResponse;
+                if (db) {
+                    await writeAlbumRows(db, fresh?.items ?? []).catch((err) =>
+                        console.warn('[cache] album infinite apply failed', queryKey, err),
+                    );
+                }
+                const next = mergePage(
+                    readSnapshot<InfiniteData<AlbumListResponse, string>>(queryKey),
+                    String(startIndex),
+                    fresh,
+                );
+                writeSnapshot(queryKey, next);
+                return { fresh, next };
+            };
+
             // Read-through: if the local cache has every row this page
             // would need, return the cached page directly and let the
             // background revalidation update the snapshot. This is what
@@ -704,72 +470,23 @@ export const useAlbumInfiniteListSuspenseQuery = (args: AlbumInfiniteListSuspens
                 // authoritative the sweep owns freshness and no automatic
                 // network call fires after a cache hit (an explicit refresh
                 // re-opens the window).
-                if (!shouldRevalidateFromNetwork()) {
-                    return cached;
-                }
-                void (async () => {
-                    try {
-                        const fresh = (await controller.getAlbumList({
-                            apiClientProps: { serverId: serverId ?? '', signal: ctx.signal },
-                            query: pageQuery,
-                        })) as AlbumListResponse;
-                        if (db) {
-                            try {
-                                const items = fresh?.items ?? [];
-                                if (items.length > 0) {
-                                    await db.albums.bulkPut(items.map(toCachedAlbumRow));
-                                    markSearchDirty('albums');
-                                    markRowsChangedFromPage('albums', pageRefsFromItems(items));
-                                    logApplied(items.length);
-                                }
-                            } catch (err) {
-                                console.warn(
-                                    '[cache] album infinite apply failed (bg)',
+                if (shouldRevalidateFromNetwork()) {
+                    void fetchPage()
+                        .then(({ next }) => queryClient.setQueryData(queryKey, next))
+                        .catch((err) => {
+                            if ((err as Error)?.name !== 'AbortError') {
+                                console.info(
+                                    '[cache] album infinite bg revalidate failed',
                                     queryKey,
                                     err,
                                 );
                             }
-                        }
-                        const existing =
-                            readSnapshot<InfiniteData<AlbumListResponse, string>>(queryKey);
-                        const next = mergePage(existing, String(startIndex), fresh);
-                        writeSnapshot(queryKey, next);
-                        queryClient.setQueryData(queryKey, next);
-                    } catch (err) {
-                        if ((err as Error)?.name !== 'AbortError') {
-                            console.info(
-                                '[cache] album infinite bg revalidate failed',
-                                queryKey,
-                                err,
-                            );
-                        }
-                    }
-                })();
+                        });
+                }
                 return cached;
             }
 
-            const fresh = (await controller.getAlbumList({
-                apiClientProps: { serverId: serverId ?? '', signal: ctx.signal },
-                query: pageQuery,
-            })) as AlbumListResponse;
-
-            if (db) {
-                try {
-                    const items = fresh?.items ?? [];
-                    if (items.length > 0) {
-                        await db.albums.bulkPut(items.map(toCachedAlbumRow));
-                        markSearchDirty('albums');
-                        markRowsChangedFromPage('albums', pageRefsFromItems(items));
-                        logApplied(items.length);
-                    }
-                } catch (err) {
-                    console.warn('[cache] album infinite apply failed', queryKey, err);
-                }
-            }
-
-            const existing = readSnapshot<InfiniteData<AlbumListResponse, string>>(queryKey);
-            writeSnapshot(queryKey, mergePage(existing, String(startIndex), fresh));
-            return fresh;
+            return (await fetchPage()).fresh;
         },
         queryKey,
         staleTime: options?.staleTime,

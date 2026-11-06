@@ -80,7 +80,7 @@ export const SongEditModal = ({ songs }: { songs: Song[] }) => {
                         containerClassName={styles.scopeOptionImage}
                         enableViewport={false}
                         explicitStatus={song.explicitStatus}
-                        id={song.imageId}
+                        id={song.albumId ?? song.imageId}
                         itemType={LibraryItem.SONG}
                         serverId={song._serverId}
                         src={song.imageUrl}

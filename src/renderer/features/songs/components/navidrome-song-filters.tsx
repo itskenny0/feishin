@@ -41,16 +41,8 @@ export const NavidromeSongFilters = ({
     const { t } = useTranslation();
     const server = useCurrentServer();
     const serverId = server.id;
-    const {
-        query,
-        setArtistIds,
-        setCustom,
-        setFavorite,
-        setGenreId,
-        setHasRating,
-        setMaxYear,
-        setMinYear,
-    } = useSongListFilters();
+    const { query, setArtistIds, setCustom, setFavorite, setGenreId, setHasRating, setYearRange } =
+        useSongListFilters();
 
     const showRatingFilter = hasFeature(server, ServerFeature.TRACK_YES_NO_RATING_FILTER);
 
@@ -141,25 +133,12 @@ export const NavidromeSongFilters = ({
 
     const handleYearFilter = useMemo(
         () => (e: number | string) => {
-            // Handle empty string, null, undefined, or invalid numbers as clearing
-
-            if (e === '' || e === null || e === undefined) {
-                setMinYear(null);
-                setMaxYear(null);
-                return;
-            }
-
-            const year = typeof e === 'number' ? e : Number(e);
-            // If it's a valid number, set it; otherwise clear
-            if (!isNaN(year) && isFinite(year) && year > 0) {
-                setMinYear(year);
-                setMaxYear(year);
-            } else {
-                setMinYear(null);
-                setMaxYear(null);
-            }
+            // Empty or invalid input clears the filter.
+            const year = Number(e);
+            const value = Number.isFinite(year) && year > 0 ? year : null;
+            setYearRange(value, value);
         },
-        [setMinYear, setMaxYear],
+        [setYearRange],
     );
 
     const debouncedHandleYearFilter = useDebouncedCallback(handleYearFilter, 300);

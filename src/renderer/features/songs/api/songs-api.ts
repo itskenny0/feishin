@@ -8,6 +8,8 @@ import {
     cachedSwr,
     cacheFavoriteCount,
     filterSongsLocal,
+    LibraryCacheDb,
+    loadSongsRows,
     readEntityCountFallback,
     readSnapshot,
     snapshotSwr,
@@ -27,6 +29,85 @@ import {
     SongListResponse,
     SongListSort,
 } from '/@/shared/types/domain-types';
+
+// Filters only the full local-filter pass can answer (no index count).
+const hasSongRowFilter = (q: ListCountQuery<SongListQuery>): boolean =>
+    Boolean(
+        q.searchTerm ||
+        q.artistIds?.length ||
+        q.genreIds?.length ||
+        q.minYear !== undefined ||
+        q.maxYear !== undefined ||
+        q.hasRating !== undefined ||
+        q.musicFolderId ||
+        (q._custom && Object.keys(q._custom).length > 0),
+    );
+
+// The song list's pages come from the local filter (resolveSongPage), so its
+// count must too: a shortcut that drops a filter shows phantom rows that
+// sync-first never corrects. Index counts only when nothing else narrows.
+const readSongCountFromCache = async (
+    db: LibraryCacheDb,
+    q: ListCountQuery<SongListQuery>,
+): Promise<number | undefined> => {
+    const albumId = q.albumIds?.length === 1 ? q.albumIds[0] : undefined;
+    const albumArtistId = q.albumArtistIds?.length === 1 ? q.albumArtistIds[0] : undefined;
+
+    if (!hasSongRowFilter(q) && !q.albumIds && !q.albumArtistIds) {
+        if (q.favorite === undefined) {
+            const count = await db.songs.count();
+            return count > 0 ? count : undefined;
+        }
+        // Favourite-only: keeps the offline favourites list populated.
+        const favRows = await db.favorites.where('ItemType').equals('Song').toArray();
+        return cacheFavoriteCount({
+            favorite: q.favorite,
+            favoriteCount: favRows.filter((f) => f.IsFavorite).length,
+            totalCount: q.favorite ? 0 : await db.songs.count(),
+        });
+    }
+
+    if (!hasSongRowFilter(q) && q.favorite === undefined) {
+        if (albumId && !q.albumArtistIds) {
+            const count = await db.songs.where('AlbumId').equals(albumId).count();
+            return count > 0 ? count : undefined;
+        }
+        if (albumArtistId && !q.albumIds) {
+            const count = await db.songs.where('AlbumArtistId').equals(albumArtistId).count();
+            return count > 0 ? count : undefined;
+        }
+    }
+
+    const rows = albumId
+        ? await db.songs.where('AlbumId').equals(albumId).toArray()
+        : albumArtistId
+          ? await db.songs.where('AlbumArtistId').equals(albumArtistId).toArray()
+          : await loadSongsRows(db);
+    if (rows.length === 0) return undefined;
+
+    const favRows =
+        q.favorite !== undefined || q.hasRating !== undefined
+            ? await db.favorites.where('ItemType').equals('Song').toArray()
+            : [];
+    return (
+        filterSongsLocal({
+            favoriteSongIds:
+                q.favorite !== undefined
+                    ? new Set(favRows.filter((f) => f.IsFavorite).map((f) => f.ItemId))
+                    : undefined,
+            query: { ...q, limit: undefined, startIndex: 0 },
+            ratedSongIds:
+                q.hasRating !== undefined
+                    ? new Set(
+                          favRows
+                              .filter((f) => typeof f.Rating === 'number' && f.Rating > 0)
+                              .map((f) => f.ItemId),
+                      )
+                    : undefined,
+            rows,
+        })?.totalRecordCount ?? undefined
+    );
+};
 
 export const songsQueries = {
     albumRadio: (args: QueryHookArgs<AlbumRadioQuery>) => {
@@ -197,12 +278,7 @@ export const songsQueries = {
         // seed from the snapshot; the queryFn computes the real count.
         const q = args.query;
         const isUnfilteredSongCount =
-            !q.searchTerm &&
-            !q.albumIds &&
-            !q.artistIds &&
-            !q.albumArtistIds &&
-            !q.genreIds?.length &&
-            q.favorite === undefined;
+            !hasSongRowFilter(q) && !q.albumIds && !q.albumArtistIds && q.favorite === undefined;
         return queryOptions({
             gcTime: 1000 * 60 * 60,
             initialData: (() =>
@@ -213,79 +289,7 @@ export const songsQueries = {
             queryFn: (ctx) =>
                 cachedSwr<number>({
                     ctx,
-                    fromCache: async (db) => {
-                        if (args.query.searchTerm) {
-                            const rows = await db.songs.toArray();
-                            const result = filterSongsLocal({
-                                query: { ...args.query, startIndex: 0 },
-                                rows,
-                            });
-                            if (result !== undefined) return result.totalRecordCount ?? 0;
-                        }
-                        if (
-                            args.query.genreIds?.length &&
-                            !args.query.albumIds &&
-                            !args.query.artistIds
-                        ) {
-                            const rows = await db.songs.toArray();
-                            const result = filterSongsLocal({
-                                query: { ...args.query, startIndex: 0 },
-                                rows,
-                            });
-                            if (result !== undefined) return result.totalRecordCount ?? 0;
-                        }
-                        // Serve favorite-only count from Dexie so the favorites songs
-                        // list is not empty offline (the list query already serves items
-                        // from cache; without a count the virtual scroll renders 0 rows).
-                        if (
-                            args.query.favorite !== undefined &&
-                            !args.query.albumIds &&
-                            !args.query.artistIds &&
-                            !args.query.genreIds?.length
-                        ) {
-                            const favRows = await db.favorites
-                                .where('ItemType')
-                                .equals('Song')
-                                .toArray();
-                            const favoriteCount = favRows.filter((f) => f.IsFavorite).length;
-                            return cacheFavoriteCount({
-                                favorite: args.query.favorite,
-                                favoriteCount,
-                                totalCount: args.query.favorite ? 0 : await db.songs.count(),
-                            });
-                        }
-                        // Single-album or single-albumArtist count is cheap via Dexie
-                        // index and avoids the virtual scroll thinking there are N total
-                        // songs when only a subset belongs to this album/artist.
-                        if (args.query.albumIds?.length === 1 && !args.query.artistIds) {
-                            const count = await db.songs
-                                .where('AlbumId')
-                                .equals(args.query.albumIds[0])
-                                .count();
-                            return count > 0 ? count : undefined;
-                        }
-                        if (
-                            args.query.albumArtistIds?.length === 1 &&
-                            !args.query.albumIds &&
-                            !args.query.artistIds
-                        ) {
-                            const count = await db.songs
-                                .where('AlbumArtistId')
-                                .equals(args.query.albumArtistIds[0])
-                                .count();
-                            return count > 0 ? count : undefined;
-                        }
-                        if (
-                            args.query.albumIds ||
-                            args.query.artistIds ||
-                            args.query.genreIds ||
-                            args.query.albumArtistIds
-                        ) {
-                            return undefined;
-                        }
-                        const cachedCount = await db.songs.count();
-                        return cachedCount > 0 ? cachedCount : undefined;
-                    },
+                    fromCache: (db) => readSongCountFromCache(db, args.query),
                     queryKey: key,
                     remote: async ({ signal }) => {
                         const optimizedCount = await getOptimizedListCount<

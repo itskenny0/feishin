@@ -12,43 +12,11 @@ import {
 import { QueryHookArgs } from '/@/renderer/lib/react-query';
 import {
     ListCountQuery,
-    Playlist,
-    PlaylistDetailQuery,
     PlaylistListQuery,
     PlaylistListResponse,
-    PlaylistSongListQuery,
-    PlaylistSongListResponse,
 } from '/@/shared/types/domain-types';
 
 export const playlistsQueries = {
-    detail: (args: QueryHookArgs<PlaylistDetailQuery>) => {
-        const key = queryKeys.playlists.detail(args.serverId, args.query.id, args.query);
-        return queryOptions({
-            initialData: (() => readSnapshot(key)) as never,
-            initialDataUpdatedAt: 0,
-            queryFn: (ctx) =>
-                cachedSwr<Playlist>({
-                    apply: async (db, fresh) => {
-                        if (!fresh) return;
-                        await db.playlists.put(toCachedPlaylistRow(fresh));
-                    },
-                    ctx,
-                    fromCache: async (db) => {
-                        if (!args.query?.id) return undefined;
-                        const row = await db.playlists.get(args.query.id);
-                        return row?.Payload;
-                    },
-                    queryKey: key,
-                    remote: ({ signal }) =>
-                        api.controller.getPlaylistDetail({
-                            apiClientProps: { serverId: args.serverId, signal },
-                            query: args.query,
-                        }) as Promise<Playlist>,
-                }),
-            queryKey: key,
-            ...args.options,
-        });
-    },
     list: (args: QueryHookArgs<PlaylistListQuery>) => {
         const key = queryKeys.playlists.list(args.serverId || '', args.query);
         return queryOptions({
@@ -113,66 +81,6 @@ export const playlistsQueries = {
                 }),
             queryKey: key,
             staleTime: 1000 * 60 * 60,
-            ...args.options,
-        });
-    },
-    songList: (args: QueryHookArgs<PlaylistSongListQuery>) => {
-        const key = queryKeys.playlists.songList(args.serverId || '', args.query.id);
-        return queryOptions({
-            initialData: (() => readSnapshot(key)) as never,
-            initialDataUpdatedAt: 0,
-            queryFn: (ctx) =>
-                cachedSwr<PlaylistSongListResponse>({
-                    apply: async (db, fresh) => {
-                        const items = fresh?.items ?? [];
-                        if (items.length === 0 || !args.query?.id) return;
-                        // Replace the playlist's tracklist in db.playlistSongs
-                        // so the next cold mount can rebuild it offline.
-                        // Order is preserved via ListOrder.
-                        await db.transaction('rw', db.playlistSongs, db.songs, async () => {
-                            await db.playlistSongs
-                                .where('PlaylistId')
-                                .equals(args.query.id)
-                                .delete();
-                            await db.playlistSongs.bulkPut(
-                                items.map((song, i) => ({
-                                    __cachedAt: Date.now(),
-                                    ListOrder: i,
-                                    PlaylistId: args.query.id,
-                                    SongId: song.id,
-                                    SongPayload: song,
-                                })),
-                            );
-                        });
-                    },
-                    ctx,
-                    fromCache: async (db) => {
-                        if (!args.query?.id) return undefined;
-                        const rows = await db.playlistSongs
-                            .where('PlaylistId')
-                            .equals(args.query.id)
-                            .toArray();
-                        if (rows.length === 0) return undefined;
-                        rows.sort((a, b) => a.ListOrder - b.ListOrder);
-                        const items = rows.map((r) => r.SongPayload);
-                        console.info('[cache] playlists: songList cache hit', {
-                            id: args.query.id,
-                            songs: items.length,
-                        });
-                        return {
-                            items,
-                            startIndex: 0,
-                            totalRecordCount: items.length,
-                        };
-                    },
-                    queryKey: key,
-                    remote: ({ signal }) =>
-                        api.controller.getPlaylistSongList({
-                            apiClientProps: { serverId: args.serverId, signal },
-                            query: args.query,
-                        }) as Promise<PlaylistSongListResponse>,
-                }),
-            queryKey: key,
             ...args.options,
         });
     },

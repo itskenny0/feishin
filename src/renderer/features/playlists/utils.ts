@@ -45,7 +45,7 @@ export function playlistSongsToAlbums(songs: Song[]): PlaylistAlbumRow[] {
             gain: null,
             genres: song.genres,
             id: song.albumId,
-            imageId: song.imageId,
+            imageId: song.albumId ?? song.imageId,
             imageUrl: song.imageUrl,
             isCompilation: song.compilation,
             lastPlayedAt:
@@ -141,6 +141,14 @@ export function reorderPlaylistItems<T extends { id: string }>(
         .filter((item): item is T => item !== undefined);
 }
 
+const BOOLEAN_FIELDS = NDSongQueryFields.filter((field) => field.type === 'boolean').map(
+    (field) => field.value,
+);
+
+// The builder holds boolean rule values as 'true' / 'false' strings.
+const toNDValue = (field: string, value: any) =>
+    BOOLEAN_FIELDS.includes(field) ? value === 'true' : value;
+
 export const parseQueryBuilderChildren = (groups: QueryBuilderGroup[], data: any[]) => {
     if (groups.length === 0) {
         return data;
@@ -158,7 +166,8 @@ export const parseQueryBuilderChildren = (groups: QueryBuilderGroup[], data: any
             if (rule.field && rule.operator) {
                 const [table, field] = rule.field.split('.');
                 const operator = mapDatePickerOperatorToApi(rule.operator);
-                const value = field !== 'releaseDate' ? rule.value : new Date(rule.value);
+                const value =
+                    field !== 'releaseDate' ? toNDValue(table, rule.value) : new Date(rule.value);
 
                 switch (table) {
                     default:
@@ -195,16 +204,7 @@ export const convertQueryGroupToNDQuery = (filter: QueryBuilderGroup) => {
         if (rule.field && rule.operator) {
             const [field] = rule.field.split('.');
             const operator = mapDatePickerOperatorToApi(rule.operator);
-            let value = rule.value;
-
-            const booleanFields = NDSongQueryFields.filter(
-                (queryField) => queryField.type === 'boolean',
-            ).map((field) => field.value);
-
-            // Convert string values to boolean
-            if (booleanFields.includes(field)) {
-                value = value === 'true';
-            }
+            const value = toNDValue(field, rule.value);
 
             switch (field) {
                 default:
@@ -245,12 +245,8 @@ export const convertNDQueryToQueryGroup = (query: Record<string, any>) => {
             const field = Object.keys(rule[operator])[0];
             let value = rule[operator][field];
 
-            const booleanFields = NDSongQueryFields.filter(
-                (queryField) => queryField.type === 'boolean',
-            ).map((field) => field.value);
-
             // Convert boolean values to string
-            if (booleanFields.includes(field)) {
+            if (BOOLEAN_FIELDS.includes(field)) {
                 value = value.toString();
             }
 

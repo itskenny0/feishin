@@ -31,10 +31,9 @@ export const AlbumListHeaderFilters = ({ toggleGenreTarget }: { toggleGenreTarge
     const { t } = useTranslation();
     const target = useGenreTarget();
     const { setGenreBehavior } = useSettingsStoreActions();
-    const albumFilters = useAlbumListFilters();
-    const songFilters = useSongListFilters();
-
     const { pageKey } = useListContext();
+    const albumFilters = useAlbumListFilters(pageKey as ItemListKey);
+    const songFilters = useSongListFilters();
 
     const choice = useMemo(() => {
         return target === GenreTarget.ALBUM

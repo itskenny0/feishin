@@ -13,12 +13,7 @@ import { usePlaylistSongListSuspenseQuery } from '/@/renderer/features/playlists
 import { reorderPlaylistItems } from '/@/renderer/features/playlists/utils';
 import { useCurrentServer, useListSettings } from '/@/renderer/store';
 import { Spinner } from '/@/shared/components/spinner/spinner';
-import {
-    LibraryItem,
-    PlaylistSongListQuery,
-    PlaylistSongListResponse,
-    Song,
-} from '/@/shared/types/domain-types';
+import { LibraryItem, PlaylistSongListResponse, Song } from '/@/shared/types/domain-types';
 import {
     ItemListKey,
     ListDisplayType,
@@ -88,8 +83,6 @@ export const PlaylistDetailSongListContent = () => {
         </Suspense>
     );
 };
-
-export type OverridePlaylistSongListQuery = Omit<Partial<PlaylistSongListQuery>, 'id'>;
 
 interface PlaylistDetailSongListViewProps {
     data: PlaylistSongListResponse;

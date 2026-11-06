@@ -3,6 +3,7 @@ import { AxiosError } from 'axios';
 
 import { api } from '/@/renderer/api';
 import { queryKeys } from '/@/renderer/api/query-keys';
+import { dropCachedPlaylistSongs } from '/@/renderer/features/playlists/queries/playlists-queries';
 import { MutationHookArgs } from '/@/renderer/lib/react-query';
 import { UpdatePlaylistArgs, UpdatePlaylistResponse } from '/@/shared/types/domain-types';
 
@@ -17,12 +18,14 @@ export const useUpdatePlaylist = (args: MutationHookArgs) => {
                 apiClientProps: { serverId: args.apiClientProps.serverId },
             });
         },
-        onSuccess: (_data, variables) => {
+        onSuccess: async (_data, variables) => {
             const { apiClientProps, query } = variables;
             const serverId = apiClientProps.serverId;
 
             if (!serverId) return;
 
+            // Smart-playlist rule changes alter the tracklist too.
+            if (query?.id) await dropCachedPlaylistSongs(query.id);
             queryClient.invalidateQueries({
                 queryKey: queryKeys.playlists.list(serverId),
             });

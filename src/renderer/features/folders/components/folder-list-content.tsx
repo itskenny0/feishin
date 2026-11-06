@@ -38,12 +38,15 @@ export const FolderListInnerContent = () => {
     const queryClient = useQueryClient();
     const { currentFolderId, query } = useFolderListFilters();
 
+    // The search applies to the listed folder only. The tree caches every
+    // node it loads, so a search-filtered fetch there would stick after the
+    // search is cleared.
     const getFolderQueryOptions = useCallback(
-        (folderId: string) => {
+        (folderId: string, searchTerm?: string) => {
             return folderQueries.folder({
                 query: {
                     id: folderId,
-                    searchTerm: query[FILTER_KEYS.SHARED.SEARCH_TERM] as string | undefined,
+                    searchTerm,
                     sortBy:
                         (query[FILTER_KEYS.SHARED.SORT_BY] as SongListSort) || SongListSort.NAME,
                     sortOrder: (query[FILTER_KEYS.SHARED.SORT_ORDER] as SortOrder) || SortOrder.ASC,
@@ -60,7 +63,10 @@ export const FolderListInnerContent = () => {
     });
 
     const currentFolderQuery = useSuspenseQuery({
-        ...getFolderQueryOptions(currentFolderId),
+        ...getFolderQueryOptions(
+            currentFolderId,
+            query[FILTER_KEYS.SHARED.SEARCH_TERM] as string | undefined,
+        ),
         staleTime: 1000 * 60,
     });
 

@@ -59,8 +59,9 @@ const SongListHeaderBadge = () => {
 };
 
 const useMergedQuery = () => {
-    const { customFilters } = useListContext();
-    const { query } = useSongListFilters();
+    // The list's key (artist / genre songs), so Play queues what is shown.
+    const { customFilters, pageKey } = useListContext();
+    const { query } = useSongListFilters(pageKey as ItemListKey);
 
     return useMemo(() => {
         return {

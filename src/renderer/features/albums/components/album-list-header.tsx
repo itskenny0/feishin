@@ -103,8 +103,9 @@ const AlbumArtistTitle = () => {
 };
 
 const useMergedQuery = () => {
-    const { query } = useAlbumListFilters();
-    const { customFilters } = useListContext();
+    // The list's key (artist / genre albums), so Play queues what is shown.
+    const { customFilters, pageKey } = useListContext();
+    const { query } = useAlbumListFilters(pageKey as ItemListKey);
 
     return useMemo(() => {
         return {

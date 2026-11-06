@@ -30,11 +30,18 @@ export const SongEditContextModal = ({ innerProps }: ContextModalProps<SongEditI
                         query: { id },
                     }),
                 ),
-            ).then((albums) => {
-                setResolvedSongs(
-                    albums.flatMap((album) => album?.songs ?? []).filter((s) => s.path),
-                );
-            });
+            )
+                .then((albums) => {
+                    setResolvedSongs(
+                        albums.flatMap((album) => album?.songs ?? []).filter((s) => s.path),
+                    );
+                })
+                .catch((err) => {
+                    // Else the modal spins forever; [] shows the editor's
+                    // "no songs" message instead.
+                    console.error('[tag-editor] album detail fetch failed', err);
+                    setResolvedSongs([]);
+                });
         } else {
             setResolvedSongs((innerProps.songs ?? []).filter((s) => s.path));
         }

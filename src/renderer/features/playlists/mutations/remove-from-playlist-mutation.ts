@@ -3,6 +3,7 @@ import { AxiosError } from 'axios';
 
 import { api } from '/@/renderer/api';
 import { queryKeys } from '/@/renderer/api/query-keys';
+import { dropCachedPlaylistSongs } from '/@/renderer/features/playlists/queries/playlists-queries';
 import { MutationOptions } from '/@/renderer/lib/react-query';
 import { RemoveFromPlaylistArgs, RemoveFromPlaylistResponse } from '/@/shared/types/domain-types';
 
@@ -16,12 +17,13 @@ export const useRemoveFromPlaylist = (options?: MutationOptions) => {
                 apiClientProps: { serverId: args.apiClientProps.serverId },
             });
         },
-        onSuccess: (_data, variables) => {
+        onSuccess: async (_data, variables) => {
             const { apiClientProps } = variables;
             const serverId = apiClientProps.serverId;
 
             if (!serverId) return;
 
+            await dropCachedPlaylistSongs(variables.query.id);
             queryClient.invalidateQueries({
                 queryKey: queryKeys.playlists.list(serverId),
             });
@@ -30,6 +32,11 @@ export const useRemoveFromPlaylist = (options?: MutationOptions) => {
             });
             queryClient.invalidateQueries({
                 queryKey: queryKeys.playlists.songList(serverId, variables.query.id),
+            });
+            // Else the skip-duplicates check still sees the removed songs and
+            // refuses to add them back.
+            queryClient.invalidateQueries({
+                queryKey: queryKeys.playlists.songListIds(serverId, variables.query.id),
             });
         },
         ...options,

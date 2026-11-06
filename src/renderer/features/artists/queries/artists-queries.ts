@@ -1,11 +1,11 @@
 // Cached query hooks for the artists feature.
 //
-// These wrap the controller calls with `useCachedQuery` /
-// `useCachedInfiniteQuery` so the IndexedDB cache primes the snapshot map
-// before the network round-trip lands. The signatures match what the
-// existing component callers expect once they migrate off the raw
-// `useQuery(artistsQueries.X(...))` form: a `QueryHookArgs`-shaped input
-// plus an `options.enabled` / `options.staleTime` pass-through.
+// These wrap the controller calls with `useCachedQuery` so the IndexedDB
+// cache primes the snapshot map before the network round-trip lands. The
+// signatures match what the existing component callers expect once they
+// migrate off the raw `useQuery(artistsQueries.X(...))` form: a
+// `QueryHookArgs`-shaped input plus an `options.enabled` /
+// `options.staleTime` pass-through.
 
 import { controller } from '/@/renderer/api/controller';
 import { queryKeys } from '/@/renderer/api/query-keys';
@@ -16,9 +16,12 @@ import {
     markRowsChangedFromPage,
     markSearchDirty,
     pageRefsFromItems,
-    useCachedInfiniteQuery,
     useCachedQuery,
 } from '/@/renderer/cache';
+import {
+    readArtistFavoriteSongsFromCache,
+    readTopSongsFromCache,
+} from '/@/renderer/features/artists/api/artists-api';
 import {
     AlbumArtist,
     AlbumArtistDetailQuery,
@@ -71,21 +74,13 @@ const canServeArtistFromCache = (query: ArtistListQuery | undefined): boolean =>
     return true;
 };
 
-// Build a Set of favorited (Album)Artist IDs from the favorites table —
-// used only when the query opts into favorite-filtering. Caller decides
-// whether to spend the read.
-//
-// The cache DB schema v8 added a standalone `ItemType` index on
-// the favorites table, so `where('ItemType').equals(kind)` rides an
-// IDB cursor over the matching rows instead of a `.filter()` JS-side
-// table walk. Earlier schemas threw a SchemaError that the outer
-// `useCachedQuery` try/catch swallowed, hence the historic fallback
-// to `.filter()`.
-const readFavoriteArtistIds = async (
-    db: LibraryCacheDb,
-    kind: 'AlbumArtist' | 'Artist',
-): Promise<Set<string>> => {
-    const rows = await db.favorites.where('ItemType').equals(kind).toArray();
+// Build a Set of favorited artist IDs from the favorites table - used only
+// when the query opts into favorite-filtering. Both artist kinds read the
+// 'AlbumArtist' bucket: it is the only one the favourites sweep writes
+// (Jellyfin/Navidrome share one favourite record between the two kinds),
+// and the grid page resolvers read it too, so counts and lists agree.
+const readFavoriteArtistIds = async (db: LibraryCacheDb): Promise<Set<string>> => {
+    const rows = await db.favorites.where('ItemType').equals('AlbumArtist').toArray();
     return new Set(rows.filter((r) => r.IsFavorite).map((r) => r.ItemId));
 };
 
@@ -111,30 +106,40 @@ const toCachedSongRow = (song: Song) => ({
     Payload: song,
 });
 
+const writeArtistRows = async (
+    db: LibraryCacheDb,
+    items: AlbumArtist[],
+    kind: 'AlbumArtist' | 'Artist',
+): Promise<void> => {
+    if (items.length === 0) return;
+    await db.artists.bulkPut(items.map((a) => toCachedArtistRow(a, kind)));
+    markSearchDirty('artists');
+    markRowsChangedFromPage('artists', pageRefsFromItems(items));
+};
+
+const writeSongRows = async (db: LibraryCacheDb, items: Song[]): Promise<void> => {
+    if (items.length === 0) return;
+    await db.songs.bulkPut(items.map(toCachedSongRow));
+    markSearchDirty('songs');
+    markRowsChangedFromPage('songs', pageRefsFromItems(items));
+};
+
 // ---------------------------------------------------------------------------
-// Album-artist list (paginated)
+// Album-artist list
 // ---------------------------------------------------------------------------
 
 export const useAlbumArtistListQuery = (args: ArtistsQueryArgs<AlbumArtistListQuery>) => {
     const { options, query, serverId } = args;
 
     return useCachedQuery<AlbumArtistListResponse>({
-        apply: async (db, fresh) => {
-            const items = fresh?.items ?? [];
-            if (items.length === 0) return;
-            await db.artists.bulkPut(items.map((a) => toCachedArtistRow(a, 'AlbumArtist')));
-            markSearchDirty('artists');
-            markRowsChangedFromPage('artists', pageRefsFromItems(items));
-        },
+        apply: (db, fresh) => writeArtistRows(db, fresh?.items ?? [], 'AlbumArtist'),
         enabled: options?.enabled ?? Boolean(serverId),
         fromCache: async (db) => {
             if (!canServeAlbumArtistFromCache(query)) return undefined;
             const rows = await db.artists.where('Kind').equals('AlbumArtist').toArray();
             if (rows.length === 0) return undefined;
             const favoriteArtistIds =
-                query?.favorite !== undefined
-                    ? await readFavoriteArtistIds(db, 'AlbumArtist')
-                    : undefined;
+                query?.favorite !== undefined ? await readFavoriteArtistIds(db) : undefined;
             return filterAlbumArtistsLocal({
                 favoriteArtistIds,
                 query: query ?? ({} as AlbumArtistListQuery),
@@ -152,70 +157,6 @@ export const useAlbumArtistListQuery = (args: ArtistsQueryArgs<AlbumArtistListQu
 };
 
 // ---------------------------------------------------------------------------
-// Album-artist list (infinite)
-// ---------------------------------------------------------------------------
-
-interface AlbumArtistInfiniteListArgs {
-    itemLimit: number;
-    options?: CachedQueryHookOptions;
-    query: Omit<AlbumArtistListQuery, 'startIndex'>;
-    serverId: string | undefined;
-}
-
-export const useAlbumArtistInfiniteListQuery = (args: AlbumArtistInfiniteListArgs) => {
-    const { itemLimit, options, query, serverId } = args;
-
-    return useCachedInfiniteQuery<AlbumArtistListResponse, number>({
-        apply: async (db, page) => {
-            const items = page?.items ?? [];
-            if (items.length === 0) return;
-            await db.artists.bulkPut(items.map((a) => toCachedArtistRow(a, 'AlbumArtist')));
-            markSearchDirty('artists');
-            markRowsChangedFromPage('artists', pageRefsFromItems(items));
-        },
-        enabled: options?.enabled ?? Boolean(serverId),
-        fromCache: async (db, pageParam) => {
-            const fullQuery = query as AlbumArtistListQuery;
-            if (!canServeAlbumArtistFromCache(fullQuery)) return undefined;
-            const rows = await db.artists.where('Kind').equals('AlbumArtist').toArray();
-            if (rows.length === 0) return undefined;
-            const favoriteArtistIds =
-                fullQuery?.favorite !== undefined
-                    ? await readFavoriteArtistIds(db, 'AlbumArtist')
-                    : undefined;
-            return filterAlbumArtistsLocal({
-                favoriteArtistIds,
-                query: {
-                    ...fullQuery,
-                    limit: itemLimit,
-                    startIndex: pageParam ?? 0,
-                },
-                rows,
-            });
-        },
-        getNextPageParam: (lastPage, _allPages, lastPageParam) => {
-            if (!lastPage || lastPage.items.length < itemLimit) return undefined;
-            return Number(lastPageParam) + itemLimit;
-        },
-        initialPageParam: 0,
-        queryKey: queryKeys.albumArtists.infiniteList(serverId ?? '', {
-            ...(query as AlbumArtistListQuery),
-            startIndex: 0,
-        }),
-        remote: (ctx) =>
-            controller.getAlbumArtistList({
-                apiClientProps: { serverId: serverId ?? '', signal: ctx.signal },
-                query: {
-                    ...(query as AlbumArtistListQuery),
-                    limit: itemLimit,
-                    startIndex: ctx.pageParam as number,
-                },
-            }) as Promise<AlbumArtistListResponse>,
-        staleTime: options?.staleTime,
-    });
-};
-
-// ---------------------------------------------------------------------------
 // Album-artist detail
 // ---------------------------------------------------------------------------
 
@@ -224,10 +165,7 @@ export const useAlbumArtistDetailQuery = (args: ArtistsQueryArgs<AlbumArtistDeta
 
     return useCachedQuery<AlbumArtistDetailResponse>({
         apply: async (db, fresh) => {
-            if (!fresh) return;
-            await db.artists.put(toCachedArtistRow(fresh, 'AlbumArtist'));
-            markSearchDirty('artists');
-            markRowsChangedFromPage('artists', pageRefsFromItems([fresh]));
+            if (fresh) await writeArtistRows(db, [fresh], 'AlbumArtist');
         },
         enabled: options?.enabled ?? Boolean(serverId && query?.id),
         fromCache: async (db) => {
@@ -276,37 +214,12 @@ export const useArtistTopSongsQuery = (args: ArtistsQueryArgs<TopSongListQuery>)
     const { options, query, serverId } = args;
 
     return useCachedQuery<TopSongListResponse>({
-        apply: async (db, fresh) => {
-            const items = fresh?.items ?? [];
-            if (items.length === 0) return;
-            await db.songs.bulkPut(items.map(toCachedSongRow));
-            markSearchDirty('songs');
-            markRowsChangedFromPage('songs', pageRefsFromItems(items));
-        },
+        apply: (db, fresh) => writeSongRows(db, fresh?.items ?? []),
         enabled: options?.enabled ?? Boolean(serverId && query?.artistId),
-        // Server ranks by popularity which we can't reproduce — but on
-        // cold-offline an approximation (playCount desc, then any
-        // order) is far better than an infinite spinner. The artist
-        // page header is one of the most-hit surfaces; previously it
-        // hung forever without network.
-        fromCache: async (db) => {
-            if (!query?.artistId) return undefined;
-            const rows = await db.songs.where('AlbumArtistId').equals(query.artistId).toArray();
-            if (rows.length === 0) return undefined;
-            const items = rows
-                .map((r) => r.Payload)
-                .sort(
-                    (a, b) =>
-                        ((b as { playCount?: number }).playCount ?? 0) -
-                        ((a as { playCount?: number }).playCount ?? 0),
-                )
-                .slice(0, query.limit ?? 20);
-            return {
-                items,
-                startIndex: 0,
-                totalRecordCount: items.length,
-            } as TopSongListResponse;
-        },
+        // Server ranks by popularity which we can't reproduce, but on
+        // cold-offline an approximation is far better than an infinite
+        // spinner on one of the most-hit surfaces.
+        fromCache: (db) => readTopSongsFromCache(db, query),
         queryKey: queryKeys.albumArtists.topSongs(serverId ?? '', query),
         remote: (ctx) =>
             controller.getTopSongs({
@@ -321,46 +234,17 @@ export const useArtistTopSongsQuery = (args: ArtistsQueryArgs<TopSongListQuery>)
 // Favorite songs (per artist)
 // ---------------------------------------------------------------------------
 
-interface FavoriteSongsArgs {
-    options?: CachedQueryHookOptions;
-    query: FavoriteSongListQuery;
-    serverId: string | undefined;
-}
-
-export const useArtistFavoriteSongsQuery = (args: FavoriteSongsArgs) => {
+export const useArtistFavoriteSongsQuery = (args: ArtistsQueryArgs<FavoriteSongListQuery>) => {
     const { options, query, serverId } = args;
 
     return useCachedQuery<SongListResponse>({
-        apply: async (db, fresh) => {
-            const items = fresh?.items ?? [];
-            if (items.length === 0) return;
-            await db.songs.bulkPut(items.map(toCachedSongRow));
-            markSearchDirty('songs');
-            markRowsChangedFromPage('songs', pageRefsFromItems(items));
-        },
+        apply: (db, fresh) => writeSongRows(db, fresh?.items ?? []),
         enabled: options?.enabled ?? Boolean(serverId && query?.artistId),
-        // Intersect cached songs by this artist with the favorites
-        // table so the artist page's "Favorite songs" section paints
-        // offline instead of spinning. Network revalidate still wins
-        // for the canonical ordering when it lands.
-        fromCache: async (db) => {
-            if (!query?.artistId) return undefined;
-            // The 'rating' variant ranks by star rating, which the favorites
-            // table can't reproduce — leave that one to the network.
-            if (query.type === 'rating') return undefined;
-            const songRows = await db.songs.where('AlbumArtistId').equals(query.artistId).toArray();
-            if (songRows.length === 0) return undefined;
-            const favs = await db.favorites
-                .filter((f) => f.ItemType === 'Song' && f.IsFavorite)
-                .toArray();
-            const favSet = new Set(favs.map((f) => f.ItemId));
-            const items = songRows.filter((r) => favSet.has(r.Id)).map((r) => r.Payload);
-            return {
-                items,
-                startIndex: 0,
-                totalRecordCount: items.length,
-            } as SongListResponse;
-        },
+        // Intersect cached songs by this artist with the favorites table so
+        // the artist page's "Favorite songs" section paints offline instead
+        // of spinning. Network revalidate still wins for the canonical
+        // ordering when it lands.
+        fromCache: (db) => readArtistFavoriteSongsFromCache(db, query),
         queryKey: queryKeys.albumArtists.favoriteSongs(serverId ?? '', query),
         remote: (ctx) =>
             controller.getFavoriteSongs({
@@ -372,29 +256,21 @@ export const useArtistFavoriteSongsQuery = (args: FavoriteSongsArgs) => {
 };
 
 // ---------------------------------------------------------------------------
-// Song-artist list (paginated)
+// Song-artist list
 // ---------------------------------------------------------------------------
 
 export const useArtistListQuery = (args: ArtistsQueryArgs<ArtistListQuery>) => {
     const { options, query, serverId } = args;
 
     return useCachedQuery<ArtistListResponse>({
-        apply: async (db, fresh) => {
-            const items = fresh?.items ?? [];
-            if (items.length === 0) return;
-            await db.artists.bulkPut(items.map((a) => toCachedArtistRow(a, 'Artist')));
-            markSearchDirty('artists');
-            markRowsChangedFromPage('artists', pageRefsFromItems(items));
-        },
+        apply: (db, fresh) => writeArtistRows(db, fresh?.items ?? [], 'Artist'),
         enabled: options?.enabled ?? Boolean(serverId),
         fromCache: async (db) => {
             if (!canServeArtistFromCache(query)) return undefined;
             const rows = await db.artists.where('Kind').equals('Artist').toArray();
             if (rows.length === 0) return undefined;
             const favoriteArtistIds =
-                query?.favorite !== undefined
-                    ? await readFavoriteArtistIds(db, 'Artist')
-                    : undefined;
+                query?.favorite !== undefined ? await readFavoriteArtistIds(db) : undefined;
             return filterArtistsLocal({
                 favoriteArtistIds,
                 query: query ?? ({} as ArtistListQuery),
@@ -406,70 +282,6 @@ export const useArtistListQuery = (args: ArtistsQueryArgs<ArtistListQuery>) => {
             controller.getArtistList({
                 apiClientProps: { serverId: serverId ?? '', signal: ctx.signal },
                 query,
-            }) as Promise<ArtistListResponse>,
-        staleTime: options?.staleTime,
-    });
-};
-
-// ---------------------------------------------------------------------------
-// Song-artist list (infinite)
-// ---------------------------------------------------------------------------
-
-interface ArtistInfiniteListArgs {
-    itemLimit: number;
-    options?: CachedQueryHookOptions;
-    query: Omit<ArtistListQuery, 'startIndex'>;
-    serverId: string | undefined;
-}
-
-export const useArtistInfiniteListQuery = (args: ArtistInfiniteListArgs) => {
-    const { itemLimit, options, query, serverId } = args;
-
-    return useCachedInfiniteQuery<ArtistListResponse, number>({
-        apply: async (db, page) => {
-            const items = page?.items ?? [];
-            if (items.length === 0) return;
-            await db.artists.bulkPut(items.map((a) => toCachedArtistRow(a, 'Artist')));
-            markSearchDirty('artists');
-            markRowsChangedFromPage('artists', pageRefsFromItems(items));
-        },
-        enabled: options?.enabled ?? Boolean(serverId),
-        fromCache: async (db, pageParam) => {
-            const fullQuery = query as ArtistListQuery;
-            if (!canServeArtistFromCache(fullQuery)) return undefined;
-            const rows = await db.artists.where('Kind').equals('Artist').toArray();
-            if (rows.length === 0) return undefined;
-            const favoriteArtistIds =
-                fullQuery?.favorite !== undefined
-                    ? await readFavoriteArtistIds(db, 'Artist')
-                    : undefined;
-            return filterArtistsLocal({
-                favoriteArtistIds,
-                query: {
-                    ...fullQuery,
-                    limit: itemLimit,
-                    startIndex: pageParam ?? 0,
-                },
-                rows,
-            });
-        },
-        getNextPageParam: (lastPage, _allPages, lastPageParam) => {
-            if (!lastPage || lastPage.items.length < itemLimit) return undefined;
-            return Number(lastPageParam) + itemLimit;
-        },
-        initialPageParam: 0,
-        queryKey: queryKeys.artists.infiniteList(serverId ?? '', {
-            ...(query as ArtistListQuery),
-            startIndex: 0,
-        }),
-        remote: (ctx) =>
-            controller.getArtistList({
-                apiClientProps: { serverId: serverId ?? '', signal: ctx.signal },
-                query: {
-                    ...(query as ArtistListQuery),
-                    limit: itemLimit,
-                    startIndex: ctx.pageParam as number,
-                },
             }) as Promise<ArtistListResponse>,
         staleTime: options?.staleTime,
     });

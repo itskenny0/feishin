@@ -44,21 +44,6 @@ import { LibraryItem, RelatedArtist, Song } from '/@/shared/types/domain-types';
 import { DragOperation, DragTarget, DragTargetMap } from '/@/shared/types/drag-and-drop';
 import { Play } from '/@/shared/types/types';
 
-export interface ExpandedAlbumData {
-    _serverId: string;
-    albumArtists: RelatedArtist[];
-    id: string;
-    imageId: null | string;
-    name: string;
-    path?: null | string;
-    songs?: null | Song[];
-}
-
-export interface ExpandedAlbumListItemProps {
-    album?: ExpandedAlbumData;
-    item?: ItemListStateItem;
-}
-
 interface AlbumTracksTableProps {
     isDark?: boolean;
     serverId: string;
@@ -69,6 +54,20 @@ interface AlbumTracksTableProps {
         name: string;
         trackNumber: number;
     }>;
+}
+
+interface ExpandedAlbumData {
+    _serverId: string;
+    albumArtists: RelatedArtist[];
+    id: string;
+    imageId: null | string;
+    name: string;
+    path?: null | string;
+    songs?: null | Song[];
+}
+
+interface ExpandedAlbumListItemProps {
+    item?: ItemListStateItem;
 }
 
 interface TrackRowProps {
@@ -366,7 +365,9 @@ function itemToExpandedAlbumData(
 ): ExpandedAlbumData | null {
     const songs =
         (item as { songs?: Song[] }).songs ?? (item as { _playlistSongs?: Song[] })._playlistSongs;
-    if (songs == null) return null;
+    // Subsonic list items carry `songs: []` (no tracklist), so an empty
+    // array must fall through to the fetching path too.
+    if (!songs?.length) return null;
     return {
         _serverId: item._serverId,
         albumArtists: item.albumArtists ?? [],
@@ -379,10 +380,6 @@ function itemToExpandedAlbumData(
 }
 
 export const ExpandedAlbumListItem = (props: ExpandedAlbumListItemProps) => {
-    if (props.album != null) {
-        return <ExpandedAlbumListItemContent albumData={props.album} />;
-    }
-
     if (props.item != null) {
         const albumData = itemToExpandedAlbumData(props.item);
 

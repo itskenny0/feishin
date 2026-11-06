@@ -219,13 +219,11 @@ export const AlbumArtistDetailHeader = forwardRef<HTMLDivElement, AlbumArtistDet
                 const albumIds = flatSortedAlbums.map((album) => album.id);
                 if (albumIds.length === 0) return;
 
-                const filter = (song: Song) => {
-                    if (song.albumArtists.some((artist) => artist.id === albumArtistId)) {
-                        return true;
-                    }
-
-                    return song.artists.some((artist) => artist.id === albumArtistId);
-                };
+                // routeId, not albumArtistId: the latter is undefined on the
+                // /library/artists/:artistId route, which would drop every song.
+                const filter = (song: Song) =>
+                    song.albumArtists.some((artist) => artist.id === routeId) ||
+                    song.artists.some((artist) => artist.id === routeId);
 
                 addToQueueByFetch(
                     server.id,
@@ -249,7 +247,6 @@ export const AlbumArtistDetailHeader = forwardRef<HTMLDivElement, AlbumArtistDet
                 groupingType,
                 artistReleaseTypeItems,
                 t,
-                albumArtistId,
             ],
         );
 

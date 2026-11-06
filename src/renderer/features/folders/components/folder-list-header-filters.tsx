@@ -213,8 +213,12 @@ export const FolderListHeaderFilters = () => {
                         visibleStartMiddle.length > 0 &&
                         item.id === visibleStartMiddle[visibleStartMiddle.length - 1].id;
 
+                    // After the first crumb too when no middle crumb shows
+                    // before the gap (maxItems 3), else the hidden levels are
+                    // unreachable.
                     const shouldInsertDropdown =
-                        (isFirstItem && nextItem.id === lastItem.id) ||
+                        (isFirstItem &&
+                            (nextItem.id === lastItem.id || visibleStartMiddle.length === 0)) ||
                         (isLastStartMiddle &&
                             (nextItem.id === lastItem.id ||
                                 (visibleEndMiddle.length > 0 &&

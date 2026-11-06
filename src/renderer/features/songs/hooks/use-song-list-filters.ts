@@ -111,6 +111,25 @@ export const useSongListFilters = (listKey?: ItemListKey) => {
         [setSearchParams],
     );
 
+    // Both bounds in one update: react-router's updater gets the params of
+    // the last render, so back-to-back setMinYear + setMaxYear calls would
+    // keep only the second.
+    const setYearRange = useCallback(
+        (min: null | number, max: null | number) => {
+            runInUrlTransition(() => {
+                setSearchParams(
+                    (prev) =>
+                        setMultipleSearchParams(prev, {
+                            [FILTER_KEYS.SONG.MAX_YEAR]: max,
+                            [FILTER_KEYS.SONG.MIN_YEAR]: min,
+                        }),
+                    { replace: true },
+                );
+            });
+        },
+        [setSearchParams],
+    );
+
     const setFavorite = useCallback(
         (value: boolean | null) => {
             runInUrlTransition(() => {
@@ -230,5 +249,6 @@ export const useSongListFilters = (listKey?: ItemListKey) => {
         setMaxYear,
         setMinYear,
         setSearchTerm,
+        setYearRange,
     };
 };

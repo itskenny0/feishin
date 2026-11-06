@@ -185,9 +185,11 @@ export const PlaylistQueryEditor = forwardRef<PlaylistQueryEditorRef, PlaylistQu
                       : detailQueryRules),
             [appliedQuery, detailQueryRules],
         );
-        const effectiveLimit = appliedJsonState?.limit ?? detailQuery?.data?.rules?.limit;
-        const effectiveLimitPercent =
-            appliedJsonState?.limitPercent ?? detailQuery?.data?.rules?.limitPercent;
+        // Applied JSON is the whole state: a limit removed there must not fall
+        // back to the saved one (which the next save would then re-add).
+        const limitSource = appliedJsonState ?? detailQuery?.data?.rules;
+        const effectiveLimit = limitSource?.limit;
+        const effectiveLimitPercent = limitSource?.limitPercent;
 
         const appliedSort = appliedJsonState?.sort;
         const effectiveSortBy = useMemo(

@@ -32,7 +32,7 @@ import { Group } from '/@/shared/components/group/group';
 import { Separator } from '/@/shared/components/separator/separator';
 import { Stack } from '/@/shared/components/stack/stack';
 import { Text } from '/@/shared/components/text/text';
-import { LibraryItem, ServerType } from '/@/shared/types/domain-types';
+import { ExplicitStatus, LibraryItem, ServerType } from '/@/shared/types/domain-types';
 import { Play } from '/@/shared/types/types';
 
 const ARTIST_COLLAPSE_THRESHOLD = 7;
@@ -188,7 +188,6 @@ export const AlbumDetailHeader = forwardRef<HTMLDivElement>((_props, ref) => {
 
         const prefixNecessary = items.length > 0;
         const releasePrefix = prefixNecessary ? `${t('page.albumDetail.released')} ` : '';
-        const releaseYearPrefix = prefixNecessary ? `${t('page.albumDetail.released')} ` : '';
         if (releaseDate) {
             items.push({
                 id: 'releaseDate',
@@ -197,7 +196,7 @@ export const AlbumDetailHeader = forwardRef<HTMLDivElement>((_props, ref) => {
         } else if (releaseYear != null && releaseYear > 0) {
             items.push({
                 id: 'releaseYear',
-                value: `${releaseYearPrefix}${releaseYear}`,
+                value: `${releasePrefix}${releaseYear}`,
             });
         }
 
@@ -213,7 +212,12 @@ export const AlbumDetailHeader = forwardRef<HTMLDivElement>((_props, ref) => {
                 },
                 {
                     id: 'explicitStatus',
-                    value: detailQuery?.data?.explicitStatus,
+                    value:
+                        detailQuery?.data?.explicitStatus === ExplicitStatus.EXPLICIT
+                            ? t('common.explicit')
+                            : detailQuery?.data?.explicitStatus === ExplicitStatus.CLEAN
+                              ? t('common.clean')
+                              : undefined,
                 },
                 {
                     id: 'size',
