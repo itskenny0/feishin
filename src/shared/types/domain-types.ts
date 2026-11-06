@@ -1,7 +1,6 @@
 import {
     JFAlbumArtistListSort,
     JFAlbumListSort,
-    JFArtistListSort,
     JFGenreListSort,
     JFPlaylistListSort,
     JFSongListSort,
@@ -145,29 +144,10 @@ export enum ExplicitStatus {
     EXPLICIT = 'EXPLICIT',
 }
 
-export enum ExternalSource {
-    LASTFM = 'LASTFM',
-    MUSICBRAINZ = 'MUSICBRAINZ',
-    SPOTIFY = 'SPOTIFY',
-    THEAUDIODB = 'THEAUDIODB',
-}
-
-export enum ExternalType {
-    ID = 'ID',
-    LINK = 'LINK',
-}
-
 export enum GenreListSort {
     ALBUM_COUNT = 'albumCount',
     NAME = 'name',
     SONG_COUNT = 'songCount',
-}
-
-export enum ImageType {
-    BACKDROP = 'BACKDROP',
-    LOGO = 'LOGO',
-    PRIMARY = 'PRIMARY',
-    SCREENSHOT = 'SCREENSHOT',
 }
 
 export enum TagListSort {
@@ -282,10 +262,6 @@ export interface BaseQuery<T> {
 
 export type Disc = Record<number, string>;
 
-export type EndpointDetails = {
-    server: ServerListItem;
-};
-
 export type Folder = {
     _itemType: LibraryItem.FOLDER;
     _serverId: string;
@@ -357,16 +333,10 @@ export interface GenreListQuery extends BaseQuery<GenreListSort> {
 // Genre List
 export type GenreListResponse = BasePaginatedResponse<Genre[]>;
 
-export type GenresResponse = Genre[];
-
-export type ListSortOrder = 'asc' | 'desc';
-
 export type MusicFolder = {
     id: string;
     name: string;
 };
-
-export type MusicFoldersResponse = MusicFolder[];
 
 export type PartialIsoDateString = string;
 
@@ -902,6 +872,36 @@ export enum ArtistListSort {
     SONG_COUNT = 'songCount',
 }
 
+export enum PlaylistListSort {
+    DURATION = 'duration',
+    NAME = 'name',
+    OWNER = 'owner',
+    PUBLIC = 'public',
+    SONG_COUNT = 'songCount',
+    UPDATED_AT = 'updatedAt',
+}
+
+export enum RadioListSort {
+    ID = 'id',
+    NAME = 'name',
+}
+
+export type AddToPlaylistArgs = BaseEndpointArgs & {
+    body: AddToPlaylistBody;
+    query: AddToPlaylistQuery;
+};
+
+export type AddToPlaylistBody = {
+    songId: string[];
+};
+
+export type AddToPlaylistQuery = {
+    id: string;
+};
+
+// Add to playlist
+export type AddToPlaylistResponse = null | undefined;
+
 export type AlbumArtistDetailArgs = BaseEndpointArgs & { query: AlbumArtistDetailQuery };
 
 export type AlbumArtistDetailQuery = { id: string };
@@ -934,84 +934,6 @@ export interface ArtistListQuery extends BaseQuery<ArtistListSort> {
 
 // Artist List
 export type ArtistListResponse = BasePaginatedResponse<AlbumArtist[]>;
-
-type ArtistListSortMap = {
-    jellyfin: Record<ArtistListSort, JFArtistListSort | undefined>;
-    navidrome: Record<ArtistListSort, undefined>;
-    subsonic: Record<ArtistListSort, undefined>;
-};
-
-export const artistListSortMap: ArtistListSortMap = {
-    jellyfin: {
-        album: JFArtistListSort.ALBUM,
-        albumCount: undefined,
-        duration: JFArtistListSort.DURATION,
-        favorited: undefined,
-        name: JFArtistListSort.NAME,
-        playCount: undefined,
-        random: JFArtistListSort.RANDOM,
-        rating: undefined,
-        recentlyAdded: JFArtistListSort.RECENTLY_ADDED,
-        releaseDate: undefined,
-        songCount: undefined,
-    },
-    navidrome: {
-        album: undefined,
-        albumCount: undefined,
-        duration: undefined,
-        favorited: undefined,
-        name: undefined,
-        playCount: undefined,
-        random: undefined,
-        rating: undefined,
-        recentlyAdded: undefined,
-        releaseDate: undefined,
-        songCount: undefined,
-    },
-    subsonic: {
-        album: undefined,
-        albumCount: undefined,
-        duration: undefined,
-        favorited: undefined,
-        name: undefined,
-        playCount: undefined,
-        random: undefined,
-        rating: undefined,
-        recentlyAdded: undefined,
-        releaseDate: undefined,
-        songCount: undefined,
-    },
-};
-
-export enum PlaylistListSort {
-    DURATION = 'duration',
-    NAME = 'name',
-    OWNER = 'owner',
-    PUBLIC = 'public',
-    SONG_COUNT = 'songCount',
-    UPDATED_AT = 'updatedAt',
-}
-
-export enum RadioListSort {
-    ID = 'id',
-    NAME = 'name',
-}
-
-export type AddToPlaylistArgs = BaseEndpointArgs & {
-    body: AddToPlaylistBody;
-    query: AddToPlaylistQuery;
-};
-
-export type AddToPlaylistBody = {
-    songId: string[];
-};
-
-export type AddToPlaylistQuery = {
-    id: string;
-};
-
-// Add to playlist
-export type AddToPlaylistResponse = null | undefined;
 
 export type CreateInternetRadioStationArgs = BaseEndpointArgs & {
     body: CreateInternetRadioStationBody;
@@ -1331,10 +1253,6 @@ export type PlaylistDetailResponse = Playlist;
 
 export type PlaylistSongListArgs = BaseEndpointArgs & { query: PlaylistSongListQuery };
 
-export type PlaylistSongListCountArgs = BaseEndpointArgs & {
-    query: ListCountQuery<PlaylistSongListQuery>;
-};
-
 export type PlaylistSongListQuery = {
     id: string;
     // Optional pagination - used by the streaming play-playlist path that
@@ -1388,15 +1306,6 @@ export enum Played {
     Never = 'never',
     Played = 'played',
 }
-
-export type ArtistInfoArgs = BaseEndpointArgs & { query: ArtistInfoQuery };
-
-// Artist Info
-export type ArtistInfoQuery = {
-    artistId: string;
-    limit: number;
-    musicFolderId?: string | string[];
-};
 
 export type FavoriteSongListArgs = BaseEndpointArgs & { query: FavoriteSongListQuery };
 
@@ -1470,8 +1379,6 @@ export type RandomSongListQuery = {
     played: Played;
 };
 
-export type RandomSongListResponse = SongListResponse;
-
 export type RefreshItemsArgs = BaseEndpointArgs & { query: { ids: string[] } };
 
 export type RefreshItemsResponse = null;
@@ -1500,20 +1407,6 @@ export type ScrobbleQuery = {
 // Scrobble
 export type ScrobbleResponse = null;
 
-export type SearchAlbumArtistsQuery = {
-    albumArtistLimit?: number;
-    albumArtistStartIndex?: number;
-    musicFolderId?: string | string[];
-    query?: string;
-};
-
-export type SearchAlbumsQuery = {
-    albumLimit?: number;
-    albumStartIndex?: number;
-    musicFolderId?: string | string[];
-    query?: string;
-};
-
 export type SearchArgs = BaseEndpointArgs & {
     query: SearchQuery;
 };
@@ -1533,13 +1426,6 @@ export type SearchResponse = {
     albumArtists: AlbumArtist[];
     albums: Album[];
     songs: Song[];
-};
-
-export type SearchSongsQuery = {
-    musicFolderId?: string | string[];
-    query?: string;
-    songLimit?: number;
-    songStartIndex?: number;
 };
 
 export type SyncedCueLine = {
@@ -1705,15 +1591,6 @@ export type DownloadArgs = BaseEndpointArgs & {
 
 export type DownloadQuery = {
     id: string;
-};
-
-// This type from https://wicg.github.io/local-font-access/#fontdata
-// NOTE: it is still experimental, so this should be updates as appropriate
-export type FontData = {
-    family: string;
-    fullName: string;
-    postscriptName: string;
-    style: string;
 };
 
 export type GetQueueArgs = BaseEndpointArgs;
@@ -2075,50 +1952,6 @@ export type TagListResponse = {
         song: string[];
     };
     tags?: Tag[];
-};
-
-export type TranscodeDecisionArgs = BaseEndpointArgs & {
-    body?: TranscodeDecisionRequestBody;
-    query: TranscodeDecisionQuery;
-};
-
-export type TranscodeDecisionQuery = {
-    id: string;
-    type: 'song';
-};
-
-export type TranscodeDecisionRequestBody = {
-    codecProfiles?: Array<{
-        limitations?: Array<{
-            comparison: string;
-            name: string;
-            required?: boolean;
-            values: string[];
-        }>;
-        name: string;
-        type: string;
-    }>;
-    directPlayProfiles?: Array<{
-        audioCodecs: string[];
-        containers: string[];
-        maxAudioChannels?: number;
-        protocols: string[];
-    }>;
-    maxAudioBitrate?: number;
-    maxTranscodingAudioBitrate?: number;
-    name: string;
-    platform: string;
-    transcodingProfiles?: Array<{
-        audioCodec: string;
-        container: string;
-        maxAudioChannels?: number;
-        protocol: string;
-    }>;
-};
-
-export type TranscodeDecisionResponse = {
-    decision: 'direct' | 'transcode';
-    transcodeParams?: string;
 };
 
 export type UserInfoArgs = BaseEndpointArgs & { query: UserInfoQuery };

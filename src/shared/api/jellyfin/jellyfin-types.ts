@@ -20,15 +20,6 @@ export enum JFAlbumListSort {
     RELEASE_DATE = 'ProductionYear,PremiereDate,SortName',
 }
 
-export enum JFArtistListSort {
-    ALBUM = 'Album,SortName',
-    DURATION = 'Runtime,AlbumArtist,Album,SortName',
-    NAME = 'SortName,Name',
-    RANDOM = 'Random,SortName',
-    RECENTLY_ADDED = 'DateCreated,SortName',
-    RELEASE_DATE = 'PremiereDate,AlbumArtist,Album,SortName',
-}
-
 export enum JFGenreListSort {
     NAME = 'SortName',
 }
@@ -864,10 +855,6 @@ const similarSongsParameters = z.object({
 const similarSongs = pagination.extend({
     Items: z.array(song),
 });
-
-export enum JellyfinExtensions {
-    SONG_LYRICS = 'songLyrics',
-}
 
 const moveItem = z.null();
 

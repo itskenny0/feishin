@@ -2,7 +2,6 @@ import { z } from 'zod';
 
 import { jfType } from '/@/shared/api/jellyfin/jellyfin-types';
 import { coerceYear, parsePartialIsoDateFromApi } from '/@/shared/api/partial-iso-date';
-import { replacePathPrefix } from '/@/shared/api/utils';
 import {
     Album,
     AlbumArtist,
@@ -11,6 +10,7 @@ import {
     LibraryItem,
     MusicFolder,
     Playlist,
+    RelatedArtist,
     Song,
 } from '/@/shared/types/domain-types';
 import { ServerListItem, ServerType } from '/@/shared/types/types';
@@ -73,31 +73,35 @@ const getSongImageId = (item: z.infer<typeof jfType._response.song>): null | str
     return null;
 };
 
-const getAlbumImageId = (item: z.infer<typeof jfType._response.album>): null | string => {
-    if (item.ImageTags?.Primary) {
-        return item.Id;
-    }
+const getPrimaryImageId = (item: { Id: string; ImageTags?: { Primary?: string } }) =>
+    item.ImageTags?.Primary ? item.Id : null;
 
-    return null;
-};
+const toRelatedArtist = (
+    entry: { Id: string; Name: string },
+    imageId: null | string,
+): RelatedArtist => ({
+    id: entry.Id,
+    imageId,
+    imageUrl: null,
+    name: entry.Name,
+    userFavorite: false,
+    userRating: null,
+});
 
-const getAlbumArtistImageId = (
-    item: z.infer<typeof jfType._response.albumArtist>,
-): null | string => {
-    if (item.ImageTags?.Primary) {
-        return item.Id;
-    }
-
-    return null;
-};
-
-const getPlaylistImageId = (item: z.infer<typeof jfType._response.playlist>): null | string => {
-    if (item.ImageTags?.Primary) {
-        return item.Id;
-    }
-
-    return null;
-};
+// GenreItems is typed as required but can be missing at runtime (responses are
+// not validated), so each caller keeps its own fallback.
+const toGenres = (items: { Id: string; Name: string }[], server: null | ServerListItem): Genre[] =>
+    items?.map((entry) => ({
+        _itemType: LibraryItem.GENRE,
+        _serverId: server?.id || '',
+        _serverType: ServerType.JELLYFIN,
+        albumCount: null,
+        id: entry.Id,
+        imageId: null,
+        imageUrl: null,
+        name: entry.Name,
+        songCount: null,
+    }));
 
 const getBlurHash = (
     item:
@@ -112,21 +116,18 @@ const getBlurHash = (
 const jellyfinPremiereFields = (item: {
     PremiereDate?: string;
     ProductionYear?: number;
-}): { originalYear: null | number; releaseDate: null | string; releaseYear: null | number } => {
+}): { releaseDate: null | string; releaseYear: null | number } => {
     const premiere = parsePartialIsoDateFromApi(item.PremiereDate ?? null);
     const prodYear = coerceYear(item.ProductionYear);
     const fallbackYear = prodYear && prodYear > 0 ? prodYear : null;
     const releaseYear: null | number = premiere.year > 0 ? premiere.year : fallbackYear;
     const releaseDate = premiere.date ?? (fallbackYear !== null ? String(fallbackYear) : null);
-    const originalYear = premiere.year > 0 ? premiere.year : fallbackYear;
-    return { originalYear, releaseDate, releaseYear };
+    return { releaseDate, releaseYear };
 };
 
 const normalizeSong = (
     item: z.infer<typeof jfType._response.song>,
     server: null | ServerListItem,
-    pathReplace?: string,
-    pathReplaceWith?: string,
 ): Song => {
     let bitDepth: null | number = null;
     let bitRate = 0;
@@ -163,7 +164,7 @@ const normalizeSong = (
         warnNoMediaSourceOnce(item as { Id?: string });
     }
 
-    const { originalYear, releaseDate, releaseYear } = jellyfinPremiereFields(item);
+    const { releaseDate, releaseYear } = jellyfinPremiereFields(item);
 
     return {
         _itemType: LibraryItem.SONG,
@@ -171,25 +172,11 @@ const normalizeSong = (
         _serverType: ServerType.JELLYFIN,
         album: item.Album,
         albumArtistName: item.AlbumArtist || '',
-        albumArtists: item.AlbumArtists?.map((entry) => ({
-            id: entry.Id,
-            imageId: entry.Id,
-            imageUrl: null,
-            name: entry.Name,
-            userFavorite: false,
-            userRating: null,
-        })),
+        albumArtists: item.AlbumArtists?.map((entry) => toRelatedArtist(entry, entry.Id)),
         albumId: item.AlbumId || `dummy/${item.Id}`,
         artistName: item?.ArtistItems?.map((entry) => entry.Name).join(', ') || '',
-        artists: (item?.ArtistItems?.length ? item.ArtistItems : item.AlbumArtists)?.map(
-            (entry) => ({
-                id: entry.Id,
-                imageId: null,
-                imageUrl: null,
-                name: entry.Name,
-                userFavorite: false,
-                userRating: null,
-            }),
+        artists: (item?.ArtistItems?.length ? item.ArtistItems : item.AlbumArtists)?.map((entry) =>
+            toRelatedArtist(entry, null),
         ),
         bitDepth,
         bitRate,
@@ -201,7 +188,7 @@ const normalizeSong = (
         compilation: null,
         container,
         createdAt: item.DateCreated,
-        date: releaseDate || (releaseYear !== null ? String(releaseYear) : null),
+        date: releaseDate,
         discNumber: item.ParentIndexNumber ?? 1,
         discSubtitle: null,
         duration: item.RunTimeTicks / TICKS_PER_MS,
@@ -221,18 +208,7 @@ const normalizeSong = (
                                 : undefined,
                   }
                 : null,
-        genres:
-            item.GenreItems?.map((entry) => ({
-                _itemType: LibraryItem.GENRE,
-                _serverId: server?.id || '',
-                _serverType: ServerType.JELLYFIN,
-                albumCount: null,
-                id: entry.Id,
-                imageId: null,
-                imageUrl: null,
-                name: entry.Name,
-                songCount: null,
-            })) || null,
+        genres: toGenres(item.GenreItems, server) || null,
         id: item.Id,
         imageId: getSongImageId(item),
         imageUrl: null,
@@ -249,9 +225,9 @@ const normalizeSong = (
         missing: null,
         name: item.Name,
         originalDate: releaseDate,
-        originalYear,
+        originalYear: releaseYear,
         participants: null,
-        path: replacePathPrefix(path || '', pathReplace, pathReplaceWith),
+        path: path || '',
         peak: null,
         playCount: (item.UserData && item.UserData.PlayCount) || 0,
         playlistItemId: item.PlaylistItemId,
@@ -277,34 +253,17 @@ const normalizeSong = (
 const normalizeAlbum = (
     item: z.infer<typeof jfType._response.album>,
     server: null | ServerListItem,
-    pathReplace?: string,
-    pathReplaceWith?: string,
 ): Album => {
-    const { originalYear, releaseDate, releaseYear } = jellyfinPremiereFields(item);
+    const { releaseDate, releaseYear } = jellyfinPremiereFields(item);
 
     return {
         _itemType: LibraryItem.ALBUM,
         _serverId: server?.id || '',
         _serverType: ServerType.JELLYFIN,
         albumArtistName: item.AlbumArtist,
-        albumArtists:
-            item.AlbumArtists.map((entry) => ({
-                id: entry.Id,
-                imageId: entry.Id,
-                imageUrl: null,
-                name: entry.Name,
-                userFavorite: false,
-                userRating: null,
-            })) || [],
-        artists: (item.ArtistItems?.length ? item.ArtistItems : item.AlbumArtists)?.map(
-            (entry) => ({
-                id: entry.Id,
-                imageId: entry.Id,
-                imageUrl: null,
-                name: entry.Name,
-                userFavorite: false,
-                userRating: null,
-            }),
+        albumArtists: item.AlbumArtists.map((entry) => toRelatedArtist(entry, entry.Id)),
+        artists: (item.ArtistItems?.length ? item.ArtistItems : item.AlbumArtists)?.map((entry) =>
+            toRelatedArtist(entry, entry.Id),
         ),
         blurHash: getBlurHash(item),
         comment: null,
@@ -314,20 +273,9 @@ const normalizeAlbum = (
         duration: item.RunTimeTicks / TICKS_PER_MS,
         explicitStatus: null,
         gain: null,
-        genres:
-            item.GenreItems?.map((entry) => ({
-                _itemType: LibraryItem.GENRE,
-                _serverId: server?.id || '',
-                _serverType: ServerType.JELLYFIN,
-                albumCount: null,
-                id: entry.Id,
-                imageId: null,
-                imageUrl: null,
-                name: entry.Name,
-                songCount: null,
-            })) || [],
+        genres: toGenres(item.GenreItems, server) || [],
         id: item.Id,
-        imageId: getAlbumImageId(item),
+        imageId: getPrimaryImageId(item),
         imageUrl: null,
         isCompilation: null,
         lastPlayedAt: null,
@@ -336,9 +284,9 @@ const normalizeAlbum = (
         missing: null,
         name: item.Name,
         originalDate: releaseDate,
-        originalYear,
+        originalYear: releaseYear,
         participants: null,
-        path: item.Path ? replacePathPrefix(item.Path, pathReplace, pathReplaceWith) : null,
+        path: item.Path || null,
         peak: null,
         playCount: item.UserData?.PlayCount || 0,
         ratedAt: null,
@@ -372,7 +320,7 @@ const normalizeAlbumArtist = (
         item.similarArtists?.Items?.filter((entry) => entry.Name !== 'Various Artists').map(
             (entry) => ({
                 id: entry.Id,
-                imageId: getAlbumArtistImageId(entry),
+                imageId: getPrimaryImageId(entry),
                 imageUrl: null,
                 name: entry.Name,
                 userFavorite: entry.UserData?.IsFavorite || false,
@@ -390,19 +338,9 @@ const normalizeAlbumArtist = (
         createdAt: item.DateCreated ?? null,
         dominantColor: null,
         duration: item.RunTimeTicks / TICKS_PER_MS,
-        genres: item.GenreItems?.map((entry) => ({
-            _itemType: LibraryItem.GENRE,
-            _serverId: server?.id || '',
-            _serverType: ServerType.JELLYFIN,
-            albumCount: null,
-            id: entry.Id,
-            imageId: null,
-            imageUrl: null,
-            name: entry.Name,
-            songCount: null,
-        })),
+        genres: toGenres(item.GenreItems, server),
         id: item.Id,
-        imageId: getAlbumArtistImageId(item),
+        imageId: getPrimaryImageId(item),
         imageUrl: null,
         lastPlayedAt: null,
         mbz: item.ProviderIds?.MusicBrainzArtist || null,
@@ -433,19 +371,9 @@ const normalizePlaylist = (
         dominantColor: null,
         duration: item.RunTimeTicks / TICKS_PER_MS,
         evaluatedAt: null,
-        genres: item.GenreItems?.map((entry) => ({
-            _itemType: LibraryItem.GENRE,
-            _serverId: server?.id || '',
-            _serverType: ServerType.JELLYFIN,
-            albumCount: null,
-            id: entry.Id,
-            imageId: null,
-            imageUrl: null,
-            name: entry.Name,
-            songCount: null,
-        })),
+        genres: toGenres(item.GenreItems, server),
         id: item.Id,
-        imageId: getPlaylistImageId(item),
+        imageId: getPrimaryImageId(item),
         imageUrl: null,
         name: item.Name,
         owner: null,
@@ -509,34 +437,6 @@ const normalizeMusicFolder = (item: z.infer<typeof jfType._response.musicFolder>
     };
 };
 
-// const normalizeArtist = (item: any) => {
-//   return {
-//     album: (item.album || []).map((entry: any) => normalizeAlbum(entry)),
-//     albumCount: item.AlbumCount,
-//     duration: item.RunTimeTicks / 10000000,
-//     genre: item.GenreItems && item.GenreItems.map((entry: any) => normalizeItem(entry)),
-//     id: item.Id,
-//     image: getCoverArtUrl(item),
-//     info: {
-//       biography: item.Overview,
-//       externalUrl: (item.ExternalUrls || []).map((entry: any) => normalizeItem(entry)),
-//       imageUrl: undefined,
-//       similarArtist: (item.similarArtist || []).map((entry: any) => normalizeArtist(entry)),
-//     },
-//     starred: item.UserData && item.UserData?.IsFavorite ? 'true' : undefined,
-//     title: item.Name,
-//     uniqueId: nanoid(),
-//   };
-// };
-
-const getGenreImageId = (item: z.infer<typeof jfType._response.genre>): null | string => {
-    if (item.ImageTags?.Primary) {
-        return item.Id;
-    }
-
-    return null;
-};
-
 const normalizeGenre = (
     item: z.infer<typeof jfType._response.genre>,
     server: null | ServerListItem,
@@ -547,7 +447,7 @@ const normalizeGenre = (
         _serverType: ServerType.JELLYFIN,
         albumCount: null,
         id: item.Id,
-        imageId: getGenreImageId(item),
+        imageId: getPrimaryImageId(item),
         imageUrl: null,
         name: item.Name,
         songCount: null,
@@ -557,13 +457,7 @@ const normalizeGenre = (
 const normalizeFolder = (
     item: z.infer<typeof jfType._response.folder>,
     server: null | ServerListItem,
-    pathReplace?: string,
-    pathReplaceWith?: string,
 ): Folder => {
-    // Read raw Path off the JSON object regardless of zod-inferred type, in
-    // case the schema-derived type strips or narrows the field.
-    const rawPath = (item as { Path?: null | string }).Path;
-    const path = rawPath ? replacePathPrefix(rawPath, pathReplace, pathReplaceWith) : null;
     return {
         _itemType: LibraryItem.FOLDER,
         _serverId: server?.id || 'unknown',
@@ -572,16 +466,9 @@ const normalizeFolder = (
         id: item.Id,
         name: item.Name || 'Unknown folder',
         parentId: item.ParentId,
-        path,
+        path: item.Path || null,
     };
 };
-
-// const normalizeScanStatus = () => {
-//   return {
-//     count: 'N/a',
-//     scanning: false,
-//   };
-// };
 
 export const jfNormalize = {
     album: normalizeAlbum,

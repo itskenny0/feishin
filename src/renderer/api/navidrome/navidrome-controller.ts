@@ -121,6 +121,43 @@ const getLibraryId = (musicFolderId?: string | string[]): string[] | undefined =
 const getArtistSongKey = (server: null | ServerListItemWithCredential) =>
     hasFeature(server, ServerFeature.TRACK_ALBUM_ARTIST_SEARCH) ? 'artists_id' : 'album_artist_id';
 
+const uploadImage = async (
+    { apiClientProps, body, query }: UploadArtistImageArgs,
+    resource: 'artist' | 'playlist' | 'radio',
+    errorMessage: string,
+): Promise<boolean> => {
+    const server = apiClientProps.server;
+    const serverUrl = server?.url?.replace(/\/$/, '');
+
+    if (!serverUrl) {
+        throw new Error('Server is required');
+    }
+
+    const form = new FormData();
+    const bytes = body.image as Uint8Array<ArrayBuffer>;
+    const fileLike =
+        typeof File !== 'undefined'
+            ? new File([bytes], 'image', { type: 'application/octet-stream' })
+            : new Blob([bytes], { type: 'application/octet-stream' });
+    form.append('image', fileLike);
+
+    const res = await axios.post(`${serverUrl}/api/${resource}/${query.id}/image`, form, {
+        headers: {
+            'Content-Type': 'multipart/form-data',
+            ...(server?.ndCredential && {
+                'x-nd-authorization': `Bearer ${server.ndCredential}`,
+            }),
+        },
+        signal: apiClientProps.signal,
+    });
+
+    if (res.status !== 200) {
+        throw new Error(errorMessage);
+    }
+
+    return res.data?.status === 'ok';
+};
+
 export const NavidromeController: InternalControllerEndpoint = {
     addToPlaylist: async (args) => {
         const { apiClientProps, body, query } = args;
@@ -163,7 +200,7 @@ export const NavidromeController: InternalControllerEndpoint = {
         }
 
         return {
-            credential: `u=${body.username}&s=${res.body.data.subsonicSalt}&t=${res.body.data.subsonicToken}`,
+            credential: `u=${encodeURIComponent(body.username)}&s=${res.body.data.subsonicSalt}&t=${res.body.data.subsonicToken}`,
             isAdmin: Boolean(res.body.data.isAdmin),
             ndCredential: res.body.data.token,
             userId: res.body.data.id,
@@ -1307,110 +1344,14 @@ export const NavidromeController: InternalControllerEndpoint = {
 
         return null;
     },
-    uploadArtistImage: async (args: UploadArtistImageArgs): Promise<UploadArtistImageResponse> => {
-        const { apiClientProps, body, query } = args;
-
-        const server = apiClientProps.server;
-        const serverUrl = server?.url?.replace(/\/$/, '');
-
-        if (!serverUrl) {
-            throw new Error('Server is required');
-        }
-
-        const form = new FormData();
-        const bytes = body.image as Uint8Array<ArrayBuffer>;
-        const fileLike =
-            typeof File !== 'undefined'
-                ? new File([bytes], 'image', { type: 'application/octet-stream' })
-                : new Blob([bytes], { type: 'application/octet-stream' });
-        form.append('image', fileLike);
-
-        const res = await axios.post(`${serverUrl}/api/artist/${query.id}/image`, form, {
-            headers: {
-                'Content-Type': 'multipart/form-data',
-                ...(server?.ndCredential && {
-                    'x-nd-authorization': `Bearer ${server.ndCredential}`,
-                }),
-            },
-            signal: apiClientProps.signal,
-        });
-
-        if (res.status !== 200) {
-            throw new Error('Failed to upload artist image');
-        }
-
-        return res.data?.status === 'ok';
-    },
+    uploadArtistImage: async (args: UploadArtistImageArgs): Promise<UploadArtistImageResponse> =>
+        uploadImage(args, 'artist', 'Failed to upload artist image'),
     uploadInternetRadioStationImage: async (
         args: UploadInternetRadioStationImageArgs,
-    ): Promise<UploadInternetRadioStationImageResponse> => {
-        const { apiClientProps, body, query } = args;
-
-        const server = apiClientProps.server;
-        const serverUrl = server?.url?.replace(/\/$/, '');
-
-        if (!serverUrl) {
-            throw new Error('Server is required');
-        }
-
-        const form = new FormData();
-        const bytes = body.image as Uint8Array<ArrayBuffer>;
-        const fileLike =
-            typeof File !== 'undefined'
-                ? new File([bytes], 'image', { type: 'application/octet-stream' })
-                : new Blob([bytes], { type: 'application/octet-stream' });
-        form.append('image', fileLike);
-
-        const res = await axios.post(`${serverUrl}/api/radio/${query.id}/image`, form, {
-            headers: {
-                'Content-Type': 'multipart/form-data',
-                ...(server?.ndCredential && {
-                    'x-nd-authorization': `Bearer ${server.ndCredential}`,
-                }),
-            },
-            signal: apiClientProps.signal,
-        });
-
-        if (res.status !== 200) {
-            throw new Error('Failed to upload internet radio station image');
-        }
-
-        return res.data?.status === 'ok';
-    },
+    ): Promise<UploadInternetRadioStationImageResponse> =>
+        uploadImage(args, 'radio', 'Failed to upload internet radio station image'),
     uploadPlaylistImage: async (
         args: UploadPlaylistImageArgs,
-    ): Promise<UploadPlaylistImageResponse> => {
-        const { apiClientProps, body, query } = args;
-
-        const server = apiClientProps.server;
-        const serverUrl = server?.url?.replace(/\/$/, '');
-
-        if (!serverUrl) {
-            throw new Error('Server is required');
-        }
-
-        const form = new FormData();
-        const bytes = body.image as Uint8Array<ArrayBuffer>;
-        const fileLike =
-            typeof File !== 'undefined'
-                ? new File([bytes], 'image', { type: 'application/octet-stream' })
-                : new Blob([bytes], { type: 'application/octet-stream' });
-        form.append('image', fileLike);
-
-        const res = await axios.post(`${serverUrl}/api/playlist/${query.id}/image`, form, {
-            headers: {
-                'Content-Type': 'multipart/form-data',
-                ...(server?.ndCredential && {
-                    'x-nd-authorization': `Bearer ${server.ndCredential}`,
-                }),
-            },
-            signal: apiClientProps.signal,
-        });
-
-        if (res.status !== 200) {
-            throw new Error('Failed to upload playlist image');
-        }
-
-        return res.data?.status === 'ok';
-    },
+    ): Promise<UploadPlaylistImageResponse> =>
+        uploadImage(args, 'playlist', 'Failed to upload playlist image'),
 };

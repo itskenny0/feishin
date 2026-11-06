@@ -17,15 +17,6 @@ import {
 } from '/@/shared/types/domain-types';
 import { ServerListItem, ServerType } from '/@/shared/types/types';
 
-// const getImageUrl = (args: { url: null | string }) => {
-//     const { url } = args;
-//     if (url === '/app/artist-placeholder.webp') {
-//         return null;
-//     }
-
-//     return url;
-// };
-
 const navidromeImageIdWithCacheBust = (
     id: string,
     uploadedImage: string | undefined,
@@ -40,58 +31,40 @@ const normalizePlayDate = (item: WithDate): null | string => {
     return !item.playDate || item.playDate.includes('0001-') ? null : item.playDate;
 };
 
-const normalizeNavidromeReleaseDate = (item: {
-    date?: string;
-    minYear?: number;
-    releaseDate?: string;
-}): { date: null | string; year: null | number } => {
-    const fromRelease = parsePartialIsoDate(item.releaseDate);
-    if (fromRelease.date) {
-        return fromRelease;
+// The first candidate that parses as a partial ISO date, else the bare year.
+const firstPartialDate = (
+    candidates: (string | undefined)[],
+    fallbackYear: number | undefined,
+): { date: null | string; year: null | number } => {
+    for (const candidate of candidates) {
+        const parsed = parsePartialIsoDate(candidate);
+        if (parsed.date) {
+            return parsed;
+        }
     }
 
-    const fromDateField = parsePartialIsoDate(item.date);
-    if (fromDateField.date) {
-        return fromDateField;
-    }
-
-    const y = coerceYear(item.minYear);
-    if (y) {
-        return { date: String(y), year: y };
-    }
-
-    return { date: null, year: null };
+    const y = coerceYear(fallbackYear);
+    return y ? { date: String(y), year: y } : { date: null, year: null };
 };
 
-const normalizeNavidromeOriginalDate = (item: {
-    date?: string;
-    minOriginalYear?: number;
-    minYear?: number;
-    originalDate?: string;
-    releaseDate?: string;
-}): { date: null | string; year: null | number } => {
-    const fromOriginal = parsePartialIsoDate(item.originalDate);
-    if (fromOriginal.date) {
-        return fromOriginal;
-    }
+const getExplicitStatus = (status?: string): ExplicitStatus | null =>
+    status === 'e' ? ExplicitStatus.EXPLICIT : status === 'c' ? ExplicitStatus.CLEAN : null;
 
-    const fromRelease = parsePartialIsoDate(item.releaseDate);
-    if (fromRelease.date) {
-        return fromRelease;
-    }
-
-    const fromDateField = parsePartialIsoDate(item.date);
-    if (fromDateField.date) {
-        return fromDateField;
-    }
-
-    const y = coerceYear(item.minOriginalYear ?? item.minYear);
-    if (y) {
-        return { date: String(y), year: y };
-    }
-
-    return { date: null, year: null };
-};
+const toGenres = (
+    genres: null | undefined | { id: string; name: string }[],
+    server?: null | ServerListItem,
+): Genre[] =>
+    (genres || []).map((genre) => ({
+        _itemType: LibraryItem.GENRE,
+        _serverId: server?.id || 'unknown',
+        _serverType: ServerType.NAVIDROME,
+        albumCount: null,
+        id: genre.id,
+        imageId: null,
+        imageUrl: null,
+        name: genre.name,
+        songCount: null,
+    }));
 
 const normalizeNavidromeSongReleaseDate = (item: {
     date?: string;
@@ -279,28 +252,13 @@ const normalizeSong = (
         discNumber: item.discNumber,
         discSubtitle: item.discSubtitle ? item.discSubtitle : null,
         duration: item.duration * 1000,
-        explicitStatus:
-            item.explicitStatus === 'e'
-                ? ExplicitStatus.EXPLICIT
-                : item.explicitStatus === 'c'
-                  ? ExplicitStatus.CLEAN
-                  : null,
+        explicitStatus: getExplicitStatus(item.explicitStatus),
         folderId: item.folderId || null,
         gain:
             item.rgAlbumGain || item.rgTrackGain
                 ? { album: item.rgAlbumGain ?? undefined, track: item.rgTrackGain }
                 : null,
-        genres: (item.genres || []).map((genre) => ({
-            _itemType: LibraryItem.GENRE,
-            _serverId: server?.id || 'unknown',
-            _serverType: ServerType.NAVIDROME,
-            albumCount: null,
-            id: genre.id,
-            imageId: null,
-            imageUrl: null,
-            name: genre.name,
-            songCount: null,
-        })),
+        genres: toGenres(item.genres, server),
         id,
         imageId: id,
         imageUrl: null,
@@ -389,8 +347,11 @@ const normalizeAlbum = (
     },
     server?: null | ServerListItem,
 ): Album => {
-    const releaseDate = normalizeNavidromeReleaseDate(item);
-    const originalDate = normalizeNavidromeOriginalDate(item);
+    const releaseDate = firstPartialDate([item.releaseDate, item.date], item.minYear);
+    const originalDate = firstPartialDate(
+        [item.originalDate, item.releaseDate, item.date],
+        item.minOriginalYear ?? item.minYear,
+    );
     const trackYearRange = { max: item.maxYear, min: item.minYear };
 
     return {
@@ -406,24 +367,9 @@ const normalizeAlbum = (
         discs: item.discs || null,
         dominantColor: item.dominantColor || null,
         duration: item.duration !== undefined ? item.duration * 1000 : null,
-        explicitStatus:
-            item.explicitStatus === 'e'
-                ? ExplicitStatus.EXPLICIT
-                : item.explicitStatus === 'c'
-                  ? ExplicitStatus.CLEAN
-                  : null,
+        explicitStatus: getExplicitStatus(item.explicitStatus),
         gain: item.rgAlbumGain !== undefined ? { album: item.rgAlbumGain, track: undefined } : null,
-        genres: (item.genres || []).map((genre) => ({
-            _itemType: LibraryItem.GENRE,
-            _serverId: server?.id || 'unknown',
-            _serverType: ServerType.NAVIDROME,
-            albumCount: null,
-            id: genre.id,
-            imageId: null,
-            imageUrl: null,
-            name: genre.name,
-            songCount: null,
-        })),
+        genres: toGenres(item.genres, server),
         id: item.id,
         imageId: item.coverArtId || item.id,
         imageUrl: null,
@@ -447,7 +393,6 @@ const normalizeAlbum = (
         songs: item.songs ? item.songs.map((song) => normalizeSong(song, server)) : undefined,
         sortName: item.orderAlbumName,
         starredAt: item.starredAt || null,
-        tags: item.tags || null,
         thumbHash: item.thumbHash || null,
         trackYearRange,
         updatedAt: item.updatedAt,
@@ -464,8 +409,6 @@ const normalizeAlbumArtist = (
     },
     server?: null | ServerListItem,
 ): AlbumArtist => {
-    // const imageUrl = getImageUrl({ url: item?.largeImageUrl?.replace(/\?size=\d+/, '') || null });
-
     let albumCount: number;
     let songCount: number;
 
@@ -499,17 +442,7 @@ const normalizeAlbumArtist = (
         createdAt: item.createdAt ?? null,
         dominantColor: item.dominantColor || null,
         duration: null,
-        genres: (item.genres || []).map((genre) => ({
-            _itemType: LibraryItem.GENRE,
-            _serverId: server?.id || 'unknown',
-            _serverType: ServerType.NAVIDROME,
-            albumCount: null,
-            id: genre.id,
-            imageId: null,
-            imageUrl: null,
-            name: genre.name,
-            songCount: null,
-        })),
+        genres: toGenres(item.genres, server),
         id: item.id,
         imageId,
         imageUrl: null,

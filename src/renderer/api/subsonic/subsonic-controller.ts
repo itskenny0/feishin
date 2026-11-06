@@ -5,7 +5,6 @@ import { set } from 'idb-keyval';
 import filter from 'lodash/filter';
 import orderBy from 'lodash/orderBy';
 import md5 from 'md5';
-import { z } from 'zod';
 
 import { contract, ssApiClient } from '/@/renderer/api/subsonic/subsonic-api';
 import { mapStructuredLyric } from '/@/renderer/api/subsonic/subsonic-structured-lyrics';
@@ -17,11 +16,7 @@ import { randomString } from '/@/renderer/utils';
 import { logger } from '/@/renderer/utils/logger';
 import { getServerUrl } from '/@/renderer/utils/normalize-server-url';
 import { ssNormalize } from '/@/shared/api/subsonic/subsonic-normalize';
-import {
-    AlbumListSortType,
-    ssType,
-    SubsonicExtensions,
-} from '/@/shared/api/subsonic/subsonic-types';
+import { AlbumListSortType, SubsonicExtensions } from '/@/shared/api/subsonic/subsonic-types';
 import {
     hasFeature,
     hasFeatureWithVersion,
@@ -98,138 +93,6 @@ const ALBUM_LIST_SORT_MAPPING: Record<AlbumListSort, AlbumListSortType | undefin
 
 const MAX_SUBSONIC_ITEMS = 500;
 const SUBSONIC_FAST_BATCH_SIZE = MAX_SUBSONIC_ITEMS * 10;
-
-// const TRANSCODE_DIRECT_PLAY_PROFILES = [
-//     {
-//         audioCodecs: ['mp3'],
-//         containers: ['mp3'],
-//         maxAudioChannels: 2,
-//         protocols: ['http'],
-//     },
-//     {
-//         audioCodecs: ['aac'],
-//         containers: ['m4a', 'mp4'],
-//         maxAudioChannels: 2,
-//         protocols: ['http'],
-//     },
-//     {
-//         audioCodecs: ['vorbis'],
-//         containers: ['ogg'],
-//         maxAudioChannels: 2,
-//         protocols: ['http'],
-//     },
-//     {
-//         audioCodecs: ['opus'],
-//         containers: ['ogg', 'webm'],
-//         maxAudioChannels: 2,
-//         protocols: ['http'],
-//     },
-//     {
-//         audioCodecs: ['pcm'],
-//         containers: ['wav'],
-//         maxAudioChannels: 2,
-//         protocols: ['http'],
-//     },
-//     {
-//         audioCodecs: ['flac'],
-//         containers: ['flac'],
-//         maxAudioChannels: 2,
-//         protocols: ['http'],
-//     },
-// ];
-
-// const TRANSCODE_UNSUPPORTED_DIRECT_PLAY_PROFILES = [
-//     {
-//       containers: ["m4a", "mp4"],
-//       audioCodecs: ["alac"],
-//       protocols: ["http"],
-//       maxAudioChannels: 2
-//     },
-//     {
-//       containers: ["m4a", "mp4"],
-//       audioCodecs: ["ac3", "eac3"],
-//       protocols: ["http"],
-//       maxAudioChannels: 6
-//     },
-//     {
-//       containers: ["ogg"],
-//       audioCodecs: ["flac", "speex"],
-//       protocols: ["http"],
-//       maxAudioChannels: 2
-//     },
-//     {
-//       containers: ["wav"],
-//       audioCodecs: ["adpcm", "gsm", "aac", "mp3"],
-//       protocols: ["http"],
-//       maxAudioChannels: 2
-//     },
-//     {
-//       containers: ["mkv"],
-//       audioCodecs: ["aac", "mp3", "flac", "opus", "vorbis", "ac3", "eac3", "dts"],
-//       protocols: ["http"],
-//       maxAudioChannels: 8
-//     },
-//     {
-//       containers: ["avi"],
-//       audioCodecs: ["mp3", "ac3", "pcm", "aac"],
-//       protocols: ["http"],
-//       maxAudioChannels: 6
-//     },
-//     {
-//       containers: ["asf", "wma"],
-//       audioCodecs: ["wma", "pcm", "mp3"],
-//       protocols: ["http"],
-//       maxAudioChannels: 2
-//     },
-//     {
-//       containers: ["caf"],
-//       audioCodecs: ["pcm", "aac", "alac", "mp3"],
-//       protocols: ["http"],
-//       maxAudioChannels: 8
-//     },
-//     {
-//       containers: ["3gp"],
-//       audioCodecs: ["aac", "amr"],
-//       protocols: ["http"],
-//       maxAudioChannels: 2
-//     },
-//     {
-//       containers: ["amr"],
-//       audioCodecs: ["amr"],
-//       protocols: ["http"],
-//       maxAudioChannels: 1
-//     },
-//     {
-//       containers: ["ape"],
-//       audioCodecs: ["ape"],
-//       protocols: ["http"],
-//       maxAudioChannels: 2
-//     },
-//     {
-//       containers: ["wv"],
-//       audioCodecs: ["wavpack"],
-//       protocols: ["http"],
-//       maxAudioChannels: 2
-//     },
-//     {
-//       containers: ["ac3"],
-//       audioCodecs: ["ac3"],
-//       protocols: ["http"],
-//       maxAudioChannels: 6
-//     },
-//     {
-//       containers: ["eac3"],
-//       audioCodecs: ["eac3"],
-//       protocols: ["http"],
-//       maxAudioChannels: 8
-//     },
-//     {
-//       containers: ["dts"],
-//       audioCodecs: ["dts"],
-//       protocols: ["http"],
-//       maxAudioChannels: 8
-//     }
-//   ];
 
 function appendTranscodeParams(url: string, format?: string, bitrate?: number) {
     let streamUrl = url;
@@ -804,16 +667,11 @@ export const SubsonicController: InternalControllerEndpoint = {
 
             const artistResult = await Promise.all(promises);
 
-            const albums = artistResult.reduce((total: number, artist) => {
-                if (artist.status !== 200) {
-                    return 0;
-                }
-
-                const length = artist.body.artist.album?.length ?? 0;
-                return length + total;
-            }, 0);
-
-            return albums;
+            return artistResult.reduce(
+                (total, artist) =>
+                    artist.status === 200 ? total + (artist.body.artist.album?.length ?? 0) : total,
+                0,
+            );
         }
 
         if (query.favorite) {
@@ -1705,22 +1563,13 @@ export const SubsonicController: InternalControllerEndpoint = {
                 }
             }
 
-            let results: z.infer<typeof ssType._response.song>[] = [];
-
-            if (fromAlbumPromises) {
-                const albumsResult = await Promise.all(fromAlbumPromises);
-
-                results = albumsResult.flatMap((album) => {
-                    if (album.status !== 200) {
-                        return [];
-                    }
-
-                    return album.body.album.song;
-                });
-            }
+            const albumsResult = await Promise.all(fromAlbumPromises);
+            const results = albumsResult.flatMap((album) =>
+                album.status === 200 ? album.body.album.song : [],
+            );
 
             return {
-                items: results.map((song) => ssNormalize.song(song, apiClientProps.server)) || [],
+                items: results.map((song) => ssNormalize.song(song, apiClientProps.server)),
                 startIndex: 0,
                 totalRecordCount: results.length,
             };
@@ -1865,74 +1714,13 @@ export const SubsonicController: InternalControllerEndpoint = {
             return (res.body.starred?.song || []).length || 0;
         }
 
-        const artistIds = query.albumArtistIds || query.artistIds;
-
-        if (query.albumIds || artistIds) {
-            const fromAlbumPromises: Promise<ServerInferResponses<typeof contract.getAlbum>>[] = [];
-            const artistDetailPromises: Promise<ServerInferResponses<typeof contract.getArtist>>[] =
-                [];
-
-            if (query.albumIds) {
-                for (const albumId of query.albumIds) {
-                    fromAlbumPromises.push(
-                        ssApiClient(apiClientProps).getAlbum({
-                            query: {
-                                id: albumId,
-                            },
-                        }),
-                    );
-                }
-            }
-
-            if (artistIds) {
-                for (const artistId of artistIds) {
-                    artistDetailPromises.push(
-                        ssApiClient(apiClientProps).getArtist({
-                            query: {
-                                id: artistId,
-                            },
-                        }),
-                    );
-                }
-
-                const artistResult = await Promise.all(artistDetailPromises);
-
-                const albums = artistResult.flatMap((artist) => {
-                    if (artist.status !== 200) {
-                        return [];
-                    }
-
-                    return artist.body.artist.album ?? [];
-                });
-
-                const albumIds = albums.map((album) => album.id);
-
-                for (const albumId of albumIds) {
-                    fromAlbumPromises.push(
-                        ssApiClient(apiClientProps).getAlbum({
-                            query: {
-                                id: albumId.toString(),
-                            },
-                        }),
-                    );
-                }
-            }
-
-            let results: z.infer<typeof ssType._response.song>[] = [];
-
-            if (fromAlbumPromises.length > 0) {
-                const albumsResult = await Promise.all(fromAlbumPromises);
-
-                results = albumsResult.flatMap((album) => {
-                    if (album.status !== 200) {
-                        return [];
-                    }
-
-                    return album.body.album.song;
-                });
-            }
-
-            return results.length;
+        if (query.albumIds || query.albumArtistIds || query.artistIds) {
+            // Same album/artist expansion as getSongList, which does not paginate it
+            const res = await SubsonicController.getSongList({
+                ...args,
+                query: { ...query, startIndex: 0 },
+            });
+            return res.items.length;
         }
 
         let totalRecordCount = 0;
@@ -2231,7 +2019,7 @@ export const SubsonicController: InternalControllerEndpoint = {
         });
 
         if (res.status !== 200) {
-            throw new Error('Failed to add to playlist');
+            throw new Error('Failed to remove from playlist');
         }
 
         return null;
@@ -2255,19 +2043,9 @@ export const SubsonicController: InternalControllerEndpoint = {
                 ssNormalize.song(song, apiClientProps.server),
             ) || [];
 
-        // 2. Get playlist detail to get the name
-        const playlistDetailRes = await ssApiClient(apiClientProps).getPlaylist({
-            query: {
-                id: query.id,
-            },
-        });
-
-        if (playlistDetailRes.status !== 200) {
-            throw new Error('Failed to get playlist detail');
-        }
-
+        // 2. The same response carries the playlist name
         const playlist = ssNormalize.playlist(
-            playlistDetailRes.body.playlist,
+            existingSongsRes.body.playlist,
             apiClientProps.server,
         );
 
@@ -2521,7 +2299,7 @@ export const SubsonicController: InternalControllerEndpoint = {
         });
 
         if (res.status !== 200) {
-            throw new Error('Failed to add to playlist');
+            throw new Error('Failed to update playlist');
         }
 
         return null;

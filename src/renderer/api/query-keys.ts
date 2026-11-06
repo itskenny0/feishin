@@ -202,17 +202,7 @@ export const queryKeys: Record<
 
             return [serverId, 'albums', 'list'] as const;
         },
-        related: (serverId: string, id: string, query?: AlbumDetailQuery) => {
-            if (query) {
-                return [serverId, 'albums', id, 'related', query] as const;
-            }
-
-            return [serverId, 'albums', id, 'related'] as const;
-        },
         root: (serverId: string) => [serverId, 'albums'],
-        serverRoot: (serverId: string) => [serverId, 'albums'],
-        songs: (serverId: string, query: SongListQuery) =>
-            [serverId, 'albums', 'songs', query] as const,
     },
     artists: {
         count: (serverId: string, query?: ArtistListQuery) => {
@@ -356,7 +346,6 @@ export const queryKeys: Record<
     },
     radio: {
         list: (serverId: string) => [serverId, 'radio', 'list'] as const,
-        root: (serverId: string) => [serverId, 'radio'] as const,
     },
     roles: {
         list: (serverId: string) => [serverId, 'roles'] as const,
@@ -374,7 +363,6 @@ export const queryKeys: Record<
         root: (serverId: string) => [serverId, 'search'] as const,
     },
     server: {
-        root: (serverId: string) => [serverId] as const,
         scanStatus: (serverId: string) => [serverId, 'server', 'scanStatus'] as const,
     },
     songs: {
@@ -458,6 +446,5 @@ export const queryKeys: Record<
             if (query) return [serverId, 'users', 'list', query] as const;
             return [serverId, 'users', 'list'] as const;
         },
-        root: (serverId: string) => [serverId, 'users'] as const,
     },
 };

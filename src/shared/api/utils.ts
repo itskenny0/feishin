@@ -158,7 +158,12 @@ export const sortSongList = (songs: Song[], sortBy: SongListSort, sortOrder: Sor
         case SongListSort.ARTIST:
             results = orderBy(
                 results,
-                [(v) => v.artistName?.toLowerCase(), 'discNumber', 'trackNumber'],
+                [
+                    (v) => v.artistName?.toLowerCase(),
+                    (v) => v.album?.toLowerCase(),
+                    'discNumber',
+                    'trackNumber',
+                ],
                 [order, order, order, order],
             );
             break;
@@ -436,7 +441,7 @@ export const sortAlbumArtistList = (
             break;
 
         case AlbumArtistListSort.FAVORITED:
-            results = orderBy(artists, ['starred'], [order]);
+            results = orderBy(artists, ['userFavorite'], [order]);
             break;
 
         case AlbumArtistListSort.NAME:
@@ -463,7 +468,7 @@ export const sortAlbumList = (albums: Album[], sortBy: AlbumListSort, sortOrder:
         case AlbumListSort.ALBUM_ARTIST:
             results = orderBy(
                 results,
-                ['albumArtist', (v) => v.name.toLowerCase()],
+                [(v) => v.albumArtistName?.toLowerCase(), (v) => v.name.toLowerCase()],
                 [order, 'asc'],
             );
             break;
@@ -471,7 +476,7 @@ export const sortAlbumList = (albums: Album[], sortBy: AlbumListSort, sortOrder:
             results = orderBy(results, ['duration'], [order]);
             break;
         case AlbumListSort.FAVORITED:
-            results = orderBy(results, ['starred'], [order]);
+            results = orderBy(results, ['userFavorite'], [order]);
             break;
         case AlbumListSort.ID:
             results = sortOrder === SortOrder.DESC ? [...results].reverse() : results;

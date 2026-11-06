@@ -239,7 +239,6 @@ const getSongItemTypes = (server: null | ServerListItem) =>
     server?.enableAudiobooks === true ? 'Audio,AudioBook' : 'Audio';
 
 export const JF_FIELDS = {
-    ALBUM_ARTIST_DETAIL: ['Genres', 'Overview', 'SortName', 'ProviderIds'],
     ALBUM_ARTIST_LIST: [
         'Genres',
         'DateCreated',
@@ -902,9 +901,10 @@ export const JellyfinController: InternalControllerEndpoint = {
         const isRootFolderId = query.id === '0';
 
         if (isRootFolderId) {
+            let items: z.infer<typeof jfType._response.folder>[];
+
             if (query.musicFolderId) {
-                // If music folder is provided, directly get the folder
-                const musicFolderRes = await jfApiClient(apiClientProps).getFolder({
+                const res = await jfApiClient(apiClientProps).getFolder({
                     params: {
                         userId,
                     },
@@ -913,93 +913,47 @@ export const JellyfinController: InternalControllerEndpoint = {
                     },
                 });
 
-                if (musicFolderRes.status !== 200) {
+                if (res.status !== 200) {
                     throw new Error('Failed to get music folder list');
                 }
 
-                let items = musicFolderRes.body.Items.filter(
-                    (item) => !isAudioItemType(apiClientProps.server, item.Type),
-                );
-
-                if (query.searchTerm) {
-                    items = filter(items, (item) => {
-                        return item.Name.toLowerCase().includes(query.searchTerm!.toLowerCase());
-                    });
-                }
-
-                const folders = items
-                    .filter((item) => !isAudioItemType(apiClientProps.server, item.Type))
-                    .map((item) =>
-                        jfNormalize.folder(
-                            item,
-                            apiClientProps.server,
-                            args.context?.pathReplace,
-                            args.context?.pathReplaceWith,
-                        ),
-                    );
-
-                const sortedFolders = orderBy(folders, [(v) => v.name.toLowerCase()], [sortOrder]);
-
-                return {
-                    _itemType: LibraryItem.FOLDER,
-                    _serverId: apiClientProps.server?.id || 'unknown',
-                    _serverType: ServerType.JELLYFIN,
-                    children: {
-                        folders: sortedFolders,
-                        songs: [],
-                    },
-                    id: query.id,
-                    name: '~',
-                    parentId: undefined,
-                };
+                items = res.body.Items;
             } else {
-                // Use the root music folder list if no music folder id is provided
-                const musicFolderRes = await jfApiClient(apiClientProps).getMusicFolderList({
+                // No music folder selected: list the user's root libraries
+                const res = await jfApiClient(apiClientProps).getMusicFolderList({
                     params: {
                         userId,
                     },
                 });
 
-                if (musicFolderRes.status !== 200) {
+                if (res.status !== 200) {
                     throw new Error('Failed to get music folder list');
                 }
 
-                let items = musicFolderRes.body.Items.filter(
-                    (item) => !isAudioItemType(apiClientProps.server, item.Type),
-                );
-
-                if (query.searchTerm) {
-                    items = filter(items, (item) => {
-                        return item.Name.toLowerCase().includes(query.searchTerm!.toLowerCase());
-                    });
-                }
-
-                const folders = items
-                    .filter((item) => !isAudioItemType(apiClientProps.server, item.Type))
-                    .map((item) =>
-                        jfNormalize.folder(
-                            item as unknown as z.infer<typeof jfType._response.folder>,
-                            apiClientProps.server,
-                            args.context?.pathReplace,
-                            args.context?.pathReplaceWith,
-                        ),
-                    );
-
-                const sortedFolders = orderBy(folders, [(v) => v.name.toLowerCase()], [sortOrder]);
-
-                return {
-                    _itemType: LibraryItem.FOLDER,
-                    _serverId: apiClientProps.server?.id || 'unknown',
-                    _serverType: ServerType.JELLYFIN,
-                    children: {
-                        folders: sortedFolders,
-                        songs: [],
-                    },
-                    id: query.id,
-                    name: '~',
-                    parentId: undefined,
-                };
+                items = res.body.Items as unknown as z.infer<typeof jfType._response.folder>[];
             }
+
+            items = items.filter((item) => !isAudioItemType(apiClientProps.server, item.Type));
+
+            if (query.searchTerm) {
+                const searchTermLower = query.searchTerm.toLowerCase();
+                items = items.filter((item) => item.Name.toLowerCase().includes(searchTermLower));
+            }
+
+            const folders = items.map((item) => jfNormalize.folder(item, apiClientProps.server));
+
+            return {
+                _itemType: LibraryItem.FOLDER,
+                _serverId: apiClientProps.server?.id || 'unknown',
+                _serverType: ServerType.JELLYFIN,
+                children: {
+                    folders: orderBy(folders, [(v) => v.name.toLowerCase()], [sortOrder]),
+                    songs: [],
+                },
+                id: query.id,
+                name: '~',
+                parentId: undefined,
+            };
         }
 
         const folderDetailRes = await jfApiClient(apiClientProps).getFolder({
@@ -1060,14 +1014,7 @@ export const JellyfinController: InternalControllerEndpoint = {
 
         let filteredFolders = items
             .filter((item) => !isAudioItemType(apiClientProps.server, item.Type))
-            .map((item) =>
-                jfNormalize.folder(
-                    item,
-                    apiClientProps.server,
-                    args.context?.pathReplace,
-                    args.context?.pathReplaceWith,
-                ),
-            );
+            .map((item) => jfNormalize.folder(item, apiClientProps.server));
         let filteredSongs = items
             .filter(
                 (item) =>
@@ -1159,8 +1106,6 @@ export const JellyfinController: InternalControllerEndpoint = {
                 jfNormalize.song(
                     item as unknown as z.infer<typeof jfType._response.song>,
                     apiClientProps.server,
-                    args.context?.pathReplace,
-                    args.context?.pathReplaceWith,
                 ),
             );
     },
@@ -1251,7 +1196,7 @@ export const JellyfinController: InternalControllerEndpoint = {
         });
 
         if (res.status !== 200) {
-            throw new Error('Failed to get genre list');
+            throw new Error('Failed to get music folder list');
         }
 
         const musicFolders = res.body.Items.filter((folder) =>
@@ -1609,64 +1554,16 @@ export const JellyfinController: InternalControllerEndpoint = {
               ? formatCommaDelimitedString(query.albumArtistIds)
               : undefined;
 
-        let items: z.infer<typeof jfType._response.song>[] = [];
-        let totalRecordCount = 0;
-        const batchSize = 50;
-
-        const includeItemTypes = getSongItemTypes(apiClientProps.server);
-
-        // Handle albumIds fetches in batches to prevent HTTP 414 errors
-        if (query.albumIds && query.albumIds.length > batchSize) {
-            const albumIdBatches = chunk(query.albumIds, batchSize);
-
-            for (const batch of albumIdBatches) {
-                const albumIdsFilter = formatCommaDelimitedString(batch);
-
-                const res = await jfApiClient(apiClientProps).getSongList({
-                    params: {
-                        userId: apiClientProps.server?.userId,
-                    },
-                    query: {
-                        AlbumIds: albumIdsFilter,
-                        ArtistIds: artistIdsFilter,
-                        Fields: JF_FIELDS.SONG,
-                        GenreIds: query.genreIds?.join(','),
-                        IncludeItemTypes: includeItemTypes,
-                        IsFavorite: query.favorite,
-                        Limit: query.limit === -1 ? undefined : query.limit,
-                        ParentId: getLibraryId(query.musicFolderId),
-                        Recursive: true,
-                        SearchTerm: query.searchTerm,
-                        SortBy: songListSortMap.jellyfin[query.sortBy] || 'Album,SortName',
-                        SortOrder: sortOrderMap.jellyfin[query.sortOrder],
-                        StartIndex: query.startIndex,
-                        ...query._custom,
-                        Years: yearsFilter,
-                    },
-                });
-
-                if (res.status !== 200) {
-                    throw new Error('Failed to get song list');
-                }
-
-                items = [...items, ...res.body.Items];
-                totalRecordCount += res.body.Items.length;
-            }
-        } else {
-            const albumIdsFilter = query.albumIds
-                ? formatCommaDelimitedString(query.albumIds)
-                : undefined;
-
+        const userId = apiClientProps.server.userId;
+        const fetchSongs = async (albumIds?: string[]) => {
             const res = await jfApiClient(apiClientProps).getSongList({
-                params: {
-                    userId: apiClientProps.server?.userId,
-                },
+                params: { userId },
                 query: {
-                    AlbumIds: albumIdsFilter,
+                    AlbumIds: albumIds ? formatCommaDelimitedString(albumIds) : undefined,
                     ArtistIds: artistIdsFilter,
                     Fields: JF_FIELDS.SONG,
                     GenreIds: query.genreIds?.join(','),
-                    IncludeItemTypes: includeItemTypes,
+                    IncludeItemTypes: getSongItemTypes(apiClientProps.server),
                     IsFavorite: query.favorite,
                     Limit: query.limit === -1 ? undefined : query.limit,
                     ParentId: getLibraryId(query.musicFolderId),
@@ -1684,19 +1581,29 @@ export const JellyfinController: InternalControllerEndpoint = {
                 throw new Error('Failed to get song list');
             }
 
+            if (!albumIds) {
+                return { items: res.body.Items, totalRecordCount: res.body.TotalRecordCount };
+            }
+
             // Jellyfin Bodge because of code from https://github.com/jellyfin/jellyfin/blob/c566ccb63bf61f9c36743ddb2108a57c65a2519b/Emby.Server.Implementations/Data/SqliteItemRepository.cs#L3622
             // If the Album ID filter is passed, Jellyfin will search for
             //  1. the matching album id
             //  2. An album with the name of the album.
             // It is this second condition causing issues,
-            if (query.albumIds) {
-                const albumIdSet = new Set(query.albumIds);
-                items = res.body.Items.filter((item) => albumIdSet.has(item.AlbumId!));
-                totalRecordCount = items.length;
-            } else {
-                items = res.body.Items;
-                totalRecordCount = res.body.TotalRecordCount;
-            }
+            const albumIdSet = new Set(albumIds);
+            const items = res.body.Items.filter((item) => albumIdSet.has(item.AlbumId!));
+            return { items, totalRecordCount: items.length };
+        };
+
+        // Fetch albumIds in batches of 50 to prevent HTTP 414 errors
+        const batches = query.albumIds ? chunk(query.albumIds, 50) : [undefined];
+        let items: z.infer<typeof jfType._response.song>[] = [];
+        let totalRecordCount = 0;
+
+        for (const batch of batches) {
+            const result = await fetchSongs(batch);
+            items = items.concat(result.items);
+            totalRecordCount += result.totalRecordCount;
         }
 
         return {
@@ -2137,94 +2044,35 @@ export const JellyfinController: InternalControllerEndpoint = {
             }
         };
 
+        const client = jfApiClient(apiClientProps);
+        const body = { ItemId: query.id, PositionTicks: position, ...queueFields };
+        let request: Promise<unknown>;
+
         if (query.submission) {
             // Checked by jellyfin-plugin-lastfm for whether or not to send the "finished" scrobble (uses PositionTicks)
-            jfApiClient(apiClientProps)
-                .scrobbleStopped({
-                    body: {
-                        IsPaused: true,
-                        ItemId: query.id,
-                        PositionTicks: position,
-                        ...queueFields,
-                    },
-                })
-                .catch(swallowScrobbleError);
-
-            return null;
-        }
-
-        if (query.event === 'start') {
-            jfApiClient(apiClientProps)
-                .scrobblePlaying({
-                    body: {
-                        ItemId: query.id,
-                        PositionTicks: position,
-                        ...queueFields,
-                    },
-                })
-                .catch(swallowScrobbleError);
-
-            return null;
-        }
-
-        if (query.event === 'pause') {
-            jfApiClient(apiClientProps)
-                .scrobbleProgress({
-                    body: {
-                        EventName: query.event,
-                        IsPaused: true,
-                        ItemId: query.id,
-                        PositionTicks: position,
-                        ...queueFields,
-                    },
-                })
-                .catch(swallowScrobbleError);
-
-            return null;
-        }
-
-        if (query.event === 'unpause') {
-            jfApiClient(apiClientProps)
-                .scrobbleProgress({
-                    body: {
-                        EventName: query.event,
-                        IsPaused: false,
-                        ItemId: query.id,
-                        PositionTicks: position,
-                        ...queueFields,
-                    },
-                })
-                .catch(swallowScrobbleError);
-
-            return null;
-        }
-
-        if (query.event === 'stop') {
-            jfApiClient(apiClientProps)
-                .scrobbleStopped({
-                    body: {
-                        ItemId: query.id,
-                        PositionTicks: position,
-                        ...queueFields,
-                    },
-                })
-                .catch(swallowScrobbleError);
-
-            return null;
-        }
-
-        jfApiClient(apiClientProps)
-            .scrobbleProgress({
+            request = client.scrobbleStopped({ body: { IsPaused: true, ...body } });
+        } else if (query.event === 'start') {
+            request = client.scrobblePlaying({ body });
+        } else if (query.event === 'stop') {
+            request = client.scrobbleStopped({ body });
+        } else {
+            request = client.scrobbleProgress({
                 body: {
+                    ...body,
                     EventName: query.event,
-                    ItemId: query.id,
-                    PositionTicks: position,
-                    ...queueFields,
+                    IsPaused:
+                        query.event === 'pause'
+                            ? true
+                            : query.event === 'unpause'
+                              ? false
+                              : undefined,
                     // Periodic timeupdates skip the (large) queue payload
                     NowPlayingQueue: query.event === 'timeupdate' ? undefined : nowPlayingQueue,
                 },
-            })
-            .catch(swallowScrobbleError);
+            });
+        }
+
+        request.catch(swallowScrobbleError);
 
         return null;
     },

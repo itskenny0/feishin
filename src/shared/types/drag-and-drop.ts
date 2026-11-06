@@ -34,11 +34,6 @@ export enum DragOperation {
     REORDER = 'reorder',
 }
 
-export interface AlbumDragMetadata {
-    image: string;
-    title: string;
-}
-
 export interface DragData<
     TDataType = unknown,
     T extends Record<string, unknown> = Record<string, unknown>,

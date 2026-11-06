@@ -111,35 +111,25 @@ const getGenres = (
         | z.infer<typeof ssType._response.albumListEntry>
         | z.infer<typeof ssType._response.song>,
     server?: null | ServerListItemWithCredential,
-): Genre[] => {
-    return item.genres
-        ? item.genres.map((genre) => ({
-              _itemType: LibraryItem.GENRE,
-              _serverId: server?.id || 'unknown',
-              _serverType: ServerType.SUBSONIC,
-              albumCount: null,
-              id: genre.name,
-              imageId: null,
-              imageUrl: null,
-              name: genre.name,
-              songCount: null,
-          }))
-        : item.genre
-          ? [
-                {
-                    _itemType: LibraryItem.GENRE,
-                    _serverId: server?.id || 'unknown',
-                    _serverType: ServerType.SUBSONIC,
-                    albumCount: null,
-                    id: item.genre,
-                    imageId: null,
-                    imageUrl: null,
-                    name: item.genre,
-                    songCount: null,
-                },
-            ]
-          : [];
-};
+): Genre[] =>
+    (item.genres?.map((genre) => genre.name) ?? (item.genre ? [item.genre] : [])).map((name) => ({
+        _itemType: LibraryItem.GENRE,
+        _serverId: server?.id || 'unknown',
+        _serverType: ServerType.SUBSONIC,
+        albumCount: null,
+        id: name,
+        imageId: null,
+        imageUrl: null,
+        name,
+        songCount: null,
+    }));
+
+const getExplicitStatus = (status?: string): ExplicitStatus | null =>
+    status === 'explicit'
+        ? ExplicitStatus.EXPLICIT
+        : status === 'clean'
+          ? ExplicitStatus.CLEAN
+          : null;
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
 
@@ -217,12 +207,7 @@ const normalizeSong = (
         discNumber: item.discNumber || 1,
         discSubtitle: discTitleMap?.get(item.discNumber ?? 1) ?? null,
         duration: item.duration ? item.duration * 1000 : 0,
-        explicitStatus:
-            item.explicitStatus === 'explicit'
-                ? ExplicitStatus.EXPLICIT
-                : item.explicitStatus === 'clean'
-                  ? ExplicitStatus.CLEAN
-                  : null,
+        explicitStatus: getExplicitStatus(item.explicitStatus),
         folderId: null,
         gain:
             item.replayGain && (item.replayGain.albumGain || item.replayGain.trackGain)
@@ -366,18 +351,13 @@ const normalizeAlbum = (
         discs,
         dominantColor: null,
         duration: item.duration * 1000,
-        explicitStatus:
-            item.explicitStatus === 'explicit'
-                ? ExplicitStatus.EXPLICIT
-                : item.explicitStatus === 'clean'
-                  ? ExplicitStatus.CLEAN
-                  : null,
+        explicitStatus: getExplicitStatus(item.explicitStatus),
         gain: null,
         genres: getGenres(item, server),
         id: item.id.toString(),
         imageId: item.coverArt?.toString() || null,
         imageUrl: null,
-        isCompilation: null,
+        isCompilation: item.isCompilation ?? null,
         lastPlayedAt: null,
         mbzId: null,
         mbzReleaseGroupId: null,

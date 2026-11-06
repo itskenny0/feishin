@@ -10,10 +10,24 @@ import {
     hasFeature,
     hasFeatureWithVersion,
     replacePathPrefix,
+    sortAlbumArtistList,
+    sortAlbumList,
+    sortSongList,
     sortSongsByFetchedOrder,
     VersionInfo,
 } from '/@/shared/api/utils';
-import { LibraryItem, ServerListItem, ServerType, Song } from '/@/shared/types/domain-types';
+import {
+    Album,
+    AlbumArtist,
+    AlbumArtistListSort,
+    AlbumListSort,
+    LibraryItem,
+    ServerListItem,
+    ServerType,
+    Song,
+    SongListSort,
+    SortOrder,
+} from '/@/shared/types/domain-types';
 import { ServerFeature } from '/@/shared/types/features-types';
 
 const server = (overrides: Partial<ServerListItem> = {}): ServerListItem => ({
@@ -159,5 +173,55 @@ describe('sortSongsByFetchedOrder', () => {
         const songs = [song('a', 5), song('b', 1), song('c', 3)];
         const result = sortSongsByFetchedOrder(songs, ['c', 'a', 'b'], LibraryItem.SONG);
         expect(result.map((s) => s.id)).toEqual(['c', 'a', 'b']);
+    });
+});
+
+// Client-side sorts used by the Subsonic controller and the artist discography.
+// They must key on fields that exist on the domain types; a key that is absent
+// on every row makes the sort a silent no-op.
+describe('sortAlbumList', () => {
+    const album = (name: string, overrides: Partial<Album> = {}) =>
+        ({ albumArtistName: '', name, userFavorite: false, ...overrides }) as Album;
+
+    it('sorts by album artist name, then album name', () => {
+        const albums = [
+            album('B', { albumArtistName: 'Zed' }),
+            album('C', { albumArtistName: 'abba' }),
+            album('A', { albumArtistName: 'Zed' }),
+        ];
+        const result = sortAlbumList(albums, AlbumListSort.ALBUM_ARTIST, SortOrder.ASC);
+        expect(result.map((a) => a.name)).toEqual(['C', 'A', 'B']);
+    });
+
+    it('puts favorites first when sorting by favorited descending', () => {
+        const albums = [album('A'), album('B', { userFavorite: true }), album('C')];
+        const result = sortAlbumList(albums, AlbumListSort.FAVORITED, SortOrder.DESC);
+        expect(result[0].name).toBe('B');
+    });
+});
+
+describe('sortAlbumArtistList', () => {
+    it('puts favorites first when sorting by favorited descending', () => {
+        const artists = [
+            { name: 'A', userFavorite: false },
+            { name: 'B', userFavorite: true },
+        ] as AlbumArtist[];
+        const result = sortAlbumArtistList(artists, AlbumArtistListSort.FAVORITED, SortOrder.DESC);
+        expect(result.map((a) => a.name)).toEqual(['B', 'A']);
+    });
+});
+
+describe('sortSongList', () => {
+    it('keeps each album together when sorting by artist', () => {
+        const song = (id: string, album: string, trackNumber: number) =>
+            ({ album, artistName: 'Artist', discNumber: 1, id, trackNumber }) as Song;
+        const songs = [
+            song('y1', 'Y', 1),
+            song('x2', 'X', 2),
+            song('x1', 'X', 1),
+            song('y2', 'Y', 2),
+        ];
+        const result = sortSongList(songs, SongListSort.ARTIST, SortOrder.ASC);
+        expect(result.map((s) => s.id)).toEqual(['x1', 'x2', 'y1', 'y2']);
     });
 });
