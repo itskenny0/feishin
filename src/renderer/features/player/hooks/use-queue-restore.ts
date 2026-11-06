@@ -181,7 +181,10 @@ export const useSaveQueue = () => {
                 await api.controller.savePlayQueue({
                     apiClientProps: { serverId },
                     query: {
-                        currentIndex: queue.items.length > 0 ? state.player.index : undefined,
+                        // The songs are in default order; under shuffle `player.index` is a
+                        // shuffled position, so send the current song's default-order index.
+                        currentIndex:
+                            queue.items.length > 0 ? state.getPlayerData().index : undefined,
                         positionMs: useTimestampStoreBase.getState().timestamp * 1000,
                         songs: queue.items.map((item) => item.id),
                     },

@@ -25,11 +25,7 @@ const mocks = vi.hoisted(() => ({
     mode: { current: 'endOfSong' as 'endOfAlbum' | 'endOfSong' | 'timed' },
     // Captured player-event callbacks so the test can fire them.
     onCurrentSongChange: { current: undefined as (() => void) | undefined },
-    onPlayerProgress: {
-        current: undefined as
-            | ((p: { timestamp: number }, prev: { timestamp: number }) => void)
-            | undefined,
-    },
+    remaining: { current: 0 },
     setRemaining: vi.fn(),
     setTargetAlbumId: vi.fn(),
     setVolume: vi.fn(),
@@ -37,12 +33,8 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('/@/renderer/features/player/audio-player/hooks/use-player-events', () => ({
-    usePlayerEvents: (callbacks: {
-        onCurrentSongChange?: () => void;
-        onPlayerProgress?: (p: { timestamp: number }, prev: { timestamp: number }) => void;
-    }) => {
+    usePlayerEvents: (callbacks: { onCurrentSongChange?: () => void }) => {
         mocks.onCurrentSongChange.current = callbacks.onCurrentSongChange;
-        mocks.onPlayerProgress.current = callbacks.onPlayerProgress;
     },
 }));
 
@@ -77,7 +69,7 @@ vi.mock('/@/renderer/store/sleep-timer.store', () => ({
     useSleepTimerActive: () => true,
     useSleepTimerMode: () => mocks.mode.current,
     useSleepTimerStore: {
-        getState: () => ({ remaining: 0, targetAlbumId: null }),
+        getState: () => ({ remaining: mocks.remaining.current, targetAlbumId: null }),
     },
 }));
 
@@ -87,12 +79,13 @@ beforeEach(() => {
     vi.useFakeTimers();
     mocks.cancelTimer.mockClear();
     mocks.mediaPause.mockClear();
+    mocks.setRemaining.mockClear();
     mocks.setVolume.mockClear();
     mocks.fadeSeconds.current = 2;
     mocks.volume.current = 80;
     mocks.mode.current = 'endOfSong';
     mocks.onCurrentSongChange.current = undefined;
-    mocks.onPlayerProgress.current = undefined;
+    mocks.remaining.current = 0;
 });
 
 afterEach(() => {
@@ -166,6 +159,29 @@ describe('sleep timer fade-out lifecycle', () => {
         view.unmount();
         vi.advanceTimersByTime(2100);
         // No stray extra pause from a phantom interval.
+        expect(mocks.mediaPause).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('sleep timer timed countdown', () => {
+    it('counts down one second per elapsed second, then fades and pauses', () => {
+        mocks.mode.current = 'timed';
+        mocks.remaining.current = 3;
+        mocks.setRemaining.mockImplementation((value: number) => {
+            mocks.remaining.current = value;
+        });
+        const view = render(<SleepTimerHookInner />);
+
+        vi.advanceTimersByTime(2000);
+        expect(mocks.remaining.current).toBe(1);
+        expect(mocks.cancelTimer).not.toHaveBeenCalled();
+
+        vi.advanceTimersByTime(1000);
+        expect(mocks.cancelTimer).toHaveBeenCalledTimes(1);
+
+        // cancelTimer() deactivates the timer, which unmounts the owner
+        view.unmount();
+        vi.advanceTimersByTime(2100);
         expect(mocks.mediaPause).toHaveBeenCalledTimes(1);
     });
 });

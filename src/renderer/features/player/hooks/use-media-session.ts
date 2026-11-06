@@ -157,7 +157,7 @@ export const useMediaSession = () => {
                 return;
             }
 
-            if (e.seekTime) {
+            if (typeof e.seekTime === 'number') {
                 playerRef.current.mediaSeekToTimestamp(e.seekTime);
             } else if (e.seekOffset) {
                 const currentTimestamp = useTimestampStoreBase.getState().timestamp;

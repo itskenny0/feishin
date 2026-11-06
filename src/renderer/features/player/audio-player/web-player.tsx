@@ -348,6 +348,11 @@ export function WebPlayer() {
     usePlayerEvents(
         {
             onCurrentSongChange: () => {
+                // A skip mid-crossfade leaves both players at their faded levels; restore the
+                // volume like the seek / pause paths do, or the new song plays quieter.
+                if (isTransitioning && transitionType === PlayerStyle.CROSSFADE) {
+                    playerRef.current?.setVolume(volume);
+                }
                 setIsTransitioning(false);
             },
             onPlayerQueueChange: () => {
@@ -525,37 +530,34 @@ export function WebPlayer() {
     useEffect(() => {
         if (!webAudio || !player1 || !player1Source) return;
 
-        if (player1 && player1Source && num === 1) {
-            const newGain = computeGain(player1);
+        const newGain = computeGain(player1);
 
-            // Apply per player slot whenever its song/source is ready so pre-started
-            // inactive players have correct gain before gapless/crossfade transitions.
-            try {
-                webAudio.gains[0].gain.setValueAtTime(
-                    Math.max(0, newGain),
-                    webAudio.context.currentTime,
-                );
-            } catch (error) {
-                console.error('Error setting gain', error);
-            }
+        // Apply per player slot whenever its song/source is ready so pre-started
+        // inactive players have correct gain before gapless/crossfade transitions.
+        try {
+            webAudio.gains[0].gain.setValueAtTime(
+                Math.max(0, newGain),
+                webAudio.context.currentTime,
+            );
+        } catch (error) {
+            console.error('Error setting gain', error);
         }
-    }, [computeGain, num, player1, player1Source, volume, webAudio]);
+    }, [computeGain, player1, player1Source, webAudio]);
 
     useEffect(() => {
         if (!webAudio || !player2 || !player2Source) return;
 
-        if (player2 && player2Source && num === 2) {
-            const newGain = computeGain(player2);
-            try {
-                webAudio.gains[1].gain.setValueAtTime(
-                    Math.max(0, newGain),
-                    webAudio.context.currentTime,
-                );
-            } catch (error) {
-                console.error('Error setting gain', error);
-            }
+        const newGain = computeGain(player2);
+
+        try {
+            webAudio.gains[1].gain.setValueAtTime(
+                Math.max(0, newGain),
+                webAudio.context.currentTime,
+            );
+        } catch (error) {
+            console.error('Error setting gain', error);
         }
-    }, [computeGain, num, player1, player2Source, player2, volume, webAudio]);
+    }, [computeGain, player2, player2Source, webAudio]);
 
     const player1Url = useSongUrl(player1, num === 1, transcode);
     const player2Url = useSongUrl(player2, num === 2, transcode);

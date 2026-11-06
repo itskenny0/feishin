@@ -157,7 +157,9 @@ export const useMainPlayerListener = () => {
         return () => {
             ipc?.removeAllListeners('renderer-player-play-pause');
             ipc?.removeAllListeners('renderer-player-next');
+            ipc?.removeAllListeners('renderer-player-next-album');
             ipc?.removeAllListeners('renderer-player-previous');
+            ipc?.removeAllListeners('renderer-player-previous-album');
             ipc?.removeAllListeners('renderer-player-play');
             ipc?.removeAllListeners('renderer-player-pause');
             ipc?.removeAllListeners('renderer-player-stop');

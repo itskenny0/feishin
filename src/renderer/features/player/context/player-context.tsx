@@ -119,7 +119,6 @@ export interface PlayerContext {
     setShuffle: (shuffle: PlayerShuffle) => void;
     setSpeed: (speed: number) => void;
     setVolume: (volume: number) => void;
-    shuffle: () => void;
     shuffleAll: () => void;
     shuffleSelected: (items: QueueSong[]) => void;
     toggleRepeat: () => void;
@@ -155,7 +154,6 @@ export const PlayerContext = createContext<PlayerContext>({
     setShuffle: () => {},
     setSpeed: () => {},
     setVolume: () => {},
-    shuffle: () => {},
     shuffleAll: () => {},
     shuffleSelected: () => {},
     toggleRepeat: () => {},
@@ -292,6 +290,10 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
     // supersedes it, so a superseded fetch can't keep appending stale songs
     // to the queue after the user has moved on.
     const streamTailAbortRef = useRef<AbortController | null>(null);
+    const abortStreamTail = useCallback(() => {
+        streamTailAbortRef.current?.abort();
+        streamTailAbortRef.current = null;
+    }, []);
 
     const [doNotShowAgain, setDoNotShowAgain] = useLocalStorage({
         defaultValue: false,
@@ -447,6 +449,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
                         type,
                     });
 
+                    if (isReplaceQueueType(type)) abortStreamTail();
                     storeActions.addToQueueByType(filteredData, type as Play, playSongId);
                 }
             };
@@ -457,7 +460,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
                 addToQueue();
             }
         },
-        [confirmQueueChange, storeActions, t, tryRemotePlay],
+        [abortStreamTail, confirmQueueChange, storeActions, t, tryRemotePlay],
     );
 
     const addToQueueByFetch = useCallback(
@@ -470,11 +473,6 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
         ) => {
             let toastId: null | string = null;
             const fetchId = nanoid();
-
-            // A new play call supersedes any previous streaming-tail fetch
-            // that may still be appending songs to the queue in the background.
-            streamTailAbortRef.current?.abort();
-            streamTailAbortRef.current = null;
 
             timeoutIds.current = {
                 ...timeoutIds.current,
@@ -525,26 +523,37 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
                         toast.hide(toastId);
                     }
 
+                    // Same filtering and playlist tagging as the non-streaming path below
                     const filters = useSettingsStore.getState().playback.filters;
-                    const filteredFirst = filterSongsByPlayerFilters(firstBatch.items, filters);
+                    const prepareSongs = (items: Song[]) => {
+                        let prepared = filterSongsByPlayerFilters(items, filters);
+                        if (options?.filter) prepared = prepared.filter(options.filter);
+                        return tagPlaylistContext(prepared, playlistId);
+                    };
+                    const filteredFirst = prepareSongs(firstBatch.items);
 
                     // Remote target active: push the batch to the device and stop;
                     // Jellyfin owns the queue from here, so skip the local tail append.
                     if (tryRemotePlay(filteredFirst, type)) return;
 
-                    // Start playback immediately with batch 1.
-                    storeActions.addToQueueByType(filteredFirst, Play.NOW);
+                    const startPlayback = () => {
+                        // This replaces the queue: stop any earlier tail from appending to it.
+                        abortStreamTail();
 
-                    // If the playlist is larger than the first batch, fetch the
-                    // rest in the background and append it page by page as it
-                    // arrives. We don't await so the caller's "play" click is
-                    // acknowledged the moment song 1 starts. streamAdaptivePaged
-                    // shrinks the page size on a slow/overloaded server instead
-                    // of hanging on one oversized request — or, worse, silently
-                    // dropping every track past it.
-                    const total = firstBatch.totalRecordCount ?? 0;
-                    const tailStart = firstBatch.items.length;
-                    if (total > tailStart) {
+                        // Start playback immediately with batch 1.
+                        storeActions.addToQueueByType(filteredFirst, Play.NOW);
+
+                        // If the playlist is larger than the first batch, fetch the
+                        // rest in the background and append it page by page as it
+                        // arrives. We don't await so the caller's "play" click is
+                        // acknowledged the moment song 1 starts. streamAdaptivePaged
+                        // shrinks the page size on a slow/overloaded server instead
+                        // of hanging on one oversized request - or, worse, silently
+                        // dropping every track past it.
+                        const total = firstBatch.totalRecordCount ?? 0;
+                        const tailStart = firstBatch.items.length;
+                        if (total <= tailStart) return;
+
                         const tailAbortController = new AbortController();
                         streamTailAbortRef.current = tailAbortController;
 
@@ -569,7 +578,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
 
                                 for await (const page of tailPages) {
                                     if (tailAbortController.signal.aborted) break;
-                                    const filteredTail = filterSongsByPlayerFilters(page, filters);
+                                    const filteredTail = prepareSongs(page);
                                     if (filteredTail.length > 0) {
                                         storeActions.addToQueueByType(filteredTail, Play.LAST);
                                     }
@@ -582,6 +591,12 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
                                 });
                             }
                         })();
+                    };
+
+                    if (options?.skipConfirmation) {
+                        startPlayback();
+                    } else {
+                        confirmQueueChange(startPlayback);
                     }
                     return;
                 }
@@ -647,6 +662,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
                             type.pinAboveUpNext,
                         );
                     } else {
+                        if (isReplaceQueueType(type)) abortStreamTail();
                         storeActions.addToQueueByType(filteredSongs, type as Play);
                     }
                 };
@@ -673,7 +689,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
                 });
             }
         },
-        [confirmQueueChange, queryClient, storeActions, t, tryRemotePlay],
+        [abortStreamTail, confirmQueueChange, queryClient, storeActions, t, tryRemotePlay],
     );
 
     const addToQueueByListQuery = useCallback(
@@ -857,6 +873,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
             const run = () => {
                 logger.debug('Cleared queue');
 
+                abortStreamTail();
                 storeActions.clearQueue();
             };
 
@@ -871,7 +888,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
                 confirmQueueChange(run);
             }
         },
-        [confirmQueueChange, storeActions],
+        [abortStreamTail, confirmQueueChange, storeActions],
     );
 
     const clearSelected = useCallback(
@@ -1097,10 +1114,11 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
                     position,
                 });
 
+                abortStreamTail();
                 storeActions.setQueue(data, index, position);
             });
         },
-        [confirmQueueChange, storeActions],
+        [abortStreamTail, confirmQueueChange, storeActions],
     );
 
     const setSpeed = useCallback(
@@ -1248,12 +1266,6 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
         [getRemoteCtx, remoteCmdAllowed, storeActions],
     );
 
-    const shuffle = useCallback(() => {
-        logger.debug('Shuffle');
-
-        storeActions.shuffle();
-    }, [storeActions]);
-
     const shuffleAll = useCallback(() => {
         logger.debug('Shuffle all');
 
@@ -1330,7 +1342,6 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
             setShuffle,
             setSpeed,
             setVolume,
-            shuffle,
             shuffleAll,
             shuffleSelected,
             toggleRepeat,
@@ -1365,7 +1376,6 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
             setShuffle,
             setSpeed,
             setVolume,
-            shuffle,
             shuffleAll,
             shuffleSelected,
             toggleRepeat,

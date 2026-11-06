@@ -184,47 +184,41 @@ const useSleepTimer = () => {
 
     const status = usePlayerStatus();
 
-    const handleOnPlayerProgress = useCallback(
-        (properties: { timestamp: number }, prev: { timestamp: number }) => {
-            if (!active) {
+    // Count down in timed mode by wall clock while playing. Player progress events can't be
+    // used: the engines report the position several times per second.
+    useEffect(() => {
+        if (!active || mode !== 'timed' || status !== PlayerStatus.PLAYING) {
+            return undefined;
+        }
+
+        let lastTick = Date.now();
+        const interval = window.setInterval(() => {
+            const now = Date.now();
+            const elapsedSeconds = Math.floor((now - lastTick) / 1000);
+
+            if (elapsedSeconds < 1) {
                 return;
             }
 
-            if (status !== PlayerStatus.PLAYING) {
-                return;
-            }
+            lastTick += elapsedSeconds * 1000;
+            const remaining = useSleepTimerStore.getState().remaining;
 
-            // Skip seek-induced progress events. Normal playback advances
-            // the timestamp by ~1 second per emission; anything bigger is a
-            // seek that should not consume sleep-timer budget. We use 2 s
-            // as the threshold so genuine multi-second progress hiccups
-            // (e.g. a network stall on a streamed song) still decrement.
-            const delta = Math.abs(properties.timestamp - prev.timestamp);
-            if (delta > 2) {
-                return;
+            if (remaining <= elapsedSeconds) {
+                cancelTimer();
+                pauseWithOptionalFade();
+            } else {
+                setRemaining(remaining - elapsedSeconds);
             }
+        }, 1000);
 
-            // Count down in timed mode
-            if (mode === 'timed') {
-                const remaining = useSleepTimerStore.getState().remaining;
-
-                if (remaining <= 0) {
-                    cancelTimer();
-                    pauseWithOptionalFade();
-                } else {
-                    setRemaining(Math.max(0, remaining - 1));
-                }
-            }
-        },
-        [active, cancelTimer, mode, pauseWithOptionalFade, setRemaining, status],
-    );
+        return () => window.clearInterval(interval);
+    }, [active, cancelTimer, mode, pauseWithOptionalFade, setRemaining, status]);
 
     usePlayerEvents(
         {
             onCurrentSongChange: handleOnCurrentSongChange,
-            onPlayerProgress: handleOnPlayerProgress,
         },
-        [handleOnCurrentSongChange, handleOnPlayerProgress],
+        [handleOnCurrentSongChange],
     );
 
     // End-of-song mode: set the pauseOnNextSongEnd flag so that

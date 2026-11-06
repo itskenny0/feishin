@@ -320,9 +320,11 @@ export const MpvPlayerEngine = (props: MpvPlayerEngineProps) => {
                     // transition logic (onProgress) and the timestamp store from
                     // this one poll. Previously mpv-player.tsx ran a second 500ms
                     // interval issuing a duplicate getCurrentTime IPC just to push
-                    // the timestamp; that has been removed. The timestamp store's
-                    // no-op guard drops the unchanged integer-second ticks.
-                    setTimestamp(Number(time.toFixed(0)));
+                    // the timestamp; that has been removed. Keep the fractional
+                    // seconds: synced lyrics treat a jump over 500ms as a seek, so
+                    // whole-second ticks made them re-sync (and resume autoscroll)
+                    // every second.
+                    setTimestamp(time);
                     onProgress({
                         played: time / (time + 10),
                         playedSeconds: time,

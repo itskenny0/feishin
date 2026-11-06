@@ -1,6 +1,8 @@
 import { useEffect } from 'react';
 
 import { eventEmitter } from '/@/renderer/events/event-emitter';
+import { EventMap } from '/@/renderer/events/events';
+import { EventCallback } from '/@/renderer/events/types';
 import {
     subscribeCurrentTrack,
     subscribeNextSongInsertion,
@@ -151,73 +153,27 @@ function createPlayerEvents(callbacks: PlayerEventsCallbacks): PlayerEvents {
         unsubscribers.push(unsubscribe);
     }
 
-    if (callbacks.onMediaNext) {
-        eventEmitter.on('MEDIA_NEXT', callbacks.onMediaNext);
-    }
+    // Subscribe to event emitter events
+    const listen = <K extends keyof EventMap>(event: K, callback?: EventCallback<EventMap[K]>) => {
+        if (!callback) return;
+        eventEmitter.on(event, callback);
+        unsubscribers.push(() => eventEmitter.off(event, callback));
+    };
 
-    if (callbacks.onMediaPrev) {
-        eventEmitter.on('MEDIA_PREV', callbacks.onMediaPrev);
-    }
-
-    if (callbacks.onPlayerSeekToTimestamp) {
-        eventEmitter.on('PLAYER_SEEK_TO_TIMESTAMP', callbacks.onPlayerSeekToTimestamp);
-    }
-
-    if (callbacks.onPlayerPlay) {
-        eventEmitter.on('PLAYER_PLAY', callbacks.onPlayerPlay);
-    }
-
-    if (callbacks.onPlayerRepeated) {
-        eventEmitter.on('PLAYER_REPEATED', callbacks.onPlayerRepeated);
-    }
-
-    if (callbacks.onPlayerStop) {
-        eventEmitter.on('PLAYER_STOP', callbacks.onPlayerStop);
-    }
-
-    if (callbacks.onQueueRestored) {
-        eventEmitter.on('QUEUE_RESTORED', callbacks.onQueueRestored);
-    }
-
-    if (callbacks.onUserFavorite) {
-        eventEmitter.on('USER_FAVORITE', callbacks.onUserFavorite);
-    }
-
-    if (callbacks.onUserRating) {
-        eventEmitter.on('USER_RATING', callbacks.onUserRating);
-    }
+    listen('MEDIA_NEXT', callbacks.onMediaNext);
+    listen('MEDIA_PREV', callbacks.onMediaPrev);
+    listen('PLAYER_LYRICS_FETCHED', callbacks.onPlayerLyricsFetched);
+    listen('PLAYER_PLAY', callbacks.onPlayerPlay);
+    listen('PLAYER_REPEATED', callbacks.onPlayerRepeated);
+    listen('PLAYER_SEEK_TO_TIMESTAMP', callbacks.onPlayerSeekToTimestamp);
+    listen('PLAYER_STOP', callbacks.onPlayerStop);
+    listen('QUEUE_RESTORED', callbacks.onQueueRestored);
+    listen('USER_FAVORITE', callbacks.onUserFavorite);
+    listen('USER_RATING', callbacks.onUserRating);
 
     return {
         cleanup: () => {
             unsubscribers.forEach((unsubscribe) => unsubscribe());
-            if (callbacks.onMediaNext) {
-                eventEmitter.off('MEDIA_NEXT', callbacks.onMediaNext);
-            }
-            if (callbacks.onMediaPrev) {
-                eventEmitter.off('MEDIA_PREV', callbacks.onMediaPrev);
-            }
-
-            if (callbacks.onPlayerSeekToTimestamp) {
-                eventEmitter.off('PLAYER_SEEK_TO_TIMESTAMP', callbacks.onPlayerSeekToTimestamp);
-            }
-            if (callbacks.onPlayerPlay) {
-                eventEmitter.off('PLAYER_PLAY', callbacks.onPlayerPlay);
-            }
-            if (callbacks.onPlayerRepeated) {
-                eventEmitter.off('PLAYER_REPEATED', callbacks.onPlayerRepeated);
-            }
-            if (callbacks.onPlayerStop) {
-                eventEmitter.off('PLAYER_STOP', callbacks.onPlayerStop);
-            }
-            if (callbacks.onQueueRestored) {
-                eventEmitter.off('QUEUE_RESTORED', callbacks.onQueueRestored);
-            }
-            if (callbacks.onUserFavorite) {
-                eventEmitter.off('USER_FAVORITE', callbacks.onUserFavorite);
-            }
-            if (callbacks.onUserRating) {
-                eventEmitter.off('USER_RATING', callbacks.onUserRating);
-            }
         },
     };
 }

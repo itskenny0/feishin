@@ -196,6 +196,7 @@ export const WebPlayerEngine = (props: WebPlayerEngineProps) => {
     }, []);
 
     const handleOnError = (
+        slot: 1 | 2,
         playerRef: React.RefObject<null | ReactPlayer>,
         onEnded: () => void,
         onErrorPause: () => void,
@@ -217,6 +218,15 @@ export const WebPlayerEngine = (props: WebPlayerEngineProps) => {
             const isNetworkError =
                 code === MediaError.MEDIA_ERR_NETWORK ||
                 code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED;
+
+            // A failing preload of the next track must not pause (or replace) the song that is
+            // playing. The errored element is reloaded once it becomes the active player.
+            if (slot !== playerNum) {
+                if (isNetworkError || code === MediaError.MEDIA_ERR_DECODE) {
+                    logger.warn('Preload error on the inactive player', { code, label, src });
+                }
+                return;
+            }
 
             if (isNetworkError) {
                 if (networkRetryCountRef.current < MAX_NETWORK_RETRIES) {
@@ -398,6 +408,7 @@ export const WebPlayerEngine = (props: WebPlayerEngineProps) => {
                 muted={isMuted}
                 onEnded={src1 && !loopPlayer1 ? () => onEndedPlayer1() : undefined}
                 onError={handleOnError(
+                    1,
                     player1Ref,
                     () => onEndedPlayer1(),
                     onErrorPause,
@@ -425,6 +436,7 @@ export const WebPlayerEngine = (props: WebPlayerEngineProps) => {
                 muted={isMuted}
                 onEnded={src2 && !loopPlayer2 ? () => onEndedPlayer2() : undefined}
                 onError={handleOnError(
+                    2,
                     player2Ref,
                     () => onEndedPlayer2(),
                     onErrorPause,
