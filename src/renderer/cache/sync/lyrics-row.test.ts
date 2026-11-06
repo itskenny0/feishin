@@ -6,7 +6,8 @@
 //  - A FullLyricsMetadata with a synced array → positive row, Synced:true,
 //    Lyrics is the JSON-stringified array.
 //  - A StructuredLyric[] (Subsonic)           → positive row from the first
-//    entry (StructuredLyric is FullLyricsMetadata-compatible).
+//    synced main entry, else the first entry (StructuredLyric is
+//    FullLyricsMetadata-compatible).
 //  - null / undefined / [] (no lyrics)        → NEGATIVE marker: empty Lyrics,
 //    no Payload. The on-demand reader treats a Payload-less row as a miss, so
 //    negatives stay transparent to on-demand internet lookup while letting the
@@ -66,6 +67,27 @@ describe('toLyricsRow', () => {
         expect(row.Synced).toBe(true);
         expect(row.Payload).toBe(structured[0]);
         expect(row.Lyrics).toBe(JSON.stringify([{ startMs: 0, text: 'hi' }]));
+    });
+
+    it('prefers the first synced main lyric over a leading unsynced or translation entry', () => {
+        const entry = (lang: string, synced: boolean, kind?: string) => ({
+            artist: 'A',
+            kind,
+            lang,
+            lyrics: synced ? [{ startMs: 0, text: lang }] : lang,
+            name: 'N',
+            remote: false,
+            source: 'srv',
+            synced,
+        });
+        const structured = [
+            entry('plain', false),
+            entry('de', true, 'translation'),
+            entry('en', true, 'main'),
+        ] as unknown as StructuredLyric[];
+        const row = toLyricsRow('s6', structured, NOW);
+        expect(row.Payload).toBe(structured[2]);
+        expect(row.Synced).toBe(true);
     });
 
     it('builds a NEGATIVE marker for null (no lyrics found)', () => {

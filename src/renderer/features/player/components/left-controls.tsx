@@ -129,9 +129,7 @@ export const LeftControls = () => {
 
     useHotkeys([
         [
-            bindings.toggleFullscreenPlayer.allowGlobal
-                ? ''
-                : bindings.toggleFullscreenPlayer.hotkey,
+            bindings.toggleFullscreenPlayer.isGlobal ? '' : bindings.toggleFullscreenPlayer.hotkey,
             handleToggleFullScreenPlayer,
         ],
     ]);

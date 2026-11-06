@@ -12,12 +12,12 @@
 //    after the favourites sweep populated the table.
 //  - `favorite: true` with a populated Set → only the favourited rows.
 
-import type { CachedAlbum } from '/@/renderer/cache/types';
+import type { CachedAlbum, CachedGenre } from '/@/renderer/cache/types';
 
 import { describe, expect, it } from 'vitest';
 
-import { filterAlbumsLocal } from '/@/renderer/cache/local-filter';
-import { AlbumListSort, SortOrder } from '/@/shared/types/domain-types';
+import { filterAlbumsLocal, filterGenresLocal } from '/@/renderer/cache/local-filter';
+import { AlbumListSort, GenreListSort, SortOrder } from '/@/shared/types/domain-types';
 
 const album = (id: string, name = id): CachedAlbum =>
     ({
@@ -149,5 +149,34 @@ describe('filterAlbumsLocal hasRating branch', () => {
         });
         expect(out?.items.map((i) => i.id)).toEqual(['a', 'c']);
         expect(out?.totalRecordCount).toBe(2);
+    });
+});
+
+describe('filterGenresLocal sort', () => {
+    const genre = (name: string, albumCount: number, songCount: number): CachedGenre => ({
+        __cachedAt: 0,
+        Id: name,
+        Name: name,
+        Payload: { albumCount, id: name, name, songCount } as never,
+        SortName: name.toLowerCase(),
+    });
+    const rows = [genre('Rock', 5, 10), genre('Jazz', 9, 3), genre('Blues', 5, 40)];
+    const ids = (sortBy: GenreListSort, sortOrder: SortOrder) =>
+        filterGenresLocal({ query: { sortBy, sortOrder, startIndex: 0 }, rows })?.items.map(
+            (i) => i.id,
+        );
+
+    it('sorts by album count with a name tiebreak in both directions', () => {
+        expect(ids(GenreListSort.ALBUM_COUNT, SortOrder.ASC)).toEqual(['Blues', 'Rock', 'Jazz']);
+        expect(ids(GenreListSort.ALBUM_COUNT, SortOrder.DESC)).toEqual(['Jazz', 'Blues', 'Rock']);
+    });
+
+    it('sorts by song count', () => {
+        expect(ids(GenreListSort.SONG_COUNT, SortOrder.DESC)).toEqual(['Blues', 'Rock', 'Jazz']);
+    });
+
+    it('sorts by name', () => {
+        expect(ids(GenreListSort.NAME, SortOrder.ASC)).toEqual(['Blues', 'Jazz', 'Rock']);
+        expect(ids(GenreListSort.NAME, SortOrder.DESC)).toEqual(['Rock', 'Jazz', 'Blues']);
     });
 });

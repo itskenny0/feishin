@@ -179,10 +179,9 @@ export const clearAllSnapshots = (): void => {
  *
  * Earlier versions of this function assumed the serverId was always the
  * FIRST element of every queryKey (the convention in `query-keys.ts`).
- * That assumption holds for the entity factories but is violated by the
- * snapshot keys used by feature-card data hooks, library-stats,
- * server-info, new-since-last-visit, and featured-genres, where the
- * label string lives at index [0] and the serverId at [1] or [2].
+ * That assumption holds for the entity factories but is violated by
+ * label-first keys such as the featured-genre covers and the home shelves
+ * (`homeQueryKey`), where the serverId sits later in the key.
  *
  * To catch all of them we scan the stringified queryKey for the
  * JSON-quoted form of the serverId. The quotes act as a word boundary

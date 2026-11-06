@@ -32,9 +32,12 @@ export const toLyricsRow = (
     result: FullLyricsMetadata | null | StructuredLyric | StructuredLyric[] | undefined,
     nowMs: number,
 ): CachedLyrics => {
-    // StructuredLyric is FullLyricsMetadata-compatible; the first entry is the
-    // primary lyric (additional entries are translations we don't cache in v1).
-    const meta = Array.isArray(result) ? result[0] : result;
+    // StructuredLyric is FullLyricsMetadata-compatible. Only one entry is
+    // cached: the first synced main lyric, else the first entry - the same
+    // default the lyrics view picks (getDefaultStructuredIndex).
+    const meta = Array.isArray(result)
+        ? (result.find((l) => l.synced && (l.kind ?? 'main') === 'main') ?? result[0])
+        : result;
     if (!meta || meta.lyrics == null) {
         return {
             __cachedAt: nowMs,

@@ -130,6 +130,13 @@ describe('favorite/rating optimistic patches the entity Payload', () => {
         expect(restored?.Payload.userRating).toBe(3);
     });
 
+    it('song-artist favourite lands in the AlbumArtist bucket the readers use', async () => {
+        await __testHandlers.createFavorite.apply(db, favoriteArgs('artist-1', LibraryItem.ARTIST));
+
+        expect((await db.favorites.get(['artist-1', 'AlbumArtist']))?.IsFavorite).toBe(true);
+        expect(await db.favorites.get(['artist-1', 'Artist'])).toBeUndefined();
+    });
+
     it('does not invent an entity row when none is cached', async () => {
         // No db.albums row seeded — apply must still succeed (favorites-only)
         // and must not fabricate a partial entity row.

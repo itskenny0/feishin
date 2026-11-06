@@ -4,8 +4,8 @@
 // migrated hook code does the table lookup and hands raw rows down.
 //
 // Every helper returns the same envelope as the corresponding controller
-// response so the wrapping `useCachedQuery` / `useCachedInfiniteQuery`
-// callers can swap them in transparently:
+// response so the wrapping `useCachedQuery` / `queryOptions` callers can
+// swap them in transparently:
 //
 //   { items, startIndex, totalRecordCount }
 //
@@ -40,6 +40,7 @@ import {
     AlbumArtistListSort,
     AlbumListSort,
     ArtistListSort,
+    GenreListSort,
     PlaylistListSort,
     SongListSort,
     SortOrder,
@@ -749,8 +750,23 @@ export const filterGenresLocal = (args: FilterGenresArgs): GenreListResponse | u
         out = out.filter((r) => foldText(r.SortName ?? '').includes(needle));
     }
 
-    out.sort((a, b) => cmpStr(a.SortName ?? '', b.SortName ?? ''));
-    out = applyDirection(out, query.sortOrder);
+    const byName = (a: CachedGenre, b: CachedGenre) => cmpStr(a.SortName, b.SortName);
+    const countKey =
+        query.sortBy === GenreListSort.ALBUM_COUNT
+            ? 'albumCount'
+            : query.sortBy === GenreListSort.SONG_COUNT
+              ? 'songCount'
+              : undefined;
+    if (countKey) {
+        // Direction applies to the count only; ties stay A-Z.
+        const dir = query.sortOrder === SortOrder.DESC ? -1 : 1;
+        out.sort(
+            (a, b) => dir * cmpNum(a.Payload?.[countKey], b.Payload?.[countKey]) || byName(a, b),
+        );
+    } else {
+        out.sort(byName);
+        out = applyDirection(out, query.sortOrder);
+    }
 
     const totalRecordCount = out.length;
     const startIndex = query.startIndex ?? 0;

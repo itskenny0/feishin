@@ -1,19 +1,14 @@
 export { applyListPageToCache } from './apply-list-page';
 export { CachedImage } from './cached-image';
-export type { CachedImageProps } from './cached-image';
-export { isCacheAvailable, isCacheAvailableSync } from './capability';
+export { isCacheAvailableSync } from './capability';
 export {
     clearLastOpenError,
-    closeCacheDb,
-    deleteCacheDb,
     getActiveCacheDb,
     getLastOpenError,
     LibraryCacheDb,
     openCacheDb,
     resetCacheDb,
-    setActiveCacheDb,
 } from './db';
-export { clearThumbnails } from './eviction';
 export { formatBytes, formatCount } from './format';
 export {
     resolveAlbumArtistPage,
@@ -28,7 +23,6 @@ export {
     mergePage,
     readEntityCountFallback,
     snapshotSwr,
-    useCachedInfiniteQuery,
     useCachedQuery,
 } from './hooks';
 export { HydrationBanner } from './hydration-banner';
@@ -37,20 +31,11 @@ export { useCacheLifecycle } from './lifecycle';
 export {
     buildListSignature,
     getOrComputeSorted,
-    loadAlbumArtistsRows,
     loadAlbumsRows,
-    loadArtistsRows,
     loadSongsRows,
-    lookupSorted,
-    markRowCacheDirty,
-    markRowsChanged,
     markRowsChangedFromPage,
     pageRefsFromItems,
-    resetRowCache,
-    storeSorted,
 } from './local-cache';
-export type { LocalCacheDebugSnapshot, PageRowRef } from './local-cache';
-export { debugLocalCache } from './local-cache';
 export {
     cacheFavoriteCount,
     filterAlbumArtistsLocal,
@@ -60,30 +45,9 @@ export {
     filterPlaylistsLocal,
     filterSongsLocal,
 } from './local-filter';
-export type {
-    FilterAlbumsArgs,
-    FilterArtistsArgs,
-    FilterGenresArgs,
-    FilterPlaylistsArgs,
-    FilterSongArtistsArgs,
-    FilterSongsArgs,
-} from './local-filter';
 export { resolveSongsByItemTypeLocal } from './local-songs-by-item';
-export {
-    blobKey,
-    LocalMediaStore,
-    localMediaStore,
-    mimeForContainer,
-    requestPersistentStorage,
-    targetKey,
-} from './media-store';
 export { enqueueMutation } from './mutations';
 export { OfflineDownloadBanner } from './offline-download-banner';
-export {
-    cancelOfflineSync,
-    refreshOfflineAvailability,
-    refreshOfflineStats,
-} from './offline-media';
 export {
     toCachedAlbumRow,
     toCachedArtistRow,
@@ -91,39 +55,15 @@ export {
     toCachedPlaylistRow,
     toCachedSongRow,
 } from './row-mappers';
-export {
-    markSearchDirty,
-    resetSearchIndexes,
-    searchAlbumsLocal,
-    searchArtistsLocal,
-    searchSongsLocal,
-} from './search';
-export {
-    dropSnapshotsForEntity,
-    dropSnapshotsForServer,
-    readSnapshot,
-    writeSnapshot,
-} from './snapshot';
+export { markSearchDirty, searchAlbumsLocal, searchArtistsLocal, searchSongsLocal } from './search';
+export { dropSnapshotsForEntity, readSnapshot, writeSnapshot } from './snapshot';
 export { StorageFirstStartModalHost } from './storage-first-start-modal';
-export { useCacheActions, useCacheStore } from './store';
-export {
-    cancelHydration,
-    hydrate,
-    runAlbumsSweep,
-    runArtistsSweep,
-    runFavoritesSweep,
-    runGenresSweep,
-    runLyricsSweep,
-    runPlaylistsSweep,
-    runSongsSweep,
-    toLyricsRow,
-} from './sync';
+export { useCacheStore } from './store';
+export { hydrate, toLyricsRow } from './sync';
 export { SyncChip } from './sync-chip';
-export type { ExplicitRefreshEntity } from './sync-first';
 export {
     entityForLibraryItem,
     entityForListKey,
-    isSyncFirstActive,
     prepareExplicitRefresh,
     shouldRevalidateFromNetwork,
 } from './sync-first';
@@ -133,9 +73,7 @@ export {
     useIsSongOfflineAvailable,
     useOfflineTargetStatus,
 } from './use-offline-availability';
-export { loadOfflineSongs, useOfflineSongCount, useOfflineSongs } from './use-offline-songs';
+export { useOfflineSongCount, useOfflineSongs } from './use-offline-songs';
 export { usePlatformCacheCapability } from './use-platform-cache-capability';
-export { useSmoothOfflineSync } from './use-smooth-offline-sync';
 export { useSmoothSweep } from './use-smooth-sweep';
-export type { SmoothSweepView } from './use-smooth-sweep';
 export { VolumeUnavailableBanner } from './volume-unavailable-banner';

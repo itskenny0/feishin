@@ -1,6 +1,6 @@
 import type { InfiniteData, QueryFunctionContext, QueryKey } from '@tanstack/react-query';
 
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 
 import type { LibraryCacheDb } from './db';
 import type { EntityType } from './types';
@@ -16,9 +16,9 @@ import { queryClient } from '/@/renderer/lib/react-query';
 const activeDb = (): LibraryCacheDb | undefined =>
     useCacheStore.getState().cacheAvailable === true ? getActiveCacheDb() : undefined;
 
-// Awaitable version of activeDb() for use in async queryFn paths (cachedSwr,
-// cachedInfiniteSwr). When the cache subsystem is still initializing (capability
-// probe in flight, or DB.open() not yet complete) this waits up to 3 s before
+// Awaitable version of activeDb() for async queryFn paths (cachedSwr). When
+// the cache subsystem is still initializing (capability probe in flight, or
+// DB.open() not yet complete) this waits up to 3 s before
 // giving up and returning undefined so the cold network path takes over.
 // Returns immediately when the DB is already open or when cacheAvailable=false.
 const waitForActiveDb = (): Promise<LibraryCacheDb | undefined> => {
@@ -175,9 +175,8 @@ export const snapshotSwr = async <TData>(args: {
 };
 
 /**
- * Stale-while-revalidate runner shared by `useCachedQuery`,
- * `useCachedInfiniteQuery`, and every cross-feature `queryOptions`
- * factory. When the cache holds a value we return it IMMEDIATELY (so
+ * Stale-while-revalidate runner shared by `useCachedQuery` and every
+ * cross-feature `queryOptions` factory. When the cache holds a value we return it IMMEDIATELY (so
  * Suspense ends, consumers see real data, and an offline session keeps
  * working) and fire the network call in the background as a fire-and-
  * forget revalidation. Failures (offline, 500, etc.) leave the cached
@@ -443,113 +442,6 @@ export const useCachedQuery = <TData>(args: CachedQueryArgs<TData>) => {
         // data shapes are always plain objects / arrays.
         placeholderData: (() => readSnapshot<TData>(queryKey)) as never,
         queryFn: (ctx) => cachedSwr<TData>({ apply, ctx, fromCache, queryKey, remote }),
-        queryKey,
-        staleTime,
-    });
-};
-
-// useCachedInfiniteQuery ---------------------------------------------------
-
-export interface CachedInfiniteQueryArgs<TPage, TPageParam> {
-    apply?: (db: LibraryCacheDb, page: TPage, pageParam: TPageParam) => Promise<void>;
-    enabled?: boolean;
-    fromCache?: (db: LibraryCacheDb, pageParam: TPageParam) => Promise<TPage | undefined>;
-    getNextPageParam: (
-        lastPage: TPage,
-        allPages: TPage[],
-        lastPageParam: TPageParam,
-    ) => TPageParam | undefined;
-    initialPageParam: TPageParam;
-    queryKey: QueryKey;
-    remote: (ctx: QueryFunctionContext<QueryKey, TPageParam>) => Promise<TPage>;
-    staleTime?: number;
-}
-
-export const useCachedInfiniteQuery = <TPage, TPageParam = number>(
-    args: CachedInfiniteQueryArgs<TPage, TPageParam>,
-) => {
-    const {
-        apply,
-        enabled = true,
-        fromCache,
-        getNextPageParam,
-        initialPageParam,
-        queryKey,
-        remote,
-        staleTime,
-    } = args;
-
-    return useInfiniteQuery<TPage, Error, InfiniteData<TPage>, QueryKey, TPageParam>({
-        enabled,
-        getNextPageParam,
-        initialPageParam,
-        placeholderData: (() => readSnapshot<InfiniteData<TPage, TPageParam>>(queryKey)) as never,
-        queryFn: async (ctx) => {
-            // Stale-while-revalidate per page (same shape as `cachedSwr`
-            // but the per-page snapshot merge means we have to wrap the
-            // logic here instead of reusing the helper).
-            const db = fromCache ? await waitForActiveDb() : activeDb();
-            const pageParam = ctx.pageParam as TPageParam;
-
-            let cachedPage: TPage | undefined;
-            if (db && fromCache) {
-                try {
-                    cachedPage = await fromCache(db, pageParam);
-                    if (cachedPage !== undefined) {
-                        const existing = readSnapshot<InfiniteData<TPage, TPageParam>>(queryKey);
-                        writeSnapshot(queryKey, mergePage(existing, pageParam, cachedPage));
-                    }
-                } catch (err) {
-                    console.warn('[cache] fromCache failed', queryKey, err);
-                }
-            }
-
-            if (cachedPage !== undefined) {
-                // Background revalidate — throttled per [queryKey, pageParam]
-                // so repeated navigations to the same page don't spam the
-                // network within the REVALIDATE_TTL_MS window. Gated through
-                // the sync-first predicate first: when the local cache is
-                // authoritative the sweep owns freshness and no automatic
-                // network call fires after a cache hit.
-                const pageQueryKey = [...(queryKey as unknown[]), pageParam];
-                if (shouldRevalidateFromNetwork() && shouldRevalidate(pageQueryKey)) {
-                    void (async () => {
-                        try {
-                            const fresh = await remote(ctx);
-                            if (db && apply) {
-                                try {
-                                    await apply(db, fresh, pageParam);
-                                } catch (err) {
-                                    console.warn('[cache] apply failed (bg)', queryKey, err);
-                                }
-                            }
-                            const existing =
-                                readSnapshot<InfiniteData<TPage, TPageParam>>(queryKey);
-                            const next = mergePage(existing, pageParam, fresh);
-                            writeSnapshot(queryKey, next);
-                            queryClient.setQueryData(queryKey, next);
-                        } catch (err) {
-                            if ((err as Error)?.name !== 'AbortError') {
-                                console.info('[cache] background revalidate failed', queryKey, err);
-                            }
-                        }
-                    })();
-                }
-                return cachedPage;
-            }
-
-            const fresh = await remote(ctx);
-            if (db && apply) {
-                try {
-                    await apply(db, fresh, pageParam);
-                } catch (err) {
-                    console.warn('[cache] apply failed', queryKey, err);
-                }
-            }
-            const existing = readSnapshot<InfiniteData<TPage, TPageParam>>(queryKey);
-            writeSnapshot(queryKey, mergePage(existing, pageParam, fresh));
-            return fresh;
-        },
         queryKey,
         staleTime,
     });

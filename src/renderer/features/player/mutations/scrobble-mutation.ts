@@ -4,6 +4,7 @@ import { AxiosError } from 'axios';
 import { api } from '/@/renderer/api';
 import { queryKeys } from '/@/renderer/api/query-keys';
 import { enqueueMutation } from '/@/renderer/cache';
+import { invalidatePlayedHomeShelves } from '/@/renderer/features/home/utils/home-query-key';
 import { MutationOptions } from '/@/renderer/lib/react-query';
 import { incrementQueuePlayCount } from '/@/renderer/store/player.store';
 import { ScrobbleArgs, ScrobbleResponse } from '/@/shared/types/domain-types';
@@ -46,15 +47,7 @@ export const useSendScrobble = (options?: MutationOptions) => {
                     });
                 }
 
-                // Invalidate recently played carousel on home route
-                queryClient.invalidateQueries({
-                    queryKey: ['home', 'recentlyPlayed'],
-                });
-
-                // Invalidate most played carousel on home route
-                queryClient.invalidateQueries({
-                    queryKey: ['home', 'mostPlayed'],
-                });
+                invalidatePlayedHomeShelves(queryClient, serverId);
 
                 // Invalidate album artist top songs
                 queryClient.invalidateQueries({

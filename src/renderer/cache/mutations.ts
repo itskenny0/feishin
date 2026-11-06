@@ -151,10 +151,11 @@ const cachedKindFromLibraryItem = (
     switch (type) {
         case LibraryItem.ALBUM:
             return 'Album';
+        // Both artist kinds share one server-side favourite record; the sweep
+        // and every reader use the 'AlbumArtist' bucket.
         case LibraryItem.ALBUM_ARTIST:
-            return 'AlbumArtist';
         case LibraryItem.ARTIST:
-            return 'Artist';
+            return 'AlbumArtist';
         case LibraryItem.PLAYLIST:
             return 'Playlist';
         case LibraryItem.PLAYLIST_SONG:
@@ -215,7 +216,7 @@ const patchCachedEntityPayload = async (
                 Payload: { ...cached.Payload, ...patch },
             });
         }
-    } else if (kind === 'Artist' || kind === 'AlbumArtist') {
+    } else if (kind === 'AlbumArtist') {
         const cached = await db.artists.get(id);
         if (cached) {
             out.push({ row: cached, table: 'artists' });
@@ -585,7 +586,7 @@ const refetchFavoriteEntity = async (
                         await db.albums.put({ ...cached, __cachedAt: now, Payload: album });
                     }
                 }
-            } else if (kind === 'AlbumArtist' || kind === 'Artist') {
+            } else if (kind === 'AlbumArtist') {
                 const artist = await controller.getAlbumArtistDetail({
                     apiClientProps: { serverId },
                     query: { id },
