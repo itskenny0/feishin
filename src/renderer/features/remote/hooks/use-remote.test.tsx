@@ -5,6 +5,7 @@ const { listeners, player } = vi.hoisted(() => {
     const listeners = new Map<string, Array<(data: unknown) => void>>();
     const on = (channel: string) => (cb: (data: unknown) => void) => {
         listeners.set(channel, [...(listeners.get(channel) ?? []), cb]);
+        return () => listeners.set(channel, listeners.get(channel)?.filter((l) => l !== cb) ?? []);
     };
     (globalThis as any).window.api = {
         ipc: {
@@ -15,7 +16,6 @@ const { listeners, player } = vi.hoisted(() => {
             requestFavorite: on('request-favorite'),
             requestPosition: on('request-position'),
             requestRating: on('request-rating'),
-            requestSeek: on('request-seek'),
             requestVolume: on('request-volume'),
             updateSetting: async () => {},
             updateSong: () => {},
@@ -60,5 +60,21 @@ describe('useRemote', () => {
 
         listeners.get('request-position')?.forEach((cb) => cb({ position: 42 }));
         expect(player.mediaSeekToTimestamp).toHaveBeenCalledWith(42);
+    });
+
+    it('unmount keeps the MPRIS listeners on the shared channels', () => {
+        // use-mpris registers on request-position / request-volume too; turning
+        // the remote off must only drop the remote's own handlers.
+        const mprisPosition = vi.fn();
+        const mprisVolume = vi.fn();
+        listeners.set('request-position', [mprisPosition]);
+        listeners.set('request-volume', [mprisVolume]);
+        const { unmount } = render(<RemoteHook />);
+        unmount();
+
+        listeners.get('request-position')?.forEach((cb) => cb({ position: 7 }));
+        listeners.get('request-volume')?.forEach((cb) => cb({ volume: 30 }));
+        expect(mprisPosition).toHaveBeenCalledTimes(1);
+        expect(mprisVolume).toHaveBeenCalledTimes(1);
     });
 });

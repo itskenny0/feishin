@@ -270,7 +270,7 @@ export const SETTINGS_SUBPAGES: Record<string, SubpageDef[]> = {
             Component: UpdateSubpage,
             description: (t) =>
                 t('page.setting.updateDescription', {
-                    defaultValue: 'Auto-update channel + release source.',
+                    defaultValue: 'Automatic updates from GitHub releases.',
                 }),
             Icon: RiRefreshLine,
             id: 'updates',

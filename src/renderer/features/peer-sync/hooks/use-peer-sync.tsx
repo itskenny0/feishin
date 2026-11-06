@@ -328,6 +328,38 @@ export const usePeerSync = () => {
         return () => clearInterval(t);
     }, [peerSync.enabled, peerSync.jellyfinRemoteEnabled, peerSync.onboarded]);
 
+    // Main keeps no broker state across launches and settings / the wizard only
+    // start it on toggle, so restart a broker left enabled last session here.
+    // Same config + room key as the settings toggle; a no-op in main when the
+    // running broker already matches, a restart when the room key changed.
+    const brokerRoomKey = peerSync.roomKeyOverride?.trim() || serverUsername;
+    useEffect(() => {
+        const api = isElectron() ? window.api.peerBroker : null;
+        // Never start with a blank room key: it is the broker auth password.
+        if (!api || !peerSync.broker.enabled || !brokerRoomKey) return;
+        const host = peerSync.broker.host;
+        const port = peerSync.broker.port;
+        api.setEnabled({
+            host,
+            port,
+            roomKey: brokerRoomKey,
+            tlsCertPath: peerSync.broker.tlsCertPath || undefined,
+            tlsKeyPath: peerSync.broker.tlsKeyPath || undefined,
+        })
+            .then((error) => {
+                if (error) warn('embedded broker start failed:', error);
+                else log('embedded broker running', { host, port });
+            })
+            .catch((error) => warn('embedded broker start failed:', error));
+    }, [
+        brokerRoomKey,
+        peerSync.broker.enabled,
+        peerSync.broker.host,
+        peerSync.broker.port,
+        peerSync.broker.tlsCertPath,
+        peerSync.broker.tlsKeyPath,
+    ]);
+
     // Poll the main-process embedded broker for status. Cheap IPC; runs at a
     // slower cadence than the renderer pings since the value rarely changes.
     useEffect(() => {

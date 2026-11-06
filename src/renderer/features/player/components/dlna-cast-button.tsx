@@ -110,18 +110,6 @@ export const DlnaCastButton = () => {
         };
         return dlnaPlayerListener.rendererDlnaGroupState(handleGroupState);
     }, [t]);
-    useEffect(() => {
-        if (!dlnaPlayerListener) return;
-        const handleDiscoveryUpdate = (_: unknown, updated: DlnaDevice[]) => {
-            setDevices((current) => {
-                if (screen !== 'idle') return current;
-                const hasNewGroups = updated.some((d) => d.groupMembers);
-                if (!hasNewGroups) return current;
-                return updated;
-            });
-        };
-        return dlnaPlayerListener.rendererDlnaDiscoveryUpdate(handleDiscoveryUpdate);
-    }, [screen]);
 
     const handleDiscover = useCallback(async () => {
         if (!dlnaPlayer) return;

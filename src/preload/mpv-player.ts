@@ -130,10 +130,6 @@ const rendererToggleShuffle = (cb: (data: PlayerData) => void) => {
     ipcRenderer.on('renderer-player-toggle-shuffle', (_, data) => cb(data));
 };
 
-const rendererError = (cb: (data: string) => void) => {
-    ipcRenderer.on('renderer-player-error', (_, data) => cb(data));
-};
-
 const rendererPlayerFallback = (cb: (data: boolean) => void) => {
     ipcRenderer.on('renderer-player-fallback', (_, data) => cb(data));
 };
@@ -162,7 +158,6 @@ export const mpvPlayer = {
 
 export const mpvPlayerListener = {
     rendererAutoNext,
-    rendererError,
     rendererMpvReconnect,
     rendererNext,
     rendererNextAlbum,

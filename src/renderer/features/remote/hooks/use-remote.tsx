@@ -14,7 +14,6 @@ import { toast } from '/@/shared/components/toast/toast';
 import { LibraryItem } from '/@/shared/types/domain-types';
 
 const remote = isElectron() ? window.api.remote : null;
-const ipc = isElectron() ? window.api.ipc : null;
 
 export const useRemote = () => {
     // Leaf subscription: pull the action handles directly instead of the
@@ -64,7 +63,7 @@ export const useRemote = () => {
             return;
         }
 
-        remote.requestPosition((data: { position: number }) => {
+        const offPosition = remote.requestPosition((data) => {
             logger.debug('Remote request position received', { position: data.position });
             const newTime = data.position;
             mediaSeekToTimestamp(newTime);
@@ -72,8 +71,8 @@ export const useRemote = () => {
 
         // No request-seek handler: the remote server never sends it, only
         // MPRIS does, and use-mpris already applies it - a second handler
-        // here doubled every MPRIS Seek (and the cleanup below wiped MPRIS's).
-        remote.requestRating((data: { id: string; rating: number; serverId: string }) => {
+        // here doubled every MPRIS Seek.
+        const offRating = remote.requestRating((data) => {
             logger.debug('Remote request rating received', {
                 id: data.id,
                 rating: data.rating,
@@ -82,12 +81,12 @@ export const useRemote = () => {
             setRating(data.serverId, [data.id], LibraryItem.SONG, data.rating);
         });
 
-        remote.requestVolume((data: { volume: number }) => {
+        const offVolume = remote.requestVolume((data) => {
             logger.debug('Remote request volume received', { volume: data.volume });
             setVolume(data.volume);
         });
 
-        remote.requestFavorite((data: { favorite: boolean; id: string; serverId: string }) => {
+        const offFavorite = remote.requestFavorite((data) => {
             logger.debug('Remote request favorite received', {
                 favorite: data.favorite,
                 id: data.id,
@@ -103,11 +102,13 @@ export const useRemote = () => {
             });
         });
 
+        // Per-listener unsubscribes: use-mpris shares request-position /
+        // request-volume, so removeAllListeners would also drop its handlers.
         return () => {
-            ipc?.removeAllListeners('request-position');
-            ipc?.removeAllListeners('request-volume');
-            ipc?.removeAllListeners('request-favorite');
-            ipc?.removeAllListeners('request-rating');
+            offPosition();
+            offRating();
+            offVolume();
+            offFavorite();
         };
     }, [
         addToFavoritesMutation,

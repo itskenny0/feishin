@@ -844,14 +844,14 @@ export const LibrarySyncSettings = () => {
                     </Button>
                 )}
                 <Button
-                    disabled={!currentServer}
+                    disabled={sweeping || !currentServer}
                     onClick={() => currentServer && void handleResync(currentServer)}
                     variant="default"
                 >
                     {t('page.setting.librarySyncDashboard.actionResync')}
                 </Button>
                 <Button
-                    disabled={!currentServer}
+                    disabled={sweeping || !currentServer}
                     onClick={() => currentServer && void handleForceFullResync(currentServer)}
                     variant="default"
                 >
@@ -859,10 +859,19 @@ export const LibrarySyncSettings = () => {
                         defaultValue: 'Force full re-sync',
                     })}
                 </Button>
-                <Button onClick={() => void handleClearThumbnails()} variant="default">
+                <Button
+                    disabled={sweeping}
+                    onClick={() => void handleClearThumbnails()}
+                    variant="default"
+                >
                     {t('page.setting.librarySyncDashboard.actionClearThumbnails')}
                 </Button>
-                <Button color="red" onClick={() => void handleClearAll()} variant="filled">
+                <Button
+                    color="red"
+                    disabled={sweeping}
+                    onClick={() => void handleClearAll()}
+                    variant="filled"
+                >
                     {t('page.setting.librarySyncDashboard.actionClearAll')}
                 </Button>
             </Group>

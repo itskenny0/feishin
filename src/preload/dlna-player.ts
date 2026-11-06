@@ -103,9 +103,6 @@ const rendererDlnaGroupState = (cb: (event: IpcRendererEvent, state: GroupMember
 const rendererDlnaGroupMemberVolume = (
     cb: (event: IpcRendererEvent, payload: { deviceId: string; volume: number }) => void,
 ) => singleOn('renderer-dlna-group-member-volume', cb);
-const rendererDlnaDiscoveryUpdate = (
-    cb: (event: IpcRendererEvent, devices: DlnaDevice[]) => void,
-) => singleOn('renderer-dlna-discovery-update', cb);
 const prepareSpeedFile = (data: {
     offset: number;
     preservePitch: boolean;
@@ -158,7 +155,6 @@ export const dlnaPlayer = {
 export const dlnaPlayerListener = {
     rendererCurrentTime,
     rendererDlnaConnectPlayback,
-    rendererDlnaDiscoveryUpdate,
     rendererDlnaGroupMemberVolume,
     rendererDlnaGroupState,
     rendererDlnaPrevTrack,

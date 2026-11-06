@@ -108,6 +108,27 @@ const BINDINGS_MAP: Record<BindingActions, string> = {
     zoomOut: i18n.t('setting.hotkey', { context: 'zoomOut' }),
 };
 
+// Bindings main can register as OS-wide shortcuts (HOTKEY_CHANNELS in
+// src/main/index.ts). The persisted allowGlobal flag also marks favorite,
+// rating and zoom bindings, which have no global handler, so it isn't used.
+const GLOBAL_CAPABLE = new Set<BindingActions>([
+    BindingActions.MUTE,
+    BindingActions.NEXT,
+    BindingActions.NEXT_ALBUM,
+    BindingActions.PAUSE,
+    BindingActions.PLAY,
+    BindingActions.PLAY_PAUSE,
+    BindingActions.PREVIOUS,
+    BindingActions.PREVIOUS_ALBUM,
+    BindingActions.SHUFFLE,
+    BindingActions.SKIP_BACKWARD,
+    BindingActions.SKIP_FORWARD,
+    BindingActions.STOP,
+    BindingActions.TOGGLE_REPEAT,
+    BindingActions.VOLUME_DOWN,
+    BindingActions.VOLUME_UP,
+]);
+
 export const HotkeyManagerSettings = memo(() => {
     const { t } = useTranslation();
     const { bindings } = useHotkeySettings();
@@ -229,6 +250,11 @@ export const HotkeyManagerSettings = memo(() => {
         });
     }, [bindings, keyword]);
 
+    // A stale isGlobal on a binding main can't run globally stays visible so
+    // it can be unchecked (in-app handlers skip bindings marked global).
+    const offersGlobal = (binding: BindingActions) =>
+        GLOBAL_CAPABLE.has(binding) || bindings[binding].isGlobal;
+
     const options: SettingOption[] = [];
 
     return (
@@ -307,6 +333,7 @@ export const HotkeyManagerSettings = memo(() => {
                                                         ].isGlobal
                                                     }
                                                     disabled={
+                                                        !offersGlobal(binding as BindingActions) ||
                                                         bindings[
                                                             binding as keyof typeof BINDINGS_MAP
                                                         ].hotkey === ''
@@ -319,9 +346,9 @@ export const HotkeyManagerSettings = memo(() => {
                                                     }
                                                     size="md"
                                                     style={{
-                                                        opacity: bindings[
-                                                            binding as keyof typeof BINDINGS_MAP
-                                                        ].allowGlobal
+                                                        opacity: offersGlobal(
+                                                            binding as BindingActions,
+                                                        )
                                                             ? 1
                                                             : 0,
                                                     }}

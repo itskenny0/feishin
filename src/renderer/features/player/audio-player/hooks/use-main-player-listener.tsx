@@ -1,13 +1,10 @@
-import { t } from 'i18next';
 import isElectron from 'is-electron';
-import { useCallback, useEffect } from 'react';
+import { useEffect } from 'react';
 
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
 import { useIsRadioActive, useRadioStore } from '/@/renderer/features/radio/hooks/use-radio-player';
 import { useVolumeWheelStep } from '/@/renderer/store';
-import { toast } from '/@/shared/components/toast/toast';
 
-const mpvPlayer = isElectron() ? window.api.mpvPlayer : null;
 const mpvPlayerListener = isElectron() ? window.api.mpvPlayerListener : null;
 const ipc = isElectron() ? window.api.ipc : null;
 
@@ -43,19 +40,6 @@ export const useMainPlayerListener = () => {
         toggleRepeat,
         toggleShuffle,
     } = usePlayer();
-
-    const handleMpvError = useCallback(
-        (message: string) => {
-            toast.error({
-                id: 'mpv-error',
-                message,
-                title: t('error.playbackError') as string,
-            });
-            mediaPause();
-            mpvPlayer!.pause();
-        },
-        [mediaPause],
-    );
 
     useEffect(() => {
         if (!mpvPlayerListener) {
@@ -150,10 +134,6 @@ export const useMainPlayerListener = () => {
             decreaseVolume(volumeWheelStep);
         });
 
-        mpvPlayerListener.rendererError((message: string) => {
-            handleMpvError(message);
-        });
-
         return () => {
             ipc?.removeAllListeners('renderer-player-play-pause');
             ipc?.removeAllListeners('renderer-player-next');
@@ -170,11 +150,9 @@ export const useMainPlayerListener = () => {
             ipc?.removeAllListeners('renderer-player-volume-mute');
             ipc?.removeAllListeners('renderer-player-volume-up');
             ipc?.removeAllListeners('renderer-player-volume-down');
-            ipc?.removeAllListeners('renderer-player-error');
         };
     }, [
         decreaseVolume,
-        handleMpvError,
         increaseVolume,
         isRadioActive,
         mediaNext,

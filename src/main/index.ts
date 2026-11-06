@@ -878,15 +878,17 @@ ipcMain.on(
         globalShortcut.unregisterAll();
 
         for (const [action, { hotkey, isGlobal }] of Object.entries(data)) {
-            if (!isGlobal || !hotkey) continue;
-
             const channel = HOTKEY_CHANNELS[action as BindingActions];
+            // No channel = no global handler; registering would only swallow
+            // the key system-wide (a stale isGlobal flag from older settings).
+            if (!isGlobal || !hotkey || !channel) continue;
+
             const accelerator = hotkeyToElectronAccelerator(hotkey);
             try {
                 // Throws on an accelerator Electron can't parse; that must not
                 // abort registering the remaining shortcuts.
                 globalShortcut.register(accelerator, () => {
-                    if (channel) getMainWindow()?.webContents.send(channel);
+                    getMainWindow()?.webContents.send(channel);
                 });
             } catch (error) {
                 log.warn('Failed to register global shortcut', { accelerator, action, error });

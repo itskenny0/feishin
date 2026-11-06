@@ -1,5 +1,7 @@
 import { ipcRenderer } from 'electron';
 
+import { listen } from './ipc';
+
 import { QueueSong } from '/@/shared/types/domain-types';
 import {
     RemoteAlbumItem,
@@ -122,27 +124,15 @@ const updateAccentColor = (color: { dark: string; light: string }) => {
     ipcRenderer.send('update-accent-color', color);
 };
 
-const requestFavorite = (
-    cb: (data: { favorite: boolean; id: string; serverId: string }) => void,
-) => {
-    ipcRenderer.on('request-favorite', (_, data) => cb(data));
-};
+const requestFavorite = listen<{ favorite: boolean; id: string; serverId: string }>(
+    'request-favorite',
+);
 
-const requestPosition = (cb: (data: { position: number }) => void) => {
-    ipcRenderer.on('request-position', (_, data) => cb(data));
-};
+const requestPosition = listen<{ position: number }>('request-position');
 
-const requestRating = (cb: (data: { id: string; rating: number; serverId: string }) => void) => {
-    ipcRenderer.on('request-rating', (_, data) => cb(data));
-};
+const requestRating = listen<{ id: string; rating: number; serverId: string }>('request-rating');
 
-const requestSeek = (cb: (data: { offset: number }) => void) => {
-    ipcRenderer.on('request-seek', (_, data) => cb(data));
-};
-
-const requestVolume = (cb: (data: { volume: number }) => void) => {
-    ipcRenderer.on('request-volume', (_, data) => cb(data));
-};
+const requestVolume = listen<{ volume: number }>('request-volume');
 
 const setRemoteEnabled = (enabled: boolean): Promise<null | string> => {
     const result = ipcRenderer.invoke('remote-enable', enabled);
@@ -220,7 +210,6 @@ export const remote = {
     requestRating,
     requestRemoveFromQueue,
     requestReorderQueue,
-    requestSeek,
     requestTracks,
     requestVolume,
     respondAlbums,

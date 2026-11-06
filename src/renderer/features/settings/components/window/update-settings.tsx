@@ -9,7 +9,6 @@ import {
 import { useSettingsStoreActions, useWindowSettings } from '/@/renderer/store';
 import { Switch } from '/@/shared/components/switch/switch';
 
-const localSettings = isElectron() ? window.api.localSettings : null;
 const utils = isElectron() ? window.api.utils : null;
 
 function disableAutoUpdates(): boolean {
@@ -31,7 +30,6 @@ export const UpdateSettings = memo(() => {
                     onChange={(e) => {
                         if (!e) return;
                         const enabled = e.currentTarget.checked;
-                        localSettings?.set('disable_auto_updates', !enabled);
                         setSettings({
                             window: {
                                 disableAutoUpdate: !enabled,

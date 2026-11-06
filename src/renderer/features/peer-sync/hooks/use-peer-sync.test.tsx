@@ -9,8 +9,11 @@
 import { cleanup, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// is-electron → false so the embedded-broker status poller stays inert.
-vi.mock('is-electron', () => ({ default: () => false }));
+// is-electron → false so the embedded-broker status poller stays inert;
+// flipped per test (after module-level isElectron() consts are evaluated) to
+// exercise the embedded-broker boot path.
+const electron = vi.hoisted(() => ({ value: false }));
+vi.mock('is-electron', () => ({ default: () => electron.value }));
 
 // Capture startPeerClient args. The other lifecycle deps run for real but are
 // inert in jsdom (no real broker, timers cleaned up on unmount).
@@ -160,5 +163,49 @@ describe('usePeerSync pong → presence freshness (SEV-1)', () => {
             (Date as unknown as { now: () => number }).now = realNow;
         }
         expect(pickTransport('peer-remote', now + MQTT_PRESENCE_TTL_MS + 1)).toBe('mqtt');
+    });
+});
+
+describe('usePeerSync embedded broker boot', () => {
+    const setEnabled = vi.fn(async () => null);
+    beforeEach(() => {
+        setEnabled.mockClear();
+        electron.value = true;
+        (window as unknown as { api: unknown }).api = {
+            peerBroker: { setEnabled, status: async () => ({ running: false }) },
+        };
+    });
+    afterEach(() => {
+        electron.value = false;
+        delete (window as unknown as { api?: unknown }).api;
+    });
+
+    it('restarts a broker enabled in a previous session, keyed on the room key', () => {
+        // Main keeps no broker state across launches; only the renderer knows
+        // the room key (derived from the signed-in username).
+        seedServer('carol');
+        seedPeerSync({
+            broker: { enabled: true, host: '0.0.0.0', port: 8083 },
+            brokerUrl: '',
+        });
+        render(<PeerSyncHook />);
+        expect(setEnabled).toHaveBeenCalledWith({
+            host: '0.0.0.0',
+            port: 8083,
+            roomKey: 'carol',
+            tlsCertPath: undefined,
+            tlsKeyPath: undefined,
+        });
+    });
+
+    it('does not start the broker when it is off or no room key is known', () => {
+        seedServer('carol');
+        seedPeerSync();
+        render(<PeerSyncHook />);
+        cleanup();
+        seedServer(undefined);
+        seedPeerSync({ broker: { enabled: true, host: '0.0.0.0', port: 8083 } });
+        render(<PeerSyncHook />);
+        expect(setEnabled).not.toHaveBeenCalled();
     });
 });

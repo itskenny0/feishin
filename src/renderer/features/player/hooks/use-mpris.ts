@@ -12,7 +12,6 @@ import { usePlayerActions, usePlayerSong } from '/@/renderer/store';
 import { LibraryItem, QueueSong } from '/@/shared/types/domain-types';
 import { PlayerShuffle, ServerType } from '/@/shared/types/types';
 
-const ipc = isElectron() ? window.api.ipc : null;
 const utils = isElectron() ? window.api.utils : null;
 const mpris = isElectron() && (utils?.isLinux() || utils?.isMacOS()) ? window.api.mpris : null;
 
@@ -137,33 +136,27 @@ export const useMPRIS = () => {
             return;
         }
 
-        mpris?.requestPosition((data: { position: number }) => {
-            player.mediaSeekToTimestamp(data.position);
-        });
+        // Per-listener unsubscribes: use-remote shares request-position /
+        // request-volume, so removeAllListeners would also drop its handlers.
+        const unsubscribers = [
+            mpris.requestPosition((data: { position: number }) => {
+                player.mediaSeekToTimestamp(data.position);
+            }),
+            mpris.requestSeek((data: { offset: number }) => {
+                player.mediaSkipForward(data.offset);
+            }),
+            mpris.requestToggleRepeat(() => {
+                player.toggleRepeat();
+            }),
+            mpris.requestToggleShuffle(() => {
+                player.toggleShuffle();
+            }),
+            mpris.requestVolume((data: { volume: number }) => {
+                player.setVolume(data.volume);
+            }),
+        ];
 
-        mpris?.requestSeek((data: { offset: number }) => {
-            player.mediaSkipForward(data.offset);
-        });
-
-        mpris?.requestToggleRepeat(() => {
-            player.toggleRepeat();
-        });
-
-        mpris?.requestToggleShuffle(() => {
-            player.toggleShuffle();
-        });
-
-        mpris?.requestVolume((data: { volume: number }) => {
-            player.setVolume(data.volume);
-        });
-
-        return () => {
-            ipc?.removeAllListeners('mpris-request-toggle-repeat');
-            ipc?.removeAllListeners('mpris-request-toggle-shuffle');
-            ipc?.removeAllListeners('request-position');
-            ipc?.removeAllListeners('request-seek');
-            ipc?.removeAllListeners('request-volume');
-        };
+        return () => unsubscribers.forEach((off) => off());
     }, [player]);
 
     // Update MPRIS when song, imageUrl, or radio metadata changes
