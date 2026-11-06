@@ -17,12 +17,12 @@ import {
 import { estimateBytes, evict } from './eviction';
 import { resolveThumbnail } from './images';
 import { runIntegrityCheck } from './integrity';
+import { LIBRARY_RESYNC_FLAG, scheduleLibraryResyncOnce } from './library-resync-once';
 import { startWorker } from './mutations';
 import { refreshOfflineAvailability, refreshOfflineStats } from './offline-media';
 import { offlineManager } from './offline/manager';
 import { resetSearchIndexes } from './search';
 import { clearAllSnapshots, dropSnapshotsForServer } from './snapshot';
-import { scheduleSongCoverResyncOnce, SONG_COVER_RESYNC_FLAG } from './song-cover-resync';
 import { useCacheActions, useCacheStore } from './store';
 import { cancelHydration, hydrate } from './sync';
 
@@ -386,10 +386,10 @@ export const useCacheLifecycle = (): void => {
                 // re-fetches them under the new soft-miss + stress gate.
                 // syncMeta-flagged → runs once per DB, never blocks boot.
                 void runThumbnailMissPurgeOnce(db);
-                // One-shot: songs cached before tracks got their own cover
-                // identity are re-synced once so distinct per-track art shows
-                // and the thumbnail sweep caches it. syncMeta-flagged.
-                void scheduleSongCoverResyncOnce(db, currentServer);
+                // One-shot: re-sync albums + songs once so installs whose sync
+                // stopped at ~1000 rows (suppressed-count bug) get the rest, and
+                // cached songs pick up their own cover identity. syncMeta-flagged.
+                void scheduleLibraryResyncOnce(db, currentServer);
                 // Restore the cache store from the persistent layer so the
                 // dashboard shows accurate counts + hydration states after
                 // a cold start. Both fields live in memory only; without
@@ -439,7 +439,7 @@ export const useCacheLifecycle = (): void => {
                             const et = meta.EntityType as string;
                             if (
                                 et === MISS_PURGE_FLAG ||
-                                et === SONG_COVER_RESYNC_FLAG ||
+                                et === LIBRARY_RESYNC_FLAG ||
                                 et === 'offlineSongMetaHeal_v1'
                             ) {
                                 continue;

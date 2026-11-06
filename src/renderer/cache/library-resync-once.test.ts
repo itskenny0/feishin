@@ -1,7 +1,7 @@
-// Existing installs cached their songs album-first (no cover identity). The
-// one-shot rewinds the songs sweep to a full re-normalizing pass exactly once
-// per DB, and starts it right away unless the first-sync gate still owns
-// hydration.
+// Existing installs stopped syncing albums + songs at ~1000 rows (suppressed
+// count) and cached songs album-first (no cover identity). The one-shot rewinds
+// both to a full pass exactly once per DB, and starts it right away unless the
+// first-sync gate still owns hydration.
 
 import 'fake-indexeddb/auto';
 import Dexie from 'dexie';
@@ -20,10 +20,10 @@ vi.mock('/@/renderer/store', () => ({
 }));
 
 import { LibraryCacheDb } from './db';
-import { scheduleSongCoverResyncOnce, SONG_COVER_RESYNC_FLAG } from './song-cover-resync';
+import { LIBRARY_RESYNC_FLAG, scheduleLibraryResyncOnce } from './library-resync-once';
 import { useCacheStore } from './store';
 
-const DB_NAME = 'feishin-cache:song-cover-resync:user';
+const DB_NAME = 'feishin-cache:library-resync:user';
 const SERVER = { id: 'srv1', type: 'jellyfin' } as never;
 
 const fullSongsMeta = {
@@ -64,12 +64,12 @@ afterEach(async () => {
     mocks.hydrate.mockClear();
 });
 
-describe('scheduleSongCoverResyncOnce', () => {
+describe('scheduleLibraryResyncOnce', () => {
     it('rewinds a fully synced song table to a full pass and starts it', async () => {
         await seedSong(db, 's1');
         await db.syncMeta.put(fullSongsMeta);
 
-        await scheduleSongCoverResyncOnce(db, SERVER);
+        await scheduleLibraryResyncOnce(db, SERVER);
 
         const meta = await db.syncMeta.get('songs');
         expect(meta?.hydrationState).toBe('partial');
@@ -79,27 +79,49 @@ describe('scheduleSongCoverResyncOnce', () => {
         expect(meta?.totalCount).toBe(2);
         expect(useCacheStore.getState().hydrationStates.songs).toBe('partial');
         expect(mocks.hydrate).toHaveBeenCalledWith(SERVER, 'full');
-        expect(await db.syncMeta.get(SONG_COVER_RESYNC_FLAG as never)).toBeDefined();
+        expect(await db.syncMeta.get(LIBRARY_RESYNC_FLAG as never)).toBeDefined();
+    });
+
+    it('rewinds albums too, and only entities that have cached rows', async () => {
+        await db.albums.put({
+            __cachedAt: 1,
+            AlbumArtistId: '',
+            DateLastSaved: '',
+            GenreIds: [],
+            Id: 'album-1',
+            Payload: { id: 'album-1' } as never,
+            ProductionYear: undefined,
+            SortName: 'a',
+        });
+        await db.syncMeta.put({ ...fullSongsMeta, EntityType: 'albums' });
+
+        await scheduleLibraryResyncOnce(db, SERVER);
+
+        const albums = await db.syncMeta.get('albums');
+        expect(albums?.hydrationState).toBe('partial');
+        expect(albums?.nextStartIndex).toBe(0);
+        expect(await db.syncMeta.get('songs')).toBeUndefined();
+        expect(mocks.hydrate).toHaveBeenCalledWith(SERVER, 'full');
     });
 
     it('runs only once per DB', async () => {
         await seedSong(db, 's1');
         await db.syncMeta.put(fullSongsMeta);
-        await scheduleSongCoverResyncOnce(db, SERVER);
+        await scheduleLibraryResyncOnce(db, SERVER);
         await db.syncMeta.put(fullSongsMeta);
         mocks.hydrate.mockClear();
 
-        await scheduleSongCoverResyncOnce(db, SERVER);
+        await scheduleLibraryResyncOnce(db, SERVER);
 
         expect((await db.syncMeta.get('songs'))?.hydrationState).toBe('full');
         expect(mocks.hydrate).not.toHaveBeenCalled();
     });
 
-    it('only stamps the flag on a DB with no cached songs', async () => {
-        await scheduleSongCoverResyncOnce(db, SERVER);
+    it('only stamps the flag on a DB with nothing cached', async () => {
+        await scheduleLibraryResyncOnce(db, SERVER);
 
         expect(await db.syncMeta.get('songs')).toBeUndefined();
-        expect(await db.syncMeta.get(SONG_COVER_RESYNC_FLAG as never)).toBeDefined();
+        expect(await db.syncMeta.get(LIBRARY_RESYNC_FLAG as never)).toBeDefined();
         expect(mocks.hydrate).not.toHaveBeenCalled();
     });
 
@@ -108,7 +130,7 @@ describe('scheduleSongCoverResyncOnce', () => {
         await seedSong(db, 's1');
         await db.syncMeta.put({ ...fullSongsMeta, hydrationState: 'partial', nextStartIndex: 500 });
 
-        await scheduleSongCoverResyncOnce(db, SERVER);
+        await scheduleLibraryResyncOnce(db, SERVER);
 
         expect((await db.syncMeta.get('songs'))?.nextStartIndex).toBe(0);
         expect(mocks.hydrate).not.toHaveBeenCalled();

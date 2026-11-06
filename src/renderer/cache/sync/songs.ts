@@ -46,7 +46,10 @@ const fetchSongsPage =
 
         return {
             items: (result?.items ?? []).map(toCachedSongRow),
-            total: result?.totalRecordCount ?? 0,
+            // Only page 1 asks for the count. With it suppressed, Jellyfin 10.11
+            // reports the page length as TotalRecordCount, which runSweep would
+            // take as the library total and stop after two pages.
+            total: startIndex === 0 ? (result?.totalRecordCount ?? 0) : 0,
         };
     };
 
