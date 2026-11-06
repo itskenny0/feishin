@@ -38,7 +38,6 @@ interface LibraryHeaderProps {
     compact?: boolean;
     containerClassName?: string;
     imageOverlay?: ReactNode;
-    imagePlaceholderUrl?: null | string;
     imageUrl?: null | string;
     item: {
         blurHash?: null | string;

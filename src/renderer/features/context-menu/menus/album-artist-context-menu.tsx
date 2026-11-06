@@ -21,10 +21,7 @@ interface AlbumArtistContextMenuProps {
 }
 
 export const AlbumArtistContextMenu = ({ items, type }: AlbumArtistContextMenuProps) => {
-    const { ids } = useMemo(() => {
-        const ids = items.map((item) => item.id);
-        return { ids };
-    }, [items]);
+    const ids = useMemo(() => items.map((item) => item.id), [items]);
 
     return (
         <MenuContent bottomStickyContent={<ContextMenuPreview items={items} itemType={type} />}>

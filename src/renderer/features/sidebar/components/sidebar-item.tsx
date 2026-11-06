@@ -88,5 +88,3 @@ export const SidebarItem = ({ isActive, to, ...props }: SidebarItemProps) => {
     }
     return <SidebarItemWithLocation to={to} {...props} />;
 };
-
-export const MemoizedSidebarItem = memo(SidebarItem);

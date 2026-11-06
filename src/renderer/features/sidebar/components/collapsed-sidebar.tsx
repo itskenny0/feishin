@@ -13,6 +13,7 @@ import { CollapsedSidebarItem } from '/@/renderer/features/sidebar/components/co
 import { getCollectionTo } from '/@/renderer/features/sidebar/components/sidebar-collection-list';
 import { SidebarIcon } from '/@/renderer/features/sidebar/components/sidebar-icon';
 import { CollapsedSidebarPlaylistList } from '/@/renderer/features/sidebar/components/sidebar-playlist-list';
+import { useSidebarItemLabels } from '/@/renderer/features/sidebar/hooks/use-sidebar-item-labels';
 import { AppMenu } from '/@/renderer/features/titlebar/components/app-menu';
 import { AppRoute } from '/@/renderer/router/routes';
 import {
@@ -45,25 +46,7 @@ export const CollapsedSidebar = () => {
     const sidebarPlaylistList = useSidebarPlaylistList();
     const { isScanning } = useScanStatus();
 
-    const translatedSidebarItemMap = useMemo(
-        () => ({
-            Albums: t('page.sidebar.albums'),
-            Artists: t('page.sidebar.albumArtists').replace(' ', '\n'),
-            'Artists-all': t('page.sidebar.artists'),
-            Collections: t('page.sidebar.collections'),
-            Favorites: t('page.sidebar.favorites'),
-            Folders: t('page.sidebar.folders'),
-            Genres: t('page.sidebar.genres'),
-            Home: t('page.sidebar.home'),
-            'Now Playing': t('page.sidebar.nowPlaying'),
-            Playlists: t('page.sidebar.playlists'),
-            Radio: t('page.sidebar.radio'),
-            Search: t('page.sidebar.search'),
-            Settings: t('page.sidebar.settings'),
-            Tracks: t('page.sidebar.tracks'),
-        }),
-        [t],
-    );
+    const labels = useSidebarItemLabels();
 
     const sidebarItemsWithRoute: SidebarItemType[] = useMemo(() => {
         if (!sidebarItems) return [];
@@ -72,9 +55,11 @@ export const CollapsedSidebar = () => {
             .filter((item) => !item.disabled)
             .map((item) => ({
                 ...item,
+                // Two-line "Album / Artists" label under the collapsed icon
                 label:
-                    translatedSidebarItemMap[item.id as keyof typeof translatedSidebarItemMap] ??
-                    item.label,
+                    item.id === 'Artists'
+                        ? labels.Artists.replace(' ', '\n')
+                        : (labels[item.id] ?? item.label),
             }));
 
         // Append the "Available offline" entry only when something is
@@ -90,7 +75,7 @@ export const CollapsedSidebar = () => {
         }
 
         return items;
-    }, [sidebarItems, translatedSidebarItemMap, offlineSongCount, t]);
+    }, [sidebarItems, labels, offlineSongCount, t]);
 
     return (
         <motion.div

@@ -17,7 +17,6 @@ const ListWithSidebarContainerContext = createContext<ListWithSidebarContainerCo
 
 interface ListWithSidebarContainerProps {
     children: ReactNode;
-    sidebarBreakpoint?: number;
     useBreakpoint?: boolean;
 }
 

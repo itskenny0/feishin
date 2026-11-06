@@ -50,35 +50,7 @@ export const PlayAction = ({ ids, itemType, songs }: PlayActionProps) => {
         [ids, itemType, player, serverId, songs],
     );
 
-    const handlePlayNow = useCallback(() => {
-        handlePlay(Play.NOW);
-    }, [handlePlay]);
-
-    const handlePlayNext = useCallback(() => {
-        handlePlay(Play.NEXT);
-    }, [handlePlay]);
-
-    const handlePlayLast = useCallback(() => {
-        handlePlay(Play.LAST);
-    }, [handlePlay]);
-
-    const handlePlayShuffled = useCallback(() => {
-        handlePlay(Play.SHUFFLE);
-    }, [handlePlay]);
-
-    const handlePlayNextShuffled = useCallback(() => {
-        handlePlay(Play.NEXT_SHUFFLE);
-    }, [handlePlay]);
-
-    const handlePlayLastShuffled = useCallback(() => {
-        handlePlay(Play.LAST_SHUFFLE);
-    }, [handlePlay]);
-
     const playButtonBehavior = usePlayButtonBehavior();
-
-    const defaultPlayAction = useCallback(() => {
-        handlePlay(playButtonBehavior);
-    }, [handlePlay, playButtonBehavior]);
 
     if (ids.length === 0) return null;
 
@@ -87,30 +59,36 @@ export const PlayAction = ({ ids, itemType, songs }: PlayActionProps) => {
             <ContextMenu.SubmenuTarget>
                 <ContextMenu.Item
                     leftIcon="mediaPlay"
-                    onSelect={defaultPlayAction}
+                    onSelect={() => handlePlay(playButtonBehavior)}
                     rightIcon="arrowRightS"
                 >
                     {t('player.play')}
                 </ContextMenu.Item>
             </ContextMenu.SubmenuTarget>
             <ContextMenu.SubmenuContent>
-                <ContextMenu.Item leftIcon="mediaPlay" onSelect={handlePlayNow}>
+                <ContextMenu.Item leftIcon="mediaPlay" onSelect={() => handlePlay(Play.NOW)}>
                     {t('player.play')}
                 </ContextMenu.Item>
-                <ContextMenu.Item leftIcon="mediaPlayNext" onSelect={handlePlayNext}>
+                <ContextMenu.Item leftIcon="mediaPlayNext" onSelect={() => handlePlay(Play.NEXT)}>
                     {t('player.addNext')}
                 </ContextMenu.Item>
-                <ContextMenu.Item leftIcon="mediaPlayLast" onSelect={handlePlayLast}>
+                <ContextMenu.Item leftIcon="mediaPlayLast" onSelect={() => handlePlay(Play.LAST)}>
                     {t('player.addLast')}
                 </ContextMenu.Item>
                 <ContextMenu.Divider />
-                <ContextMenu.Item leftIcon="mediaShuffle" onSelect={handlePlayShuffled}>
+                <ContextMenu.Item leftIcon="mediaShuffle" onSelect={() => handlePlay(Play.SHUFFLE)}>
                     {t('player.shuffle')}
                 </ContextMenu.Item>
-                <ContextMenu.Item leftIcon="mediaPlayNext" onSelect={handlePlayNextShuffled}>
+                <ContextMenu.Item
+                    leftIcon="mediaPlayNext"
+                    onSelect={() => handlePlay(Play.NEXT_SHUFFLE)}
+                >
                     {t('player.addNextShuffled')}
                 </ContextMenu.Item>
-                <ContextMenu.Item leftIcon="mediaPlayLast" onSelect={handlePlayLastShuffled}>
+                <ContextMenu.Item
+                    leftIcon="mediaPlayLast"
+                    onSelect={() => handlePlay(Play.LAST_SHUFFLE)}
+                >
                     {t('player.addLastShuffled')}
                 </ContextMenu.Item>
             </ContextMenu.SubmenuContent>

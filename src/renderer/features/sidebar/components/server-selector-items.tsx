@@ -236,7 +236,6 @@ export const ServerSelectorItems = () => {
             >
                 {t('page.appMenu.logout')}
             </DropdownMenu.Item>
-            {!isServerLock() && <></>}
             {musicFolders && musicFolders.items.length > 0 && (
                 <>
                     <DropdownMenu.Divider />

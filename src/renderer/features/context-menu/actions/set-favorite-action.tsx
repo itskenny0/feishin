@@ -1,8 +1,6 @@
-import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { useCreateFavorite } from '/@/renderer/features/shared/mutations/create-favorite-mutation';
-import { useDeleteFavorite } from '/@/renderer/features/shared/mutations/delete-favorite-mutation';
+import { useSetFavorite } from '/@/renderer/features/shared/hooks/use-set-favorite';
 import { useCurrentServerId, useShowFavorites } from '/@/renderer/store';
 import { ContextMenu } from '/@/shared/components/context-menu/context-menu';
 import { LibraryItem } from '/@/shared/types/domain-types';
@@ -17,32 +15,12 @@ export const SetFavoriteAction = ({ ids, itemType }: SetFavoriteActionProps) => 
     const serverId = useCurrentServerId();
     const showFavorites = useShowFavorites();
 
-    const createFavoriteMutation = useCreateFavorite({});
-    const deleteFavoriteMutation = useDeleteFavorite({});
+    const setFavorite = useSetFavorite();
 
-    const handleAddToFavorites = useCallback(() => {
+    const handleSetFavorite = (isFavorite: boolean) => {
         if (ids.length === 0 || !serverId) return;
-
-        createFavoriteMutation.mutate({
-            apiClientProps: { serverId },
-            query: {
-                id: ids,
-                type: itemType,
-            },
-        });
-    }, [createFavoriteMutation, ids, itemType, serverId]);
-
-    const handleRemoveFromFavorites = useCallback(() => {
-        if (ids.length === 0 || !serverId) return;
-
-        deleteFavoriteMutation.mutate({
-            apiClientProps: { serverId },
-            query: {
-                id: ids,
-                type: itemType,
-            },
-        });
-    }, [deleteFavoriteMutation, ids, itemType, serverId]);
+        setFavorite(serverId, ids, itemType, isFavorite);
+    };
 
     if (!showFavorites) {
         return null;
@@ -60,10 +38,10 @@ export const SetFavoriteAction = ({ ids, itemType }: SetFavoriteActionProps) => 
                 </ContextMenu.Item>
             </ContextMenu.SubmenuTarget>
             <ContextMenu.SubmenuContent>
-                <ContextMenu.Item leftIcon="favorite" onSelect={handleAddToFavorites}>
+                <ContextMenu.Item leftIcon="favorite" onSelect={() => handleSetFavorite(true)}>
                     {t('action.addToFavorites')}
                 </ContextMenu.Item>
-                <ContextMenu.Item leftIcon="unfavorite" onSelect={handleRemoveFromFavorites}>
+                <ContextMenu.Item leftIcon="unfavorite" onSelect={() => handleSetFavorite(false)}>
                     {t('action.removeFromFavorites')}
                 </ContextMenu.Item>
             </ContextMenu.SubmenuContent>

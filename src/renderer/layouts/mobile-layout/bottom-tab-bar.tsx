@@ -172,7 +172,7 @@ export const BottomTabBar = ({ onScrollToTop }: BottomTabBarProps) => {
                     return (
                         <button
                             aria-current={!isToggle && active ? 'page' : undefined}
-                            aria-expanded={isToggle ? active : undefined}
+                            aria-expanded={isToggle ? libraryPopoverOpen : undefined}
                             aria-haspopup={isToggle ? 'menu' : undefined}
                             aria-label={tab.label}
                             className={clsx(styles.tab, { [styles.active]: active })}

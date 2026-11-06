@@ -13,6 +13,7 @@ import {
     SidebarSharedPlaylistList,
     useSidebarPlaylistAddDragMonitor,
 } from '/@/renderer/features/sidebar/components/sidebar-playlist-list';
+import { useSidebarItemLabels } from '/@/renderer/features/sidebar/hooks/use-sidebar-item-labels';
 import { useSwipeToClose } from '/@/renderer/hooks/use-swipe-to-close';
 import {
     SidebarItemType,
@@ -56,39 +57,17 @@ export const MobileSidebar = ({ onSwipeClose }: MobileSidebarProps = {}) => {
         onClose: onSwipeClose ?? (() => undefined),
     });
 
-    const translatedSidebarItemMap = useMemo(
-        () => ({
-            Albums: t('page.sidebar.albums'),
-            Artists: t('page.sidebar.albumArtists'),
-            'Artists-all': t('page.sidebar.artists'),
-            Favorites: t('page.sidebar.favorites'),
-            Genres: t('page.sidebar.genres'),
-            Home: t('page.sidebar.home'),
-            'Now Playing': t('page.sidebar.nowPlaying'),
-            Playlists: t('page.sidebar.playlists'),
-            Search: t('page.sidebar.search'),
-            Settings: t('page.sidebar.settings'),
-            Tracks: t('page.sidebar.tracks'),
-        }),
-        [t],
-    );
-
+    const labels = useSidebarItemLabels();
     const sidebarItems = useSidebarItems();
 
-    const sidebarItemsWithRoute: SidebarItemType[] = useMemo(() => {
-        if (!sidebarItems) return [];
-
-        const items = sidebarItems
-            .filter((item) => !item.disabled)
-            .map((item) => ({
-                ...item,
-                label:
-                    translatedSidebarItemMap[item.id as keyof typeof translatedSidebarItemMap] ??
-                    item.label,
-            }));
-
-        return items;
-    }, [sidebarItems, translatedSidebarItemMap]);
+    // Collections is a section, not a route (it would render as a dead link here).
+    const sidebarItemsWithRoute: SidebarItemType[] = useMemo(
+        () =>
+            (sidebarItems ?? [])
+                .filter((item) => !item.disabled && item.id !== 'Collections' && item.route)
+                .map((item) => ({ ...item, label: labels[item.id] ?? item.label })),
+        [sidebarItems, labels],
+    );
 
     return (
         <div className={styles.container} id="mobile-sidebar" ref={containerRef}>

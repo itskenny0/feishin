@@ -2,8 +2,11 @@ import { openContextModal } from '@mantine/modals';
 import { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { useCurrentServer } from '/@/renderer/store';
+import { hasFeature } from '/@/shared/api/utils';
 import { ContextMenu } from '/@/shared/components/context-menu/context-menu';
 import { LibraryItem } from '/@/shared/types/domain-types';
+import { ServerFeature } from '/@/shared/types/features-types';
 
 interface ShareActionProps {
     ids: string[];
@@ -12,6 +15,7 @@ interface ShareActionProps {
 
 export const ShareAction = ({ ids, itemType }: ShareActionProps) => {
     const { t } = useTranslation();
+    const server = useCurrentServer();
 
     const resourceType = useMemo(() => {
         switch (itemType) {
@@ -40,6 +44,9 @@ export const ShareAction = ({ ids, itemType }: ShareActionProps) => {
             title: t('page.contextMenu.shareItem'),
         });
     }, [ids, resourceType, t]);
+
+    // Only Navidrome implements sharing; elsewhere the request fails.
+    if (!hasFeature(server, ServerFeature.SHARING_ALBUM_SONG)) return null;
 
     return (
         <ContextMenu.Item leftIcon="share" onSelect={onSelect}>

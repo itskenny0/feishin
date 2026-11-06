@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 
 import { usePlayerSong, usePlayerStatus } from '/@/renderer/store/player.store';
+import { useWindowBarTrackinfo } from '/@/renderer/store/settings.store';
 import { PlayerStatus } from '/@/shared/types/types';
 
 const APP_NAME = 'Feishin';
@@ -10,15 +11,18 @@ const APP_NAME = 'Feishin';
  * track. When the user is playing a song, the OS tab/window chrome shows
  * "Song Title — Artist · Feishin"; otherwise it falls back to plain "Feishin".
  *
+ * Honors the "track info in window title" setting (windowBarTrackinfo).
+ *
  * Mount once at the top of the app tree; the hook is idempotent across renders.
  */
 export const useDocumentTitle = () => {
     const song = usePlayerSong();
     const status = usePlayerStatus();
+    const showTrackInfo = useWindowBarTrackinfo();
 
     useEffect(() => {
         const isPlaying = status === PlayerStatus.PLAYING;
-        if (isPlaying && song?.name) {
+        if (showTrackInfo && isPlaying && song?.name) {
             const artist = song.artists?.[0]?.name ?? song.artistName;
             document.title = artist
                 ? `${song.name} — ${artist} · ${APP_NAME}`
@@ -30,5 +34,5 @@ export const useDocumentTitle = () => {
         return () => {
             document.title = APP_NAME;
         };
-    }, [song?.name, song?.artists, song?.artistName, status]);
+    }, [showTrackInfo, song?.name, song?.artists, song?.artistName, status]);
 };

@@ -28,6 +28,7 @@ import {
     SidebarSharedPlaylistList,
     useSidebarPlaylistAddDragMonitor,
 } from '/@/renderer/features/sidebar/components/sidebar-playlist-list';
+import { useSidebarItemLabels } from '/@/renderer/features/sidebar/hooks/use-sidebar-item-labels';
 import { AppRoute } from '/@/renderer/router/routes';
 import {
     useAppStore,
@@ -104,25 +105,7 @@ export const Sidebar = () => {
 
     const sidebarBottomSection = useSidebarBottomSection();
 
-    const translatedSidebarItemMap = useMemo(
-        () => ({
-            Albums: t('page.sidebar.albums'),
-            Artists: t('page.sidebar.albumArtists'),
-            'Artists-all': t('page.sidebar.artists'),
-            Collections: t('page.sidebar.collections'),
-            Favorites: t('page.sidebar.favorites'),
-            Folders: t('page.sidebar.folders'),
-            Genres: t('page.sidebar.genres'),
-            Home: t('page.sidebar.home'),
-            'Now Playing': t('page.sidebar.nowPlaying'),
-            Playlists: t('page.sidebar.playlists'),
-            Radio: t('page.sidebar.radio'),
-            Search: t('page.sidebar.search'),
-            Settings: t('page.sidebar.settings'),
-            Tracks: t('page.sidebar.tracks'),
-        }),
-        [t],
-    );
+    const labels = useSidebarItemLabels();
 
     const sidebarItems = useSidebarItems();
     // Reactive count of downloaded tracks — drives the hidden-when-empty
@@ -162,13 +145,11 @@ export const Sidebar = () => {
             .filter((item) => !item.disabled)
             .map((item) => ({
                 ...item,
-                label:
-                    translatedSidebarItemMap[item.id as keyof typeof translatedSidebarItemMap] ??
-                    item.label,
+                label: labels[item.id] ?? item.label,
             }));
 
         return items;
-    }, [sidebarItems, translatedSidebarItemMap]);
+    }, [sidebarItems, labels]);
 
     /* Library accordion: only items with a route (exclude Collections section).
      * Append the "Available offline" entry only when something is downloaded
@@ -456,7 +437,7 @@ const SidebarImage = () => {
  * Escape and backdrop click. Image scales to viewport height with an aspect-
  * preserving max-width.
  */
-const ImageZoomLightbox = ({
+export const ImageZoomLightbox = ({
     imageUrl,
     onClose,
     opened,
@@ -478,8 +459,19 @@ const ImageZoomLightbox = ({
 
     if (!opened || !imageUrl) return null;
 
+    // React events bubble through portals to the sidebar image, whose click
+    // toggles the full-screen player and whose right-click opens the song
+    // menu, so keep the lightbox's events to itself.
     return createPortal(
-        <div className={styles.zoomOverlay} onClick={onClose} role="dialog">
+        <div
+            className={styles.zoomOverlay}
+            onClick={(e) => {
+                e.stopPropagation();
+                onClose();
+            }}
+            onContextMenu={(e) => e.stopPropagation()}
+            role="dialog"
+        >
             <img
                 alt=""
                 className={styles.zoomImage}

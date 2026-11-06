@@ -108,6 +108,13 @@ describe('BottomTabBar — active indicator', () => {
         expect(tab(/more|menu/i)).toBeUndefined();
     });
 
+    it('reports the Library popover as collapsed on a library route until it is opened', async () => {
+        renderBar({}, '/library/albums');
+        expect(tab(/library/i)?.getAttribute('aria-expanded')).toBe('false');
+        fireEvent.click(tab(/library/i) as HTMLElement);
+        await waitFor(() => expect(tab(/library/i)?.getAttribute('aria-expanded')).toBe('true'));
+    });
+
     it('moves the dot to the Library tab when its popover is open over the Home route', async () => {
         renderBar({}, '/');
         fireEvent.click(tab(/library/i) as HTMLElement);

@@ -19,10 +19,7 @@ interface PlaylistContextMenuProps {
 }
 
 export const PlaylistContextMenu = ({ items, type }: PlaylistContextMenuProps) => {
-    const { ids } = useMemo(() => {
-        const ids = items.map((item) => item.id);
-        return { ids };
-    }, [items]);
+    const ids = useMemo(() => items.map((item) => item.id), [items]);
 
     const { userId, ...permissions } = usePermissions();
 

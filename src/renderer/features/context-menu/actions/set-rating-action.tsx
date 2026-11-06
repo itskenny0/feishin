@@ -1,4 +1,3 @@
-import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useSetRating } from '/@/renderer/features/shared/hooks/use-set-rating';
@@ -21,9 +20,8 @@ export const SetRatingAction = ({ ids, itemType }: SetRatingActionProps) => {
 
     const setRating = useSetRating();
 
-    const isRatingSupported = useMemo(() => {
-        return server?.type === ServerType.NAVIDROME || server?.type === ServerType.SUBSONIC;
-    }, [server?.type]);
+    const isRatingSupported =
+        server?.type === ServerType.NAVIDROME || server?.type === ServerType.SUBSONIC;
 
     const onRating = (rating: number) => {
         setRating(serverId, ids, itemType, rating);
@@ -45,24 +43,16 @@ export const SetRatingAction = ({ ids, itemType }: SetRatingActionProps) => {
                 </ContextMenu.Item>
             </ContextMenu.SubmenuTarget>
             <ContextMenu.SubmenuContent>
-                <ContextMenu.Item onSelect={() => onRating(0)}>
-                    <Rating preventDefault={false} readOnly stopPropagation={false} value={0} />
-                </ContextMenu.Item>
-                <ContextMenu.Item onSelect={() => onRating(1)}>
-                    <Rating preventDefault={false} readOnly stopPropagation={false} value={1} />
-                </ContextMenu.Item>
-                <ContextMenu.Item onSelect={() => onRating(2)}>
-                    <Rating preventDefault={false} readOnly stopPropagation={false} value={2} />
-                </ContextMenu.Item>
-                <ContextMenu.Item onSelect={() => onRating(3)}>
-                    <Rating preventDefault={false} readOnly stopPropagation={false} value={3} />
-                </ContextMenu.Item>
-                <ContextMenu.Item onSelect={() => onRating(4)}>
-                    <Rating preventDefault={false} readOnly stopPropagation={false} value={4} />
-                </ContextMenu.Item>
-                <ContextMenu.Item onSelect={() => onRating(5)}>
-                    <Rating preventDefault={false} readOnly stopPropagation={false} value={5} />
-                </ContextMenu.Item>
+                {[0, 1, 2, 3, 4, 5].map((rating) => (
+                    <ContextMenu.Item key={rating} onSelect={() => onRating(rating)}>
+                        <Rating
+                            preventDefault={false}
+                            readOnly
+                            stopPropagation={false}
+                            value={rating}
+                        />
+                    </ContextMenu.Item>
+                ))}
             </ContextMenu.SubmenuContent>
         </ContextMenu.Submenu>
     );

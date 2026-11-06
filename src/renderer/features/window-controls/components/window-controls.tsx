@@ -11,9 +11,12 @@ import {
 import styles from './window-controls.module.css';
 
 const browser = isElectron() ? window.api.browser : null;
+const localSettings = isElectron() ? window.api.localSettings : null;
 
 export const WindowControls = () => {
-    const [max, setMax] = useState(false);
+    // Seeded like the window bar: a window started maximized otherwise needs two
+    // clicks to restore.
+    const [max, setMax] = useState(localSettings?.env.START_MAXIMIZED || false);
 
     const handleMinimize = useCallback(() => {
         browser?.minimize();
@@ -25,15 +28,13 @@ export const WindowControls = () => {
         // in sync as long as the user toggles via these controls; OS-level
         // shortcuts or titlebar double-clicks can desync it, in which case the
         // next click simply corrects course.
-        setMax((prev) => {
-            if (prev) {
-                browser?.unmaximize();
-            } else {
-                browser?.maximize();
-            }
-            return !prev;
-        });
-    }, []);
+        if (max) {
+            browser?.unmaximize();
+        } else {
+            browser?.maximize();
+        }
+        setMax(!max);
+    }, [max]);
 
     const handleClose = useCallback(() => {
         browser?.exit();

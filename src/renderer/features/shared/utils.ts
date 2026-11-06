@@ -1,7 +1,6 @@
 import Fuse from 'fuse.js';
 import z from 'zod';
 
-import i18n from '/@/i18n/i18n';
 import {
     Album,
     AlbumArtist,
@@ -13,26 +12,6 @@ import {
     QueueSong,
     Song,
 } from '/@/shared/types/domain-types';
-import { Play } from '/@/shared/types/types';
-
-export const PLAY_TYPES = [
-    {
-        label: i18n.t('player.play'),
-        play: Play.NOW,
-    },
-    {
-        label: i18n.t('player.shuffle'),
-        play: Play.SHUFFLE,
-    },
-    {
-        label: i18n.t('player.addLast'),
-        play: Play.LAST,
-    },
-    {
-        label: i18n.t('player.addNext'),
-        play: Play.NEXT,
-    },
-];
 
 export const customFiltersSchema = z.record(z.string(), z.any());
 

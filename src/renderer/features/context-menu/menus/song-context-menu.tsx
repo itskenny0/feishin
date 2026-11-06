@@ -26,10 +26,7 @@ interface SongContextMenuProps {
 }
 
 export const SongContextMenu = ({ items, type }: SongContextMenuProps) => {
-    const { ids } = useMemo(() => {
-        const ids = items.map((item) => item.id);
-        return { ids };
-    }, [items]);
+    const ids = useMemo(() => items.map((item) => item.id), [items]);
 
     return (
         <MenuContent bottomStickyContent={<ContextMenuPreview items={items} itemType={type} />}>
@@ -46,7 +43,6 @@ export const SongContextMenu = ({ items, type }: SongContextMenuProps) => {
             <DownloadAction ids={ids} />
             <ShareAction ids={ids} itemType={LibraryItem.SONG} />
             <PinAction items={items} itemType={LibraryItem.SONG} />
-            <ContextMenu.Divider />
             <ContextMenu.Divider />
             <GoToAction items={items} />
             <ShowInFileExplorerAction items={items} />

@@ -5,11 +5,11 @@ import { useTranslation } from 'react-i18next';
 import { queryKeys } from '/@/renderer/api/query-keys';
 import { enqueueMutation } from '/@/renderer/cache';
 import { eventEmitter } from '/@/renderer/events/event-emitter';
-import { PreviousQueryData } from '/@/renderer/features/shared/mutations/favorite-optimistic-updates';
 import {
-    applyRatingOptimisticUpdates,
-    restoreRatingQueryData,
-} from '/@/renderer/features/shared/mutations/rating-optimistic-updates';
+    applyItemOptimisticUpdates,
+    PreviousQueryData,
+    restoreQueryData,
+} from '/@/renderer/features/shared/mutations/item-optimistic-updates';
 import { MutationHookArgs } from '/@/renderer/lib/react-query';
 import { toast } from '/@/shared/components/toast/toast';
 import { LibraryItem, RatingResponse, SetRatingArgs } from '/@/shared/types/domain-types';
@@ -30,25 +30,31 @@ export const useSetRatingMutation = (args: MutationHookArgs) => {
             return undefined;
         },
         mutationKey: setRatingMutationKey,
-        onError: (_error, _variables, context) => {
+        onError: (error, _variables, context) => {
+            // Re-emitting here would only re-apply the new rating: the event
+            // carries one value for all ids, and their previous ratings differ.
             if (context) {
-                restoreRatingQueryData(queryClient, context);
+                restoreQueryData(queryClient, context);
             }
 
             toast.show({
-                message: _error.message,
+                message: error.message,
                 title: t('error.genericError') as string,
                 type: 'error',
             });
-
-            eventEmitter.emit('USER_RATING', {
-                id: _variables.query.id,
-                itemType: _variables.query.type,
-                rating: _variables.query.rating,
-                serverId: _variables.apiClientProps.serverId,
-            });
         },
         onMutate: (variables) => {
+            // Snapshot (and patch) the query cache before announcing the
+            // change: list loaders write the event into their own queries
+            // synchronously, and a snapshot taken after that can't undo it.
+            const previous = applyItemOptimisticUpdates(
+                queryClient,
+                variables.apiClientProps.serverId,
+                variables.query.id,
+                variables.query.type,
+                { userRating: variables.query.rating },
+            );
+
             eventEmitter.emit('USER_RATING', {
                 id: variables.query.id,
                 itemType: variables.query.type,
@@ -56,7 +62,7 @@ export const useSetRatingMutation = (args: MutationHookArgs) => {
                 serverId: variables.apiClientProps.serverId,
             });
 
-            return applyRatingOptimisticUpdates(queryClient, variables, variables.query.rating);
+            return previous;
         },
         onSuccess: (_data, variables) => {
             if (

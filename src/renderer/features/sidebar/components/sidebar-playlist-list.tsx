@@ -186,17 +186,7 @@ export const PlaylistRowButton = memo(
                         (args.edge === 'top' || args.edge === 'bottom') &&
                         onReorder
                     ) {
-                        const sourceItems = Array.isArray(args.source.item)
-                            ? (args.source.item as Playlist[])
-                            : undefined;
-
-                        // Prevent cross-scope reorders (owned <-> shared)
-                        if (sourceItems && sourceItems.length > 0) {
-                            if (sourceItems.some((si) => si.ownerId !== item.ownerId)) {
-                                return;
-                            }
-                        }
-
+                        // handleReorder ignores sources from the other (owned / shared) list
                         onReorder(sourceIds, to, args.edge);
                         return;
                     }
@@ -524,7 +514,9 @@ const useSidebarPlaylistItems = (scope: 'owned' | 'shared') => {
 
         const currentIds = items.map((p) => p.id);
         const targetIndex = currentIds.indexOf(targetId);
-        if (targetIndex === -1) return;
+        // Only reorder within one list: shared playlists have different owners, but a
+        // drop from the other (owned <-> shared) list must not enter this scope's order.
+        if (targetIndex === -1 || sourceIds.some((id) => !currentIds.includes(id))) return;
 
         const idsWithoutSources = currentIds.filter((id) => !sourceIds.includes(id));
 

@@ -22,26 +22,36 @@ export function useJellyfinQuickConnect({ onAuthenticated }: UseJellyfinQuickCon
     const [code, setCode] = useState<null | string>(null);
     const [isLoading, setIsLoading] = useState(false);
     const intervalRef = useRef<null | ReturnType<typeof setInterval>>(null);
+    // Bumped by every start / stop / unmount. A request that resolves after its
+    // run was cancelled (or superseded) must not start polling or log in.
+    const runRef = useRef(0);
+    // Read at login time so the caller's latest form values are used, not the
+    // ones captured when polling started.
+    const onAuthenticatedRef = useRef(onAuthenticated);
+    onAuthenticatedRef.current = onAuthenticated;
 
-    useEffect(() => {
-        return () => {
-            if (intervalRef.current) clearInterval(intervalRef.current);
-        };
-    }, []);
-
-    const stop = useCallback(() => {
+    const clearPolling = useCallback(() => {
+        runRef.current += 1;
         if (intervalRef.current) {
             clearInterval(intervalRef.current);
             intervalRef.current = null;
         }
+    }, []);
+
+    useEffect(() => clearPolling, [clearPolling]);
+
+    const stop = useCallback(() => {
+        clearPolling();
         setCode(null);
         setIsLoading(false);
-    }, []);
+    }, [clearPolling]);
 
     const start = useCallback(
         async (url: string) => {
             if (!url) return;
 
+            clearPolling();
+            const run = runRef.current;
             setIsLoading(true);
             setCode(null);
 
@@ -53,25 +63,29 @@ export function useJellyfinQuickConnect({ onAuthenticated }: UseJellyfinQuickCon
                     ServerType.JELLYFIN,
                 );
             } catch (err: any) {
+                if (runRef.current !== run) return;
                 setIsLoading(false);
                 toast.error({
                     message: err?.message ?? t('error.jellyfinQuickConnectNotActive'),
                 });
                 return;
             }
+            if (runRef.current !== run) return;
 
             setCode(result.code);
             setIsLoading(false);
 
             intervalRef.current = setInterval(async () => {
+                let approved = false;
                 try {
                     const authenticated = await api.controller.authenticate(
                         url,
                         { action: 'quickConnectState', secret: result.secret },
                         ServerType.JELLYFIN,
                     );
-                    if (!authenticated) return;
+                    if (!authenticated || runRef.current !== run) return;
 
+                    approved = true;
                     stop();
 
                     const data = await api.controller.authenticate(
@@ -84,8 +98,9 @@ export function useJellyfinQuickConnect({ onAuthenticated }: UseJellyfinQuickCon
                         return;
                     }
 
-                    await onAuthenticated(data);
+                    await onAuthenticatedRef.current(data);
                 } catch (err: any) {
+                    if (!approved && runRef.current !== run) return;
                     stop();
                     toast.error({
                         message: err?.message ?? t('error.jellyfinQuickConnectDeactivated'),
@@ -93,7 +108,7 @@ export function useJellyfinQuickConnect({ onAuthenticated }: UseJellyfinQuickCon
                 }
             }, 5000);
         },
-        [onAuthenticated, stop, t],
+        [clearPolling, stop, t],
     );
 
     return { code, isLoading, start, stop };

@@ -1,7 +1,7 @@
 import { closeAllModals, openModal } from '@mantine/modals';
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router';
+import { useNavigate, useParams } from 'react-router';
 
 import { useDeletePlaylist } from '/@/renderer/features/playlists/mutations/delete-playlist-mutation';
 import { AppRoute } from '/@/renderer/router/routes';
@@ -20,6 +20,7 @@ interface DeletePlaylistActionProps {
 export const DeletePlaylistAction = ({ disabled, items }: DeletePlaylistActionProps) => {
     const { t } = useTranslation();
     const navigate = useNavigate();
+    const { playlistId } = useParams() as { playlistId?: string };
     const serverId = useCurrentServerId();
     const deletePlaylistMutation = useDeletePlaylist({});
 
@@ -36,7 +37,10 @@ export const DeletePlaylistAction = ({ disabled, items }: DeletePlaylistActionPr
                 ),
             );
 
-            navigate(AppRoute.PLAYLISTS, { replace: true });
+            // Leave the page only if it shows a playlist that no longer exists
+            if (items.some((playlist) => playlist.id === playlistId)) {
+                navigate(AppRoute.PLAYLISTS, { replace: true });
+            }
             toast.success({
                 message: t('action.deletePlaylist'),
             });
@@ -48,7 +52,7 @@ export const DeletePlaylistAction = ({ disabled, items }: DeletePlaylistActionPr
         }
 
         closeAllModals();
-    }, [deletePlaylistMutation, items, navigate, serverId, t]);
+    }, [deletePlaylistMutation, items, navigate, playlistId, serverId, t]);
 
     const openDeletePlaylistModal = useCallback(() => {
         if (items.length === 0) return;

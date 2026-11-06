@@ -243,6 +243,9 @@ export const AddToPlaylistAction = ({ items, itemType }: AddToPlaylistActionProp
                             );
                         },
                         queryKey,
+                        // Never trust a cached id list: nothing invalidates it
+                        // after songs are added to / removed from the playlist.
+                        staleTime: 0,
                     });
 
                     const uniqueSongIds: string[] = [];
@@ -263,39 +266,24 @@ export const AddToPlaylistAction = ({ items, itemType }: AddToPlaylistActionProp
                     return;
                 }
 
-                addToPlaylistMutation.mutate(
-                    {
-                        apiClientProps: { serverId },
-                        body: {
-                            songId: songsToAdd,
-                        },
-                        query: {
-                            id: playlistId,
-                        },
+                // The menu (and this component's mutation observer) unmounts
+                // as soon as the item is selected, so per-call mutate()
+                // callbacks would never fire; await the promise instead.
+                await addToPlaylistMutation.mutateAsync({
+                    apiClientProps: { serverId },
+                    body: {
+                        songId: songsToAdd,
                     },
-                    {
-                        onError: (err) => {
-                            toast.error({
-                                message: err.message,
-                                title: t('error.genericError'),
-                            });
-                        },
-                        // Move the success toast into onSuccess. The previous
-                        // version fired the success toast synchronously after
-                        // .mutate(), so the user saw "Added N tracks" even
-                        // when the request later failed — quickly followed by
-                        // a separate error toast. Now success and error are
-                        // mutually exclusive and accurate.
-                        onSuccess: () => {
-                            toast.success({
-                                message: t('form.addToPlaylist.success', {
-                                    message: songsToAdd.length,
-                                    numOfPlaylists: 1,
-                                }),
-                            });
-                        },
+                    query: {
+                        id: playlistId,
                     },
-                );
+                });
+                toast.success({
+                    message: t('form.addToPlaylist.success', {
+                        message: songsToAdd.length,
+                        numOfPlaylists: 1,
+                    }),
+                });
             } catch (error) {
                 toast.error({
                     message: (error as Error).message,

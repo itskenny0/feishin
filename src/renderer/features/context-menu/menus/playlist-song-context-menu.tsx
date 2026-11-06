@@ -24,10 +24,7 @@ interface PlaylistSongContextMenuProps {
 }
 
 export const PlaylistSongContextMenu = ({ items, type }: PlaylistSongContextMenuProps) => {
-    const { ids } = useMemo(() => {
-        const ids = items.map((item) => item.id);
-        return { ids };
-    }, [items]);
+    const ids = useMemo(() => items.map((item) => item.id), [items]);
 
     return (
         <MenuContent bottomStickyContent={<ContextMenuPreview items={items} itemType={type} />}>
@@ -38,8 +35,10 @@ export const PlaylistSongContextMenu = ({ items, type }: PlaylistSongContextMenu
             <ContextMenu.Divider />
             <AddToPlaylistAction items={ids} itemType={type} />
             <ContextMenu.Divider />
-            <SetFavoriteAction ids={ids} itemType={type} />
-            <SetRatingAction ids={ids} itemType={type} />
+            {/* Songs, not PLAYLIST_SONG: the player queue and remote only follow SONG
+                favorite / rating events (same mapping as the inline row controls). */}
+            <SetFavoriteAction ids={ids} itemType={LibraryItem.SONG} />
+            <SetRatingAction ids={ids} itemType={LibraryItem.SONG} />
             <ContextMenu.Divider />
             <OfflineDownloadAction items={items} itemType={type} />
             <DownloadAction ids={ids} />

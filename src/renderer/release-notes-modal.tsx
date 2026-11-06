@@ -2,7 +2,7 @@ import { closeAllModals, openModal } from '@mantine/modals';
 import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
 import DOMPurify from 'dompurify';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import packageJson from '../../package.json';
@@ -26,19 +26,35 @@ import { Select } from '/@/shared/components/select/select';
 import { Spinner } from '/@/shared/components/spinner/spinner';
 import { Stack } from '/@/shared/components/stack/stack';
 import { Text } from '/@/shared/components/text/text';
-import { useLocalStorage } from '/@/shared/hooks/use-local-storage';
 
 interface ReleaseNotesContentProps {
     onDismiss: () => void;
     version: string;
 }
 
-const ReleaseNotesContent = ({ onDismiss, version }: ReleaseNotesContentProps) => {
+const dotsToDashes = (version: string) => version.replace(/\./g, '-');
+
+// Release builds stamp package.json with the tag's dots turned into dashes
+// (v1.17.0-itskenny0-2026.11.06-0215 -> 1.17.0-itskenny0-2026-11-06-0215, see
+// release-fork.yml), so map the installed version back to its real tag version.
+export const resolveReleaseVersion = (version: string, releases: GitHubRelease[]): string => {
+    const match = releases
+        .map((r) => parseVersionFromTag(r.tag_name))
+        .find((v) => dotsToDashes(v) === dotsToDashes(version));
+    return match ?? version;
+};
+
+const ReleaseNotesContent = ({
+    onDismiss,
+    version: installedVersion,
+}: ReleaseNotesContentProps) => {
     const { t } = useTranslation();
-    const [selectedVersion, setSelectedVersion] = useState(version);
+    const [selectedVersion, setSelectedVersion] = useState<null | string>(null);
 
     // Fetch list of recent releases for the selector
-    const { data: releasesList = [] } = useGithubReleasesList();
+    const { data: releasesList = [], isPending: isListPending } = useGithubReleasesList();
+    const version = resolveReleaseVersion(installedVersion, releasesList);
+    const activeVersion = selectedVersion ?? version;
 
     const releaseOptions = useMemo(() => {
         const options = releasesList.slice(0, RELEASES_TO_FETCH).map((r) => {
@@ -62,13 +78,15 @@ const ReleaseNotesContent = ({ onDismiss, version }: ReleaseNotesContentProps) =
         isError,
         isLoading,
     } = useQuery({
+        // Wait for the list so the installed version resolves to its real tag
+        enabled: !isListPending,
         queryFn: async () => {
             const response = await axios.get<GitHubRelease>(
-                `${GITHUB_RELEASES_URL}/tags/${toTag(selectedVersion)}`,
+                `${GITHUB_RELEASES_URL}/tags/${toTag(activeVersion)}`,
             );
             return response.data;
         },
-        queryKey: ['github-release', selectedVersion],
+        queryKey: ['github-release', activeVersion],
         retry: 2,
     });
 
@@ -123,7 +141,7 @@ const ReleaseNotesContent = ({ onDismiss, version }: ReleaseNotesContentProps) =
         });
     }, [htmlContent]);
 
-    const isLoadingState = isLoading || isConverting;
+    const isLoadingState = isListPending || isLoading || isConverting;
     const isErrorState = isError || !releaseData;
 
     if (isLoadingState) {
@@ -141,14 +159,14 @@ const ReleaseNotesContent = ({ onDismiss, version }: ReleaseNotesContentProps) =
                     <Select
                         data={releaseOptions}
                         onChange={(v) => v && setSelectedVersion(v)}
-                        value={selectedVersion}
+                        value={activeVersion}
                     />
                 )}
                 <Text size="sm">{t('error.genericError')}</Text>
                 <Group justify="flex-end">
                     <Button
                         component="a"
-                        href={`https://github.com/${GITHUB_REPO}/releases/tag/${toTag(selectedVersion)}`}
+                        href={`https://github.com/${GITHUB_REPO}/releases/tag/${toTag(activeVersion)}`}
                         onClick={onDismiss}
                         rightSection={<Icon icon="externalLink" />}
                         target="_blank"
@@ -170,7 +188,7 @@ const ReleaseNotesContent = ({ onDismiss, version }: ReleaseNotesContentProps) =
                 <Select
                     data={releaseOptions}
                     onChange={(v) => v && setSelectedVersion(v)}
-                    value={selectedVersion}
+                    value={activeVersion}
                 />
             )}
             <ScrollArea
@@ -188,7 +206,7 @@ const ReleaseNotesContent = ({ onDismiss, version }: ReleaseNotesContentProps) =
             <Group justify="flex-end">
                 <Button
                     component="a"
-                    href={`https://github.com/${GITHUB_REPO}/releases/tag/${toTag(selectedVersion)}`}
+                    href={`https://github.com/${GITHUB_REPO}/releases/tag/${toTag(activeVersion)}`}
                     onClick={onDismiss}
                     rightSection={<Icon icon="externalLink" />}
                     target="_blank"
@@ -204,45 +222,14 @@ const ReleaseNotesContent = ({ onDismiss, version }: ReleaseNotesContentProps) =
     );
 };
 
-interface ReleaseNotesModalContentWrapperProps {
-    setDismissRef?: (fn: (() => void) | undefined) => void;
-}
-
-const ReleaseNotesModalContentWrapper = ({
-    setDismissRef,
-}: ReleaseNotesModalContentWrapperProps) => {
-    const { version } = packageJson;
-    const [, setValue] = useLocalStorage({ key: 'version' });
-
-    const handleDismiss = useCallback(() => {
-        setValue(version);
-        closeAllModals();
-    }, [setValue, version]);
-
-    useEffect(() => {
-        setDismissRef?.(handleDismiss);
-        return () => setDismissRef?.(undefined);
-    }, [handleDismiss, setDismissRef]);
-
-    return <ReleaseNotesContent onDismiss={handleDismiss} version={version} />;
-};
-
-export const openReleaseNotesModal = (title: string) => {
-    const dismissRef = { current: null as (() => void) | null };
-
+export const openReleaseNotesModal = (title: string) =>
     openModal({
         children: (
-            <ReleaseNotesModalContentWrapper
-                setDismissRef={(fn) => {
-                    dismissRef.current = fn ?? null;
-                }}
-            />
+            <ReleaseNotesContent onDismiss={() => closeAllModals()} version={packageJson.version} />
         ),
-        onClose: () => dismissRef.current?.(),
         size: 'xl',
         title,
     });
-};
 
 // The auto-on-update <ReleaseNotesModal /> component used to live here and
 // pop up automatically whenever the installed version differed from the

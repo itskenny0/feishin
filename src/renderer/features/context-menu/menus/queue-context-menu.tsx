@@ -24,10 +24,7 @@ interface QueueContextMenuProps {
 }
 
 export const QueueContextMenu = ({ items }: QueueContextMenuProps) => {
-    const { ids } = useMemo(() => {
-        const ids = items.map((item) => item.id);
-        return { ids };
-    }, [items]);
+    const ids = useMemo(() => items.map((item) => item.id), [items]);
 
     return (
         <MenuContent

@@ -180,14 +180,10 @@ export const remapPlaylistFolderPath = (
         return `${targetFolderPath}${separator}${remainder}`;
     }
 
-    if (sourceFolderPath.startsWith(`${targetFolderPath}${separator}`)) {
-        // Higher ancestor: move the folder as a unit (Pop/Rock/Classic/x -> Pop/Classic/x).
-        const folderName = getFolderName(sourceFolderPath, separator);
-        return `${targetFolderPath}${separator}${folderName}${separator}${remainder}`;
-    }
-
-    // Unrelated target: nest the full source folder path (Classic/x -> Rock/Classic/x).
-    return `${targetFolderPath}${separator}${sourceFolderPath}${separator}${remainder}`;
+    // Any other target (ancestor, sibling or unrelated folder): move the folder as a unit
+    // by its own name (Pop/Rock/Classic/x -> Pop/Classic/x, Rock/Classic/x -> Pop/Classic/x).
+    const folderName = getFolderName(sourceFolderPath, separator);
+    return `${targetFolderPath}${separator}${folderName}${separator}${remainder}`;
 };
 
 export const remapPlaylistToRoot = (playlistName: string, separator: string): string => {
@@ -880,6 +876,7 @@ export const PlaylistFolderTree = ({
     onReorder,
     onToggleFolder,
 }: PlaylistFolderTreeProps) => {
+    const separator = useSidebarPlaylistFolderSeparator();
     return (
         <>
             {groups.map((group) => {
@@ -913,7 +910,7 @@ export const PlaylistFolderTree = ({
                                 <PlaylistRowButton
                                     item={item}
                                     key={item.id}
-                                    name={item.name.slice(group.name.length + 1)}
+                                    name={item.name.slice(group.name.length + separator.length)}
                                     onContextMenu={onContextMenu}
                                     onReorder={onReorder}
                                     to={item.id}

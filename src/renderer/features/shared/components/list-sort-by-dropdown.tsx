@@ -22,11 +22,8 @@ import { ItemListKey } from '/@/shared/types/types';
 interface ListSortByDropdownProps {
     defaultSortByValue: string;
     disabled?: boolean;
-    includeId?: boolean;
     itemType: LibraryItem;
     listKey: ItemListKey;
-    onChange?: (value: string) => void;
-    target?: React.ReactNode;
 }
 
 export const ListSortByDropdown = ({
@@ -34,8 +31,6 @@ export const ListSortByDropdown = ({
     disabled,
     itemType,
     listKey,
-    onChange,
-    target,
 }: ListSortByDropdownProps) => {
     const server = useCurrentServer();
 
@@ -44,28 +39,19 @@ export const ListSortByDropdown = ({
     const sortByLabel =
         (itemType && FILTERS[itemType][server.type].find((f) => f.value === sortBy)?.name) || '—';
 
-    const handleSortByChange = (sortBy: string) => {
-        setSortBy(sortBy);
-        onChange?.(sortBy);
-    };
-
     return (
         <DropdownMenu disabled={disabled} position="bottom-start">
             <DropdownMenu.Target>
-                {target ? (
-                    target
-                ) : (
-                    <Button disabled={disabled} variant="subtle">
-                        {sortByLabel}
-                    </Button>
-                )}
+                <Button disabled={disabled} variant="subtle">
+                    {sortByLabel}
+                </Button>
             </DropdownMenu.Target>
             <DropdownMenu.Dropdown>
                 {FILTERS[itemType][server.type].map((f) => (
                     <DropdownMenu.Item
                         isSelected={f.value === sortBy}
                         key={`filter-${f.name}`}
-                        onClick={() => handleSortByChange(f.value)}
+                        onClick={() => setSortBy(f.value)}
                         value={f.value}
                     >
                         {f.name}
@@ -82,7 +68,6 @@ interface ListSortByDropdownControlledProps {
     itemType: LibraryItem;
     setSortBy: Dispatch<SetStateAction<string>>;
     sortBy: string;
-    target?: React.ReactNode;
 }
 
 export const ListSortByDropdownControlled = ({
@@ -91,7 +76,6 @@ export const ListSortByDropdownControlled = ({
     itemType,
     setSortBy,
     sortBy,
-    target,
 }: ListSortByDropdownControlledProps) => {
     const server = useCurrentServer();
 
@@ -99,27 +83,19 @@ export const ListSortByDropdownControlled = ({
 
     const sortByLabel = availableFilters.find((f) => f.value === sortBy)?.name || '—';
 
-    const handleSortByChange = (sortBy: string) => {
-        setSortBy(sortBy);
-    };
-
     return (
         <DropdownMenu disabled={disabled} position="bottom-start">
             <DropdownMenu.Target>
-                {target ? (
-                    target
-                ) : (
-                    <Button disabled={disabled} variant="subtle">
-                        {sortByLabel}
-                    </Button>
-                )}
+                <Button disabled={disabled} variant="subtle">
+                    {sortByLabel}
+                </Button>
             </DropdownMenu.Target>
             <DropdownMenu.Dropdown>
                 {availableFilters.map((f) => (
                     <DropdownMenu.Item
                         isSelected={f.value === sortBy}
                         key={`filter-${f.name}`}
-                        onClick={() => handleSortByChange(f.value)}
+                        onClick={() => setSortBy(f.value)}
                         value={f.value}
                     >
                         {f.name}

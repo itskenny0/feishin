@@ -7,81 +7,89 @@ import { queryKeys } from '/@/renderer/api/query-keys';
 import { enqueueMutation } from '/@/renderer/cache';
 import { eventEmitter } from '/@/renderer/events/event-emitter';
 import {
-    applyFavoriteOptimisticUpdates,
+    applyItemOptimisticUpdates,
     PreviousQueryData,
-    restoreFavoriteQueryData,
-} from '/@/renderer/features/shared/mutations/favorite-optimistic-updates';
+    restoreQueryData,
+} from '/@/renderer/features/shared/mutations/item-optimistic-updates';
 import { MutationHookArgs } from '/@/renderer/lib/react-query';
 import { toast } from '/@/shared/components/toast/toast';
 import { FavoriteArgs, FavoriteResponse, LibraryItem } from '/@/shared/types/domain-types';
 
 const remote = isElectron() ? window.api.remote : null;
 
-const createFavoriteMutationKey = ['set-favorite', true];
+const SONG_ITEM_TYPES = new Set([
+    LibraryItem.PLAYLIST_SONG,
+    LibraryItem.QUEUE_SONG,
+    LibraryItem.SONG,
+]);
 
-export const useCreateFavorite = (args: MutationHookArgs) => {
+export const favoriteMutationKey = (isFavorite: boolean) => ['set-favorite', isFavorite];
+
+const emitFavorite = (variables: FavoriteArgs, favorite: boolean) =>
+    eventEmitter.emit('USER_FAVORITE', {
+        favorite,
+        id: variables.query.id,
+        itemType: variables.query.type,
+        serverId: variables.apiClientProps.serverId,
+    });
+
+/** Shared implementation of the add (`isFavorite`) / remove favorite mutations. */
+export const useFavoriteMutation = (isFavorite: boolean, args: MutationHookArgs) => {
     const { options } = args || {};
     const queryClient = useQueryClient();
     const { t } = useTranslation();
 
     return useMutation<FavoriteResponse, AxiosError, FavoriteArgs, PreviousQueryData[]>({
         mutationFn: async (args) => {
-            await enqueueMutation('createFavorite', {
+            await enqueueMutation(isFavorite ? 'createFavorite' : 'deleteFavorite', {
                 ...args,
                 apiClientProps: { serverId: args.apiClientProps.serverId },
             });
             return undefined;
         },
-        mutationKey: createFavoriteMutationKey,
-        onError: (_error, variables, context) => {
+        mutationKey: favoriteMutationKey(isFavorite),
+        onError: (error, variables, context) => {
             if (context) {
-                restoreFavoriteQueryData(queryClient, context);
+                restoreQueryData(queryClient, context);
             }
 
             toast.show({
-                message: _error.message,
+                message: error.message,
                 title: t('error.genericError') as string,
                 type: 'error',
             });
 
-            eventEmitter.emit('USER_FAVORITE', {
-                favorite: false,
-                id: variables.query.id,
-                itemType: variables.query.type,
-                serverId: variables.apiClientProps.serverId,
-            });
+            emitFavorite(variables, !isFavorite);
         },
         onMutate: (variables) => {
-            eventEmitter.emit('USER_FAVORITE', {
-                favorite: true,
-                id: variables.query.id,
-                itemType: variables.query.type,
-                serverId: variables.apiClientProps.serverId,
-            });
+            // Snapshot (and patch) the query cache before announcing the
+            // change: list loaders write the event into their own queries
+            // synchronously, and a snapshot taken after that can't undo it.
+            const previous = applyItemOptimisticUpdates(
+                queryClient,
+                variables.apiClientProps.serverId,
+                variables.query.id,
+                variables.query.type,
+                { userFavorite: isFavorite },
+            );
 
-            return applyFavoriteOptimisticUpdates(queryClient, variables, true);
+            emitFavorite(variables, isFavorite);
+
+            return previous;
         },
         onSuccess: (_data, variables) => {
-            if (variables.query.type === LibraryItem.SONG) {
-                remote?.updateFavorite(true, variables.apiClientProps.serverId, variables.query.id);
-            }
-            if (
-                variables.query.type === LibraryItem.SONG ||
-                variables.query.type === LibraryItem.PLAYLIST_SONG ||
-                variables.query.type === LibraryItem.QUEUE_SONG
-            ) {
-                queryClient.invalidateQueries({
-                    queryKey: queryKeys.albumArtists.favoriteSongs(
-                        variables.apiClientProps.serverId,
-                    ),
-                });
-            }
+            const { serverId } = variables.apiClientProps;
+            if (!SONG_ITEM_TYPES.has(variables.query.type)) return;
+            remote?.updateFavorite(isFavorite, serverId, variables.query.id);
+            queryClient.invalidateQueries({
+                queryKey: queryKeys.albumArtists.favoriteSongs(serverId),
+            });
         },
         ...options,
     });
 };
 
-export const useIsMutatingCreateFavorite = () => {
-    const mutatingCount = useIsMutating({ mutationKey: createFavoriteMutationKey });
-    return mutatingCount > 0;
-};
+export const useCreateFavorite = (args: MutationHookArgs) => useFavoriteMutation(true, args);
+
+export const useIsMutatingCreateFavorite = () =>
+    useIsMutating({ mutationKey: favoriteMutationKey(true) }) > 0;

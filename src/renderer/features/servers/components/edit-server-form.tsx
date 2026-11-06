@@ -10,6 +10,7 @@ import { api } from '/@/renderer/api';
 import { useIsMobileShell } from '/@/renderer/hooks/use-breakpoint';
 import { queryClient } from '/@/renderer/lib/react-query';
 import { getServerById, useAuthStoreActions } from '/@/renderer/store';
+import { normalizeServerUrl } from '/@/renderer/utils/normalize-server-url';
 import { Checkbox } from '/@/shared/components/checkbox/checkbox';
 import { Group } from '/@/shared/components/group/group';
 import { Icon } from '/@/shared/components/icon/icon';
@@ -87,7 +88,8 @@ export const EditServerForm = ({ isUpdate, onCancel, password, server }: EditSer
             // Check if we can skip authentication
             const usernameChanged = values.username !== server.username;
             const passwordProvided = values.password && values.password.trim() !== '';
-            const urlChanged = values.url !== server.url;
+            const url = normalizeServerUrl(values.url);
+            const urlChanged = url !== server.url;
             const typeChanged = values.type !== server.type;
 
             // Skip authentication if username hasn't changed, password is empty, and URL/type haven't changed
@@ -111,7 +113,7 @@ export const EditServerForm = ({ isUpdate, onCancel, password, server }: EditSer
                     id: server.id,
                     name: values.name,
                     type: values.type,
-                    url: values.url,
+                    url,
                 };
             } else {
                 // Need to authenticate
@@ -124,7 +126,7 @@ export const EditServerForm = ({ isUpdate, onCancel, password, server }: EditSer
                 }
 
                 data = await authFunction(
-                    values.url,
+                    url,
                     {
                         legacy: values.legacyAuth,
                         password: values.password,
@@ -145,7 +147,7 @@ export const EditServerForm = ({ isUpdate, onCancel, password, server }: EditSer
                     isAdmin: data.isAdmin,
                     name: values.name,
                     type: values.type,
-                    url: values.url,
+                    url,
                     userId: data.userId,
                     username: data.username,
                 };

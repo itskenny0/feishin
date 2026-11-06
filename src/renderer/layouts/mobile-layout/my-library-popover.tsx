@@ -8,6 +8,7 @@ import styles from './my-library-popover.module.css';
 import { useOfflineSongCount } from '/@/renderer/cache';
 import { BottomSheet } from '/@/renderer/features/jellyfin-remote-target/components/bottom-sheet/bottom-sheet';
 import { SidebarIcon } from '/@/renderer/features/sidebar/components/sidebar-icon';
+import { useSidebarItemLabels } from '/@/renderer/features/sidebar/hooks/use-sidebar-item-labels';
 import { useHaptic } from '/@/renderer/hooks/use-haptic';
 import { AppRoute } from '/@/renderer/router/routes';
 import { SidebarItemType, useSidebarItems } from '/@/renderer/store/settings.store';
@@ -43,27 +44,7 @@ export const MyLibraryPopover = ({ onClose, opened }: MyLibraryPopoverProps) => 
     // "Available offline" entry below.
     const offlineSongCount = useOfflineSongCount();
 
-    // Same id → label map the sidebar uses, kept in sync with the
-    // `page.sidebar.*` keys. Memoised so the entries array below stays
-    // referentially stable across renders.
-    const translatedSidebarItemMap = useMemo(
-        () => ({
-            Albums: t('page.sidebar.albums', { defaultValue: 'Albums' }),
-            Artists: t('page.sidebar.albumArtists', { defaultValue: 'Album Artists' }),
-            'Artists-all': t('page.sidebar.artists', { defaultValue: 'Artists' }),
-            Favorites: t('page.sidebar.favorites', { defaultValue: 'Favorites' }),
-            Folders: t('page.sidebar.folders', { defaultValue: 'Folders' }),
-            Genres: t('page.sidebar.genres', { defaultValue: 'Genres' }),
-            Home: t('page.sidebar.home', { defaultValue: 'Home' }),
-            'Now Playing': t('page.sidebar.nowPlaying', { defaultValue: 'Now Playing' }),
-            Playlists: t('page.sidebar.playlists', { defaultValue: 'Playlists' }),
-            Radio: t('page.sidebar.radio', { defaultValue: 'Radio' }),
-            Search: t('page.sidebar.search', { defaultValue: 'Search' }),
-            Settings: t('page.sidebar.settings', { defaultValue: 'Settings' }),
-            Tracks: t('page.sidebar.tracks', { defaultValue: 'Songs' }),
-        }),
-        [t],
-    );
+    const labels = useSidebarItemLabels();
 
     // Library entries, mirroring the sidebar's `libraryItemsWithRoute`:
     // enabled, has a route, and not the Collections pseudo-section.
@@ -88,9 +69,7 @@ export const MyLibraryPopover = ({ onClose, opened }: MyLibraryPopoverProps) => 
             )
             .map((item) => ({
                 ...item,
-                label:
-                    translatedSidebarItemMap[item.id as keyof typeof translatedSidebarItemMap] ??
-                    item.label,
+                label: labels[item.id] ?? item.label,
             }));
 
         // Append the "Available offline" entry only when something is
@@ -106,7 +85,7 @@ export const MyLibraryPopover = ({ onClose, opened }: MyLibraryPopoverProps) => 
         }
 
         return items;
-    }, [sidebarItems, translatedSidebarItemMap, alwaysIncludeIds, offlineSongCount, t]);
+    }, [sidebarItems, labels, alwaysIncludeIds, offlineSongCount, t]);
 
     const handleSelect = useCallback(
         (route: string) => {

@@ -377,15 +377,19 @@ const LanguageEffect = () => {
     const language = useLanguage();
 
     useEffect(() => {
-        if (language) {
-            // Lazily fetch the locale chunk (no-op for English / already
-            // loaded) before switching so the bundle is registered first.
-            loadLanguage(language)
-                .then(() => {
-                    i18n.changeLanguage(language);
-                })
-                .catch((err) => console.error('[i18n] failed to switch language', err));
-        }
+        if (!language) return undefined;
+        // Switching quickly (A -> B) must not let A's slower chunk load land last.
+        let cancelled = false;
+        // Lazily fetch the locale chunk (no-op for English / already
+        // loaded) before switching so the bundle is registered first.
+        loadLanguage(language)
+            .then(() => {
+                if (!cancelled) i18n.changeLanguage(language);
+            })
+            .catch((err) => console.error('[i18n] failed to switch language', err));
+        return () => {
+            cancelled = true;
+        };
     }, [language]);
 
     return null;

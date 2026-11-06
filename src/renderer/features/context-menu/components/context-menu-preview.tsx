@@ -68,11 +68,24 @@ const getItemImage = (item: unknown): null | string => {
     return null;
 };
 
-const getItemId = (item: unknown): null | string => {
-    if (item && typeof item === 'object' && 'id' in item && typeof item.id === 'string') {
-        return item.id;
-    }
-    return null;
+const SONG_ITEM_TYPES = new Set<LibraryItem | undefined>([
+    LibraryItem.PLAYLIST_SONG,
+    LibraryItem.QUEUE_SONG,
+    LibraryItem.SONG,
+]);
+
+// Covers render from the local cache only, keyed the way the thumbnail sweep
+// stores them: songs share their album's cover (albumId ?? imageId), every
+// other entity keys on its own id.
+const getCacheItemId = (item: unknown, itemType?: LibraryItem): null | string => {
+    if (!item || typeof item !== 'object') return null;
+    const { albumId, id, imageId } = item as {
+        albumId?: null | string;
+        id?: unknown;
+        imageId?: null | string;
+    };
+    if (SONG_ITEM_TYPES.has(itemType)) return albumId ?? imageId ?? null;
+    return typeof id === 'string' ? id : null;
 };
 
 export const ContextMenuPreview = ({ items, itemType }: ContextMenuPreviewProps) => {
@@ -92,7 +105,7 @@ export const ContextMenuPreview = ({ items, itemType }: ContextMenuPreviewProps)
     const itemName = filesystemName || metadataName;
 
     const itemImage = firstItem ? getItemImage(firstItem) : null;
-    const itemId = firstItem ? getItemId(firstItem) : null;
+    const cacheItemId = getCacheItemId(firstItem, itemType);
     const isMultiple = itemCount > 1;
 
     const imageUrl = useItemImageUrl({
@@ -138,23 +151,15 @@ export const ContextMenuPreview = ({ items, itemType }: ContextMenuPreviewProps)
                                     : undefined
                             }
                         >
-                            {itemImage ? (
-                                imageUrl && itemId ? (
-                                    <CachedImage
-                                        alt={itemName}
-                                        className={styles.image}
-                                        itemId={itemId}
-                                        size={96}
-                                        src={imageUrl}
-                                        variant="itemCard"
-                                    />
-                                ) : (
-                                    <img
-                                        alt={itemName}
-                                        className={styles.image}
-                                        src={imageUrl ?? ''}
-                                    />
-                                )
+                            {itemImage && imageUrl && cacheItemId ? (
+                                <CachedImage
+                                    alt={itemName}
+                                    className={styles.image}
+                                    itemId={cacheItemId}
+                                    size={96}
+                                    src={imageUrl}
+                                    variant="itemCard"
+                                />
                             ) : null}
                             <div className={styles.imageOverlay} />
                         </div>

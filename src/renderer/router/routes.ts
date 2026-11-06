@@ -1,7 +1,6 @@
 export enum AppRoute {
     ACTION_REQUIRED = '/action-required',
     COMMAND = '/command',
-    EXPLORE = '/explore',
     FAKE_LIBRARY_ALBUM_DETAILS = '/library/albums/dummy/:albumId',
     FAVORITES = '/favorites',
     HOME = '/',
@@ -27,12 +26,10 @@ export enum AppRoute {
     LOGIN = '/login',
     NO_NETWORK = '/no-network',
     NOW_PLAYING = '/now-playing',
-    PLAYING = '/playing',
     PLAYLISTS = '/playlists',
     PLAYLISTS_DETAIL_SONGS = '/playlists/:playlistId/songs',
     RADIO = '/radio',
     SEARCH = '/search/:itemType',
     SEARCH_INDEX = '/search',
-    SERVERS = '/servers',
     SETTINGS = '/settings',
 }
