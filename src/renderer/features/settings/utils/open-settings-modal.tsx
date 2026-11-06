@@ -1,16 +1,11 @@
 import { openContextModal } from '@mantine/modals';
 
-/*
- * Mobile-shell query mirrors useIsMobileShell() in
- * /@/renderer/hooks/use-breakpoint. We can't use that hook here
- * (utility module, no React tree), so we sample window.matchMedia
- * directly at open-time. The query catches phones in either
- * orientation; tablets and desktops get the regular sized modal.
- */
-const MOBILE_SHELL_QUERY = '(max-width: 767px), (orientation: landscape) and (max-height: 480px)';
-
 import { SettingsHeader } from '/@/renderer/features/settings/components/settings-header';
+import { MOBILE_SHELL_QUERY } from '/@/renderer/hooks/use-breakpoint';
 
+// Utility module (no React tree), so sample the same query useIsMobileShell()
+// uses directly at open-time: phones in either orientation get a fullscreen
+// sheet, tablets and desktops the regular sized modal.
 export const openSettingsModal = () => {
     const isMobile =
         typeof window !== 'undefined' && window.matchMedia

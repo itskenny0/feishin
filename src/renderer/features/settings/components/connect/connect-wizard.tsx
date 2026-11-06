@@ -438,7 +438,7 @@ const StepFinish = ({
                     </Text>
                     <Text size="sm">{tierLabel}</Text>
                 </Group>
-                {brokerUrl && (
+                {tier !== 'embedded' && brokerUrl && (
                     <Group justify="space-between">
                         <Text isMuted size="sm">
                             {t('page.setting.wizardBrokerUrl', { defaultValue: 'Broker URL' })}
@@ -447,7 +447,7 @@ const StepFinish = ({
                     </Group>
                 )}
             </Stack>
-            {!finished && (
+            {!finished && tier !== 'embedded' && (
                 <Checkbox
                     checked={homeAssistant}
                     description={t('page.setting.wizardHomeAssistant', {
@@ -636,19 +636,22 @@ export const ConnectWizard = memo(() => {
                     toast.error({ message: errorMsg });
                     return;
                 }
+            } else if (peerBrokerApi && settings.broker.enabled) {
+                // Leaving the embedded tier: stop the broker we're about to
+                // mark disabled, or it keeps listening until restart.
+                void peerBrokerApi.setEnabled(null);
             }
 
             setSettings({
                 peerSync: {
-                    broker: {
-                        ...settings.broker,
-                        enabled: tier === 'embedded',
-                    },
+                    broker: { enabled: tier === 'embedded' },
                     brokerPassword: tier === 'own' ? password : '',
                     brokerUrl: tier === 'embedded' ? '' : brokerUrl.trim(),
                     brokerUsername: tier === 'own' ? username : '',
                     enabled: true,
-                    homeAssistant: { enabled: homeAssistant },
+                    // The HA bridge rides a broker URL, which the embedded
+                    // tier doesn't persist.
+                    homeAssistant: { enabled: homeAssistant && tier !== 'embedded' },
                     jellyfinRemoteEnabled: true,
                     onboarded: true,
                     peerId,

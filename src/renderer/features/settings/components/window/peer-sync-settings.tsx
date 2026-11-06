@@ -102,7 +102,7 @@ export const PeerSyncSettings = memo(() => {
     // user's own devices authenticate to each other's broker.
     const ensureIdentity = useCallback(() => {
         if (settings.peerId) return;
-        setSettings({ peerSync: { peerId: settings.peerId || nanoid() } });
+        setSettings({ peerSync: { peerId: nanoid() } });
     }, [settings.peerId, setSettings]);
 
     const handleEnable = useCallback(

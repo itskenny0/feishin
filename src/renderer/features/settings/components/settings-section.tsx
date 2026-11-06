@@ -34,14 +34,6 @@ export const SettingsSection = ({ extra, options, title }: SettingsSectionProps)
     const hasKeyword = keyword !== '';
     const isMobileShell = useIsMobileShell();
 
-    /*
-     * Sections used to collapse-by-default on mobile to fit a long
-     * scroll of many sections per category. Settings is now Android-
-     * style drill-down (settings-layout.tsx) — each section lives on
-     * its own subpage — so a collapsible inside the subpage would
-     * just add an extra tap for no organisational benefit. Render the
-     * title inline and let the options follow.
-     */
     const values = options.filter((o) => {
         if (o.isHidden) return false;
         if (hasKeyword && o.isSubheader) return false;
@@ -49,19 +41,19 @@ export const SettingsSection = ({ extra, options, title }: SettingsSectionProps)
         return true;
     });
 
-    if (hasKeyword && values.length === 0) {
+    // `extra` filters itself by the same keyword (hotkey table, draggable
+    // configs), so only drop the section when there is no extra to show.
+    if (hasKeyword && values.length === 0 && !extra) {
         return null;
     }
 
-    const titleNode = title ? (
-        <TextTitle fw={600} order={4}>
-            {title}
-        </TextTitle>
-    ) : null;
-
     return (
         <>
-            {titleNode}
+            {title && (
+                <TextTitle fw={600} order={4}>
+                    {title}
+                </TextTitle>
+            )}
             {/*
              * Mobile keeps a small horizontal gutter ('sm') instead of going
              * edge-flush (px=0) so labels and descriptions don't run into the

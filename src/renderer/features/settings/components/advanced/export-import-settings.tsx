@@ -1,4 +1,4 @@
-import { closeAllModals, openModal } from '@mantine/modals';
+import { openModal } from '@mantine/modals';
 import { t } from 'i18next';
 import { memo, useCallback } from 'react';
 
@@ -7,14 +7,12 @@ import {
     SettingOption,
     SettingsSection,
 } from '/@/renderer/features/settings/components/settings-section';
-import { useSettingsForExport, useSettingsStoreActions } from '/@/renderer/store';
+import { openResetSettingsModal } from '/@/renderer/features/settings/utils/open-reset-settings-modal';
+import { useSettingsForExport } from '/@/renderer/store';
 import { Button } from '/@/shared/components/button/button';
-import { ConfirmModal } from '/@/shared/components/modal/modal';
-import { Text } from '/@/shared/components/text/text';
 
 export const ExportImportSettings = memo(() => {
     const settingForExport = useSettingsForExport();
-    const { reset } = useSettingsStoreActions();
 
     const onExportSettings = useCallback(() => {
         const settingsFile = new File([JSON.stringify(settingForExport)], 'feishin-settings.json', {
@@ -38,22 +36,6 @@ export const ExportImportSettings = memo(() => {
         });
     };
 
-    const handleResetToDefault = () => {
-        reset();
-        closeAllModals();
-    };
-
-    const openResetConfirmModal = () => {
-        openModal({
-            children: (
-                <ConfirmModal onConfirm={handleResetToDefault}>
-                    <Text>{t('common.areYouSure')}</Text>
-                </ConfirmModal>
-            ),
-            title: t('common.resetToDefault'),
-        });
-    };
-
     const options: SettingOption[] = [
         {
             control: (
@@ -71,7 +53,7 @@ export const ExportImportSettings = memo(() => {
         },
         {
             control: (
-                <Button onClick={openResetConfirmModal} size="compact-sm" variant="default">
+                <Button onClick={openResetSettingsModal} size="compact-sm" variant="default">
                     {t('common.resetToDefault')}
                 </Button>
             ),

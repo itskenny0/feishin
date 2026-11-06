@@ -107,6 +107,19 @@ describe('SettingsLayout category structure', () => {
         }
     });
 
+    it('exposes the equalizer / compressor page under Playback', () => {
+        expect(SETTINGS_SUBPAGES.playback.map((s) => s.id)).toContain('equalizer');
+    });
+
+    it('hides Electron-only subpages that would render empty elsewhere', () => {
+        // jsdom is not Electron: the update toggle and the media-session
+        // switch both hide themselves there, so their subpages must too.
+        const find = (category: string, id: string) =>
+            SETTINGS_SUBPAGES[category].find((s) => s.id === id)!;
+        expect(find('advanced', 'updates').visible?.(null)).toBe(false);
+        expect(find('hotkeys', 'media-session').visible?.(null)).toBe(false);
+    });
+
     it('search finds a subpage that moved categories (Scrobbling → Library)', () => {
         renderLayout();
 

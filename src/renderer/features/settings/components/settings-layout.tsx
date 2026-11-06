@@ -1,6 +1,5 @@
 import type { TFunction } from 'i18next';
 
-import { Capacitor } from '@capacitor/core';
 import clsx from 'clsx';
 import isElectron from 'is-electron';
 import { ReactNode, Suspense, useCallback, useLayoutEffect, useMemo, useState } from 'react';
@@ -21,7 +20,7 @@ import {
 
 import styles from './settings-layout.module.css';
 
-import { SETTINGS_SUBPAGES, SubpageDef } from '/@/renderer/features/settings/subpages';
+import { isTouchOnly, SETTINGS_SUBPAGES, SubpageDef } from '/@/renderer/features/settings/subpages';
 import { useIsMobileShell } from '/@/renderer/hooks/use-breakpoint';
 import { useCurrentServer } from '/@/renderer/store/auth.store';
 import {
@@ -30,20 +29,6 @@ import {
     useSettingsStoreActions,
 } from '/@/renderer/store/settings.store';
 import { Spinner } from '/@/shared/components/spinner/spinner';
-
-/*
- * "Is this a touch-first, no-keyboard device" detector. We can't use
- * the React `useIsTouch` hook in the CATEGORIES array because that
- * lives at module scope. matchMedia is synchronous + cheap, so we
- * sample it once per render where needed (inside the visible() lambdas).
- */
-const isTouchOnlyDevice = () => {
-    if (typeof window === 'undefined') return false;
-    if (Capacitor.getPlatform() === 'android' || Capacitor.getPlatform() === 'ios') {
-        return true;
-    }
-    return window.matchMedia('(pointer: coarse)').matches;
-};
 
 interface CategoryDef {
     description: (t: TFunction) => string;
@@ -118,7 +103,7 @@ const CATEGORIES: CategoryDef[] = [
         Icon: RiKeyboardLine,
         id: 'hotkeys',
         label: (t) => t('page.setting.hotkeysTab'),
-        visible: () => !isTouchOnlyDevice(),
+        visible: () => !isTouchOnly(),
     },
     {
         description: (t) =>
@@ -173,7 +158,8 @@ export const SettingsLayout = () => {
     const server = useCurrentServer();
     const [query, setQuery] = useState('');
 
-    const visibleCategories = CATEGORIES.filter((c) => c.visible());
+    // Host capabilities don't change mid-session, so filter once per mount.
+    const visibleCategories = useMemo(() => CATEGORIES.filter((c) => c.visible()), []);
     // All visible subpages in the current category, including drill-down
     // children (used for resolving the selected subpage + its parent).
     // Memoized so callbacks that close over it satisfy the React Compiler's
@@ -247,10 +233,7 @@ export const SettingsLayout = () => {
             }
         }
         return hits;
-        // visibleCategories is derived from a module constant + visible();
-        // its identity churns per render but its contents are stable.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [trimmedQuery, server, t]);
+    }, [trimmedQuery, server, t, visibleCategories]);
 
     const handleSelectHit = useCallback(
         (hit: SearchHit) => {

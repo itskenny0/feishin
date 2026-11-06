@@ -1,21 +1,18 @@
-import { closeAllModals, openModal } from '@mantine/modals';
 import { useTranslation } from 'react-i18next';
 
 import { PageHeader } from '/@/renderer/components/page-header/page-header';
 import { UpdateAvailableButton } from '/@/renderer/features/settings/components/update-available-button';
 import { useSettingSearchStore } from '/@/renderer/features/settings/store/search.store';
+import { openResetSettingsModal } from '/@/renderer/features/settings/utils/open-reset-settings-modal';
 import { LibraryHeaderBar } from '/@/renderer/features/shared/components/library-header-bar';
 import { SearchInput } from '/@/renderer/features/shared/components/search-input';
 import { useIsMobileShell, useIsTouch } from '/@/renderer/hooks/use-breakpoint';
 import { useMobileDrawer } from '/@/renderer/store';
-import { useSettingsStoreActions } from '/@/renderer/store/settings.store';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Button } from '/@/shared/components/button/button';
 import { Flex } from '/@/shared/components/flex/flex';
 import { Group } from '/@/shared/components/group/group';
 import { Icon } from '/@/shared/components/icon/icon';
-import { ConfirmModal } from '/@/shared/components/modal/modal';
-import { Text } from '/@/shared/components/text/text';
 
 export type SettingsHeaderProps = {
     showUpdateAvailable?: boolean;
@@ -23,7 +20,6 @@ export type SettingsHeaderProps = {
 
 export const SettingsHeader = ({ showUpdateAvailable }: SettingsHeaderProps) => {
     const { t } = useTranslation();
-    const { reset } = useSettingsStoreActions();
     const { search, setSearch } = useSettingSearchStore();
     /*
      * Touch devices: skip the search input's autofocus. Auto-focus
@@ -38,33 +34,10 @@ export const SettingsHeader = ({ showUpdateAvailable }: SettingsHeaderProps) => 
     const isMobileShell = useIsMobileShell();
     const { open: openDrawer } = useMobileDrawer();
 
-    const handleResetToDefault = () => {
-        reset();
-        closeAllModals();
-    };
-
-    const openResetConfirmModal = () => {
-        openModal({
-            children: (
-                <ConfirmModal onConfirm={handleResetToDefault}>
-                    <Text>{t('common.areYouSure')}</Text>
-                </ConfirmModal>
-            ),
-            title: t('common.resetToDefault'),
-        });
-    };
-
     /*
-     * Mobile shell rendering: the title + search + reset button were
-     * laid out as a single Flex row that overflowed the viewport on
-     * phones — the SearchInput floated off into the right margin and
-     * the "Reset to default" button wrapped onto a second visual line
-     * that the user couldn't reach. On mobile the search and reset
-     * are reachable from the drill-down section UI (Search affordance
-     * is inside each section via the existing collapsible search
-     * filter; Reset is a footer button at the very end of the General
-     * tab), so dropping them from the header cleans up the layout
-     * dramatically.
+     * Mobile shell: the title + search + reset row overflowed the viewport
+     * on phones. Search lives in the category list (settings-layout) and
+     * Reset under Advanced > Backup, so the header drops both there.
      */
     if (isMobileShell) {
         return (
@@ -108,7 +81,7 @@ export const SettingsHeader = ({ showUpdateAvailable }: SettingsHeaderProps) => 
                             defaultValue={search}
                             onChange={(event) => setSearch(event.target.value.toLocaleLowerCase())}
                         />
-                        <Button onClick={openResetConfirmModal} variant="default">
+                        <Button onClick={openResetSettingsModal} variant="default">
                             {t('common.resetToDefault')}
                         </Button>
                     </Group>

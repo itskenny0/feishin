@@ -103,13 +103,10 @@ export const DraggableItems = <K extends string, T extends SortableItem<K>>({
         context: 'description',
     });
 
-    const shouldShow = useMemo(() => {
-        return (
-            keyword === '' ||
-            title.toLocaleLowerCase().includes(keyword) ||
-            description.toLocaleLowerCase().includes(keyword)
-        );
-    }, [description, keyword, title]);
+    const shouldShow =
+        keyword === '' ||
+        titleText.toLocaleLowerCase().includes(keyword) ||
+        descriptionText.toLocaleLowerCase().includes(keyword);
 
     const orderedItems = useMemo(() => {
         if (!nonReorderableItemIds?.length) {

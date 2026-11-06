@@ -44,34 +44,41 @@ export const SettingsOptions = memo(
                 </Group>
             );
         }
+
+        const label = (
+            <>
+                <Text isNoSelect size="md">
+                    {title}
+                </Text>
+                {note && (
+                    <Tooltip label={note} openDelay={400}>
+                        <Icon icon="info" />
+                    </Tooltip>
+                )}
+            </>
+        );
+        const descriptionNode =
+            showDescription &&
+            (React.isValidElement(description) ? (
+                description
+            ) : (
+                <Text isMuted isNoSelect size="sm">
+                    {description}
+                </Text>
+            ));
+
         // Mobile shell stacks label-above-control because the side-by-side
         // layout cramps both columns into uncomfortably narrow widths on a
-        // 360px phone. Desktop keeps the existing label-left / control-
-        // right pair for fast scanning.
+        // 360px phone. Desktop keeps the label-left / control-right pair for
+        // fast scanning. Mobile gap 'sm' (12px) keeps the muted description
+        // from crowding the title and control.
         if (isMobileShell) {
             return (
-                // gap 'sm' (12px) on mobile gives the stacked label /
-                // description / control rows breathing room — at 'xs' (8px)
-                // the muted description crowded the title and control.
                 <Stack className={indent ? styles.rowIndented : styles.row} gap="sm">
                     <Group gap="xs" wrap="nowrap">
-                        <Text isNoSelect size="md">
-                            {title}
-                        </Text>
-                        {note && (
-                            <Tooltip label={note} openDelay={400}>
-                                <Icon icon="info" />
-                            </Tooltip>
-                        )}
+                        {label}
                     </Group>
-                    {showDescription &&
-                        (React.isValidElement(description) ? (
-                            description
-                        ) : (
-                            <Text isMuted isNoSelect size="sm">
-                                {description}
-                            </Text>
-                        ))}
+                    {descriptionNode}
                     <Group className={styles.mobileControl} justify="flex-start" w="100%">
                         {control}
                     </Group>
@@ -80,35 +87,17 @@ export const SettingsOptions = memo(
         }
 
         return (
-            <>
-                <Group
-                    className={indent ? styles.rowIndented : styles.row}
-                    justify="space-between"
-                    wrap="nowrap"
-                >
-                    <Stack className={styles.rowLabel} gap="xs">
-                        <Group>
-                            <Text isNoSelect size="md">
-                                {title}
-                            </Text>
-                            {note && (
-                                <Tooltip label={note} openDelay={400}>
-                                    <Icon icon="info" />
-                                </Tooltip>
-                            )}
-                        </Group>
-                        {showDescription &&
-                            (React.isValidElement(description) ? (
-                                description
-                            ) : (
-                                <Text isMuted isNoSelect size="sm">
-                                    {description}
-                                </Text>
-                            ))}
-                    </Stack>
-                    <Group justify="flex-end">{control}</Group>
-                </Group>
-            </>
+            <Group
+                className={indent ? styles.rowIndented : styles.row}
+                justify="space-between"
+                wrap="nowrap"
+            >
+                <Stack className={styles.rowLabel} gap="xs">
+                    <Group>{label}</Group>
+                    {descriptionNode}
+                </Stack>
+                <Group justify="flex-end">{control}</Group>
+            </Group>
         );
     },
 );

@@ -142,18 +142,19 @@ export const ScrobbleSettings = memo(() => {
             control: (
                 <Switch
                     aria-label="Toggle notify"
-                    defaultChecked={settings.scrobble.notify}
+                    checked={settings.scrobble.notify}
                     onChange={async (e) => {
-                        if (Notification.permission === 'denied') {
-                            toast.error({
-                                message: t('error.notificationDenied'),
-                            });
-                            return;
-                        }
+                        // Read before awaiting: React nulls currentTarget once
+                        // the handler yields.
+                        const notify = e.currentTarget.checked;
 
-                        if (Notification.permission !== 'granted') {
-                            const permissions = await Notification.requestPermission();
-                            if (permissions !== 'granted') {
+                        // Permission only gates turning notifications on.
+                        if (notify && Notification.permission !== 'granted') {
+                            const permission =
+                                Notification.permission === 'denied'
+                                    ? 'denied'
+                                    : await Notification.requestPermission();
+                            if (permission !== 'granted') {
                                 toast.error({
                                     message: t('error.notificationDenied'),
                                 });
@@ -161,13 +162,7 @@ export const ScrobbleSettings = memo(() => {
                             }
                         }
 
-                        setSettings({
-                            playback: {
-                                scrobble: {
-                                    notify: e.currentTarget.checked,
-                                },
-                            },
-                        });
+                        setSettings({ playback: { scrobble: { notify } } });
                     }}
                 />
             ),

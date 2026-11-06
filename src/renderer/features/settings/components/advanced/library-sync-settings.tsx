@@ -359,52 +359,33 @@ export const LibrarySyncSettings = () => {
         }
     }, []);
 
-    const handleSyncNow = useCallback(
-        (server: ServerListItem) => {
-            try {
-                console.info('[cache] dashboard: hydrate(full) requested');
-                void hydrate(server, 'full');
-            } catch (err) {
-                console.warn('[cache] dashboard: hydrate failed', { err });
-                toast.error({ message: (err as Error).message ?? String(err) });
-            }
-        },
-        // no deps — server arg passed in
-        [],
-    );
-
-    const handlePause = useCallback(() => {
-        try {
-            console.info('[cache] dashboard: pause requested');
-            cancelHydration();
-        } catch (err) {
-            console.warn('[cache] dashboard: pause failed', { err });
-            toast.error({ message: (err as Error).message ?? String(err) });
-        }
+    // hydrate() swallows its own failures (callers fire-and-forget it), so
+    // these need no try/catch.
+    const handleSyncNow = useCallback((server: ServerListItem) => {
+        console.info('[cache] dashboard: hydrate(full) requested');
+        void hydrate(server, 'full');
     }, []);
 
-    const resetEntityCountsForClear = useCallback(() => {
+    const handlePause = useCallback(() => {
+        console.info('[cache] dashboard: pause requested');
+        cancelHydration();
+    }, []);
+
+    const resetAfterClear = useCallback(() => {
         // clearAllCacheData() empties Dexie but doesn't touch the
         // in-memory cache store. Without this reset the dashboard
         // keeps showing the pre-clear counts (and the sweep prefetch
         // log misleads about what's actually in the table). Wipe both
         // counts and hydration states so the new hydration writes
         // clean numbers as it progresses.
-        const entities = [
-            'albums',
-            'artists',
-            'favorites',
-            'genres',
-            'lyrics',
-            'playlists',
-            'songs',
-            'thumbnails',
-        ] as const;
-        for (const e of entities) {
+        for (const e of Object.keys(ENTITY_LABEL_KEYS) as EntityType[]) {
             cacheActions.setEntityCount(e, 0);
             cacheActions.setHydrationState(e, 'none');
         }
         cacheActions.setBytesUsed(0);
+        setThumbnailCount(0);
+        setThumbnailBytes(0);
+        setSyncMeta({});
     }, [cacheActions]);
 
     // Default Re-sync — keeps existing rows and uses delta-sync mode
@@ -418,24 +399,16 @@ export const LibrarySyncSettings = () => {
                 confirmLabel: t('common.confirm', { defaultValue: 'Confirm' }),
                 message: t('page.setting.librarySyncDashboard.confirmResync'),
                 onConfirm: () => {
-                    void (async () => {
-                        try {
-                            console.info('[cache] dashboard: re-sync confirmed (delta-eligible)');
-                            void hydrate(server, 'full');
-                            await refreshBytesUsed();
-                        } catch (err) {
-                            console.warn('[cache] dashboard: re-sync failed', { err });
-                            toast.error({ message: (err as Error).message ?? String(err) });
-                        }
-                    })();
+                    console.info('[cache] dashboard: re-sync confirmed (delta-eligible)');
+                    void hydrate(server, 'full');
+                    void refreshBytesUsed();
                 },
                 title: t('page.setting.librarySyncDashboard.resync', {
                     defaultValue: 'Re-sync library',
                 }),
             });
         },
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        [refreshBytesUsed],
+        [refreshBytesUsed, t],
     );
 
     // Force full re-sync — clears the local cache first so the next
@@ -458,10 +431,7 @@ export const LibrarySyncSettings = () => {
                         try {
                             console.info('[cache] dashboard: force-full re-sync confirmed');
                             await clearAllCacheData();
-                            resetEntityCountsForClear();
-                            setThumbnailCount(0);
-                            setThumbnailBytes(0);
-                            setSyncMeta({});
+                            resetAfterClear();
                             void hydrate(server, 'full');
                             await refreshBytesUsed();
                         } catch (err) {
@@ -475,8 +445,7 @@ export const LibrarySyncSettings = () => {
                 }),
             });
         },
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        [refreshBytesUsed, resetEntityCountsForClear],
+        [refreshBytesUsed, resetAfterClear, t],
     );
 
     const handleClearThumbnails = useCallback(async () => {
@@ -507,10 +476,7 @@ export const LibrarySyncSettings = () => {
                     try {
                         console.info('[cache] dashboard: clear all confirmed');
                         await clearAllCacheData();
-                        resetEntityCountsForClear();
-                        setThumbnailCount(0);
-                        setThumbnailBytes(0);
-                        setSyncMeta({});
+                        resetAfterClear();
                         await refreshBytesUsed();
                     } catch (err) {
                         console.warn('[cache] dashboard: clear all failed', { err });
@@ -522,7 +488,7 @@ export const LibrarySyncSettings = () => {
                 defaultValue: 'Clear all cache data',
             }),
         });
-    }, [refreshBytesUsed, resetEntityCountsForClear, t]);
+    }, [refreshBytesUsed, resetAfterClear, t]);
 
     // Hard-reset path that bypasses the active-handle requirement.
     // Triggered when the lifecycle reports a schema upgrade / open
@@ -551,10 +517,7 @@ export const LibrarySyncSettings = () => {
                         console.info('[cache] dashboard: force-reset DB', { serverId, userId });
                         await resetCacheDb(serverId, userId);
                         clearLastOpenError();
-                        resetEntityCountsForClear();
-                        setThumbnailCount(0);
-                        setThumbnailBytes(0);
-                        setSyncMeta({});
+                        resetAfterClear();
                         const reopened = await openCacheDb(serverId, userId);
                         if (reopened && currentServer) {
                             void hydrate(currentServer, 'full');
@@ -570,8 +533,7 @@ export const LibrarySyncSettings = () => {
                 defaultValue: 'Reset cache database',
             }),
         });
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentServer, resetEntityCountsForClear]);
+    }, [currentServer, resetAfterClear, t]);
 
     const handleSliderCommit = useCallback(
         (bytes: number) => {

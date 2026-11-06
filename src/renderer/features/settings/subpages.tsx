@@ -36,7 +36,7 @@ import {
     RiServerLine,
     RiSettings4Line,
     RiSlideshowLine,
-    RiTerminalBoxLine,
+    RiSoundModuleLine,
     RiThumbUpLine,
     RiTv2Line,
     RiVolumeUpLine,
@@ -44,9 +44,11 @@ import {
 } from 'react-icons/ri';
 
 import { hasFeature } from '/@/shared/api/utils';
+import { Text } from '/@/shared/components/text/text';
 import { ServerFeature } from '/@/shared/types/features-types';
 
-const isTouchOnly = () => {
+/** Touch-first device with no keyboard (phones, tablets, coarse pointers). */
+export const isTouchOnly = () => {
     if (typeof window === 'undefined') return false;
     if (Capacitor.getPlatform() === 'android' || Capacitor.getPlatform() === 'ios') return true;
     return window.matchMedia('(pointer: coarse)').matches;
@@ -163,6 +165,10 @@ const AutoDjSubpage = lazyDefault(
     () => import('/@/renderer/features/settings/components/playback/auto-dj-settings'),
     'AutoDJSettings',
 );
+const EqSubpage = lazyDefault(
+    () => import('/@/renderer/features/settings/components/playback/eq-settings'),
+    'EqSettings',
+);
 const PrefetchSubpage = lazyDefault(
     () => import('/@/renderer/features/settings/components/playback/prefetch-settings'),
     'PrefetchSettings',
@@ -269,6 +275,8 @@ export const SETTINGS_SUBPAGES: Record<string, SubpageDef[]> = {
             Icon: RiRefreshLine,
             id: 'updates',
             label: (t) => t('page.setting.updates', { defaultValue: 'Updates' }),
+            // Mirrors UpdateSettings' own isHidden, so the page is never empty.
+            visible: () => isElectron() && !window.api?.utils?.disableAutoUpdates?.(),
         },
         {
             Component: ServerInfoSubpage,
@@ -359,7 +367,7 @@ export const SETTINGS_SUBPAGES: Record<string, SubpageDef[]> = {
             Icon: RiAlertLine,
             id: 'touch-only-help',
             label: (t) => t('page.setting.touchOnlyHelp', { defaultValue: 'Touch-only help' }),
-            visible: () => isTouchOnly(),
+            visible: isTouchOnly,
         },
     ],
     connect: [
@@ -544,6 +552,7 @@ export const SETTINGS_SUBPAGES: Record<string, SubpageDef[]> = {
             Icon: RiPulseLine,
             id: 'media-session',
             label: (t) => t('page.setting.mediaSession', { defaultValue: 'Media keys' }),
+            visible: () => isElectron() && !isLinuxDesktop(),
         },
         {
             Component: HotkeyManagerSubpage,
@@ -653,6 +662,16 @@ export const SETTINGS_SUBPAGES: Record<string, SubpageDef[]> = {
             label: (t) => t('page.setting.filters', { defaultValue: 'Filters' }),
         },
         {
+            Component: EqSubpage,
+            description: (t) =>
+                t('page.setting.equalizerDescription', {
+                    defaultValue: 'Graphic EQ and dynamic range compressor.',
+                }),
+            Icon: RiSoundModuleLine,
+            id: 'equalizer',
+            label: (t) => t('setting.equalizer'),
+        },
+        {
             Component: AutoDjSubpage,
             description: (t) =>
                 t('page.setting.autoDjDescription', {
@@ -708,21 +727,14 @@ export const SETTINGS_SUBPAGES: Record<string, SubpageDef[]> = {
     ],
 };
 
-// Tiny inline component for the touch-only help subpage — explains
-// what keyboard-bound features are unavailable on phones.
+// Touch-only help subpage: explains which keyboard-bound features are
+// unavailable on phones. Muted theme text so it stays legible on light themes.
 function TerminalAccessNote() {
     return (
-        <div style={{ padding: '1rem 0' }}>
-            <p style={{ color: 'rgb(255 255 255 / 70%)', fontSize: '0.95rem', lineHeight: 1.5 }}>
-                Hotkeys, the developer logger panel, and the Linux keychain integration are
-                desktop-only and don&apos;t appear on a touch device. If you need them, switch to
-                the Electron build on your laptop and sync settings via Backup.
-            </p>
-        </div>
+        <Text isMuted py="md">
+            Hotkeys, the developer logger panel, and the Linux keychain integration are desktop-only
+            and don&apos;t appear on a touch device. If you need them, switch to the Electron build
+            on your laptop and sync settings via Backup.
+        </Text>
     );
 }
-
-// Convenience used by the layout — also wired into the icon rendering
-// pattern for category-level rows. Exported separately so the layout
-// can use `Icon as IconType` and not couple to react-icons internals.
-export const SUBPAGE_FALLBACK_ICON = RiTerminalBoxLine;
