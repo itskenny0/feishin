@@ -1616,13 +1616,13 @@ export const usePlayerStoreBase = createWithEqualityFn<PlayerState>()(
                     const timeToSkip = offset ?? offsetFromSettings ?? 5;
 
                     const currentTimestamp = useTimestampStoreBase.getState().timestamp;
-                    // When the duration is known, clamp just shy of the end.
-                    // Otherwise (radio / streams / metadata not loaded yet)
-                    // advance without an upper bound instead of no-op'ing — the
-                    // engine clamps an over-seek itself, and a silent dead button
-                    // is worse. mediaSkipBackward already ignores duration.
+                    // When the duration is known, clamp just shy of the end
+                    // (duration is ms, the timestamp is seconds). Otherwise
+                    // (radio / streams / metadata not loaded yet) advance without
+                    // an upper bound instead of no-op'ing - the engine clamps an
+                    // over-seek itself. mediaSkipBackward already ignores duration.
                     const newTimestamp = duration
-                        ? Math.min(duration - 1, currentTimestamp + timeToSkip)
+                        ? Math.min(duration / 1000 - 1, currentTimestamp + timeToSkip)
                         : currentTimestamp + timeToSkip;
 
                     // See mediaSkipBackward: update the timestamp store right away to

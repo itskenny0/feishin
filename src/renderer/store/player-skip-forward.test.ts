@@ -48,7 +48,8 @@ describe('mediaSkipForward', () => {
     });
 
     it('still clamps just shy of the end on a track with a known duration', () => {
-        seedCurrent(45);
+        // Song.duration is ms, the timestamp is seconds.
+        seedCurrent(45_000);
         usePlayerStoreBase.getState().mediaSkipForward(10);
         // min(45 - 1, 30 + 10) = min(44, 40) = 40
         expect(useTimestampStoreBase.getState().timestamp).toBe(40);
