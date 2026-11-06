@@ -294,9 +294,8 @@ export const MpvSettings = memo(() => {
                     width={75}
                 />
             ),
-            description: t('setting.replayGainMode', {
+            description: t('setting.replayGainPreamp', {
                 context: 'description',
-
                 ReplayGain: 'ReplayGain',
             }),
             title: t('setting.replayGainPreamp', { ReplayGain: 'ReplayGain' }),

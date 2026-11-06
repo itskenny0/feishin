@@ -120,3 +120,10 @@
     height: 32px;
     border-radius: var(--theme-radius-sm);
 }
+
+/* Touch screens have overlay scrollbars; the gutter only made the grid off-centre. */
+@media (hover: none) and (pointer: coarse) {
+    .grid-root {
+        padding-right: 0;
+    }
+}

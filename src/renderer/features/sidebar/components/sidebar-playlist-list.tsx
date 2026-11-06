@@ -280,6 +280,7 @@ export const PlaylistRowButton = memo(
             // both are expressible as a cheap inline opacity transition that
             // doesn't allocate a motion node per row.
             <Link
+                aria-label={iconOnly ? name : undefined}
                 className={clsx(styles.row, {
                     [styles.rowCompact]: isCompact && !iconOnly,
                     [styles.rowDraggedOver]: isDraggedOver && !isSmartPlaylist,
@@ -398,7 +399,7 @@ export const PlaylistRowButton = memo(
                                                 </Text>
                                             </div>
                                         )}
-                                    {item.ownerId !== permissions.userId && (
+                                    {item.owner && item.ownerId !== permissions.userId && (
                                         <div className={styles.metadataGroupItem}>
                                             <Icon color="muted" icon="user" size="sm" />
                                             <Text isMuted size="sm">

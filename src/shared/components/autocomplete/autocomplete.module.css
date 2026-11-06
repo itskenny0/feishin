@@ -55,7 +55,7 @@
 }
 
 .option:hover {
-    background: lighten(var(--theme-colors-surface), 5%);
+    background: color-mix(in srgb, var(--theme-colors-surface), var(--theme-colors-foreground) 8%);
 }
 
 .clear-button {

@@ -1,5 +1,5 @@
 import { motion } from 'motion/react';
-import { useEffect, useRef, useState } from 'react';
+import { cloneElement, isValidElement, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import styles from './play-button-group.module.css';
 
@@ -101,12 +101,19 @@ export const PlayTooltip = ({
     disabled?: boolean;
     type: Play;
 }) => {
+    // The rich tooltip is JSX, so the icon-only button inside would otherwise
+    // have no accessible name. Name it after the action unless it has one.
+    const named =
+        isValidElement<{ 'aria-label'?: string }>(children) && !children.props['aria-label']
+            ? cloneElement(children, { 'aria-label': PLAY_BEHAVIOR_TO_LABEL[type] })
+            : children;
+
     return (
         <Tooltip
             disabled={disabled}
             label={<TooltipLabel label={PLAY_BEHAVIOR_TO_LABEL[type]} type={type} />}
         >
-            {children}
+            {named}
         </Tooltip>
     );
 };
@@ -329,6 +336,32 @@ export const PlayButtonGroupPopover = ({
     const itemVariants = getItemVariants(position);
     const isVertical = position === 'left' || position === 'right';
     const popoverRef = useRef<HTMLDivElement>(null);
+    const playNowRef = useRef<HTMLButtonElement>(null);
+
+    // Keyboard support: focus moves into the popover when it opens, Escape
+    // closes it, and focus goes back to the trigger if it was inside on close.
+    useEffect(() => {
+        const frame = requestAnimationFrame(() => playNowRef.current?.focus());
+        return () => cancelAnimationFrame(frame);
+    }, []);
+
+    useEffect(() => {
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key !== 'Escape') return;
+            event.preventDefault();
+            onClose?.();
+        };
+        document.addEventListener('keydown', onKeyDown, true);
+        return () => document.removeEventListener('keydown', onKeyDown, true);
+    }, [onClose]);
+
+    useLayoutEffect(() => {
+        const popover = popoverRef.current;
+        const trigger = triggerRef?.current;
+        return () => {
+            if (popover?.contains(document.activeElement)) trigger?.focus();
+        };
+    }, [triggerRef]);
 
     useClickOutside(
         () => {
@@ -405,6 +438,7 @@ export const PlayButtonGroupPopover = ({
                                     onLongPress={() =>
                                         onPlay(LONG_PRESS_PLAY_BEHAVIOR[button.type])
                                     }
+                                    ref={button.type === Play.NOW ? playNowRef : undefined}
                                 />
                             </Tooltip>
                         </motion.div>

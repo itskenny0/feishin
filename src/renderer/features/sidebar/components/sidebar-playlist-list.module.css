@@ -40,6 +40,18 @@
     border-radius: var(--theme-radius-md);
 }
 
+/* Touch shows the play controls permanently, so always leave them room. */
+@media (pointer: coarse) {
+    .metadata,
+    .compact-name {
+        margin-right: 100px;
+    }
+
+    .controls {
+        background: none;
+    }
+}
+
 .row-hover {
     .metadata,
     .compact-name {

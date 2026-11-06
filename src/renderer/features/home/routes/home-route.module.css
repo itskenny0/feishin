@@ -65,3 +65,8 @@
         padding-left: 1.25rem;
     }
 }
+
+/* Rows that render nothing must not leave a double gap. */
+.content-stack > :empty {
+    display: none;
+}

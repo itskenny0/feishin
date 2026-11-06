@@ -114,6 +114,8 @@ const PinnedTile = memo(({ pin }: { pin: Pin }) => {
 
     const handleKeyDown = useCallback(
         (e: React.KeyboardEvent) => {
+            // Keys on the Unpin button inside the tile are its own.
+            if (e.target !== e.currentTarget) return;
             if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
                 handleOpen();

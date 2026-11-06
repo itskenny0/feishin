@@ -8,6 +8,7 @@ import {
     useFullScreenPlayerVisualizerAsBackground,
 } from '/@/renderer/store/full-screen-player.store';
 import { usePlaybackSettings, useSettingsStoreActions } from '/@/renderer/store/settings.store';
+import { onActivationKey } from '/@/renderer/utils/activation-key';
 
 /**
  * Visualizer entry-point card in the mobile fullscreen player's scroll
@@ -55,6 +56,7 @@ export const MobileFullscreenVisualizerCard = memo(() => {
         <div
             aria-label={t('page.fullscreenPlayer.visualizer', { defaultValue: 'Visualizer' })}
             onClick={handleOpen}
+            onKeyDown={onActivationKey(handleOpen)}
             role="button"
             style={{
                 background: 'rgb(20 20 28 / 92%)',

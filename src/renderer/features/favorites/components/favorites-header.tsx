@@ -72,7 +72,11 @@ export const FavoritesHeader = ({ itemType }: FavoritesHeaderProps) => {
             <PageHeader>
                 <Flex justify="space-between" w="100%">
                     <LibraryHeaderBar ignoreMaxWidth>
-                        <PlayButton itemType={itemType} query={playQuery} />
+                        <PlayButton
+                            disabled={itemCount === 0}
+                            itemType={itemType}
+                            query={playQuery}
+                        />
                         <LibraryHeaderBar.Title>
                             <DropdownMenu position="right">
                                 <DropdownMenu.Target>
@@ -150,6 +154,21 @@ export const FavoritesHeader = ({ itemType }: FavoritesHeaderProps) => {
     );
 };
 
-const PlayButton = ({ itemType, query }: { itemType: LibraryItem; query: Record<string, any> }) => {
-    return <LibraryHeaderBar.PlayButton itemType={itemType} listQuery={query} variant="filled" />;
+const PlayButton = ({
+    disabled,
+    itemType,
+    query,
+}: {
+    disabled?: boolean;
+    itemType: LibraryItem;
+    query: Record<string, any>;
+}) => {
+    return (
+        <LibraryHeaderBar.PlayButton
+            disabled={disabled}
+            itemType={itemType}
+            listQuery={query}
+            variant="filled"
+        />
+    );
 };

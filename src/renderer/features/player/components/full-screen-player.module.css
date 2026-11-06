@@ -25,8 +25,16 @@
         transition: opacity 0.2s ease;
     }
 
-    &:hover :global(.full-screen-player-controls-container) {
+    &:hover :global(.full-screen-player-controls-container),
+    :global(.full-screen-player-controls-container):focus-within {
         opacity: 1;
+    }
+
+    /* Touch screens have no hover to reveal the controls. */
+    @media (hover: none) {
+        :global(.full-screen-player-controls-container) {
+            opacity: 1;
+        }
     }
 }
 

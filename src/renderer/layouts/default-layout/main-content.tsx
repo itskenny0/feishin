@@ -20,6 +20,7 @@ import { RightSidebar } from '/@/renderer/layouts/default-layout/right-sidebar';
 import {
     useAppStore,
     useAppStoreActions,
+    useFullScreenPlayerExpanded,
     useGlobalExpanded,
     useSideQueueLayout,
     useSideQueueType,
@@ -39,6 +40,9 @@ const TABLET_SHELL_QUERY = '(min-width: 768px) and (max-width: 1199px)';
 const MINIMUM_SIDEBAR_WIDTH = 300;
 
 export const MainContent = ({ shell }: { shell?: boolean }) => {
+    // While the fullscreen player covers the page, keep Tab and screen readers
+    // out of the sidebars and page underneath it.
+    const isFullScreenPlayerExpanded = useFullScreenPlayerExpanded();
     const {
         collapsed: storedCollapsed,
         leftWidth,
@@ -270,25 +274,31 @@ export const MainContent = ({ shell }: { shell?: boolean }) => {
                 <>
                     <FullScreenVisualizerOverlay />
                     <FullScreenOverlay />
-                    <LeftSidebar isResizing={isResizing} startResizing={startResizing} />
-                    {/*
-                     * Suppress the right (queue) sidebar render entirely
-                     * in the tablet sweet-spot. RightSidebar normally
-                     * reads `rightExpanded` from the store itself, so
-                     * the parent override above doesn't reach it — we
-                     * just skip mounting it in this range. The user's
-                     * stored desktop preference is untouched.
-                     */}
-                    {!isTabletRange && (
-                        <RightSidebar
-                            isResizing={isResizingRight}
-                            ref={rightSidebarRef}
-                            startResizing={startResizing}
-                        />
-                    )}
                 </>
             )}
-            <MainContentBody />
+            <div inert={isFullScreenPlayerExpanded} style={{ display: 'contents' }}>
+                {!shell && (
+                    <>
+                        <LeftSidebar isResizing={isResizing} startResizing={startResizing} />
+                        {/*
+                         * Suppress the right (queue) sidebar render entirely
+                         * in the tablet sweet-spot. RightSidebar normally
+                         * reads `rightExpanded` from the store itself, so
+                         * the parent override above doesn't reach it - we
+                         * just skip mounting it in this range. The user's
+                         * stored desktop preference is untouched.
+                         */}
+                        {!isTabletRange && (
+                            <RightSidebar
+                                isResizing={isResizingRight}
+                                ref={rightSidebarRef}
+                                startResizing={startResizing}
+                            />
+                        )}
+                    </>
+                )}
+                <MainContentBody />
+            </div>
         </motion.div>
     );
 };

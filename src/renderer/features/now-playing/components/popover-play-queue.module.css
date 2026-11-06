@@ -20,7 +20,7 @@
     font-size: 10px;
     font-weight: 600;
     line-height: 16px;
-    color: var(--theme-colors-primary-color, #fff);
+    color: var(--theme-colors-primary-contrast);
     text-align: center;
     pointer-events: none;
     background-color: var(--theme-colors-primary-filled, var(--theme-colors-primary));

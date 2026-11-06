@@ -6,17 +6,18 @@ import {
     ItemTableListInnerColumn,
     TableColumnTextContainer,
 } from '/@/renderer/components/item-list/item-table-list/item-table-list-column';
+import { isPlausibleReleaseYear } from '/@/shared/utils/release-year';
 
 const YearColumnBase = (props: ItemTableListInnerColumn) => {
     const rowItem = props.getRowItem?.(props.rowIndex) ?? (props.data as any[])[props.rowIndex];
     const item = rowItem as any;
 
     const yearDisplay = useMemo(() => {
-        if (item && 'year' in item && item.year != null) {
-            const year = item.year;
-            if (typeof year === 'number') {
-                return year;
-            }
+        // Gate through the plausibility check so cached rows that still carry
+        // a placeholder year (e.g. 1 from an unknown Jellyfin date) show the
+        // empty fallback instead of "1".
+        if (item && 'year' in item && isPlausibleReleaseYear(item.year)) {
+            return item.year;
         }
         return null;
     }, [item]);

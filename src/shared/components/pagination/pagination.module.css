@@ -20,7 +20,7 @@
     }
 
     &:hover {
-        background-color: lighten(var(--theme-colors-surface), 10%);
+        background-color: color-mix(in srgb, var(--theme-colors-surface), var(--theme-colors-foreground) 12%);
 
         &[data-active] {
             background-color: darken(var(--theme-colors-primary-filled), 10%);

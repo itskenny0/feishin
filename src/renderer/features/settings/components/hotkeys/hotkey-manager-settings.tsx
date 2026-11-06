@@ -19,6 +19,7 @@ import { Icon } from '/@/shared/components/icon/icon';
 import { Table } from '/@/shared/components/table/table';
 import { TextInput } from '/@/shared/components/text-input/text-input';
 import {
+    formatHotkeyForDisplay,
     keyboardCodeToHotkeyKey,
     MODIFIER_KEY_CODES,
 } from '/@/shared/utils/keyboard-code-to-hotkey';
@@ -318,10 +319,10 @@ export const HotkeyManagerSettings = memo(() => {
                                                         ? '1px dashed red'
                                                         : undefined,
                                                 }}
-                                                value={
+                                                value={formatHotkeyForDisplay(
                                                     bindings[binding as keyof typeof BINDINGS_MAP]
-                                                        .hotkey
-                                                }
+                                                        .hotkey ?? '',
+                                                )}
                                             />
                                         </Table.Td>
                                         {isElectron() && (

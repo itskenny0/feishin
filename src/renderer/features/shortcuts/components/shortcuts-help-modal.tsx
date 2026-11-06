@@ -11,6 +11,7 @@ import { ScrollArea } from '/@/shared/components/scroll-area/scroll-area';
 import { Stack } from '/@/shared/components/stack/stack';
 import { TextInput } from '/@/shared/components/text-input/text-input';
 import { Text } from '/@/shared/components/text/text';
+import { formatHotkeyPart } from '/@/shared/utils/keyboard-code-to-hotkey';
 
 // Mapping from the binding key in the store to the i18n context used by
 // the existing hotkey settings page (see hotkey-manager-settings.tsx).
@@ -155,7 +156,7 @@ const HotkeyChips = ({ hotkey }: { hotkey: string }) => {
                             +
                         </Text>
                     )}
-                    <Kbd>{part}</Kbd>
+                    <Kbd>{formatHotkeyPart(part)}</Kbd>
                 </Group>
             ))}
         </Group>

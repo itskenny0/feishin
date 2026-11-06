@@ -28,14 +28,14 @@ export const useRowInteractionDelegate = ({
             return rowEl?.getAttribute('data-row-index') ?? null;
         };
 
-        const apply = (prev: null | string, next: null | string) => {
+        const apply = (next: null | string) => {
             if (rafId !== null) cancelAnimationFrame(rafId);
             rafId = requestAnimationFrame(() => {
-                if (prev) {
-                    root.querySelectorAll(`[data-row-index="${prev}"]`).forEach((node) => {
-                        (node as HTMLElement).removeAttribute('data-row-hovered');
-                    });
-                }
+                // Clear every hovered cell, not just the previous row's: a
+                // cancelled frame used to skip a removal and leave a row lit.
+                root.querySelectorAll('[data-row-hovered]').forEach((node) => {
+                    node.removeAttribute('data-row-hovered');
+                });
                 if (next) {
                     root.querySelectorAll(`[data-row-index="${next}"]`).forEach((node) => {
                         (node as HTMLElement).setAttribute('data-row-hovered', 'true');
@@ -44,11 +44,11 @@ export const useRowInteractionDelegate = ({
             });
         };
 
+        // Re-applied for the same row too: cells that mount after the first
+        // apply (virtualized panes) would otherwise stay unhighlighted.
         const setHovered = (next: null | string) => {
-            if (next === hoveredKey) return;
-            const prev = hoveredKey;
             hoveredKey = next;
-            apply(prev, next);
+            apply(next);
         };
 
         const onPointerOver = (e: PointerEvent) => {
@@ -70,7 +70,7 @@ export const useRowInteractionDelegate = ({
             root.removeEventListener('pointerout', onPointerOut);
             if (rafId !== null) cancelAnimationFrame(rafId);
             // Ensure we don't leave stale attributes behind
-            if (hoveredKey) apply(hoveredKey, null);
+            if (hoveredKey) apply(null);
         };
     }, [containerRef, enableRowHoverHighlight]);
 

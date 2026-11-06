@@ -59,7 +59,7 @@ const mantineTheme: MantineThemeOverride = createTheme({
     },
     cursorType: 'pointer',
     defaultRadius: 'sm',
-    focusRing: 'never',
+    focusRing: 'auto',
     fontFamily: 'var(--theme-content-font-family)',
     fontSizes: {
         '2xl': rem('20px'),
@@ -105,7 +105,9 @@ const mantineTheme: MantineThemeOverride = createTheme({
         xl: rem('24px'),
         xs: rem('14px'),
     },
-    luminanceThreshold: 0.3,
+    // 0.179 is the WCAG crossover: white text on the default orange accent
+    // was 3.1:1, below AA.
+    luminanceThreshold: 0.179,
     primaryColor: 'primary',
     primaryShade: { dark: 5, light: 9 },
     radius: {

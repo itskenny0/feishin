@@ -40,6 +40,7 @@ import {
     useShowFilesystemNameForAlbums,
     useShowPlaybarYearChip,
 } from '/@/renderer/store/settings.store';
+import { onActivationKey } from '/@/renderer/utils/activation-key';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Center } from '/@/shared/components/center/center';
 import { Group } from '/@/shared/components/group/group';
@@ -143,13 +144,16 @@ export const LeftControls = () => {
                         <div className={styles.imageWrapper}>
                             <motion.div
                                 animate={{ opacity: 1, scale: 1, x: 0 }}
+                                aria-label={t('player.toggleFullscreenPlayer')}
                                 className={styles.image}
                                 exit={{ opacity: 0, x: -50 }}
                                 initial={{ opacity: 0, x: -50 }}
                                 key="playerbar-image"
                                 onClick={handleToggleFullScreenPlayer}
                                 onContextMenu={handleToggleContextMenu}
+                                onKeyDown={onActivationKey(() => handleToggleFullScreenPlayer())}
                                 role="button"
+                                tabIndex={0}
                                 transition={{ duration: 0.2, ease: 'easeOut' }}
                                 whileHover={{ scale: 1.1 }}
                             >

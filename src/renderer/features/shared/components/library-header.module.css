@@ -15,10 +15,7 @@
 
 .top-right {
     position: absolute;
-    top: calc(
-        var(--theme-spacing-lg) +
-            max(env(safe-area-inset-top, 0px), var(--android-safe-top, 0px))
-    );
+    top: var(--theme-spacing-lg);
     right: var(--theme-spacing-md);
     z-index: 20;
 }
@@ -48,6 +45,13 @@
     transition: opacity 320ms ease;
 }
 
+/* On very wide screens the wash ended in hard vertical edges; fade them out. */
+@media (width >= 1900px) {
+    .library-header[data-layout='desktop'] .hero-gradient {
+        mask-image: linear-gradient(90deg, transparent, #000 160px, #000 calc(100% - 160px), transparent);
+    }
+}
+
 .library-header {
     position: relative;
     width: 100%;
@@ -60,11 +64,7 @@
     flex-direction: column;
     gap: var(--theme-spacing-md);
     align-items: center;
-    padding: calc(
-            var(--theme-spacing-lg) +
-                max(env(safe-area-inset-top, 0px), var(--android-safe-top, 0px))
-        )
-        var(--theme-spacing-md) var(--theme-spacing-md);
+    padding: var(--theme-spacing-lg) var(--theme-spacing-md) var(--theme-spacing-md);
     text-align: center;
 }
 
@@ -162,6 +162,13 @@
 .image-section:hover .image-overlay {
     pointer-events: auto;
     opacity: 1;
+}
+
+@media (pointer: coarse) {
+    .image-overlay {
+        pointer-events: auto;
+        opacity: 1;
+    }
 }
 
 .metadata-section {

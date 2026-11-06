@@ -1,5 +1,6 @@
 import { ItemDetailListCellProps } from './types';
 
+import i18n from '/@/i18n/i18n';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { LibraryItem } from '/@/shared/types/domain-types';
 
@@ -24,6 +25,7 @@ export const ActionsColumn = ({ controls, internalState, song }: ItemDetailListC
 
     return (
         <ActionIcon
+            aria-label={i18n.t('common.more')}
             icon="ellipsisHorizontal"
             iconProps={{
                 color: 'muted',

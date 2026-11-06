@@ -4,6 +4,7 @@ import type { TFunction } from 'i18next';
 import { Capacitor } from '@capacitor/core';
 import isElectron from 'is-electron';
 import { ComponentType, lazy, ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
     RiAccountBoxLine,
     RiAlertLine,
@@ -11,15 +12,17 @@ import {
     RiBracesLine,
     RiBroadcastLine,
     RiBugLine,
-    RiCelsiusLine,
     RiCommandLine,
     RiDatabase2Line,
     RiDiscordLine,
     RiDownloadLine,
     RiEqualizer2Line,
     RiEqualizerLine,
+    RiExchangeLine,
     RiExternalLinkLine,
     RiEyeLine,
+    RiFileList3Line,
+    RiFileTransferLine,
     RiFolderLine,
     RiGamepadLine,
     RiHomeLine,
@@ -27,7 +30,6 @@ import {
     RiLayoutLeftLine,
     RiMagicLine,
     RiMicLine,
-    RiMusicLine,
     RiPaletteLine,
     RiPlayCircleLine,
     RiPulseLine,
@@ -297,6 +299,7 @@ export const SETTINGS_SUBPAGES: Record<string, SubpageDef[]> = {
             Icon: RiSlideshowLine,
             id: 'jellyfin-actions',
             label: (t) => t('page.setting.jellyfinActions', { defaultValue: 'Jellyfin actions' }),
+            visible: (server) => server?.type === 'jellyfin' && Boolean(server?.isAdmin),
         },
         {
             Component: StylesSubpage,
@@ -324,7 +327,7 @@ export const SETTINGS_SUBPAGES: Record<string, SubpageDef[]> = {
                 t('page.setting.exportImportDescription', {
                     defaultValue: 'Backup and restore settings.',
                 }),
-            Icon: RiMusicLine,
+            Icon: RiFileTransferLine,
             id: 'export-import',
             label: (t) => t('page.setting.exportImport', { defaultValue: 'Backup' }),
         },
@@ -332,9 +335,9 @@ export const SETTINGS_SUBPAGES: Record<string, SubpageDef[]> = {
             Component: LoggerSubpage,
             description: (t) =>
                 t('page.setting.loggerDescription', {
-                    defaultValue: 'Inspect runtime logs (debugging only).',
+                    defaultValue: 'Log verbosity (debugging only).',
                 }),
-            Icon: RiBugLine,
+            Icon: RiFileList3Line,
             id: 'logger',
             label: (t) => t('page.setting.logger', { defaultValue: 'Logs' }),
         },
@@ -352,7 +355,7 @@ export const SETTINGS_SUBPAGES: Record<string, SubpageDef[]> = {
             Component: CacheSubpage,
             description: (t) =>
                 t('page.setting.cacheDescription', {
-                    defaultValue: 'Clear cached cover art and stream data.',
+                    defaultValue: 'Clear cached library data and saved images.',
                 }),
             Icon: RiDatabase2Line,
             id: 'cache',
@@ -442,7 +445,7 @@ export const SETTINGS_SUBPAGES: Record<string, SubpageDef[]> = {
             Component: ApplicationSubpage,
             description: (t) =>
                 t('page.setting.applicationDescription', {
-                    defaultValue: 'Language, behaviour, system integrations.',
+                    defaultValue: 'Language, behavior, system integrations.',
                 }),
             Icon: RiSettings4Line,
             id: 'application',
@@ -452,7 +455,7 @@ export const SETTINGS_SUBPAGES: Record<string, SubpageDef[]> = {
             Component: ThemeSubpage,
             description: (t) =>
                 t('page.setting.themeDescription', {
-                    defaultValue: 'Light / dark themes, accent colour, fonts.',
+                    defaultValue: 'Light / dark themes, accent color, custom themes.',
                 }),
             Icon: RiPaletteLine,
             id: 'theme',
@@ -482,7 +485,7 @@ export const SETTINGS_SUBPAGES: Record<string, SubpageDef[]> = {
             Component: FullscreenPlayerSubpage,
             description: (t) =>
                 t('page.setting.fullscreenPlayerDescription', {
-                    defaultValue: 'Dynamic backgrounds, image blur, opacity.',
+                    defaultValue: 'Which track details show, and in what order.',
                 }),
             Icon: RiTv2Line,
             id: 'fullscreen-player',
@@ -512,7 +515,7 @@ export const SETTINGS_SUBPAGES: Record<string, SubpageDef[]> = {
             Component: ExternalLinksSubpage,
             description: (t) =>
                 t('page.setting.externalLinksDescription', {
-                    defaultValue: 'Right-click "open in…" service links.',
+                    defaultValue: 'Service links on album and artist pages.',
                 }),
             Icon: RiExternalLinkLine,
             id: 'external-links',
@@ -570,7 +573,7 @@ export const SETTINGS_SUBPAGES: Record<string, SubpageDef[]> = {
             Component: ScrobbleSubpage,
             description: (t) =>
                 t('page.setting.scrobbleDescription', {
-                    defaultValue: 'Last.fm / Listenbrainz reporting + notifications.',
+                    defaultValue: 'Scrobble thresholds and song notifications.',
                 }),
             Icon: RiThumbUpLine,
             id: 'scrobble',
@@ -580,7 +583,7 @@ export const SETTINGS_SUBPAGES: Record<string, SubpageDef[]> = {
             Component: LyricsSubpage,
             description: (t) =>
                 t('page.setting.lyricsDescription', {
-                    defaultValue: 'Lyric providers, fonts, offsets.',
+                    defaultValue: 'Auto-scroll, furigana / romaji, providers, offsets.',
                 }),
             Icon: RiMicLine,
             id: 'lyrics',
@@ -647,7 +650,7 @@ export const SETTINGS_SUBPAGES: Record<string, SubpageDef[]> = {
                 t('page.setting.transcodeDescription', {
                     defaultValue: 'Server-side transcoding profiles + bitrate.',
                 }),
-            Icon: RiCelsiusLine,
+            Icon: RiExchangeLine,
             id: 'transcode',
             label: (t) => t('page.setting.transcode', { defaultValue: 'Transcoding' }),
         },
@@ -655,7 +658,7 @@ export const SETTINGS_SUBPAGES: Record<string, SubpageDef[]> = {
             Component: PlayerFilterSubpage,
             description: (t) =>
                 t('page.setting.filtersDescription', {
-                    defaultValue: 'ReplayGain, crossfade, gapless.',
+                    defaultValue: 'Hide songs from the queue by rule.',
                 }),
             Icon: RiEqualizerLine,
             id: 'filters',
@@ -685,7 +688,7 @@ export const SETTINGS_SUBPAGES: Record<string, SubpageDef[]> = {
             Component: PrefetchSubpage,
             description: (t) =>
                 t('page.setting.prefetchDescription', {
-                    defaultValue: 'Preload next track for instant transitions.',
+                    defaultValue: 'Prefetch sidebar albums and upcoming lyrics.',
                 }),
             Icon: RiDownloadLine,
             id: 'prefetch',
@@ -712,6 +715,7 @@ export const SETTINGS_SUBPAGES: Record<string, SubpageDef[]> = {
             Icon: RiDiscordLine,
             id: 'discord',
             label: (t) => t('page.setting.discord', { defaultValue: 'Discord' }),
+            visible: () => isElectron(),
         },
         {
             Component: PasswordSubpage,
@@ -730,11 +734,10 @@ export const SETTINGS_SUBPAGES: Record<string, SubpageDef[]> = {
 // Touch-only help subpage: explains which keyboard-bound features are
 // unavailable on phones. Muted theme text so it stays legible on light themes.
 function TerminalAccessNote() {
+    const { t } = useTranslation();
     return (
         <Text isMuted py="md">
-            Hotkeys, the developer logger panel, and the Linux keychain integration are desktop-only
-            and don&apos;t appear on a touch device. If you need them, switch to the Electron build
-            on your laptop and sync settings via Backup.
+            {t('page.setting.touchOnlyHelpBody')}
         </Text>
     );
 }

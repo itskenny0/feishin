@@ -1,5 +1,7 @@
 .mark {
-    padding: 0 2px;
+    /* No padding: matches are often single letters, and padding pushed them
+       apart from the rest of the word ("C a n't"). */
+    padding: 0;
     color: inherit;
     background-color: color-mix(
         in srgb,

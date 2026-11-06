@@ -107,6 +107,9 @@ export const RowPlayControlPopover = ({
 
         const handleKeyDown = (event: KeyboardEvent) => {
             if (event.key === 'Escape') {
+                // Mark it handled so page-level Escape hotkeys (e.g. the
+                // fullscreen player's minimise) leave this press alone.
+                event.preventDefault();
                 closeNow();
             }
         };

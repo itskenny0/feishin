@@ -96,6 +96,7 @@ const GroupMemberVolumeRow = ({
                 </span>
                 {!isMinWidth && (
                     <CustomPlayerbarSlider
+                        aria-label={`${t('player.volume')} - ${member.device.name}`}
                         max={100}
                         min={0}
                         onChange={(value) => {
@@ -315,6 +316,7 @@ export const DlnaVolumeButton = () => {
                 </span>
                 {!isMinWidth && (
                     <CustomPlayerbarSlider
+                        aria-label={t('player.volume')}
                         max={100}
                         min={0}
                         onChange={handleVolumeSlider}

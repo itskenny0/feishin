@@ -79,18 +79,20 @@ const useShuffleAllStore = createWithEqualityFn<ShuffleAllSlice>()(
     ),
 );
 
-const PLAYED_DATA: { label: string; value: Played }[] = [
-    { label: 'all tracks', value: Played.All },
-    { label: 'only unplayed tracks', value: Played.Never },
-    { label: 'only played tracks', value: Played.Played },
-];
-
 export const useShuffleAllStoreActions = () => useShuffleAllStore((state) => state.actions);
 
 export const ShuffleAllContextModal = () => {
     const server = useCurrentServer();
     const { addToQueueByData, addToQueueByFetch } = usePlayer();
     const { t } = useTranslation();
+    const playedData = useMemo(
+        () => [
+            { label: t('form.shuffleAll.input_played_optionAll'), value: Played.All },
+            { label: t('form.shuffleAll.input_played_optionUnplayed'), value: Played.Never },
+            { label: t('form.shuffleAll.input_played_optionPlayed'), value: Played.Played },
+        ],
+        [t],
+    );
     const {
         enableMaxYear,
         enableMinYear,
@@ -238,7 +240,7 @@ export const ShuffleAllContextModal = () => {
             {server?.type === ServerType.JELLYFIN && playbackKind === 'songs' && (
                 <Select
                     clearable
-                    data={PLAYED_DATA}
+                    data={playedData}
                     label={t('form.shuffleAll.input_played')}
                     onChange={(e) => {
                         setStore({ played: e as Played });

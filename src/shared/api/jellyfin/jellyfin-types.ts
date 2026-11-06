@@ -365,6 +365,7 @@ const genreItem = z.object({
 });
 
 const genre = z.object({
+    AlbumCount: z.number().optional(),
     BackdropImageTags: z.array(z.any()),
     ChannelId: z.null(),
     Id: z.string(),
@@ -373,6 +374,7 @@ const genre = z.object({
     LocationType: z.string(),
     Name: z.string(),
     ServerId: z.string(),
+    SongCount: z.number().optional(),
     Type: z.string(),
 });
 

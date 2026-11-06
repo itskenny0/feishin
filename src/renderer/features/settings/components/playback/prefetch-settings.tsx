@@ -74,10 +74,5 @@ export const PrefetchSettings = memo(() => {
         },
     ];
 
-    return (
-        <SettingsSection
-            options={options}
-            title={t('setting.prefetch', { postProcess: 'titleCase' })}
-        />
-    );
+    return <SettingsSection options={options} title={t('page.setting.prefetch')} />;
 });

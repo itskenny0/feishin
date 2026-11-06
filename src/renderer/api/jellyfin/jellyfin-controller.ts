@@ -930,7 +930,10 @@ export const JellyfinController: InternalControllerEndpoint = {
                     throw new Error('Failed to get music folder list');
                 }
 
-                items = res.body.Items as unknown as z.infer<typeof jfType._response.folder>[];
+                // Only music libraries: the root also lists Movies, Shows, etc.
+                items = res.body.Items.filter((f) =>
+                    isSupportedCollection(apiClientProps.server, f.CollectionType),
+                ) as unknown as z.infer<typeof jfType._response.folder>[];
             }
 
             items = items.filter((item) => !isAudioItemType(apiClientProps.server, item.Type));

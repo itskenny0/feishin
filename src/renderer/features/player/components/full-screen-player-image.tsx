@@ -88,6 +88,7 @@ const ImageWithPlaceholder = ({
 
     return (
         <MotionImage
+            alt=""
             className={clsx(styles.image, className, {
                 [styles.censored]: explicit,
             })}

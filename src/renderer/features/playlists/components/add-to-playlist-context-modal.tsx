@@ -480,6 +480,9 @@ export const AddToPlaylistContextModal = ({
                             <Table.Tbody>
                                 {filteredItems.map((item, index) => (
                                     <Table.Tr
+                                        aria-pressed={form.values.selectedPlaylistIds.includes(
+                                            item.value,
+                                        )}
                                         key={item.value}
                                         onBlur={() => setFocusedRowIndex(null)}
                                         onClick={() => handleSelectItem(item)}

@@ -50,6 +50,8 @@ export const TranscodeSettings = memo(() => {
                                 : undefined,
                         });
                     }}
+                    placeholder="0"
+                    rightSection="kbps"
                     w={100}
                 />
             ),

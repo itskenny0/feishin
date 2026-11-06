@@ -78,10 +78,18 @@ export const usePlayButtonClick = ({
         [longPressHandlers],
     );
 
-    const handleClick = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
-        e.stopPropagation();
-        e.preventDefault();
-    }, []);
+    const handleClick = useCallback(
+        (e: React.MouseEvent<HTMLButtonElement>) => {
+            e.stopPropagation();
+            e.preventDefault();
+            // Enter/Space and assistive tech only dispatch a click (detail 0),
+            // which never reaches the long-press mouseup/touchend path.
+            if (e.detail === 0 && !isDisabled) {
+                onClick?.(e);
+            }
+        },
+        [isDisabled, onClick],
+    );
 
     const handlers = useMemo(
         () => ({

@@ -16,7 +16,6 @@ import {
 } from '/@/renderer/features/settings/components/settings-section';
 import { usePlaybackSettings, useSettingsStoreActions } from '/@/renderer/store/settings.store';
 import { Button } from '/@/shared/components/button/button';
-import { Divider } from '/@/shared/components/divider/divider';
 import { Group } from '/@/shared/components/group/group';
 import { NumberInput } from '/@/shared/components/number-input/number-input';
 import { Select } from '/@/shared/components/select/select';
@@ -207,7 +206,7 @@ function EqBandSlider({
                 {/* Coloured fill between the zero line and the thumb */}
                 <div
                     style={{
-                        background: 'var(--mantine-color-blue-filled)',
+                        background: 'var(--theme-colors-primary-filled)',
                         borderRadius: 2,
                         bottom: `${fillBottomPct}%`,
                         left: 1,
@@ -843,9 +842,7 @@ export const EqSettings = memo(() => {
 
     return (
         <>
-            <Divider />
             <SettingsSection options={eqOptions} />
-            <Divider />
             <SettingsSection options={compressorOptions} />
         </>
     );

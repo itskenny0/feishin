@@ -116,5 +116,7 @@ export const openTransportComparisonModal = (title: string): void => {
         children: <TransportComparisonContent />,
         size: 'lg',
         title,
+        // Above the mobile device-picker sheet it is opened from.
+        zIndex: 1100,
     });
 };

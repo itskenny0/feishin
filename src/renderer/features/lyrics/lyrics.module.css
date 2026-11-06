@@ -83,6 +83,18 @@
     transition: opacity 0.2s ease;
 }
 
-.lyrics-container:hover .settings-icon {
+.lyrics-container:hover .settings-icon,
+.settings-icon:focus-visible {
     opacity: 1;
+}
+
+/* Touch screens have no hover to reveal the cog and the offset controls. */
+@media (hover: none) {
+    .settings-icon {
+        opacity: 1;
+    }
+
+    .actions-container {
+        opacity: 0.6;
+    }
 }

@@ -40,6 +40,7 @@ import {
     useTrackmapEnabled,
 } from '/@/renderer/store/settings.store';
 import { useTimestampStoreBase } from '/@/renderer/store/timestamp.store';
+import { onActivationKey } from '/@/renderer/utils/activation-key';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Group } from '/@/shared/components/group/group';
 import { Icon } from '/@/shared/components/icon/icon';
@@ -286,13 +287,18 @@ export const MobilePlayerbar = () => {
                             <div className={styles.imageWrapper}>
                                 <motion.div
                                     animate={{ opacity: 1, scale: 1 }}
+                                    aria-label={t('player.toggleFullscreenPlayer')}
                                     className={styles.image}
                                     exit={{ opacity: 0 }}
                                     initial={{ opacity: 0 }}
                                     key="mobile-playerbar-image"
                                     onClick={handleToggleFullScreenPlayer}
                                     onContextMenu={handleToggleContextMenu}
+                                    onKeyDown={onActivationKey(() =>
+                                        handleToggleFullScreenPlayer(),
+                                    )}
                                     role="button"
+                                    tabIndex={0}
                                     transition={{ duration: 0.2, ease: 'easeIn' }}
                                 >
                                     <Tooltip
@@ -357,6 +363,7 @@ export const MobilePlayerbar = () => {
                                         </Text>
                                         {isSongDefined && (
                                             <ActionIcon
+                                                aria-label={t('common.more')}
                                                 icon="ellipsisVertical"
                                                 onClick={handleToggleContextMenu}
                                                 size="xs"

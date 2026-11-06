@@ -27,3 +27,9 @@ tr:hover .remove-button,
 .removed-row > :first-child {
     text-decoration: line-through;
 }
+
+@media (pointer: coarse) {
+    .remove-button {
+        opacity: 1;
+    }
+}

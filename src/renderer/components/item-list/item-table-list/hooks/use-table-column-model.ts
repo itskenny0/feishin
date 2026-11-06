@@ -19,10 +19,15 @@ export const useTableColumnModel = ({
     // (album, year, genre, size, etc.) so the essential title + duration
     // get the horizontal space - on a 360-480px viewport, having 6+
     // columns means everything is truncated past the point of legibility.
+    // Narrow containers in the desktop shell (fullscreen queue panel, tablet
+    // widths) have the same problem: autofit shrinks Title to the same share
+    // as Genre or Year, so it truncates to a few letters.
     const isMobileShell = useIsMobileShell();
+    const isNarrow = totalContainerWidth > 0 && totalContainerWidth < 600;
+    const trimForMobile = isMobileShell || isNarrow;
     const parsedColumns = useMemo(
-        () => parseTableColumns(columns, { trimForMobile: isMobileShell }),
-        [columns, isMobileShell],
+        () => parseTableColumns(columns, { trimForMobile }),
+        [columns, trimForMobile],
     );
 
     const calculatedColumnWidths = useMemo(() => {
@@ -30,7 +35,9 @@ export const useTableColumnModel = ({
 
         // When autoSizeColumns is enabled, treat unpinned widths as proportions and scale to fit container.
         // Pinned columns keep their base width so they don't get squeezed.
-        if (autoFitColumns) {
+        // The mobile shell always fits the table to the screen: a phone cannot
+        // usefully scroll a table sideways.
+        if (autoFitColumns || isMobileShell) {
             const pinnedWidth = parsedColumns.reduce(
                 (sum, col, idx) => (col.pinned !== null ? sum + baseWidths[idx] : sum),
                 0,
@@ -50,6 +57,19 @@ export const useTableColumnModel = ({
 
             if (unpinnedReferenceWidth === 0 || availableForUnpinned <= 0) {
                 return baseWidths.map((width) => Math.round(width));
+            }
+
+            // Growing: give the spare room to the auto-size columns (Title)
+            // instead of stretching every column ('#' was ~4x on ultrawide).
+            const autoIdx = unpinnedIndices.filter((idx) => parsedColumns[idx].autoSize);
+            if (availableForUnpinned > unpinnedReferenceWidth && autoIdx.length > 0) {
+                const extraPer = (availableForUnpinned - unpinnedReferenceWidth) / autoIdx.length;
+                const grown = baseWidths.map((width, idx) =>
+                    Math.round(autoIdx.includes(idx) ? width + extraPer : width),
+                );
+                grown[autoIdx[0]] +=
+                    totalContainerWidth - grown.reduce((sum, width) => sum + width, 0);
+                return grown;
             }
 
             const scaleFactor = availableForUnpinned / unpinnedReferenceWidth;
@@ -110,7 +130,7 @@ export const useTableColumnModel = ({
         });
 
         return distributed.map((width) => Math.round(width));
-    }, [autoFitColumns, centerContainerWidth, parsedColumns, totalContainerWidth]);
+    }, [autoFitColumns, centerContainerWidth, isMobileShell, parsedColumns, totalContainerWidth]);
 
     const pinnedLeftColumnCount = useMemo(
         () => parsedColumns.filter((col) => col.pinned === 'left').length,

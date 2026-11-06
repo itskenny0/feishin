@@ -30,7 +30,7 @@
  */
 /* stylelint-disable selector-class-pattern -- Mantine emits PascalCase class
    names on its root elements and we have to target those externally. */
-@media (width <= 767px), (orientation: landscape) and (height <= 480px) {
+@media (width <= 767px), (orientation: landscape) and (height <= 480px) and (pointer: coarse) {
     .container {
         gap: var(--theme-spacing-sm);
         padding: 0;

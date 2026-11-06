@@ -1,4 +1,4 @@
-import { MantineProvider } from '@mantine/core';
+import { type CSSVariablesResolver, MantineProvider } from '@mantine/core';
 import '@mantine/core/styles.css';
 import '@mantine/notifications/styles.css';
 
@@ -12,6 +12,13 @@ import { Shell } from '/@/remote/components/shell';
 import { useAccentColor, useIsDark, useReconnect } from '/@/remote/store';
 import { useAppTheme } from '/@/renderer/themes/use-app-theme';
 import { AppTheme } from '/@/shared/themes/app-theme-types';
+
+// c="dimmed" text should use the theme's muted colour, not Mantine's gray.
+const mutedDimmedResolver: CSSVariablesResolver = () => ({
+    dark: { '--mantine-color-dimmed': 'var(--theme-colors-foreground-muted)' },
+    light: { '--mantine-color-dimmed': 'var(--theme-colors-foreground-muted)' },
+    variables: {},
+});
 
 export const App = () => {
     const isDark = useIsDark();
@@ -47,7 +54,11 @@ export const App = () => {
         // that specifically, like segmented-control.module.css's
         // `@mixin dark`/`@mixin light` active-tab background, stayed stuck
         // on whatever scheme was active the moment the page first loaded.
-        <MantineProvider forceColorScheme={mode} theme={theme}>
+        <MantineProvider
+            cssVariablesResolver={mutedDimmedResolver}
+            forceColorScheme={mode}
+            theme={theme}
+        >
             <HashRouter>
                 <Shell />
             </HashRouter>

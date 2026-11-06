@@ -21,6 +21,7 @@ import { type PlaylistAlbumRow, playlistSongsToAlbums } from '/@/renderer/featur
 import { useListRefreshTick } from '/@/renderer/features/shared/hooks/use-list-refresh-tick';
 import { useSearchTermFilter } from '/@/renderer/features/shared/hooks/use-search-term-filter';
 import { searchLibraryItems } from '/@/renderer/features/shared/utils';
+import { useIsMobileShell } from '/@/renderer/hooks/use-breakpoint';
 import { useEnableGridMultiSelect, useListSettings } from '/@/renderer/store';
 import { sortSongList } from '/@/shared/api/utils';
 import {
@@ -174,8 +175,13 @@ export const PlaylistDetailAlbumView = ({ data }: { data: PlaylistSongListRespon
         );
     }, [table.columns]);
 
+    const isMobileShell = useIsMobileShell();
+
     const renderAlbumList = () => {
-        switch (display) {
+        // A Detail choice saved on a wider screen falls back to the grid on phones.
+        switch (
+            isMobileShell && display === ListDisplayType.DETAIL ? ListDisplayType.GRID : display
+        ) {
             case ListDisplayType.DETAIL:
                 return (
                     <ItemDetailList

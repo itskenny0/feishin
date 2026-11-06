@@ -288,8 +288,9 @@
 }
 
 .header-content.center {
-    justify-content: center;
-    text-align: center;
+    justify-content: flex-start;
+    justify-content: safe center;
+    text-align: left;
 }
 
 .header-content.left {
@@ -464,6 +465,16 @@
 }
 
 @media (pointer: coarse) {
+    /* Draw the divider on the column edge, not inside the next header. */
+    .resize-handle-right::before {
+        right: 11px;
+    }
+
+    .resize-handle-left::before {
+        right: auto;
+        left: 11px;
+    }
+
     .resize-handle {
         width: 24px;
         margin-right: -12px;

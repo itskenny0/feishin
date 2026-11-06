@@ -226,7 +226,7 @@ export default class MenuBuilder {
                     click: this.send('renderer-player-skip-backward'),
                     enabled: isPlaybackItemEnabled(inputFocused, accelerators?.seekBackward),
                     id: MENU_ITEM_IDS.seekBackward,
-                    label: 'Seek Backforward',
+                    label: 'Seek Backward',
                 },
                 { type: 'separator' },
                 {

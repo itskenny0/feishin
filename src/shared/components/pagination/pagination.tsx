@@ -3,6 +3,7 @@ import {
     PaginationProps as MantinePaginationProps,
 } from '@mantine/core';
 import clsx from 'clsx';
+import { t } from 'i18next';
 import { useRef, useState } from 'react';
 
 import styles from './pagination.module.css';
@@ -81,38 +82,42 @@ export const Pagination = ({
                     value={currentPageValue}
                 />
                 {/* Re-seed on open: the page may have changed since mount. */}
-                <Popover onOpen={() => setGoToPage(currentPageValue)} position="top">
-                    <Popover.Target>
-                        <ActionIcon
-                            className={styles.control}
-                            icon="ellipsisHorizontal"
-                            size="xs"
-                            style={{
-                                height: 'calc(2rem * 1)',
-                                minWidth: 'calc(2rem * 1)',
-                            }}
-                        />
-                    </Popover.Target>
-                    <Popover.Dropdown>
-                        <Group gap={0}>
-                            <NumberInput
-                                autoFocus
-                                hideControls={false}
-                                max={props.total}
-                                min={1}
-                                onChange={(e) => setGoToPage(Number(e))}
-                                onKeyDown={handleGoToKeyDown}
-                                value={goToPage}
-                                width={120}
-                            />
+                {props.total > 1 && (
+                    <Popover onOpen={() => setGoToPage(currentPageValue)} position="top">
+                        <Popover.Target>
                             <ActionIcon
-                                icon="arrowRight"
-                                onClick={handleGoToPage}
-                                variant="default"
+                                aria-label={t('action.goToPage')}
+                                className={styles.control}
+                                icon="ellipsisHorizontal"
+                                size="xs"
+                                style={{
+                                    height: 'calc(2rem * 1)',
+                                    minWidth: 'calc(2rem * 1)',
+                                }}
                             />
-                        </Group>
-                    </Popover.Dropdown>
-                </Popover>
+                        </Popover.Target>
+                        <Popover.Dropdown>
+                            <Group gap={0}>
+                                <NumberInput
+                                    autoFocus
+                                    hideControls={false}
+                                    max={props.total}
+                                    min={1}
+                                    onChange={(e) => setGoToPage(Number(e))}
+                                    onKeyDown={handleGoToKeyDown}
+                                    value={goToPage}
+                                    width={120}
+                                />
+                                <ActionIcon
+                                    aria-label={t('action.goToPage')}
+                                    icon="arrowRight"
+                                    onClick={handleGoToPage}
+                                    variant="default"
+                                />
+                            </Group>
+                        </Popover.Dropdown>
+                    </Popover>
+                )}
             </Group>
             {containerQuery.isSm && totalItemCount > 0 && (
                 <Text isNoSelect weight={500}>

@@ -21,6 +21,9 @@ export const Slider = memo(
                 ref={ref}
                 style={style}
                 {...props}
+                // Mantine puts role="slider" on the thumb and names it from
+                // thumbLabel; a plain aria-label only lands on the root div.
+                thumbLabel={props.thumbLabel ?? props['aria-label']}
             />
         );
     }),

@@ -534,7 +534,7 @@ const AlbumArtistMetadataTopSongsContent = ({
                                     styles={{
                                         input: {
                                             background: 'transparent',
-                                            border: '1px solid rgba(255, 255, 255, 0.05)',
+                                            border: '1px solid var(--theme-colors-border)',
                                         },
                                     }}
                                     value={searchTerm}
@@ -879,7 +879,7 @@ const AlbumArtistMetadataFavoriteSongs = ({
                                     styles={{
                                         input: {
                                             background: 'transparent',
-                                            border: '1px solid rgba(255, 255, 255, 0.05)',
+                                            border: '1px solid var(--theme-colors-border)',
                                         },
                                     }}
                                     value={searchTerm}
@@ -1596,6 +1596,9 @@ const ArtistAlbums = ({ albumsQuery, order }: ArtistAlbumsProps) => {
     return (
         <Grid.Col order={order} span={12}>
             <Stack gap="md">
+                <TextTitle fw={700} order={3}>
+                    {t('page.albumArtistDetail.discography')}
+                </TextTitle>
                 <Group gap="sm" w="100%">
                     <TextInput
                         flex={1}
@@ -1617,7 +1620,7 @@ const ArtistAlbums = ({ albumsQuery, order }: ArtistAlbumsProps) => {
                         styles={{
                             input: {
                                 background: 'transparent',
-                                border: '1px solid rgba(255, 255, 255, 0.05)',
+                                border: '1px solid var(--theme-colors-border)',
                             },
                         }}
                         value={searchTerm}

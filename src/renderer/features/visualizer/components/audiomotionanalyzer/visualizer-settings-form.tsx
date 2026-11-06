@@ -111,8 +111,8 @@ const buildTranslatedOptions = (t: TFunction) => ({
         { label: t('visualizer.options.weightingFilter.none') as string, value: '' },
         { label: t('visualizer.options.weightingFilter.a') as string, value: 'A' },
         { label: t('visualizer.options.weightingFilter.b') as string, value: 'B' },
-        { label: t('visualizer.options.weightingFilter.C') as string, value: 'C' },
-        { label: t('visualizer.options.weightingFilter.D') as string, value: 'D' },
+        { label: t('visualizer.options.weightingFilter.c') as string, value: 'C' },
+        { label: t('visualizer.options.weightingFilter.d') as string, value: 'D' },
         { label: t('visualizer.options.weightingFilter.z') as string, value: 'Z' },
     ],
 });

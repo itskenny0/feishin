@@ -181,7 +181,7 @@ export const MobileFullscreenPlayerControls = memo(
                                       defaultValue: 'Repeat one',
                                   })
                                 : repeatActive
-                                  ? t('player.repeat', { defaultValue: 'Repeat all' })
+                                  ? t('player.repeat', { context: 'all' })
                                   : t('player.repeat', {
                                         context: 'off',
                                         defaultValue: 'Repeat off',

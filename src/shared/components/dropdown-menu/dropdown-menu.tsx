@@ -51,6 +51,17 @@ export const DropdownMenu = ({ children, ...props }: MenuProps) => {
                 dropdown: styles['menu-dropdown'],
                 itemSection: styles['menu-item-section'],
             }}
+            // Long menus (e.g. sort options) scroll inside the viewport
+            // instead of running off the bottom of a phone screen.
+            middlewares={{
+                flip: true,
+                shift: true,
+                size: {
+                    apply: ({ availableHeight, elements }) => {
+                        elements.floating.style.maxHeight = `${Math.max(availableHeight - 8, 120)}px`;
+                    },
+                },
+            }}
             offset={10}
             transitionProps={{
                 transition: getTransition(props.position),

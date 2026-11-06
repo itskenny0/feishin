@@ -45,6 +45,7 @@ import {
     useSidebarItems,
     useWindowSettings,
 } from '/@/renderer/store/settings.store';
+import { onActivationKey } from '/@/renderer/utils/activation-key';
 import { Accordion } from '/@/shared/components/accordion/accordion';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Center } from '/@/shared/components/center/center';
@@ -316,14 +317,17 @@ const SidebarImage = () => {
     return (
         <motion.div
             animate={{ opacity: 1, y: 0 }}
+            aria-label={t('player.toggleFullscreenPlayer')}
             className={styles.imageContainer}
             exit={{ opacity: 0, y: 200 }}
             initial={{ opacity: 0, y: 200 }}
             key="sidebar-image"
             onClick={expandFullScreenPlayer}
             onContextMenu={handleToggleContextMenu}
+            onKeyDown={onActivationKey(expandFullScreenPlayer)}
             role="button"
             style={{ aspectRatio: 1 }}
+            tabIndex={0}
             transition={{ duration: 0.3, ease: 'easeInOut' }}
         >
             <Tooltip label={t('player.toggleFullscreenPlayer')}>

@@ -91,10 +91,58 @@ const calculateVolumeDown = (volume: number, volumeWheelStep: number) => {
     return volumeToSet;
 };
 
+// Below 835px (and on touch up to 1280px, where every bar button grows to
+// 44px) the full cluster is far wider than its grid column and used to spill
+// over the transport. There, the secondary controls swap in behind a toggle.
+const CRAMPED_QUERY = '(max-width: 834px), (pointer: coarse) and (max-width: 1280px)';
+
 export const RightControls = () => {
+    const { t } = useTranslation();
     const showFavorites = useShowFavorites();
     const showRatings = useShowRatings();
     const playbackType = usePlaybackType();
+    const isCramped = useMediaQuery(CRAMPED_QUERY);
+    const [showSecondary, setShowSecondary] = useState(false);
+
+    if (isCramped) {
+        return (
+            <Flex align="center" h="100%" justify="flex-end" px="0.5rem" py="0.5rem">
+                <Group align="center" gap={4} wrap="nowrap">
+                    {showSecondary ? (
+                        <>
+                            {showRatings && <RatingButton />}
+                            <AutoDJButton />
+                            <SleepTimerButton />
+                            <PlayerConfig />
+                            <LyricsButton />
+                        </>
+                    ) : (
+                        <>
+                            <DlnaCastButton />
+                            {showFavorites && <FavoriteButton />}
+                            <QueueButton />
+                            <DevicePickerButton />
+                            {playbackType === PlayerType.DLNA ? (
+                                <DlnaVolumeButton />
+                            ) : (
+                                <VolumeButton hideSlider />
+                            )}
+                        </>
+                    )}
+                    <ActionIcon
+                        aria-expanded={showSecondary}
+                        aria-label={showSecondary ? t('common.close') : t('common.more')}
+                        icon={showSecondary ? 'x' : 'ellipsisHorizontal'}
+                        iconProps={{ size: 'lg' }}
+                        onClick={() => setShowSecondary((open) => !open)}
+                        size="sm"
+                        variant="subtle"
+                    />
+                </Group>
+            </Flex>
+        );
+    }
+
     return (
         // Spotify's right cluster is a single vertically-centered row
         // right-aligned against the bar edge. Feishin previously stacked
@@ -613,7 +661,7 @@ const RatingButton = () => {
     );
 };
 
-const VolumeButton = () => {
+const VolumeButton = ({ hideSlider = false }: { hideSlider?: boolean }) => {
     const { bindings } = useHotkeySettings();
     const source = useActivePlayerSource();
     const canSetVolume = useTransportEnabled('SetVolume');
@@ -777,8 +825,9 @@ const VolumeButton = () => {
                     ))}
                 </ContextMenu.Content>
             </ContextMenu>
-            {!isMinWidth ? (
+            {!isMinWidth && !hideSlider ? (
                 <CustomPlayerbarSlider
+                    aria-label={t('player.volume')}
                     disabled={!canSetVolume}
                     max={100}
                     min={0}

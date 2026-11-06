@@ -13,10 +13,12 @@
 
 .label-left {
     justify-self: end;
+    font-variant-numeric: tabular-nums;
 }
 
 .label-right {
     justify-self: start;
+    font-variant-numeric: tabular-nums;
 }
 
 .root {

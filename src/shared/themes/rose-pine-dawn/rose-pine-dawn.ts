@@ -2,6 +2,10 @@ import { AppThemeConfiguration } from '/@/shared/themes/app-theme-types';
 
 export const rosePineDawn: AppThemeConfiguration = {
     app: {
+        'overlay-header':
+            'linear-gradient(rgb(250 244 237 / 50%) 0%, rgb(250 244 237 / 80%)), var(--theme-background-noise)',
+        'overlay-subheader':
+            'linear-gradient(180deg, rgb(250 244 237 / 5%) 0%, var(--theme-colors-background)), var(--theme-background-noise)',
         'scrollbar-handle-active-background': 'rgba(206, 202, 205, 0.7)',
         'scrollbar-handle-background': 'rgba(244, 237, 232, 0.5)',
     },
@@ -17,6 +21,11 @@ export const rosePineDawn: AppThemeConfiguration = {
         'state-warning': '#ea9d34', // gold
         surface: '#fffaf3', // surface
         'surface-foreground': '#797593', // subtle
+    },
+    mantineOverride: {
+        primaryShade: {
+            light: 4,
+        },
     },
     mode: 'light',
 };

@@ -14,6 +14,7 @@ import { ScrobbleStatus } from '/@/renderer/features/player/components/scrobble-
 import { TrackmapCanvas } from '/@/renderer/features/trackmap';
 import { useAppStore, useAppStoreActions, usePlayerTimestamp } from '/@/renderer/store';
 import { useTrackmapEnabled } from '/@/renderer/store/settings.store';
+import { onActivationKey } from '/@/renderer/utils/activation-key';
 import { Slider, SliderProps } from '/@/shared/components/slider/slider';
 import { Text } from '/@/shared/components/text/text';
 import { PlaybackSelectors } from '/@/shared/constants/playback-selectors';
@@ -60,9 +61,11 @@ const DurationReadout = ({
                 setShowTimeRemaining(!showTimeRemaining);
                 e.stopPropagation();
             }}
+            onKeyDown={onActivationKey(() => setShowTimeRemaining(!showTimeRemaining))}
             role="button"
             size="xs"
             style={{ cursor: 'pointer', userSelect: 'none' }}
+            tabIndex={0}
         >
             {text}
         </Text>

@@ -12,7 +12,7 @@
     max-width: 420px;
 }
 
-@media (width <= 767px), (orientation: landscape) and (height <= 480px) {
+@media (width <= 767px), (orientation: landscape) and (height <= 480px) and (pointer: coarse) {
     .form input {
         font-size: 16px;
     }

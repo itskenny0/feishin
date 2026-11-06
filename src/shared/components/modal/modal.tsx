@@ -7,7 +7,7 @@ import {
     openModal as openModalMantine,
 } from '@mantine/modals';
 import { t } from 'i18next';
-import React, { ReactNode } from 'react';
+import React, { ReactNode, useState } from 'react';
 
 import styles from './modal.module.css';
 
@@ -48,6 +48,7 @@ export const Modal = ({ children, classNames, handlers, ...rest }: ModalProps) =
                 ...classNames,
             }}
             closeButtonProps={{
+                'aria-label': t('common.close', { defaultValue: 'Close' }),
                 icon: <Icon icon="x" size="xl" />,
             }}
             onClose={handlers.close}
@@ -90,7 +91,7 @@ interface ConfirmModalProps {
     };
     loading?: boolean;
     onCancel?: () => void;
-    onConfirm: () => void;
+    onConfirm: () => Promise<unknown> | void;
 }
 
 export const ConfirmModal = ({
@@ -101,6 +102,20 @@ export const ConfirmModal = ({
     onCancel,
     onConfirm,
 }: ConfirmModalProps) => {
+    // Async confirms stay busy until they settle, so a second click cannot
+    // repeat the action (e.g. a double delete followed by an error toast).
+    const [pending, setPending] = useState(false);
+
+    const handleConfirm = async () => {
+        if (pending) return;
+        setPending(true);
+        try {
+            await onConfirm();
+        } finally {
+            setPending(false);
+        }
+    };
+
     const handleCancel = () => {
         if (onCancel) {
             onCancel();
@@ -113,14 +128,14 @@ export const ConfirmModal = ({
         <Stack>
             <Flex>{children}</Flex>
             <Group justify="flex-end">
-                <Button disabled={loading} onClick={handleCancel} variant="default">
+                <Button disabled={loading || pending} onClick={handleCancel} variant="default">
                     {labels?.cancel ?? t('common.cancel', { defaultValue: 'Cancel' })}
                 </Button>
                 <Button
                     data-autofocus
                     disabled={disabled}
-                    loading={loading}
-                    onClick={onConfirm}
+                    loading={loading || pending}
+                    onClick={handleConfirm}
                     variant="filled"
                 >
                     {labels?.confirm ?? t('common.confirm', { defaultValue: 'Confirm' })}
@@ -148,6 +163,7 @@ export const ModalsProvider = ({ children, ...rest }: ModalsProviderProps) => {
                     title: styles.title,
                 },
                 closeButtonProps: {
+                    'aria-label': t('common.close', { defaultValue: 'Close' }),
                     icon: <Icon icon="x" size="xl" />,
                 },
                 overlayProps: {

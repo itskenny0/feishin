@@ -151,10 +151,9 @@ export const LyricSettings = memo(() => {
             ),
             description: t('setting.skipNeteasePlaceholders', {
                 context: 'description',
-                postProcess: 'sentenceCase',
             }),
             isHidden: !isElectron(),
-            title: t('setting.skipNeteasePlaceholders', { postProcess: 'sentenceCase' }),
+            title: t('setting.skipNeteasePlaceholders'),
         },
         {
             control: (

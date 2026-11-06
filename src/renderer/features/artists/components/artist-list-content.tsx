@@ -107,6 +107,9 @@ export const ArtistListView = ({
     });
 
     if (countQuery.data?.totalRecordCount === 0) {
+        const isFiltered =
+            Boolean((query as { searchTerm?: string }).searchTerm) ||
+            (query as { favorite?: boolean }).favorite !== undefined;
         const fallback: EmptyStateProps = {
             description: t('emptyState.artistsDescription', {
                 defaultValue: 'Artists will appear here once your library is scanned.',
@@ -114,6 +117,17 @@ export const ArtistListView = ({
             icon: 'artist',
             title: t('emptyState.artistsTitle', { defaultValue: 'No artists yet' }),
         };
+        // A search or filter that matches nothing is not an empty library.
+        if (isFiltered) {
+            return (
+                <EmptyState
+                    description={t('emptyState.searchDescription')}
+                    icon="search"
+                    title={t('emptyState.searchTitle')}
+                    {...emptyState}
+                />
+            );
+        }
         return <EmptyState {...fallback} {...emptyState} />;
     }
 

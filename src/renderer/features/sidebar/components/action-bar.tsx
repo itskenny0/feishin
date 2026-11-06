@@ -7,7 +7,7 @@ import { useScanStatus } from '/@/renderer/features/shared/hooks/use-scan-status
 import { AppMenu } from '/@/renderer/features/titlebar/components/app-menu';
 import { useIsMobileShell } from '/@/renderer/hooks/use-breakpoint';
 import { AppRoute } from '/@/renderer/router/routes';
-import { useCommandPalette } from '/@/renderer/store';
+import { useCommandPalette, useHotkeySettings } from '/@/renderer/store';
 import { Button } from '/@/shared/components/button/button';
 import { DropdownMenu } from '/@/shared/components/dropdown-menu/dropdown-menu';
 import { Grid } from '/@/shared/components/grid/grid';
@@ -15,10 +15,12 @@ import { Group } from '/@/shared/components/group/group';
 import { Icon } from '/@/shared/components/icon/icon';
 import { Kbd } from '/@/shared/components/kbd/kbd';
 import { TextInput } from '/@/shared/components/text-input/text-input';
+import { formatHotkeyForDisplay } from '/@/shared/utils/keyboard-code-to-hotkey';
 
 export const ActionBar = () => {
     const { t } = useTranslation();
     const { open } = useCommandPalette();
+    const searchHotkey = useHotkeySettings().bindings.globalSearch?.hotkey;
     const isMobileShell = useIsMobileShell();
     const navigate = useNavigate();
     const { isScanning } = useScanStatus();
@@ -63,10 +65,13 @@ export const ActionBar = () => {
                         readOnly
                         // Permanent hint so users discover the command-
                         // palette shortcut without trawling the settings.
-                        // "Mod+K" matches the hotkey string Mantine /
-                        // mousetrap uses internally (mod = Ctrl on
-                        // Windows/Linux, ⌘ on macOS).
-                        rightSection={<Kbd size="xs">Mod+K</Kbd>}
+                        // Built from the (rebindable) binding, with the
+                        // library's "mod" shown as Ctrl or ⌘.
+                        rightSection={
+                            searchHotkey ? (
+                                <Kbd size="xs">{formatHotkeyForDisplay(searchHotkey)}</Kbd>
+                            ) : undefined
+                        }
                         rightSectionWidth={52}
                         size="sm"
                     />

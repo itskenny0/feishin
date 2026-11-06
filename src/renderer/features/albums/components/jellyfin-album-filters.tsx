@@ -293,7 +293,7 @@ export const JellyfinAlbumFilters = ({
                 <YesNoSelect
                     label={compilationFilter.label}
                     onChange={(e) => compilationFilter.onChange(e ? e === 'true' : undefined)}
-                    value={compilationFilter.value ? compilationFilter.value.toString() : undefined}
+                    value={compilationFilter.value == null ? null : String(compilationFilter.value)}
                 />
             )}
             {!disableArtistFilter && (

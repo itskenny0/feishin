@@ -90,8 +90,9 @@ export const SearchHeader = ({ navigationId }: SearchHeaderProps) => {
                             {t('common.search', { defaultValue: 'Search' })}
                         </LibraryHeaderBar.Title>
                     </LibraryHeaderBar>
-                    <Group gap="xs">
+                    <Group gap="xs" wrap="nowrap">
                         <SearchInput
+                            defaultExpanded
                             defaultValue={searchParams.get('query') || ''}
                             onChange={handleSearch}
                         />

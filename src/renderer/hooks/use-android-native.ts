@@ -1,8 +1,9 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 import { useBottomSheetStore } from '/@/renderer/features/jellyfin-remote-target/components/bottom-sheet/bottom-sheet-store';
 import { SETTINGS_SUBPAGES } from '/@/renderer/features/settings/subpages';
 import { MOBILE_SHELL_QUERY } from '/@/renderer/hooks/use-breakpoint';
+import { useHotkeys } from '/@/renderer/hooks/use-hotkeys';
 import {
     useAppStore,
     useFullScreenPlayerStore,
@@ -235,6 +236,46 @@ const escapeKeydown = () =>
 
 const MANTINE_OVERLAY_SELECTOR =
     '.mantine-Modal-content, .mantine-Drawer-content, .mantine-Popover-dropdown';
+
+/**
+ * True while a Radix menu or a visible Mantine modal / drawer / popover is in
+ * the DOM. Page-level Escape hotkeys use it to leave a press that closes one of
+ * those alone: both libraries close behind an exit transition, so the overlay
+ * is still present while the same keydown bubbles up to <html>.
+ */
+export const isDomOverlayOpen = (): boolean =>
+    document.querySelector('[data-radix-menu-content][data-state="open"]') !== null ||
+    Array.from(document.querySelectorAll<HTMLElement>(MANTINE_OVERLAY_SELECTOR)).some(
+        (el) => el.style.display !== 'none',
+    );
+
+/**
+ * Escape hotkey for page-level closers (fullscreen player, visualizer) that
+ * leaves alone a press which is closing a menu, modal or popover. The open
+ * state is read in a window capture listener registered on mount, so it is
+ * taken before that overlay's own handlers close (and possibly unmount) it.
+ */
+export const useOverlayAwareEscape = (handler: () => void) => {
+    const overlayOpenRef = useRef(false);
+
+    useEffect(() => {
+        const snapshot = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') overlayOpenRef.current = isDomOverlayOpen();
+        };
+        window.addEventListener('keydown', snapshot, true);
+        return () => window.removeEventListener('keydown', snapshot, true);
+    }, []);
+
+    useHotkeys([
+        [
+            'Escape',
+            (event) => {
+                if (event.defaultPrevented || overlayOpenRef.current) return;
+                handler();
+            },
+        ],
+    ]);
+};
 
 /**
  * Back-gesture step 1: close the topmost DOM-rendered overlay by synthesising

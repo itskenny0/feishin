@@ -130,7 +130,7 @@ table {
         border-radius: 18px;
     }
 
-    button:not(.mantine-focus-never) {
+    button:not(.mantine-focus-never, .mantine-focus-auto) {
         border-radius: 8px;
     }
 }

@@ -14,7 +14,7 @@
  *    public brokers can see playback state and commands.
  *  - peerId is auto-generated on first opt-in if missing.
  */
-import { Alert, Collapse, Group, Stack, Switch } from '@mantine/core';
+import { Alert, Collapse, Group, Stack } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import isElectron from 'is-electron';
 import { nanoid } from 'nanoid';
@@ -30,6 +30,7 @@ import { Button } from '/@/shared/components/button/button';
 import { NumberInput } from '/@/shared/components/number-input/number-input';
 import { PasswordInput } from '/@/shared/components/password-input/password-input';
 import { Select } from '/@/shared/components/select/select';
+import { Switch } from '/@/shared/components/switch/switch';
 import { TextInput } from '/@/shared/components/text-input/text-input';
 import { Text } from '/@/shared/components/text/text';
 import { toast } from '/@/shared/components/toast/toast';

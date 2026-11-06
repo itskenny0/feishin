@@ -119,13 +119,10 @@ const CustomThemesManager = memo(() => {
                             size="compact-md"
                             variant="subtle"
                         >
-                            {t('common.openFolder', { postProcess: 'titleCase' })}
+                            {t('common.openFolder')}
                         </Button>
                         <Button onClick={() => refresh()} size="compact-md" variant="subtle">
-                            {t('common.reload', {
-                                defaultValue: 'Reload',
-                                postProcess: 'titleCase',
-                            })}
+                            {t('common.reload', { defaultValue: 'Reload' })}
                         </Button>
                     </Group>
                 }
@@ -401,7 +398,7 @@ export const ThemeSettings = memo(() => {
         <SettingsSection
             extra={
                 <>
-                    <CustomThemesManager />
+                    {isElectron() && <CustomThemesManager />}
                     <StylesSettings />
                 </>
             }

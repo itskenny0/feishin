@@ -188,7 +188,7 @@ export const SidebarCollectionList = () => {
 
     return (
         <Accordion.Item value="collections">
-            <Accordion.Control component="div" role="button" style={{ userSelect: 'none' }}>
+            <Accordion.Control style={{ userSelect: 'none' }}>
                 <Text fw={700} fz="md">
                     {t('page.sidebar.collections')}
                 </Text>

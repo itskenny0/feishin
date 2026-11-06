@@ -136,6 +136,12 @@ function CommandPaletteSearch({
     );
 }
 
+const PAGE_LABEL_KEYS: Record<CommandPalettePages, string> = {
+    [CommandPalettePages.GO_TO]: 'page.globalSearch.commands.goToPage',
+    [CommandPalettePages.HOME]: 'common.home',
+    [CommandPalettePages.MANAGE_SERVERS]: 'page.globalSearch.commands.serverCommands',
+};
+
 export const CommandPalette = ({ modalProps }: CommandPaletteProps) => {
     const [value, setValue] = useState('');
     const [query, setQuery] = useState('');
@@ -146,9 +152,9 @@ export const CommandPalette = ({ modalProps }: CommandPaletteProps) => {
     const searchInputRef = useRef<HTMLInputElement>(null);
     // On the mobile shell the modal goes fullscreen so the input/results
     // claim the entire viewport (Spotify search style) rather than a
-    // cramped centered dialog. zIndex bumped to 1000 so the palette
-    // floats above the bottom-tab-bar (which has its own z-index 0 in
-    // the layout grid + a box-shadow) and the mini-player above it.
+    // cramped centered dialog. It keeps Mantine's default modal z-index so
+    // its own tooltips and modals opened from it (add to playlist) stack
+    // above it.
     const isMobileShell = useIsMobileShell();
 
     const popPage = useCallback(() => {
@@ -226,10 +232,8 @@ export const CommandPalette = ({ modalProps }: CommandPaletteProps) => {
                               'calc(var(--theme-spacing-md) + max(env(safe-area-inset-top, 0px), var(--android-safe-top, 0px)))',
                       }
                     : { display: 'none' },
-                root: { zIndex: 1000 },
             }}
             withCloseButton={isMobileShell}
-            zIndex={1000}
         >
             <Command
                 filter={(value, search) => {
@@ -315,7 +319,7 @@ export const CommandPalette = ({ modalProps }: CommandPaletteProps) => {
                             size="compact-xs"
                             variant="subtle"
                         >
-                            {page?.toLocaleUpperCase()}
+                            {t(PAGE_LABEL_KEYS[page])}
                         </Button>
                     ))}
                 </Breadcrumb>

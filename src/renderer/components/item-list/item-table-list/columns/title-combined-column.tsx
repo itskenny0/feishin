@@ -91,6 +91,8 @@ export const DefaultTitleCombinedColumn = (props: ItemTableListInnerColumn) => {
     // Playlists have no `artists`; they still render image + name.
     if (item && 'name' in item && 'imageUrl' in item) {
         const rowHeight = props.getRowHeight(props.rowIndex, props);
+        // Two-line titles plus the artist line overflow rows under 64px.
+        const isShortRow = props.size === 'compact' || rowHeight < 64;
         const path = getTitlePath(props.itemType, (rowItem as any).id as string);
         const align = props.columns[props.columnIndex]?.align || 'start';
         const hasAlbumGroupColumn = props.hasAlbumGroupColumn ?? false;
@@ -159,12 +161,12 @@ export const DefaultTitleCombinedColumn = (props: ItemTableListInnerColumn) => {
                         [styles.alignCenter]: align === 'center',
                         [styles.alignLeft]: align === 'start',
                         [styles.alignRight]: align === 'end',
-                        [styles.compact]: props.size === 'compact',
+                        [styles.compact]: isShortRow,
                     })}
                 >
                     <Text
                         className={clsx(styles.title, {
-                            [styles.compact]: props.size === 'compact',
+                            [styles.compact]: isShortRow,
                             [styles.large]: props.size === 'large',
                         })}
                         isNoSelect
@@ -257,6 +259,8 @@ export const QueueSongTitleCombinedColumn = (props: ItemTableListInnerColumn) =>
 
     if (row && 'name' in row && 'imageUrl' in row && 'artists' in row) {
         const rowHeight = props.getRowHeight(props.rowIndex, props);
+        // Two-line titles plus the artist line overflow rows under 64px.
+        const isShortRow = props.size === 'compact' || rowHeight < 64;
         const path = getTitlePath(props.itemType, (rowItem as any).id as string);
         const align = props.columns[props.columnIndex]?.align || 'start';
         const hasAlbumGroupColumn = props.hasAlbumGroupColumn ?? false;
@@ -328,13 +332,13 @@ export const QueueSongTitleCombinedColumn = (props: ItemTableListInnerColumn) =>
                         [styles.alignCenter]: align === 'center',
                         [styles.alignLeft]: align === 'start',
                         [styles.alignRight]: align === 'end',
-                        [styles.compact]: props.size === 'compact',
+                        [styles.compact]: isShortRow,
                     })}
                 >
                     <Text
                         className={clsx({
                             [styles.active]: isActive,
-                            [styles.compact]: props.size === 'compact',
+                            [styles.compact]: isShortRow,
                             [styles.large]: props.size === 'large',
                             [styles.title]: true,
                         })}

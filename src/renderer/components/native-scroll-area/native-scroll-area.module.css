@@ -2,6 +2,12 @@
     height: calc(100vh - 90px);
 }
 
+/* The desktop maths above (viewport minus the 90px player bar) is wrong in the
+   mobile shell, which has a tab bar and a player row that collapses when idle. */
+:global(#mobile-layout) .scroll-area {
+    height: 100%;
+}
+
 .drag-container {
     position: absolute;
     top: 0;

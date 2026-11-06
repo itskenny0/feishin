@@ -2,7 +2,7 @@ import type { EntityType } from '/@/renderer/cache/types';
 import type { ServerListItem } from '/@/shared/types/domain-types';
 
 import { Capacitor } from '@capacitor/core';
-import { Alert, Button, Group, Progress, Slider, Stack, Switch, Text, Title } from '@mantine/core';
+import { Alert, Button, Group, Progress, Slider, Stack, Text, Title } from '@mantine/core';
 import { openConfirmModal } from '@mantine/modals';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -34,6 +34,8 @@ import { cancelHydration } from '/@/renderer/cache/sync';
 import { CacheStatsWidget } from '/@/renderer/features/settings/components/advanced/cache-stats-widget';
 import { ConsoleLogViewer } from '/@/renderer/features/settings/components/advanced/console-log-viewer';
 import { useAuthStore, useSettingsStore } from '/@/renderer/store';
+import { formatDateRelative } from '/@/renderer/utils/format';
+import { Switch } from '/@/shared/components/switch/switch';
 import { toast } from '/@/shared/components/toast/toast';
 
 const MIB = 1024 * 1024;
@@ -63,19 +65,8 @@ const ENTITY_DISPLAY_ORDER: EntityType[] = [
     'favorites',
 ];
 
-const formatRelative = (timestamp: number): string => {
-    const diff = Date.now() - timestamp;
-    if (diff < 0) return 'just now';
-    const sec = Math.floor(diff / 1000);
-    if (sec < 60) return `${sec}s ago`;
-    const min = Math.floor(sec / 60);
-    if (min < 60) return `${min}m ago`;
-    const hr = Math.floor(min / 60);
-    if (hr < 24) return `${hr}h ago`;
-    const day = Math.floor(hr / 24);
-    if (day < 7) return `${day}d ago`;
-    return new Date(timestamp).toLocaleDateString();
-};
+const formatRelative = (timestamp: number): string =>
+    formatDateRelative(new Date(timestamp).toISOString());
 
 const formatBytes = (n: number | undefined): string => {
     if (n === undefined || !Number.isFinite(n)) return '—';
@@ -610,7 +601,7 @@ export const LibrarySyncSettings = () => {
                 first-sync gate + dashboard own the initial full sync), so this
                 is a read-only "on — required" notice rather than an opt-out
                 toggle. */}
-            <Alert color="blue" variant="light">
+            <Alert color="primary" variant="light">
                 {t('page.setting.librarySyncDashboard.cacheRequiredStatus', {
                     defaultValue:
                         'Local cache is on and required — your library is kept on-device so the app loads instantly and works offline.',
@@ -710,7 +701,9 @@ export const LibrarySyncSettings = () => {
                                     {count.toLocaleString()}
                                 </Text>
                                 <Text c="dimmed" size="sm">
-                                    {state}
+                                    {t(`page.setting.librarySyncDashboard.state_${state}`, {
+                                        defaultValue: state,
+                                    })}
                                 </Text>
                             </Group>
                         </Group>

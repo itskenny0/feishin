@@ -29,21 +29,14 @@
 }
 
 /*
- * Desktop label column. Capped at 50% so a long description never pushes
- * the control off-screen. At tablet content widths (≤1199, incl. the
- * settings modal) 50% halves an already-narrow pane and crushes the
- * control, so relax the cap to give the control column more room.
+ * Desktop label column. Takes the room the control doesn't need, so
+ * descriptions use the full card width instead of wrapping at half.
  */
 .row-label {
     display: flex;
+    flex: 1 1 0;
     align-self: flex-start;
-    max-width: 50%;
-}
-
-@media (width <= 1199px) {
-    .row-label {
-        max-width: 62%;
-    }
+    min-width: 0;
 }
 
 /*
@@ -53,7 +46,7 @@
  * to flex-start so the labels read flush with the left edge — Spotify
  * / Android Settings convention.
  */
-@media (width <= 767px), (orientation: landscape) and (height <= 480px) {
+@media (width <= 767px), (orientation: landscape) and (height <= 480px) and (pointer: coarse) {
     .row {
         align-items: flex-start;
     }
@@ -135,4 +128,16 @@
 .subheader-indented {
     padding-left: var(--theme-spacing-lg);
     margin-left: var(--theme-spacing-md);
+}
+
+/* 44px-ish tap target around phone toggles without changing the layout. */
+.mobile-control > [class*='mantine-Switch-root'] [class*='mantine-Switch-body'] {
+    padding: 12px 8px;
+    margin: -12px -8px;
+}
+
+/* Default-variant inputs and buttons need a visible edge on the card surface. */
+:is(.row, .row-indented)
+    :is(input:not([type='checkbox']), button)[data-variant='default']:not(:focus, :focus-visible) {
+    border-color: var(--theme-colors-border);
 }

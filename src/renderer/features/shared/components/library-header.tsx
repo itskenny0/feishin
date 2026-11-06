@@ -1,5 +1,3 @@
-import type { KeyboardEvent } from 'react';
-
 import { closeAllModals, openModal } from '@mantine/modals';
 import clsx from 'clsx';
 import { forwardRef, ReactNode, Ref, useCallback, useMemo } from 'react';
@@ -23,6 +21,7 @@ import { useIsMutatingDeleteFavorite } from '/@/renderer/features/shared/mutatio
 import { useIsMutatingRating } from '/@/renderer/features/shared/mutations/set-rating-mutation';
 import { useIsMobileShell } from '/@/renderer/hooks/use-breakpoint';
 import { useBlurExplicitImages } from '/@/renderer/store';
+import { onActivationKey } from '/@/renderer/utils/activation-key';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Center } from '/@/shared/components/center/center';
 import { DragDropZone } from '/@/shared/components/drag-drop-zone/drag-drop-zone';
@@ -179,11 +178,11 @@ export const LibraryHeader = forwardRef(
         }, [blurExplicitImages, item.explicitStatus, item.imageId, item.type]);
 
         const imageSectionSharedProps = {
+            'aria-label': t('common.zoom'),
             onClick: () => {
                 openImage();
             },
-            onKeyDown: (event: KeyboardEvent) =>
-                [' ', 'Enter', 'Spacebar'].includes(event.key) && openImage(),
+            onKeyDown: onActivationKey(openImage),
             role: 'button' as const,
             style: { cursor: 'pointer' as const },
             tabIndex: 0,

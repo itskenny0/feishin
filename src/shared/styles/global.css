@@ -15,7 +15,6 @@
 *:focus-visible {
     outline: 2px solid var(--theme-colors-primary, #4dabf7);
     outline-offset: 2px;
-    border-radius: 2px;
 }
 
 *,
@@ -42,7 +41,6 @@ html {
     overflow: hidden;
     font-family: var(--theme-content-font-family);
     font-size: var(--theme-root-font-size);
-    font-variant-numeric: tabular-nums;
     color: var(--theme-colors-foreground);
     background: var(--theme-colors-background);
 }
@@ -415,6 +413,11 @@ button {
     --theme-radius-xs: var(--mantine-radius-xs);
     --theme-radius-sm: var(--mantine-radius-sm);
     --theme-radius-md: var(--mantine-radius-md);
+
+    /* Tokens some components reference but no theme defined. */
+    --theme-colors-primary-transparent: color-mix(in srgb, var(--theme-colors-primary) 15%, transparent);
+    --theme-colors-text-secondary: var(--theme-colors-foreground-muted);
+    --theme-card-default-radius: var(--theme-radius-md);
     --theme-radius-lg: var(--mantine-radius-lg);
     --theme-radius-xl: var(--mantine-radius-xl);
     --theme-radius-card: 6px; /* artwork / cards (Spotify 6px) */

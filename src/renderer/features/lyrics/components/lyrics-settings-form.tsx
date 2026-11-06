@@ -514,11 +514,10 @@ export const LyricsSettingsForm = ({ settingsKey }: LyricsSettingsFormProps) => 
             ),
             description: t('setting.skipNeteasePlaceholders', {
                 context: 'description',
-                postProcess: 'sentenceCase',
             }),
             id: 'skipNeteasePlaceholders',
             isHidden: !isElectron(),
-            label: t('setting.skipNeteasePlaceholders', { postProcess: 'sentenceCase' }),
+            label: t('setting.skipNeteasePlaceholders'),
         },
     ];
 

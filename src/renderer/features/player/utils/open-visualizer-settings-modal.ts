@@ -15,8 +15,9 @@ import i18n from '/@/i18n/i18n';
  */
 const shouldRenderFullScreen = () => {
     if (typeof window === 'undefined' || !window.matchMedia) return false;
-    return window.matchMedia('(max-width: 767px), (orientation: landscape) and (max-height: 480px)')
-        .matches;
+    return window.matchMedia(
+        '(max-width: 767px), (orientation: landscape) and (max-height: 480px) and (pointer: coarse)',
+    ).matches;
 };
 
 export const openVisualizerSettingsModal = () => {

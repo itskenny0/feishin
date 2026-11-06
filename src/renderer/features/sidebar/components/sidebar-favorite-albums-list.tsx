@@ -28,6 +28,7 @@ import { ButtonProps } from '/@/shared/components/button/button';
 import { Group } from '/@/shared/components/group/group';
 import { Icon } from '/@/shared/components/icon/icon';
 import { Text } from '/@/shared/components/text/text';
+import { useMediaQuery } from '/@/shared/hooks/use-media-query';
 import { Album, AlbumListSort, LibraryItem, SortOrder } from '/@/shared/types/domain-types';
 import { Play } from '/@/shared/types/types';
 import { lastPathSegment } from '/@/shared/utils/album-folder-from-path';
@@ -44,6 +45,8 @@ const AlbumRowButton = memo(({ item, name, onContextMenu }: AlbumRowButtonProps)
         state: { item },
     };
     const [isHovered, setIsHovered] = useState(false);
+    // No hover on touch: keep the play controls visible, as playlist rows do.
+    const isCoarsePointer = useMediaQuery('(pointer: coarse)');
 
     const player = usePlayer();
     const handlePlay = useCallback(
@@ -115,7 +118,7 @@ const AlbumRowButton = memo(({ item, name, onContextMenu }: AlbumRowButtonProps)
                 </div>
             </div>
 
-            {isHovered && <RowControls id={item.id} onPlay={handlePlay} />}
+            {(isHovered || isCoarsePointer) && <RowControls id={item.id} onPlay={handlePlay} />}
         </Link>
     );
 });

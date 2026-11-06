@@ -94,3 +94,10 @@
         padding: var(--theme-spacing-lg);
     }
 }
+
+/* Touch screens have overlay scrollbars; the gutter only made the grid off-centre. */
+@media (hover: none) and (pointer: coarse) {
+    .item-grid-container {
+        padding-right: 0;
+    }
+}

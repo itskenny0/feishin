@@ -42,6 +42,9 @@ const TooltipComponent = memo(
                 transitionProps={memoizedTransitionProps}
                 withArrow
                 withinPortal={withinPortal}
+                // Above context menus (1000), the sync dashboard (9000) and the
+                // zoom overlay, which used to hide their own tooltips.
+                zIndex={10001}
                 {...props}
             >
                 {children}

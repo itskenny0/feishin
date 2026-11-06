@@ -3,6 +3,7 @@ import { useCallback } from 'react';
 
 import styles from './album-group-controls.module.css';
 
+import i18n from '/@/i18n/i18n';
 import { albumQueries } from '/@/renderer/features/albums/api/album-api';
 import { useSetFavorite } from '/@/renderer/features/shared/hooks/use-set-favorite';
 import { useSetRating } from '/@/renderer/features/shared/hooks/use-set-rating';
@@ -80,6 +81,8 @@ export const AlbumGroupControls = ({ albumId, serverId, serverType }: AlbumGroup
         <div className={styles.controls}>
             {showFavorites && (
                 <ActionIcon
+                    aria-label={i18n.t('common.favorite')}
+                    aria-pressed={Boolean(album.userFavorite)}
                     className={styles.favorite}
                     disabled={isMutatingFavorite}
                     icon="favorite"

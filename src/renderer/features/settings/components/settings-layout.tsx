@@ -1,8 +1,17 @@
 import type { TFunction } from 'i18next';
 
+import { Capacitor } from '@capacitor/core';
 import clsx from 'clsx';
 import isElectron from 'is-electron';
-import { ReactNode, Suspense, useCallback, useLayoutEffect, useMemo, useState } from 'react';
+import {
+    ReactNode,
+    Suspense,
+    useCallback,
+    useLayoutEffect,
+    useMemo,
+    useRef,
+    useState,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import {
     RiArrowLeftLine,
@@ -47,7 +56,7 @@ const CATEGORIES: CategoryDef[] = [
     {
         description: (t) =>
             t('page.setting.appearanceDescription', {
-                defaultValue: 'Theme, fonts, sidebar, player bar, fullscreen player.',
+                defaultValue: 'Theme, sidebar, player bar, fullscreen player.',
             }),
         Icon: RiPaletteLine,
         id: 'general',
@@ -67,7 +76,7 @@ const CATEGORIES: CategoryDef[] = [
     {
         description: (t) =>
             t('page.setting.libraryDescription', {
-                defaultValue: 'Scrobbling, lyrics, artist pages, smart playlists, paths.',
+                defaultValue: 'Scrobbling, lyrics, artist pages.',
             }),
         Icon: RiMusic2Line,
         id: 'library',
@@ -77,7 +86,7 @@ const CATEGORIES: CategoryDef[] = [
     {
         description: (t) =>
             t('page.setting.playbackDescription', {
-                defaultValue: 'Audio engine, ReplayGain, transitions, queue behaviour.',
+                defaultValue: 'Audio engine, ReplayGain, transitions, queue behavior.',
             }),
         Icon: RiEqualizerLine,
         id: 'playback',
@@ -87,8 +96,7 @@ const CATEGORIES: CategoryDef[] = [
     {
         description: (t) =>
             t('page.setting.connectDescription', {
-                defaultValue:
-                    'Jellyfin Connect remote-play, peer MQTT sync, and the local library cache.',
+                defaultValue: 'Jellyfin Connect remote play, peer sync, library cache.',
             }),
         Icon: RiBroadcastLine,
         id: 'connect',
@@ -113,7 +121,8 @@ const CATEGORIES: CategoryDef[] = [
         Icon: RiWindowLine,
         id: 'window',
         label: (t) => t('page.setting.windowTab'),
-        visible: isElectron,
+        // Web still has "Track info in window title" (the browser tab title).
+        visible: () => isElectron() || !Capacitor.isNativePlatform(),
     },
     {
         description: (t) =>
@@ -186,6 +195,12 @@ export const SettingsLayout = () => {
     // the reset lands before paint (no one-frame flash of the stale subpage).
     // Mount-scoped by design: this models "entered Settings", not "viewport
     // became mobile" — the mobile route remounts SettingsLayout on every entry.
+    // A new subpage starts at the top, not at the previous page's scroll offset.
+    const contentRef = useRef<HTMLElement>(null);
+    useLayoutEffect(() => {
+        if (contentRef.current) contentRef.current.scrollTop = 0;
+    }, [currentTab, currentSubpage]);
+
     useLayoutEffect(() => {
         if (isMobile) {
             setSettings({ tab: '', tabSubpage: '' });
@@ -379,6 +394,7 @@ export const SettingsLayout = () => {
                         defaultValue: 'Setting category content',
                     })}
                     className={styles.content}
+                    ref={contentRef}
                 >
                     {activeCategory && !selectedSubpage && (
                         <span aria-hidden className={styles.watermark}>

@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import {
@@ -17,7 +17,7 @@ import { Group } from '/@/shared/components/group/group';
 import { JsonInput } from '/@/shared/components/json-input/json-input';
 import { NumberInput } from '/@/shared/components/number-input/number-input';
 import { Select } from '/@/shared/components/select/select';
-import { Slider } from '/@/shared/components/slider/slider';
+import { Slider, SliderProps } from '/@/shared/components/slider/slider';
 import { Stack } from '/@/shared/components/stack/stack';
 import { Switch } from '/@/shared/components/switch/switch';
 import { Text } from '/@/shared/components/text/text';
@@ -197,6 +197,13 @@ const TrackmapJsonControls = () => {
     );
 };
 
+// Moves locally while dragging and only writes the setting on release.
+const CommitSlider = ({ onChangeEnd, value, ...props }: SliderProps & { value: number }) => {
+    const [local, setLocal] = useState(value);
+    useEffect(() => setLocal(value), [value]);
+    return <Slider {...props} onChange={setLocal} onChangeEnd={onChangeEnd} value={local} />;
+};
+
 export const TrackmapSettings = memo(() => {
     const { t } = useTranslation();
     const settings = useGeneralSettings();
@@ -218,7 +225,7 @@ export const TrackmapSettings = memo(() => {
         step = 1,
     ): SettingOption => ({
         control: (
-            <Slider
+            <CommitSlider
                 aria-label={t(`setting.${labelKey}`)}
                 max={max}
                 min={min}
@@ -231,6 +238,7 @@ export const TrackmapSettings = memo(() => {
             />
         ),
         description: t(`setting.${labelKey}`, { context: 'description' }),
+        id: key,
         indent: true,
         isHidden: !settings.trackmapEnabled || !showAdvanced,
         title: `${t(`setting.${labelKey}`)} (${settings[key]})`,
@@ -355,12 +363,13 @@ export const TrackmapSettings = memo(() => {
             ),
             description: t('setting.trackmapStyle', { context: 'description' }),
             indent: true,
-            isHidden: !settings.trackmapEnabled,
+            // Only one style exists; unhide once there is a second.
+            isHidden: true,
             title: t('setting.trackmapStyle'),
         },
         {
             control: (
-                <Slider
+                <CommitSlider
                     aria-label={t('setting.trackmapHeight')}
                     max={100}
                     min={0}
@@ -371,13 +380,14 @@ export const TrackmapSettings = memo(() => {
                 />
             ),
             description: t('setting.trackmapHeight', { context: 'description' }),
+            id: 'trackmapHeight',
             indent: true,
             isHidden: !settings.trackmapEnabled,
             title: `${t('setting.trackmapHeight')} (${settings.trackmapHeight})`,
         },
         {
             control: (
-                <Slider
+                <CommitSlider
                     aria-label={t('setting.trackmapGlow')}
                     max={100}
                     min={0}
@@ -388,13 +398,14 @@ export const TrackmapSettings = memo(() => {
                 />
             ),
             description: t('setting.trackmapGlow', { context: 'description' }),
+            id: 'trackmapGlow',
             indent: true,
             isHidden: !settings.trackmapEnabled,
             title: `${t('setting.trackmapGlow')} (${settings.trackmapGlow})`,
         },
         {
             control: (
-                <Slider
+                <CommitSlider
                     aria-label={t('setting.trackmapSensitivity')}
                     max={100}
                     min={0}
@@ -407,6 +418,7 @@ export const TrackmapSettings = memo(() => {
                 />
             ),
             description: t('setting.trackmapSensitivity', { context: 'description' }),
+            id: 'trackmapSensitivity',
             indent: true,
             isHidden: !settings.trackmapEnabled,
             note: t('setting.trackmapSensitivity_note'),

@@ -76,7 +76,6 @@ const RadioListItem = ({ station }: RadioListItemProps) => {
                             cancel: t('common.cancel'),
                             confirm: t('common.delete'),
                         }}
-                        loading={deleteRadioStationMutation.isPending}
                         onConfirm={async () => {
                             try {
                                 await deleteRadioStationMutation.mutateAsync({

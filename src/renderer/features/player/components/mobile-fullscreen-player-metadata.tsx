@@ -164,11 +164,17 @@ export const MobileFullscreenPlayerMetadata = memo(
                 )}
                 {hasMetadata && (
                     <Group align="center" className={styles.metadataRow} gap="xs" wrap="nowrap">
-                        {container && <Text size="xs">{container}</Text>}
+                        {container && (
+                            <Text isMuted size="xs">
+                                {container}
+                            </Text>
+                        )}
                         {year && (
                             <>
                                 {container && <Separator />}
-                                <Text size="xs">{year}</Text>
+                                <Text isMuted size="xs">
+                                    {year}
+                                </Text>
                             </>
                         )}
                     </Group>

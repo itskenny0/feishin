@@ -91,7 +91,11 @@ const ReleaseNotesContent = ({
     });
 
     // Convert markdown to HTML using GitHub's markdown API
-    const { data: htmlContent, isLoading: isConverting } = useQuery({
+    const {
+        data: htmlContent,
+        isError: isMarkdownError,
+        isLoading: isConverting,
+    } = useQuery({
         enabled: !!releaseData?.body,
         queryFn: async () => {
             const response = await axios.post(
@@ -142,7 +146,7 @@ const ReleaseNotesContent = ({
     }, [htmlContent]);
 
     const isLoadingState = isListPending || isLoading || isConverting;
-    const isErrorState = isError || !releaseData;
+    const isErrorState = isError || !releaseData || isMarkdownError;
 
     if (isLoadingState) {
         return (

@@ -72,3 +72,9 @@
     opacity: 0;
     transition: opacity 0.15s ease;
 }
+
+@media (pointer: coarse) {
+    .more-button {
+        opacity: 1;
+    }
+}

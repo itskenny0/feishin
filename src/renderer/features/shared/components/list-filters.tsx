@@ -23,6 +23,7 @@ import { Spinner } from '/@/shared/components/spinner/spinner';
 import { Stack } from '/@/shared/components/stack/stack';
 import { Text } from '/@/shared/components/text/text';
 import { useDisclosure } from '/@/shared/hooks/use-disclosure';
+import { useMediaQuery } from '/@/shared/hooks/use-media-query';
 import { LibraryItem, ServerType } from '/@/shared/types/domain-types';
 import { ItemListKey } from '/@/shared/types/types';
 
@@ -67,7 +68,9 @@ export const ListFiltersModal = ({ isActive, itemType }: ListFiltersProps) => {
         clear();
     };
 
-    const canPin = Boolean(setIsSidebarOpen);
+    // Phones never show the pinned filter sidebar, so don't offer to pin.
+    const isNarrow = useMediaQuery('(max-width: 575.98px)');
+    const canPin = Boolean(setIsSidebarOpen) && !isNarrow;
 
     const disableArtistFilter = pageKey === ItemListKey.ALBUM_ARTIST_ALBUM;
     const disableGenreFilter =

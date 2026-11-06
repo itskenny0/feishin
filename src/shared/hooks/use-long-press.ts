@@ -9,6 +9,7 @@ interface UseLongPressOptions<T extends HTMLElement = HTMLElement> {
 }
 
 interface UseLongPressReturn {
+    onClick: (event: React.MouseEvent) => void;
     onMouseDown: (event: React.MouseEvent) => void;
     onMouseLeave: (event: React.MouseEvent) => void;
     onMouseUp: (event: React.MouseEvent) => void;
@@ -102,6 +103,18 @@ export const useLongPress = <T extends HTMLElement = HTMLElement>({
         eventRef.current = null;
     }, [clear, onClick, onFinish]);
 
+    // Keyboard and assistive-tech activation only dispatch a click (detail 0),
+    // never mousedown/mouseup or touch events, so it would otherwise do nothing.
+    // Pointer clicks (detail >= 1) already fired through mouseup/touchend.
+    const handleClick = useCallback(
+        (event: React.MouseEvent) => {
+            if (event.detail === 0) {
+                onClick?.(event as React.MouseEvent<T>);
+            }
+        },
+        [onClick],
+    );
+
     const handleTouchCancel = useCallback(() => {
         const event = eventRef.current;
         clear();
@@ -111,6 +124,7 @@ export const useLongPress = <T extends HTMLElement = HTMLElement>({
     }, [clear, onFinish]);
 
     return {
+        onClick: handleClick,
         onMouseDown: handleMouseDown,
         onMouseLeave: handleMouseLeave,
         onMouseUp: handleMouseUp,

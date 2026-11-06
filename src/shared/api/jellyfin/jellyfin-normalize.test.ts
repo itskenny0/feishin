@@ -159,6 +159,28 @@ describe('jfNormalize.song MusicBrainz ids', () => {
     });
 });
 
+describe('jfNormalize.song release date', () => {
+    it("treats Jellyfin's 0001-01-01 unknown-date sentinel as no date", () => {
+        const result = jfNormalize.song(
+            baseSong({ PremiereDate: '0001-01-01T00:00:00.0000000Z' }),
+            server,
+        );
+
+        expect(result.releaseYear).toBeNull();
+        expect(result.releaseDate).toBeNull();
+    });
+
+    it('falls back to ProductionYear when the premiere date is the sentinel', () => {
+        const result = jfNormalize.song(
+            baseSong({ PremiereDate: '0001-01-01T00:00:00.0000000Z', ProductionYear: 2006 }),
+            server,
+        );
+
+        expect(result.releaseYear).toBe(2006);
+        expect(result.releaseDate).toBe('2006');
+    });
+});
+
 // Freeze regression (2026-06-11): a /Sessions NowPlayingItem carries no
 // MediaSources, so a remote-target controller re-normalizing the mirrored
 // track on every 2Hz frame logged "no media sources" once PER FRAME with the

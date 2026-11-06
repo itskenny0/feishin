@@ -27,6 +27,7 @@ import { useButtonSize, useSkipButtons } from '/@/renderer/store';
 import { Icon } from '/@/shared/components/icon/icon';
 import { Stack } from '/@/shared/components/stack/stack';
 import { Text } from '/@/shared/components/text/text';
+import { useMediaQuery } from '/@/shared/hooks/use-media-query';
 import { PlayerRepeat, PlayerShuffle } from '/@/shared/types/types';
 
 export const CenterControls = () => {
@@ -53,7 +54,11 @@ export const CenterControls = () => {
      * controls stay reachable. The buttons return to the desktop layout
      * at ≥1281 and below 835 the mobile shell takes over.
      */
-    const isCompactTablet = useIsBigTablet();
+    // 768-834px needs the compact transport too: the full row plus the right
+    // cluster does not fit there either. useIsBigTablet stays 835-1280 because
+    // the right sidebar overlay keys off it.
+    const isNarrowTablet = useMediaQuery('(min-width: 768px) and (max-width: 834px)');
+    const isCompactTablet = useIsBigTablet() || isNarrowTablet;
 
     if (isRadioActive) {
         return (
@@ -230,6 +235,8 @@ const PreviousButton = memo(({ buttonSize, disabled, t }: TransportButtonProps) 
 
     return (
         <PlayerButton
+            // The rich tooltip below is JSX, so it cannot double as the name.
+            aria-label={t('player.previous')}
             disabled={disabled || !canPrevious}
             icon={<Icon fill="default" icon="mediaPrevious" size={buttonSize} />}
             onClick={(e) => mediaPrevious(e.altKey)}
@@ -324,6 +331,8 @@ const NextButton = memo(({ buttonSize, disabled, t }: TransportButtonProps) => {
 
     return (
         <PlayerButton
+            // The rich tooltip below is JSX, so it cannot double as the name.
+            aria-label={t('player.next')}
             disabled={disabled || !canNext}
             icon={<Icon fill="default" icon="mediaNext" size={buttonSize} />}
             onClick={(e) => mediaNext(e.altKey)}

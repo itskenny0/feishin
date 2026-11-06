@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 
 import { useColdFetchPending } from '/@/renderer/cache';
 import { EmptyState } from '/@/renderer/features/shared/components/empty-state';
+import { useIsOnline } from '/@/renderer/lib/network-status';
 import { Button } from '/@/shared/components/button/button';
 import { type AppIconSelection } from '/@/shared/components/icon/icon';
 import { Spinner } from '/@/shared/components/spinner/spinner';
@@ -28,6 +29,9 @@ export const DetailLoadFallback = ({
 }: DetailLoadFallbackProps) => {
     const { t } = useTranslation();
     const pending = useColdFetchPending(queryKey);
+    // Online but nothing came back: most likely the item no longer exists, so
+    // don't blame the network.
+    const isOnline = useIsOnline();
 
     if (pending) {
         return (
@@ -50,11 +54,20 @@ export const DetailLoadFallback = ({
                     {t('emptyState.retry', { defaultValue: 'Try again' })}
                 </Button>
             }
-            description={t('error.networkErrorFriendly', {
-                defaultValue: 'Could not reach the server. Check your network and try again.',
-            })}
+            description={
+                isOnline
+                    ? t('emptyState.unavailableDescription')
+                    : t('error.networkErrorFriendly', {
+                          defaultValue:
+                              'Could not reach the server. Check your network and try again.',
+                      })
+            }
             icon={icon}
-            title={t('error.genericError', { defaultValue: 'Something went wrong' })}
+            title={
+                isOnline
+                    ? t('emptyState.unavailableTitle')
+                    : t('error.genericError', { defaultValue: 'Something went wrong' })
+            }
         />
     );
 };

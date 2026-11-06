@@ -2,6 +2,7 @@ import clsx from 'clsx';
 
 import styles from './row-index-column.module.css';
 
+import i18n from '/@/i18n/i18n';
 import { isRowPlayControlColumn } from '/@/renderer/components/item-list/helpers/get-row-play-control-column';
 import { RowPlayControlCell } from '/@/renderer/components/item-list/item-table-list/columns/row-play-control-cell';
 import { useRowPlayControl } from '/@/renderer/components/item-list/item-table-list/columns/use-row-play-control';
@@ -67,6 +68,7 @@ const DefaultRowIndexColumn = (props: ItemTableListInnerColumn) => {
         return (
             <TableColumnContainer {...props}>
                 <ActionIcon
+                    aria-label={i18n.t('common.expand')}
                     className={clsx(styles.expand, 'hover-only')}
                     icon="arrowDownS"
                     iconProps={{ color: 'muted', size: 'md' }}

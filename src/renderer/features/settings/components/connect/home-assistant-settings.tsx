@@ -3,13 +3,14 @@
 // bridge (default off), name the HA device, and copy a Tier-2
 // media_player.template snippet for a native media-player card.
 
-import { Stack, Switch } from '@mantine/core';
+import { Stack } from '@mantine/core';
 import { useTranslation } from 'react-i18next';
 
 import { haTemplateSnippet } from '/@/renderer/features/home-assistant/template-snippet';
 import { SettingsSection } from '/@/renderer/features/settings/components/settings-section';
 import { usePeerSyncSettings, useSettingsStoreActions } from '/@/renderer/store';
 import { Button } from '/@/shared/components/button/button';
+import { Switch } from '/@/shared/components/switch/switch';
 import { TextInput } from '/@/shared/components/text-input/text-input';
 import { toast } from '/@/shared/components/toast/toast';
 

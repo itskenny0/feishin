@@ -19,6 +19,8 @@ import { TextInput, TextInputProps } from '/@/shared/components/text-input/text-
 
 interface SearchInputProps extends TextInputProps {
     buttonProps?: Partial<ActionIconProps>;
+    /** Always show the field (search pages), instead of the icon-to-field toggle. */
+    defaultExpanded?: boolean;
     enableHotkey?: boolean;
     fillContainer?: boolean;
     inputProps?: Partial<TextInputProps>;
@@ -27,6 +29,7 @@ interface SearchInputProps extends TextInputProps {
 
 export const SearchInput = ({
     buttonProps,
+    defaultExpanded = false,
     enableHotkey = true,
     fillContainer = false,
     inputProps,
@@ -36,7 +39,7 @@ export const SearchInput = ({
     const { t } = useTranslation();
     const ref = useRef<HTMLInputElement>(null);
     const binding = useSettingsStore((state) => state.hotkeys.bindings.localSearch, shallow);
-    const [isInputMode, setIsInputMode] = useState(false);
+    const [isInputMode, setIsInputMode] = useState(defaultExpanded);
 
     useHotkeys([
         [
@@ -56,9 +59,9 @@ export const SearchInput = ({
             onChange?.({ target: { value: '' } } as ChangeEvent<HTMLInputElement>);
             if (ref.current) {
                 ref.current.value = '';
-                ref.current.blur();
+                if (!defaultExpanded) ref.current.blur();
             }
-            setIsInputMode(false);
+            if (!defaultExpanded) setIsInputMode(false);
         }
     };
 
@@ -92,6 +95,7 @@ export const SearchInput = ({
     };
 
     const handleBlur = () => {
+        if (defaultExpanded) return;
         const hasValue = props.value || ref.current?.value;
         if (!hasValue) {
             setIsInputMode(false);
@@ -115,7 +119,7 @@ export const SearchInput = ({
                       width: shouldExpand ? '100%' : '36px',
                   }
                 : {
-                      width: shouldExpand ? '200px' : '36px',
+                      width: shouldExpand ? 'min(200px, 40dvw)' : '36px',
                   }),
         }),
         [fillContainer, shouldExpand],
@@ -148,7 +152,7 @@ export const SearchInput = ({
             <TextInput
                 aria-label={t('common.search')}
                 leftSection={<Icon icon="search" />}
-                maw={fillContainer ? '100%' : '20dvw'}
+                maw="100%"
                 {...inputProps}
                 onBlur={handleBlur}
                 onChange={onChange}
@@ -160,7 +164,12 @@ export const SearchInput = ({
                 {...props}
                 rightSection={
                     ref.current?.value ? (
-                        <ActionIcon icon="x" onClick={handleClear} variant="transparent" />
+                        <ActionIcon
+                            aria-label={t('common.clear')}
+                            icon="x"
+                            onClick={handleClear}
+                            variant="transparent"
+                        />
                     ) : null
                 }
             />

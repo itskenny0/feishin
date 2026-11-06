@@ -4,6 +4,7 @@ import { ReactNode, useCallback } from 'react';
 import { RowPlayControlPopover } from '../../row-play-control-popover';
 import styles from './row-index-column.module.css';
 
+import i18n from '/@/i18n/i18n';
 import {
     ItemTableListInnerColumn,
     TableColumnContainer,
@@ -74,6 +75,7 @@ export const RowPlayControlCell = (
             {getIndexDisplay(true)}
             <div className={clsx(styles.expand, 'hover-only')}>
                 <ActionIcon
+                    aria-label={i18n.t('common.expand')}
                     icon="arrowDownS"
                     iconProps={{ color: 'muted', size: 'md' }}
                     onClick={handleExpand}

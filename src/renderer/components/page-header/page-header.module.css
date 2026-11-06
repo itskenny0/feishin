@@ -20,13 +20,21 @@
 
 .container[data-visible='true'] {
     pointer-events: auto;
-    background-color: var(--page-header-bg, var(--theme-colors-background));
+    background-color: color-mix(
+        in srgb,
+        var(--page-header-bg, var(--theme-colors-background)) 30%,
+        var(--theme-colors-background)
+    );
     opacity: 1;
 }
 
 .container.visible {
     pointer-events: auto;
-    background-color: var(--page-header-bg, var(--theme-colors-background));
+    background-color: color-mix(
+        in srgb,
+        var(--page-header-bg, var(--theme-colors-background)) 30%,
+        var(--theme-colors-background)
+    );
     opacity: 1;
 }
 

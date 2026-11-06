@@ -36,25 +36,6 @@ export const SidebarSettings = memo(() => {
         });
     };
 
-    const handleSetMobileLibraryDestination = (value: null | string) => {
-        if (
-            value !== 'albums' &&
-            value !== 'album-artists' &&
-            value !== 'artists' &&
-            value !== 'songs' &&
-            value !== 'genres' &&
-            value !== 'folders' &&
-            value !== 'playlists'
-        ) {
-            return;
-        }
-        setSettings({
-            general: {
-                mobileLibraryDestination: value,
-            },
-        });
-    };
-
     const handleSetMobilePlayerbarShowNavButtons = (e: ChangeEvent<HTMLInputElement>) => {
         setSettings({
             general: {
@@ -186,35 +167,13 @@ export const SidebarSettings = memo(() => {
         },
         {
             control: (
-                <Select
-                    data={[
-                        { label: 'Albums', value: 'albums' },
-                        { label: 'Album artists', value: 'album-artists' },
-                        { label: 'Artists', value: 'artists' },
-                        { label: 'Songs', value: 'songs' },
-                        { label: 'Genres', value: 'genres' },
-                        { label: 'Folders', value: 'folders' },
-                        { label: 'Playlists', value: 'playlists' },
-                    ]}
-                    onChange={handleSetMobileLibraryDestination}
-                    value={settings.mobileLibraryDestination}
-                />
-            ),
-            description:
-                'Where the "Library" tab on the mobile bottom bar takes you. Default: Albums.',
-            title: 'Mobile Library tab destination',
-        },
-        {
-            control: (
                 <Switch
-                    aria-label="Show prev/next buttons on the mobile mini-player"
                     checked={settings.mobilePlayerbarShowNavButtons}
                     onChange={handleSetMobilePlayerbarShowNavButtons}
                 />
             ),
-            description:
-                'Show explicit previous/next buttons alongside play/pause on the mobile mini-player. Off by default since horizontal swipe already switches tracks.',
-            title: 'Mobile mini-player nav buttons',
+            description: t('setting.mobilePlayerbarNavButtons', { context: 'description' }),
+            title: t('setting.mobilePlayerbarNavButtons'),
         },
         {
             control: (

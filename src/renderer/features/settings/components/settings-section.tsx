@@ -9,6 +9,8 @@ import { TextTitle } from '/@/shared/components/text-title/text-title';
 export type SettingOption = {
     control: ReactNode;
     description?: ReactNode | string;
+    /** Stable React key when the title changes (e.g. shows the live value). */
+    id?: string;
     indent?: boolean;
     isHidden?: boolean;
     /**
@@ -62,8 +64,8 @@ export const SettingsSection = ({ extra, options, title }: SettingsSectionProps)
              * a more balanced reading rhythm.
              */}
             <Stack gap="lg" px={isMobileShell ? 'sm' : 'xl'}>
-                {values.map((option) => (
-                    <SettingsOptions key={`option-${option.title}`} {...option} />
+                {values.map(({ id, ...option }) => (
+                    <SettingsOptions key={id ?? `option-${option.title}`} {...option} />
                 ))}
                 {extra}
             </Stack>

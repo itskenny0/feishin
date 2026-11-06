@@ -79,3 +79,26 @@ export const keyboardCodeToHotkeyKey = (code: string): null | string => {
 
     return null;
 };
+
+const IS_APPLE_PLATFORM =
+    typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
+
+/**
+ * One key of a hotkey string as users know it: the library's "mod" token
+ * becomes Ctrl (or ⌘ on Apple platforms), other keys get a capital letter.
+ */
+export const formatHotkeyPart = (part: string): string => {
+    const key = part.trim();
+    if (key.toLowerCase() === 'mod') return IS_APPLE_PLATFORM ? '⌘' : 'Ctrl';
+    if (key === '[plus]') return '+';
+    return key.charAt(0).toUpperCase() + key.slice(1);
+};
+
+/** "mod+shift+k" -> "Ctrl+Shift+K" (or "⌘+Shift+K") for display only. */
+export const formatHotkeyForDisplay = (hotkey: string): string =>
+    hotkey
+        .split('+')
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .map(formatHotkeyPart)
+        .join('+');

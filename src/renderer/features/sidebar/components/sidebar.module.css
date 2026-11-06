@@ -46,6 +46,12 @@
     &:hover button {
         display: block;
     }
+
+    @media (pointer: coarse) {
+        button {
+            display: block;
+        }
+    }
 }
 
 .sidebar-image {

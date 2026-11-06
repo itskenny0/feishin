@@ -26,7 +26,7 @@
 }
 
 .refresh-label {
-    color: var(--theme-colors-text-muted, var(--mantine-color-gray-5));
+    color: var(--theme-colors-foreground-muted);
 }
 
 .searching-row {

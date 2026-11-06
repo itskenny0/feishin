@@ -110,7 +110,7 @@ export const ScrobbleSettings = memo(() => {
                 context: 'description',
             }),
             isHidden: scrobbleMinimumMode === ScrobbleMinimumMode.SECONDS,
-            title: t('setting.minimumScrobblePercentage'),
+            title: `${t('setting.minimumScrobblePercentage')}: ${settings.scrobble.scrobbleAtPercentage}%`,
         },
         {
             control: (

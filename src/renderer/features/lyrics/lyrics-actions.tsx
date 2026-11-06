@@ -283,7 +283,7 @@ export const LyricsActions = ({
                     </Button>
                 ) : null}
                 <ActionIcon
-                    aria-label="Decrease lyric offset"
+                    aria-label={t('common.slower')}
                     disabled={isActionsDisabled}
                     icon="minus"
                     onClick={() => handleLyricOffset(offsetMs - 50)}
@@ -295,7 +295,7 @@ export const LyricsActions = ({
                 />
                 <Tooltip label={t('setting.lyricOffset')} openDelay={0}>
                     <NumberInput
-                        aria-label="Lyric offset"
+                        aria-label={t('setting.lyricOffset')}
                         disabled={isActionsDisabled}
                         onChange={handleLyricOffset}
                         // Arrow-key step matches the +/- buttons (50ms) so
@@ -308,7 +308,7 @@ export const LyricsActions = ({
                     />
                 </Tooltip>
                 <ActionIcon
-                    aria-label="Increase lyric offset"
+                    aria-label={t('common.faster')}
                     disabled={isActionsDisabled}
                     icon="plus"
                     onClick={() => handleLyricOffset(offsetMs + 50)}

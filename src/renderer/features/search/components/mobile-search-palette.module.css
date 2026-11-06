@@ -17,9 +17,8 @@
 
 /*
  * Sticky search header. Sits above the scrolling results so the input never
- * scrolls away with the soft keyboard open. Top padding clears the iOS notch
- * (env safe-area-inset-top) / Android status bar (--android-safe-top fallback,
- * because the Capacitor WebView reports env() as 0 there).
+ * scrolls away with the soft keyboard open. No safe-area padding: the mobile
+ * shell row this renders in is already inset below the status bar.
  */
 .header {
     position: sticky;
@@ -29,8 +28,7 @@
     flex-shrink: 0;
     gap: var(--theme-spacing-sm);
     align-items: center;
-    padding: calc(var(--theme-spacing-sm) + max(env(safe-area-inset-top, 0px), var(--android-safe-top, 0px)))
-        var(--theme-spacing-md) var(--theme-spacing-sm);
+    padding: var(--theme-spacing-sm) var(--theme-spacing-md);
     background: var(--theme-colors-surface);
     border-bottom: 1px solid alpha(var(--theme-colors-foreground-muted), 0.12);
 }
@@ -44,18 +42,19 @@
     min-width: 0;
 }
 
+.search-field input {
+    text-overflow: ellipsis;
+}
+
 /*
  * Scroll region for results / command rows. flex:1 so it fills the space
  * between the sticky header and the bottom of the sheet, and scrolls
- * independently. Bottom padding clears the gesture-nav pill / home indicator
- * so the last row isn't tucked behind it.
+ * independently. The shell row is already inset above the gesture-nav pill.
  */
 .scroll {
     flex: 1 1 auto;
     width: 100%;
-    padding-bottom: calc(
-        var(--theme-spacing-xl) + max(env(safe-area-inset-bottom, 0px), var(--android-safe-bottom, 0px))
-    );
+    padding-bottom: var(--theme-spacing-xl);
     overflow-x: hidden;
     overflow-y: auto;
 

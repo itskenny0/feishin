@@ -44,6 +44,7 @@ import { Modal } from '/@/shared/components/modal/modal';
 import { Tooltip } from '/@/shared/components/tooltip/tooltip';
 import { useDisclosure } from '/@/shared/hooks/use-disclosure';
 import { useLocalStorage } from '/@/shared/hooks/use-local-storage';
+import { useMediaQuery } from '/@/shared/hooks/use-media-query';
 import { LibraryItem, Song, SongListSort, SortOrder } from '/@/shared/types/domain-types';
 import { ItemListKey } from '/@/shared/types/types';
 
@@ -80,7 +81,9 @@ const PlaylistSongListFiltersModal = () => {
         setIsSidebarOpen?.(!isSidebarOpen);
     };
 
-    const canPin = Boolean(setIsSidebarOpen);
+    // Phones never show the pinned filter sidebar, so don't offer to pin.
+    const isNarrow = useMediaQuery('(max-width: 575.98px)');
+    const canPin = Boolean(setIsSidebarOpen) && !isNarrow;
 
     return (
         <>

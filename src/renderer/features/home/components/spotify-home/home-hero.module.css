@@ -49,6 +49,12 @@
     transition: background 600ms ease-out;
 }
 
+@media (width >= 1900px) {
+    .glow {
+        mask-image: linear-gradient(90deg, transparent, #000 200px, #000 calc(100% - 200px), transparent);
+    }
+}
+
 .greeting {
     position: relative;
     z-index: 1;

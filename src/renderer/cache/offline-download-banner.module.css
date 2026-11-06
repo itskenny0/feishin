@@ -20,7 +20,7 @@
 }
 
 .banner[data-position='top'] {
-    top: calc(env(safe-area-inset-top, 0px) + 0.75rem);
+    top: calc(max(env(safe-area-inset-top, 0px), var(--android-safe-top, 0px)) + 0.75rem);
 }
 
 .title {

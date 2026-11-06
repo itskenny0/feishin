@@ -6,7 +6,7 @@ import {
     ListConfigMenu,
     SONG_DISPLAY_TYPES,
 } from '/@/renderer/features/shared/components/list-config-menu';
-import { useHotkeys } from '/@/renderer/hooks/use-hotkeys';
+import { useOverlayAwareEscape } from '/@/renderer/hooks/use-android-native';
 import { useFullScreenPlayerStore, useFullScreenPlayerStoreActions } from '/@/renderer/store';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { ItemListKey, ListDisplayType } from '/@/shared/types/types';
@@ -24,7 +24,7 @@ export const SharedFullscreenPlayerSettings = () => {
         });
     };
 
-    useHotkeys([['Escape', handleToggleFullScreenPlayer]]);
+    useOverlayAwareEscape(handleToggleFullScreenPlayer);
 
     return (
         <>

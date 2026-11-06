@@ -67,6 +67,7 @@
 .slider-value-wrapper {
     min-width: 0;
     min-height: 0;
+    font-variant-numeric: tabular-nums;
 
     &:first-child {
         justify-self: end;

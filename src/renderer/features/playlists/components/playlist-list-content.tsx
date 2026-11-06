@@ -116,6 +116,9 @@ export const PlaylistListView = ({
     });
 
     if (countQuery.data?.totalRecordCount === 0) {
+        const isFiltered =
+            Boolean((query as { searchTerm?: string }).searchTerm) ||
+            (query as { favorite?: boolean }).favorite !== undefined;
         const fallback: EmptyStateProps = {
             action: (
                 <Button onClick={() => openCreatePlaylistModal(server)} variant="filled">
@@ -128,6 +131,17 @@ export const PlaylistListView = ({
             icon: 'playlist',
             title: t('emptyState.playlistsTitle', { defaultValue: 'No playlists yet' }),
         };
+        // A search or filter that matches nothing is not an empty library.
+        if (isFiltered) {
+            return (
+                <EmptyState
+                    description={t('emptyState.searchDescription')}
+                    icon="search"
+                    title={t('emptyState.searchTitle')}
+                    {...emptyState}
+                />
+            );
+        }
         return <EmptyState {...fallback} {...emptyState} />;
     }
 

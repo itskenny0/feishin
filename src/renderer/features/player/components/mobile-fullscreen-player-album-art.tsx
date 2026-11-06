@@ -102,6 +102,7 @@ const ImageWithPlaceholder = ({
 
     return (
         <MotionImage
+            alt=""
             className={clsx(styles.albumImage, className, {
                 [styles.censored]: explicit,
             })}

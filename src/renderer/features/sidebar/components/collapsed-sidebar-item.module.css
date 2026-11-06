@@ -5,8 +5,9 @@
     color: var(--theme-colors-foreground-muted);
     cursor: pointer;
 
+    /* Inset so the scroll area does not clip the ring on the full-width item. */
     &:focus-visible {
-        outline: none;
+        outline-offset: -2px;
     }
 
     svg {

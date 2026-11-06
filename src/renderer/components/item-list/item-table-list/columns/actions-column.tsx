@@ -1,3 +1,4 @@
+import i18n from '/@/i18n/i18n';
 import {
     ItemTableListInnerColumn,
     TableColumnContainer,
@@ -34,6 +35,7 @@ export const ActionsColumn = (props: ItemTableListInnerColumn) => {
         return (
             <TableColumnContainer {...props}>
                 <ActionIcon
+                    aria-label={i18n.t('common.more')}
                     className="hover-only"
                     icon="ellipsisHorizontal"
                     iconProps={{

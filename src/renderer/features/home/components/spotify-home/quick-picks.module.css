@@ -111,6 +111,11 @@
     width: 2.25rem;
     height: 2.25rem;
     color: var(--theme-colors-background);
+
+    @mixin light {
+        color: var(--theme-colors-primary-contrast);
+    }
+
     cursor: pointer;
     background: var(--theme-colors-primary);
     border: none;
@@ -132,7 +137,10 @@
         background: color-mix(in srgb, var(--theme-colors-foreground) 14%, transparent);
     }
 
+    /* Overlay the hidden button so it does not reserve room from the title. */
     .play-button {
+        position: absolute;
+        right: 0.5rem;
         opacity: 0;
         transform: translateY(4px);
     }

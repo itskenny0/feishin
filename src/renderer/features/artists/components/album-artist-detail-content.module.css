@@ -32,6 +32,10 @@
     gap: var(--theme-spacing-md);
     align-items: center;
     margin-bottom: var(--theme-spacing-md);
+
+    @media (width <= 767px) {
+        grid-template-columns: 1fr;
+    }
 }
 
 .album-section-divider-container {

@@ -436,7 +436,7 @@ axiosClient.interceptors.response.use(
                             throw TIMEOUT_ERROR;
                         }
                         if (res.status !== 200) {
-                            throw new Error(i18n.t('error.authenticatedFailed') as string);
+                            throw new Error(i18n.t('error.authenticationFailed') as string);
                         }
 
                         const newCredential = res.data.token;

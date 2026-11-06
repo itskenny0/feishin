@@ -136,6 +136,9 @@ export const StorageMigrationModal = ({
             opened={opened}
             title={title}
             withCloseButton={!blocking}
+            // Also opened from the first-sync gate (position: fixed, z-index 9000);
+            // Mantine's default modal z-index (200) would put it behind the gate.
+            zIndex={10001}
         >
             <Stack gap="md">
                 <Text size="sm">{body}</Text>

@@ -7,11 +7,11 @@ import {
     useActivePlayerSource,
     useTransportEnabled,
 } from '/@/renderer/features/jellyfin-remote-target/hooks/use-active-player-source';
+import { CustomPlayerbarSlider } from '/@/renderer/features/player/components/playerbar-slider';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
 import { useIsAndroidNative } from '/@/renderer/hooks/use-breakpoint';
 import { usePlayerMuted } from '/@/renderer/store';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
-import { Slider } from '/@/shared/components/slider/slider';
 import { useThrottledValue } from '/@/shared/hooks/use-throttled-value';
 
 /**
@@ -90,8 +90,8 @@ export const MobileFullscreenPlayerVolume = memo(() => {
                     variant="subtle"
                 />
             </div>
-            <Slider
-                aria-label={t('player.volume', { defaultValue: 'Volume' })}
+            <CustomPlayerbarSlider
+                aria-label={t('player.volume')}
                 className={styles.volumeSlider}
                 disabled={!canSetVolume}
                 max={100}

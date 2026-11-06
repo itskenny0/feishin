@@ -1109,10 +1109,14 @@ export const MobileFullscreenPlayer = () => {
                             <ActionIcon
                                 aria-label={t('common.collapse')}
                                 icon="arrowDownS"
+                                iconProps={{ size: 'xl' }}
                                 onClick={handleToggleFullScreenPlayer}
                                 size="sm"
                                 variant={isPageHovered ? 'default' : 'subtle'}
                             />
+                            <Text fw={600} size="lg">
+                                {t('page.fullscreenPlayer.upNext')}
+                            </Text>
                             <ActionIcon
                                 aria-label={t('common.close')}
                                 icon="x"
@@ -1143,6 +1147,7 @@ export const MobileFullscreenPlayer = () => {
                             <ActionIcon
                                 aria-label={t('common.collapse')}
                                 icon="arrowDownS"
+                                iconProps={{ size: 'xl' }}
                                 onClick={handleToggleFullScreenPlayer}
                                 size="sm"
                                 variant={isPageHovered ? 'default' : 'subtle'}

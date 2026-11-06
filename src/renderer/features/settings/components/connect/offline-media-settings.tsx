@@ -14,7 +14,6 @@ import {
     ScrollArea,
     Slider,
     Stack,
-    Switch,
     Table,
     Text,
     TextInput,
@@ -23,12 +22,12 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-    RiAddLine,
     RiDeleteBinLine,
     RiDownload2Line,
     RiPauseLine,
     RiPlayLine,
     RiRefreshLine,
+    RiSearchLine,
 } from 'react-icons/ri';
 
 import { api } from '/@/renderer/api';
@@ -51,6 +50,7 @@ import { useCacheStore } from '/@/renderer/cache/store';
 import { useSmoothOfflineSync } from '/@/renderer/cache/use-smooth-offline-sync';
 import { StorageLocationSettings } from '/@/renderer/features/settings/components/connect/storage-location-settings';
 import { useAuthStore, useSettingsStore } from '/@/renderer/store';
+import { Switch } from '/@/shared/components/switch/switch';
 import { toast } from '/@/shared/components/toast/toast';
 import {
     AlbumArtistListSort,
@@ -650,14 +650,14 @@ export const OfflineMediaSettings = () => {
                             if (e.key === 'Enter') void handleSearch();
                         }}
                         placeholder={t('page.setting.offlineMedia.searchPlaceholder', {
-                            defaultValue: 'Search albums / artists / genres / playlists…',
+                            defaultValue: 'Search your library…',
                         })}
                         style={{ flex: 1 }}
                         value={searchTerm}
                     />
                     <Button
                         disabled={!searchTerm.trim() || !currentServer}
-                        leftSection={<RiAddLine />}
+                        leftSection={<RiSearchLine />}
                         onClick={() => void handleSearch()}
                     >
                         {t('page.setting.offlineMedia.searchButton', { defaultValue: 'Search' })}

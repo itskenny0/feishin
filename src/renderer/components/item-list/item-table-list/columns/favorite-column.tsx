@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
+import i18n from '/@/i18n/i18n';
 import {
     ItemTableListInnerColumn,
     TableColumnContainer,
@@ -40,6 +41,8 @@ export const FavoriteColumn = (props: ItemTableListInnerColumn) => {
         return (
             <TableColumnContainer {...props}>
                 <ActionIcon
+                    aria-label={i18n.t('common.favorite')}
+                    aria-pressed={Boolean(row)}
                     className={row ? undefined : 'hover-only'}
                     disabled={isPending}
                     icon="favorite"

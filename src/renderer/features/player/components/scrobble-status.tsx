@@ -100,7 +100,7 @@ export const ScrobbleStatus = () => {
             <HoverCard.Target>
                 <Group
                     align="center"
-                    aria-label={t('player.scrobble')}
+                    aria-label={t('setting.scrobble')}
                     fz="xs"
                     gap="sm"
                     justify="center"
@@ -121,7 +121,11 @@ export const ScrobbleStatus = () => {
             <HoverCard.Dropdown onClick={(e) => e.stopPropagation()}>
                 <Stack gap="md" p="sm">
                     {hookInactive ? (
-                        <Text size="sm">{t('form.privateMode.enabled')}</Text>
+                        <Text size="sm">
+                            {privateMode
+                                ? t('form.privateMode.enabled')
+                                : t('player.scrobbleDisabled')}
+                        </Text>
                     ) : (
                         <>
                             {showDurationCondition && (

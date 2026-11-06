@@ -66,7 +66,13 @@ const PlayButtonBase = forwardRef<HTMLButtonElement, PlayButtonProps>(
 
         return (
             <button
-                aria-label={t('player.play')}
+                aria-label={
+                    icon === 'mediaPlayNext'
+                        ? t('player.addNext')
+                        : icon === 'mediaPlayLast'
+                          ? t('player.addLast')
+                          : t('player.play')
+                }
                 className={clsx(styles.playButton, classNames, {
                     [styles.fill]: fill,
                     [styles.secondary]: isSecondary,

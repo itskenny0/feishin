@@ -270,7 +270,7 @@ export const JellyfinSongFilters = ({
                     key={`jf-filter-${filter.label}`}
                     label={filter.label}
                     onChange={(e) => filter.onChange(e ? e === 'true' : undefined)}
-                    value={filter.value ? filter.value.toString() : undefined}
+                    value={filter.value == null ? null : String(filter.value)}
                 />
             ))}
             {!disableArtistFilter && (

@@ -36,6 +36,18 @@ const _CollapsedSidebarItem = forwardRef<HTMLDivElement, CollapsedSidebarItemPro
                     [styles.disabled]: disabled,
                 })}
                 direction="column"
+                // Menu triggers render as a div, so Enter / Space would do
+                // nothing; links (<a>) keep their native Enter.
+                onKeyDown={(e: React.KeyboardEvent<HTMLElement>) => {
+                    if (
+                        e.target === e.currentTarget &&
+                        e.currentTarget.tagName !== 'A' &&
+                        (e.key === 'Enter' || e.key === ' ')
+                    ) {
+                        e.preventDefault();
+                        e.currentTarget.click();
+                    }
+                }}
                 ref={ref}
                 tabIndex={0}
                 {...props}

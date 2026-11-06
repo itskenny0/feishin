@@ -9,8 +9,8 @@ import { Lyrics } from '/@/renderer/features/lyrics/lyrics';
 import { FullScreenVisualizerSongInfo } from '/@/renderer/features/player/components/full-screen-visualizer-song-info';
 import { useIdleControls } from '/@/renderer/features/player/hooks/use-idle-controls';
 import { openVisualizerSettingsModal } from '/@/renderer/features/player/utils/open-visualizer-settings-modal';
+import { useOverlayAwareEscape } from '/@/renderer/hooks/use-android-native';
 import { VISUALIZER_FULLSCREEN_TARGET_ID } from '/@/renderer/hooks/use-fullscreen-toggle';
-import { useHotkeys } from '/@/renderer/hooks/use-hotkeys';
 import { useIsMobile } from '/@/renderer/hooks/use-is-mobile';
 import {
     useFullScreenPlayerStore,
@@ -115,7 +115,7 @@ export const FullScreenVisualizer = () => {
         });
     };
 
-    useHotkeys([['Escape', handleCloseVisualizer]]);
+    useOverlayAwareEscape(handleCloseVisualizer);
 
     // Never leave the window stuck in fullscreen if the visualizer goes away while
     // fullscreened (route change, close button, etc.).

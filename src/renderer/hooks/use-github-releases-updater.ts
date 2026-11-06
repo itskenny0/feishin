@@ -166,7 +166,7 @@ const showUpdateToast = (t: TFunction, release: GithubRelease) => {
                 }),
                 labels: {
                     cancel: t('common.later', { defaultValue: 'Later' }),
-                    confirm: t('common.install', { defaultValue: 'Install' }),
+                    confirm: target.isApk ? t('common.install') : t('common.open'),
                 },
                 onConfirm: () => {
                     triggerDownload(target.url, target.filename);

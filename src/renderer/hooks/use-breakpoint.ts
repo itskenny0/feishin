@@ -91,11 +91,11 @@ export const useBreakpoint = (): Breakpoint => {
  * width is > 767 and they're not in landscape.
  *
  * Keep the corresponding CSS-side rules using the same combined expression
- * (`@media (max-width: 767px), (orientation: landscape) and (max-height: 480px)`)
+ * (`@media (max-width: 767px), (orientation: landscape) and (max-height: 480px) and (pointer: coarse)`)
  * so JS-gated rendering and CSS-gated styling line up.
  */
 export const MOBILE_SHELL_QUERY =
-    '(max-width: 767px), (orientation: landscape) and (max-height: 480px)';
+    '(max-width: 767px), (orientation: landscape) and (max-height: 480px) and (pointer: coarse)';
 
 /**
  * True for phone + phablet (i.e. anything below the desktop shell), OR

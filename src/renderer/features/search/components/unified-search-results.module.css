@@ -397,7 +397,7 @@
 }
 
 .card-art-wrap-round {
-    padding: 0 8%;
+    margin-inline: 8%;
 }
 
 .card-art {

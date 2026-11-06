@@ -34,7 +34,7 @@
  * fullscreen-player lyrics config (Synchronized / Unsynchronized
  * font-size, gap, etc.) stack vertically instead of overflowing.
  */
-@media (width <= 767px) {
+@media (width <= 767px), (orientation: landscape) and (height <= 480px) {
     .dropdown {
         width: calc(100vw - 24px);
 

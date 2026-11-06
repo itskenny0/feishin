@@ -12,7 +12,6 @@ import { Select } from '/@/shared/components/select/select';
 import { Slider } from '/@/shared/components/slider/slider';
 import { Switch } from '/@/shared/components/switch/switch';
 import { Text } from '/@/shared/components/text/text';
-import { Tooltip } from '/@/shared/components/tooltip/tooltip';
 import { Play } from '/@/shared/types/types';
 
 export const ControlSettings = memo(() => {
@@ -25,7 +24,6 @@ export const ControlSettings = memo(() => {
             control: (
                 <NumberInput
                     defaultValue={settings.buttonSize}
-                    hideControls={false}
                     max={30}
                     min={15}
                     onBlur={(e) => {
@@ -76,46 +74,46 @@ export const ControlSettings = memo(() => {
         {
             control: (
                 <Group>
-                    <Tooltip label={t('common.backward')}>
-                        <NumberInput
-                            defaultValue={settings.skipButtons.skipBackwardSeconds}
-                            min={0}
-                            onBlur={(e) =>
-                                setSettings({
-                                    general: {
-                                        ...settings,
-                                        skipButtons: {
-                                            ...settings.skipButtons,
-                                            skipBackwardSeconds: e.currentTarget.value
-                                                ? Number(e.currentTarget.value)
-                                                : 0,
-                                        },
+                    <NumberInput
+                        defaultValue={settings.skipButtons.skipBackwardSeconds}
+                        label={t('common.backward')}
+                        min={0}
+                        onBlur={(e) =>
+                            setSettings({
+                                general: {
+                                    ...settings,
+                                    skipButtons: {
+                                        ...settings.skipButtons,
+                                        skipBackwardSeconds: e.currentTarget.value
+                                            ? Number(e.currentTarget.value)
+                                            : 0,
                                     },
-                                })
-                            }
-                            width={75}
-                        />
-                    </Tooltip>
-                    <Tooltip label={t('common.forward')}>
-                        <NumberInput
-                            defaultValue={settings.skipButtons.skipForwardSeconds}
-                            min={0}
-                            onBlur={(e) =>
-                                setSettings({
-                                    general: {
-                                        ...settings,
-                                        skipButtons: {
-                                            ...settings.skipButtons,
-                                            skipForwardSeconds: e.currentTarget.value
-                                                ? Number(e.currentTarget.value)
-                                                : 0,
-                                        },
+                                },
+                            })
+                        }
+                        rightSection="s"
+                        width={75}
+                    />
+                    <NumberInput
+                        defaultValue={settings.skipButtons.skipForwardSeconds}
+                        label={t('common.forward')}
+                        min={0}
+                        onBlur={(e) =>
+                            setSettings({
+                                general: {
+                                    ...settings,
+                                    skipButtons: {
+                                        ...settings.skipButtons,
+                                        skipForwardSeconds: e.currentTarget.value
+                                            ? Number(e.currentTarget.value)
+                                            : 0,
                                     },
-                                })
-                            }
-                            width={75}
-                        />
-                    </Tooltip>
+                                },
+                            })
+                        }
+                        rightSection="s"
+                        width={75}
+                    />
                 </Group>
             ),
             description: t('setting.skipDuration', {

@@ -67,6 +67,11 @@
         ),
         var(--theme-overlay-header);
     backdrop-filter: blur(var(--image-blur));
+
+    /* The dark wash made theme-coloured (dark) text unreadable on light themes. */
+    @mixin light {
+        background: var(--theme-overlay-header);
+    }
 }
 
 .background-overlay {
@@ -93,9 +98,9 @@
      * --android-safe-* (28px) since env() reports 0 there.
      */
     top: max(env(safe-area-inset-top, 0px), var(--android-safe-top, 0px));
-    right: 0;
+    right: env(safe-area-inset-right, 0);
     bottom: max(env(safe-area-inset-bottom, 0px), var(--android-safe-bottom, 0px));
-    left: 0;
+    left: env(safe-area-inset-left, 0);
     z-index: 1;
     display: flex;
     flex-direction: column;
@@ -164,14 +169,14 @@
 .drag-handle-pill {
     width: 44px;
     height: 4px;
-    background: rgb(255 255 255 / 45%);
+    background: color-mix(in srgb, var(--theme-colors-foreground) 35%, transparent);
     border-radius: 4px;
     transition: background 160ms ease;
 }
 
 .drag-handle:active .drag-handle-pill,
 .drag-handle:focus-visible .drag-handle-pill {
-    background: rgb(255 255 255 / 80%);
+    background: color-mix(in srgb, var(--theme-colors-foreground) 60%, transparent);
 }
 
 /*
@@ -378,7 +383,9 @@
 
 .artist-card-stats {
     font-size: 0.8rem;
-    color: color-mix(in srgb, var(--theme-colors-foreground) 60%, transparent);
+
+    /* The card is always a dark glass panel with white text. */
+    color: rgb(255 255 255 / 70%);
 }
 
 /* Clamp the bio to ~5 lines on mobile so the card stays a preview, not
@@ -894,6 +901,7 @@
 .time-container {
     flex-shrink: 0;
     min-width: 3.5ch;
+    font-variant-numeric: tabular-nums;
 }
 
 .slider-wrapper {
@@ -1135,7 +1143,10 @@
 .queue-badge {
     position: absolute;
     top: 12px;
-    right: 12px;
+
+    /* The wrapper is a wide flex: 1 cell with the icon centred, so anchor
+       to the centre (the icon's top-right corner), not the cell edge. */
+    left: calc(50% + 6px);
     z-index: 1;
     min-width: 18px;
     height: 18px;

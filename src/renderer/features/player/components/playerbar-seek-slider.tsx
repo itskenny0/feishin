@@ -1,5 +1,6 @@
 import formatDuration from 'format-duration';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { CustomPlayerbarSlider } from './playerbar-slider';
 
@@ -26,6 +27,7 @@ const SEEK_RESOLVE_MS = 5000;
 // expensive Mantine slider - it only re-renders when its own max/min props
 // change or its own (now ~20fps-gated) position subscription emits.
 const PlayerbarSeekSliderBase = ({ max, min }: PlayerbarSeekSliderProps) => {
+    const { t } = useTranslation();
     const [isSeeking, setIsSeeking] = useState(false);
     const [seekValue, setSeekValue] = useState(0);
     const source = useActivePlayerSource();
@@ -97,6 +99,7 @@ const PlayerbarSeekSliderBase = ({ max, min }: PlayerbarSeekSliderProps) => {
 
     return (
         <CustomPlayerbarSlider
+            aria-label={t('player.seek')}
             disabled={!canSeek}
             label={label}
             max={max}
@@ -106,6 +109,7 @@ const PlayerbarSeekSliderBase = ({ max, min }: PlayerbarSeekSliderProps) => {
             onClick={handleClick}
             size={6}
             style={sliderStyle}
+            thumbValueText={label}
             value={isSeeking ? seekValue : currentTime}
             w="100%"
         />

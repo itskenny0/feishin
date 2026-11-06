@@ -113,7 +113,7 @@ export const ConnectDiagnosticsSettings = memo(() => {
     if (!settings.onboarded) {
         return (
             <Stack gap="sm">
-                <Alert color="blue" variant="light">
+                <Alert color="primary" variant="light">
                     {t('page.setting.connectDiagnosticsOnboardingCta', {
                         defaultValue: 'Set up Sync & Connect to see live diagnostics.',
                     })}
@@ -133,7 +133,7 @@ export const ConnectDiagnosticsSettings = memo(() => {
             <Alert color="gray" variant="light">
                 {t('page.setting.connectDiagnosticsMasterOff', {
                     defaultValue:
-                        'Jellyfin Remote is turned off. Re-enable it under Connect -> Jellyfin Connect (MQTT) to see live diagnostics here.',
+                        'Jellyfin Remote is turned off. Re-enable it under Sync & Connect -> Jellyfin Connect (MQTT) to see live diagnostics here.',
                 })}
             </Alert>
         );
@@ -143,7 +143,7 @@ export const ConnectDiagnosticsSettings = memo(() => {
             <Alert color="gray" variant="light">
                 {t('page.setting.connectDiagnosticsDisabled', {
                     defaultValue:
-                        'Peer sync is disabled. Turn it on under Connect -> Jellyfin Connect (MQTT) to see live diagnostics here.',
+                        'Peer sync is disabled. Turn it on under Sync & Connect -> Jellyfin Connect (MQTT) to see live diagnostics here.',
                 })}
             </Alert>
         );

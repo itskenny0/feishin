@@ -68,6 +68,7 @@ export const PlayQueueListControls = ({
     const toolbarRef = useRef<HTMLDivElement>(null);
     const [overflowTier, setOverflowTier] = useState<OverflowTier>(0);
     const queueInPlaybackOrder = useQueueInPlaybackOrder();
+    const isQueueEmpty = usePlayerStoreBase((state) => state.queue.default.length === 0);
 
     useEffect(() => {
         const element = toolbarRef.current;
@@ -200,6 +201,7 @@ export const PlayQueueListControls = ({
                 )}
                 <span className={styles.overflowTier3}>
                     <ActionIcon
+                        disabled={isQueueEmpty}
                         icon="mediaShuffle"
                         iconProps={{ size: 'lg' }}
                         onClick={handleShuffleQueue}
@@ -207,6 +209,7 @@ export const PlayQueueListControls = ({
                         variant="subtle"
                     />
                     <ActionIcon
+                        disabled={isQueueEmpty}
                         icon="delete"
                         iconProps={{ size: 'lg' }}
                         onClick={handleClearQueue}
@@ -216,6 +219,7 @@ export const PlayQueueListControls = ({
                 </span>
                 <span className={styles.overflowTier2}>
                     <ActionIcon
+                        disabled={isQueueEmpty}
                         icon="goToItem"
                         iconProps={{ size: 'lg' }}
                         onClick={handleJumpToCurrent}
@@ -223,6 +227,7 @@ export const PlayQueueListControls = ({
                         variant="subtle"
                     />
                     <ActionIcon
+                        disabled={isQueueEmpty}
                         icon="playlistAdd"
                         iconProps={{ size: 'lg' }}
                         onClick={handleCreatePlaylistFromQueue}
@@ -257,12 +262,14 @@ export const PlayQueueListControls = ({
                             {showTier3Menu && (
                                 <>
                                     <DropdownMenu.Item
+                                        disabled={isQueueEmpty}
                                         leftSection={<Icon icon="mediaShuffle" />}
                                         onClick={handleShuffleQueue}
                                     >
                                         {t('player.shuffle')}
                                     </DropdownMenu.Item>
                                     <DropdownMenu.Item
+                                        disabled={isQueueEmpty}
                                         leftSection={<Icon icon="delete" />}
                                         onClick={handleClearQueue}
                                     >
@@ -273,12 +280,14 @@ export const PlayQueueListControls = ({
                             {showTier2Menu && (
                                 <>
                                     <DropdownMenu.Item
+                                        disabled={isQueueEmpty}
                                         leftSection={<Icon icon="goToItem" />}
                                         onClick={handleJumpToCurrent}
                                     >
                                         {t('action.goToCurrent')}
                                     </DropdownMenu.Item>
                                     <DropdownMenu.Item
+                                        disabled={isQueueEmpty}
                                         leftSection={<Icon icon="playlistAdd" />}
                                         onClick={() => handleCreatePlaylistFromQueue()}
                                     >

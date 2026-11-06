@@ -70,7 +70,14 @@ export function ArtistMultiSelectRow({
                 <Text isMuted overflow="hidden" size="xs">
                     {count ? (
                         <>
-                            {count} {t(`entity.${countEntity}`, { count })}
+                            {t(
+                                countEntity === 'song'
+                                    ? 'entity.trackWithCount'
+                                    : 'entity.albumWithCount',
+                                {
+                                    count,
+                                },
+                            )}
                         </>
                     ) : null}
                 </Text>
@@ -124,7 +131,14 @@ export function GenreMultiSelectRow({
                 <Text isMuted overflow="hidden" size="xs">
                     {count ? (
                         <>
-                            {count} {t(`entity.${countEntity}`, { count })}
+                            {t(
+                                countEntity === 'song'
+                                    ? 'entity.trackWithCount'
+                                    : 'entity.albumWithCount',
+                                {
+                                    count,
+                                },
+                            )}
                         </>
                     ) : null}
                 </Text>

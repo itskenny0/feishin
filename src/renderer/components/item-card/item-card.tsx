@@ -381,6 +381,7 @@ const ItemCardStandardImageArea = memo(function ItemCardStandardImageArea({
 
     return isLinkBranch ? (
         <Link
+            aria-label={(data as { name?: string })?.name || undefined}
             className={imageContainerClassName}
             draggable={false}
             onClick={handleImageClick}
@@ -589,6 +590,7 @@ const CompactItemCardImageArea = memo(function CompactItemCardImageArea({
 
     return isLinkBranch ? (
         <Link
+            aria-label={(data as { name?: string })?.name || undefined}
             className={imageContainerClassName}
             draggable={false}
             onClick={handleImageClick}
@@ -1763,7 +1765,8 @@ const ItemCardRow = memo(
                 })}
                 size={index > 0 ? 'sm' : 'md'}
             >
-                {formattedContent}
+                {/* nbsp keeps an empty line's height so rows line up across cards */}
+                {formattedContent || '\u00a0'}
             </Text>
         );
     },

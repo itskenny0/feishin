@@ -3,13 +3,12 @@
     display: flex;
     flex-direction: column;
     height: 100%;
-    max-height: calc(100vh - 119px);
-    user-select: none;
-}
 
-.sidebar-container.web,
-.sidebar-container.linux {
-    max-height: calc(100vh - 149px);
+    /* The main-content grid row already has the right height on every
+       platform; the old 100vh-minus-magic-number caps left a dead band
+       above the player bar (59px on web/Linux) and clipped nav items. */
+    max-height: 100%;
+    user-select: none;
 }
 
 .server-icon {

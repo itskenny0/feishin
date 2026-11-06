@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+    formatHotkeyForDisplay,
     keyboardCodeToHotkeyKey,
     MODIFIER_KEY_CODES,
 } from '/@/shared/utils/keyboard-code-to-hotkey';
@@ -69,5 +70,13 @@ describe('MODIFIER_KEY_CODES', () => {
     it('does not contain non-modifier codes', () => {
         expect(MODIFIER_KEY_CODES.has('KeyA')).toBe(false);
         expect(MODIFIER_KEY_CODES.has('Enter')).toBe(false);
+    });
+});
+
+describe('formatHotkeyForDisplay', () => {
+    it('shows the mod token as a real key and capitalises the rest', () => {
+        expect(formatHotkeyForDisplay('mod+shift+k')).toBe('Ctrl+Shift+K');
+        expect(formatHotkeyForDisplay('mod+[plus]')).toBe('Ctrl++');
+        expect(formatHotkeyForDisplay('')).toBe('');
     });
 });

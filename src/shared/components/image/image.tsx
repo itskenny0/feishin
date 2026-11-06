@@ -177,6 +177,8 @@ export function BaseImage({
         >
             {nativeImage.displaySrc && !hasImgError ? (
                 <img
+                    // Decorative by default: the item name is always next to it.
+                    alt=""
                     className={clsx(styles.image, className, {
                         // The fade-in is a "this just loaded" cue. A cover that
                         // was already in memory (peekable, incl. a cross-variant

@@ -105,7 +105,11 @@ export const BottomTabBar = ({ onScrollToTop }: BottomTabBarProps) => {
                 // Spotify terms, OR while the library popover itself is open so
                 // the tab stays visually anchored.
                 isActive: (p) =>
-                    libraryPopoverOpen || p.startsWith('/library') || p.startsWith('/playlists'),
+                    libraryPopoverOpen ||
+                    p.startsWith('/library') ||
+                    p.startsWith('/playlists') ||
+                    p.startsWith(AppRoute.FAVORITES) ||
+                    p.startsWith(AppRoute.RADIO),
                 key: 'library',
                 label: t('page.sidebar.myLibrary', { defaultValue: 'Library' }),
                 // Open the entity-type popover instead of navigating.

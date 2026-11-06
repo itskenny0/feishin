@@ -831,6 +831,7 @@ const AlbumDetailSongsTable = ({ songs }: AlbumDetailSongsTableProps) => {
                     rightSection={
                         searchTerm ? (
                             <ActionIcon
+                                aria-label={t('common.clear')}
                                 icon="x"
                                 onClick={() => setSearchTerm('')}
                                 size="sm"

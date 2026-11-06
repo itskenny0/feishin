@@ -24,5 +24,10 @@ export const everforestLight: AppThemeConfiguration = {
         'surface-foreground': 'rgb(92, 103, 76)',
         white: 'rgb(255, 255, 255)',
     },
+    mantineOverride: {
+        primaryShade: {
+            light: 4,
+        },
+    },
     mode: 'light',
 };

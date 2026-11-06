@@ -340,7 +340,7 @@ export const openEditRadioStationModal = (
 
     if (!server) {
         toast.error({
-            message: t('common.error.noServer') as string,
+            message: t('error.serverNotSelectedError') as string,
         });
         return;
     }

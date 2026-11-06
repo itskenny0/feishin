@@ -252,11 +252,8 @@ export const AudioSettings = memo(() => {
             ),
             description: t('setting.jellyfinRemoteControl', {
                 context: 'description',
-                postProcess: 'sentenceCase',
             }),
-            title: t('setting.jellyfinRemoteControl', {
-                postProcess: 'sentenceCase',
-            }),
+            title: t('setting.jellyfinRemoteControl', {}),
         },
     ];
 

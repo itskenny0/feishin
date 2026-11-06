@@ -355,6 +355,7 @@ function BaseGridCarousel(props: GridCarouselProps) {
                                 </Group>
                                 <Group className={styles.navButtons} gap="xs" justify="end">
                                     <ActionIcon
+                                        aria-label={t('common.previous')}
                                         disabled={isPrevDisabled}
                                         icon="arrowLeftS"
                                         iconProps={{ size: 'lg' }}
@@ -363,6 +364,7 @@ function BaseGridCarousel(props: GridCarouselProps) {
                                         variant="subtle"
                                     />
                                     <ActionIcon
+                                        aria-label={t('common.next')}
                                         disabled={isNextDisabled}
                                         icon="arrowRightS"
                                         iconProps={{ size: 'lg' }}
@@ -377,6 +379,7 @@ function BaseGridCarousel(props: GridCarouselProps) {
                                 <div className={styles.customTitleContent}>{title}</div>
                                 <Group className={styles.navButtons} gap="xs" justify="end">
                                     <ActionIcon
+                                        aria-label={t('common.previous')}
                                         disabled={isPrevDisabled}
                                         icon="arrowLeftS"
                                         iconProps={{ size: 'lg' }}
@@ -385,6 +388,7 @@ function BaseGridCarousel(props: GridCarouselProps) {
                                         variant="subtle"
                                     />
                                     <ActionIcon
+                                        aria-label={t('common.next')}
                                         disabled={isNextDisabled}
                                         icon="arrowRightS"
                                         iconProps={{ size: 'lg' }}

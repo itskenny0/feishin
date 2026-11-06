@@ -132,7 +132,7 @@ export const DiscordSettings = memo(() => {
         {
             control: (
                 <Select
-                    aria-label={t('setting.discordDisplayType')}
+                    aria-label={t('setting.discordDisplayType', { discord: 'Discord' })}
                     clearable={false}
                     data={[
                         { label: 'Feishin', value: DiscordDisplayType.FEISHIN },
@@ -172,7 +172,7 @@ export const DiscordSettings = memo(() => {
         {
             control: (
                 <Select
-                    aria-label={t('setting.discordLinkType')}
+                    aria-label={t('setting.discordLinkType', { discord: 'Discord' })}
                     clearable={false}
                     data={[
                         {

@@ -75,6 +75,8 @@ export const PlayerConfig = () => {
             {
                 component: <AudioDeviceConfig />,
                 id: 'audioDevice',
+                // Device selection needs Electron, as on the settings page.
+                isHidden: !isElectron(),
                 label: t('setting.audioDevice'),
             },
         ],

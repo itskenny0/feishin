@@ -3,7 +3,7 @@
     width: 100%;
     container-type: inline-size;
     overflow: hidden;
-    background: var(--mantine-color-dark-6);
+    background: var(--theme-colors-surface);
     border-radius: var(--mantine-radius-md);
 }
 

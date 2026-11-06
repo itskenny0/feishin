@@ -31,3 +31,10 @@
 .body {
     padding: var(--theme-spacing-md);
 }
+
+/* Full-screen phone modals: keep the title and close button below the status bar. */
+.content[data-full-screen] .header {
+    padding-top: calc(
+        var(--theme-spacing-md) + max(env(safe-area-inset-top, 0px), var(--android-safe-top, 0px))
+    );
+}

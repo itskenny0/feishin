@@ -122,6 +122,12 @@
     opacity: 1;
 }
 
+@media (pointer: coarse) {
+    .panel-reorder-controls {
+        opacity: 1;
+    }
+}
+
 .draggable-region {
     position: relative;
     flex-shrink: 0;

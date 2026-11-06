@@ -6,6 +6,7 @@ input[cmdk-input] {
 }
 
 [cmdk-group-heading] {
+    padding: 0 var(--theme-spacing-sm);
     margin: var(--theme-spacing-md) 0;
     font-size: var(--theme-font-size-sm);
     opacity: 0.8;
@@ -71,4 +72,11 @@ input[cmdk-input] {
         margin: var(--theme-spacing-sm) 0;
         font-size: var(--theme-font-size-md);
     }
+}
+
+/* Keep the footer (breadcrumb and key hints) inside the modal. */
+[cmdk-list] {
+    max-height: min(60dvh, 560px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
 }

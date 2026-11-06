@@ -109,7 +109,7 @@ export const ListSortByDropdownControlled = ({
 export const CLIENT_SIDE_SONG_FILTERS = [
     {
         defaultOrder: SortOrder.ASC,
-        name: i18n.t('filter.id'),
+        name: i18n.t('filter.defaultOrder'),
         value: SongListSort.ID,
     },
     {
@@ -600,7 +600,7 @@ const FOLDER_LIST_FILTERS: Partial<
     [ServerType.JELLYFIN]: [
         {
             defaultOrder: SortOrder.ASC,
-            name: i18n.t('filter.id'),
+            name: i18n.t('filter.defaultOrder'),
             value: SongListSort.ID,
         },
         ...(SONG_LIST_FILTERS[ServerType.JELLYFIN] || []),
@@ -608,7 +608,7 @@ const FOLDER_LIST_FILTERS: Partial<
     [ServerType.NAVIDROME]: [
         {
             defaultOrder: SortOrder.ASC,
-            name: i18n.t('filter.id'),
+            name: i18n.t('filter.defaultOrder'),
             value: SongListSort.ID,
         },
         ...(SONG_LIST_FILTERS[ServerType.NAVIDROME] || []),
@@ -616,7 +616,7 @@ const FOLDER_LIST_FILTERS: Partial<
     [ServerType.SUBSONIC]: [
         {
             defaultOrder: SortOrder.ASC,
-            name: i18n.t('filter.id'),
+            name: i18n.t('filter.defaultOrder'),
             value: SongListSort.ID,
         },
         ...(SONG_LIST_FILTERS[ServerType.SUBSONIC] || []),

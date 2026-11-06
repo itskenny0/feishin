@@ -45,6 +45,8 @@
 
 .menu-dropdown {
     padding: var(--theme-spacing-xs);
+    overflow-y: auto;
+    overscroll-behavior: contain;
     color: var(--theme-colors-foreground);
     background: var(--theme-colors-background);
     border: 1px solid var(--theme-colors-border);

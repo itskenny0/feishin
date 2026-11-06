@@ -1,5 +1,5 @@
 /* eslint-disable perfectionist/sort-imports */
-import { MantineProvider } from '@mantine/core';
+import { type CSSVariablesResolver, MantineProvider } from '@mantine/core';
 import { Notifications } from '@mantine/notifications';
 import 'overlayscrollbars/overlayscrollbars.css';
 import '/styles/overlayscrollbars.css';
@@ -47,6 +47,13 @@ import '/@/shared/styles/global.css';
 import { PlayerProvider } from '/@/renderer/features/player/context/player-context';
 import { AudioPlayers } from '/@/renderer/features/player/components/audio-players';
 
+// c="dimmed" text should use the theme's muted colour, not Mantine's gray.
+const mutedDimmedResolver: CSSVariablesResolver = () => ({
+    dark: { '--mantine-color-dimmed': 'var(--theme-colors-foreground-muted)' },
+    light: { '--mantine-color-dimmed': 'var(--theme-colors-foreground-muted)' },
+    variables: {},
+});
+
 const UpdateAvailableDialog = lazy(() =>
     import('./update-available-dialog').then((module) => ({
         default: module.UpdateAvailableDialog,
@@ -81,7 +88,11 @@ const ThemedApp = () => {
     const { mode, theme } = useAppTheme();
 
     return (
-        <MantineProvider forceColorScheme={mode} theme={theme}>
+        <MantineProvider
+            cssVariablesResolver={mutedDimmedResolver}
+            forceColorScheme={mode}
+            theme={theme}
+        >
             <AppShell />
         </MantineProvider>
     );

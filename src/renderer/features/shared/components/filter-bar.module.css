@@ -58,6 +58,7 @@
 
     .filter-bar > * {
         flex-wrap: nowrap !important;
+        gap: var(--theme-spacing-sm);
         justify-content: flex-start !important;
         width: max-content;
         min-width: 100%;

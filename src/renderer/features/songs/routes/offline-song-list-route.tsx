@@ -87,7 +87,11 @@ const OfflineSongListRoute = () => {
     const header = (
         <PageHeader>
             <LibraryHeaderBar ignoreMaxWidth>
-                <LibraryHeaderBar.PlayButton itemType={LibraryItem.SONG} songs={songs} />
+                <LibraryHeaderBar.PlayButton
+                    disabled={songs?.length === 0}
+                    itemType={LibraryItem.SONG}
+                    songs={songs}
+                />
                 <LibraryHeaderBar.Title order={2}>
                     {t('page.sidebar.offline', { defaultValue: 'Available offline' })}
                 </LibraryHeaderBar.Title>

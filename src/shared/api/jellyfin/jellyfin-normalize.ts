@@ -15,6 +15,7 @@ import {
 } from '/@/shared/types/domain-types';
 import { ServerListItem, ServerType } from '/@/shared/types/types';
 import { blurHashesDiffer } from '/@/shared/utils/blurhash';
+import { isPlausibleReleaseYear } from '/@/shared/utils/release-year';
 
 const TICKS_PER_MS = 10000;
 
@@ -125,11 +126,16 @@ const jellyfinPremiereFields = (item: {
     PremiereDate?: string;
     ProductionYear?: number;
 }): { releaseDate: null | string; releaseYear: null | number } => {
+    // Jellyfin sends .NET DateTime.MinValue ("0001-01-01T00:00:00") for an
+    // unknown date, which would otherwise surface as the year 1.
     const premiere = parsePartialIsoDateFromApi(item.PremiereDate ?? null);
+    const premiereValid = isPlausibleReleaseYear(premiere.year);
     const prodYear = coerceYear(item.ProductionYear);
-    const fallbackYear = prodYear && prodYear > 0 ? prodYear : null;
-    const releaseYear: null | number = premiere.year > 0 ? premiere.year : fallbackYear;
-    const releaseDate = premiere.date ?? (fallbackYear !== null ? String(fallbackYear) : null);
+    const fallbackYear = isPlausibleReleaseYear(prodYear) ? prodYear : null;
+    const releaseYear: null | number = premiereValid ? premiere.year : fallbackYear;
+    const releaseDate =
+        (premiereValid ? premiere.date : null) ??
+        (fallbackYear !== null ? String(fallbackYear) : null);
     return { releaseDate, releaseYear };
 };
 
@@ -306,7 +312,7 @@ const normalizeAlbum = (
         releaseTypes: [],
         releaseYear,
         size: null,
-        songCount: item?.ChildCount || null,
+        songCount: item?.ChildCount ?? null,
         songs: item.Songs?.map((song) => normalizeSong(song, server)),
         sortName: item.SortName || item.Name,
         starredAt: null,
@@ -391,7 +397,7 @@ const normalizePlaylist = (
         public: null,
         rules: null,
         size: null,
-        songCount: item?.ChildCount || null,
+        songCount: item?.ChildCount ?? null,
         sync: null,
         thumbHash: null,
         uploadedImage: item.ImageTags?.Primary ?? undefined,
@@ -455,12 +461,12 @@ const normalizeGenre = (
         _itemType: LibraryItem.GENRE,
         _serverId: server?.id || '',
         _serverType: ServerType.JELLYFIN,
-        albumCount: null,
+        albumCount: item.AlbumCount ?? null,
         id: item.Id,
         imageId: getPrimaryImageId(item),
         imageUrl: null,
         name: item.Name,
-        songCount: null,
+        songCount: item.SongCount ?? null,
     };
 };
 

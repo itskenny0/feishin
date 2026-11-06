@@ -23,11 +23,11 @@
         border: 1px solid transparent;
 
         &:hover {
-            background: lighten(var(--theme-colors-surface), 5%);
+            background: color-mix(in srgb, var(--theme-colors-surface), var(--theme-colors-foreground) 8%);
         }
 
         &:focus-visible {
-            background: lighten(var(--theme-colors-surface), 10%);
+            background: color-mix(in srgb, var(--theme-colors-surface), var(--theme-colors-foreground) 12%);
         }
     }
 

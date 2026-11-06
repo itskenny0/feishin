@@ -237,7 +237,7 @@
     -webkit-line-clamp: 2;
     font-size: 0.7188rem;
     line-height: 1.35;
-    color: color-mix(in srgb, var(--theme-colors-foreground) 48%, transparent);
+    color: var(--theme-colors-foreground-muted);
     -webkit-box-orient: vertical;
 }
 
@@ -265,7 +265,7 @@
 .watermark {
     position: absolute;
     top: -0.45em;
-    right: 0.1em;
+    left: 0.1em;
     z-index: 0;
     font-size: clamp(4rem, 12vw, 9rem);
     font-weight: 800;
@@ -403,7 +403,7 @@
     -webkit-line-clamp: 3;
     font-size: 0.75rem;
     line-height: 1.4;
-    color: color-mix(in srgb, var(--theme-colors-foreground) 52%, transparent);
+    color: var(--theme-colors-foreground-muted);
     -webkit-box-orient: vertical;
 }
 
@@ -507,12 +507,7 @@
 }
 
 .mobile .watermark {
-    /* Desktop crops the headline above the pane edge (-0.45em); on the
-       phone the pane slides UNDER the translucent app header, so the
-       cropped sliver bled through it a few px above the back row. Anchor
-       flush so the back-button's blur band owns the crop instead. */
-    top: 0;
-    font-size: clamp(3rem, 18vw, 5.5rem);
+    display: none;
 }
 
 .mobile .content-inner {
