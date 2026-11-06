@@ -8,7 +8,6 @@ import { describe, expect, it } from 'vitest';
 import {
     getTrackColumnFixed,
     isNoHorizontalPaddingColumn,
-    isTrackColumnHoverOnly,
     shouldShowHoverOnlyColumnContent,
 } from '/@/renderer/components/item-list/item-detail-list/utils';
 import { TableColumn } from '/@/shared/types/types';
@@ -43,18 +42,6 @@ describe('isNoHorizontalPaddingColumn', () => {
     it('is false for text columns', () => {
         expect(isNoHorizontalPaddingColumn(TableColumn.TITLE)).toBe(false);
         expect(isNoHorizontalPaddingColumn(TableColumn.DURATION)).toBe(false);
-    });
-});
-
-describe('isTrackColumnHoverOnly', () => {
-    it('is true for actions / favorite / rating', () => {
-        expect(isTrackColumnHoverOnly(TableColumn.ACTIONS)).toBe(true);
-        expect(isTrackColumnHoverOnly(TableColumn.USER_FAVORITE)).toBe(true);
-        expect(isTrackColumnHoverOnly(TableColumn.USER_RATING)).toBe(true);
-    });
-
-    it('is false for everything else', () => {
-        expect(isTrackColumnHoverOnly(TableColumn.TITLE)).toBe(false);
     });
 });
 

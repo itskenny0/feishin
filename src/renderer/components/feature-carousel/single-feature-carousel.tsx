@@ -313,7 +313,8 @@ export const SingleFeatureCarousel = ({ data, onNearEnd }: SingleFeatureCarousel
         return null;
     }
 
-    const currentAlbum = data[currentIndex];
+    // `data` can shrink under the index (random refetch); wrap instead of crashing.
+    const currentAlbum = data[currentIndex % data.length];
 
     return (
         <div

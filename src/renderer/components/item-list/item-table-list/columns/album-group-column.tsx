@@ -57,13 +57,7 @@ export const AlbumGroupColumn = (props: ItemTableListInnerColumn) => {
         // No vertical border. Bottom border only on the last row of the group so
         // mid-group lines don't cut through overflowing artwork.
         const needsBottomBorder =
-            !!props.enableHorizontalBorders &&
-            isLastInAlbumGroup(
-                props.rowIndex,
-                props.getRowItem,
-                !!props.enableHeader,
-                props.data.length,
-            );
+            !!props.enableHorizontalBorders && isLastInAlbumGroup(props.rowIndex, props.getRowItem);
 
         return (
             <div
@@ -83,15 +77,14 @@ export const AlbumGroupColumn = (props: ItemTableListInnerColumn) => {
         );
     }
 
-    let groupRowCount = 1;
+    // Bounded by getRowItem: `data` is only the header slot in accessor mode.
     const groupSongs: Song[] = [item];
-    const totalDataRows = props.data.length + firstDataRow;
-    for (let idx = props.rowIndex + 1; idx < totalDataRows; idx++) {
+    for (let idx = props.rowIndex + 1; ; idx++) {
         const nextItem = props.getRowItem?.(idx) as null | Song | undefined;
         if (!nextItem || nextItem.album !== item.album) break;
-        groupRowCount++;
         groupSongs.push(nextItem);
     }
+    const groupRowCount = groupSongs.length;
 
     const metadata = computeAlbumGroupMetadata(groupSongs, groupRowCount, t);
     const groupHeightKey = getAlbumGroupHeightKey(item, groupRowCount);

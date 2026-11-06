@@ -584,6 +584,14 @@ const BaseItemGridList = ({
         listRef.current.scrollTo(offset);
     }, []);
 
+    // Item the arrow keys last moved to, and the selection size they left.
+    // `getSelected()` is in list order, so its last item is not the cursor once
+    // Shift+Left/Up extends the selection backwards. A click that changes the
+    // selection size hands the cursor back to the last selected item.
+    const keyboardCursorRef = useRef<undefined | { rowId: string; selectedCount: number }>(
+        undefined,
+    );
+
     // Handle keyboard navigation
     const handleKeyDown = useCallback(
         (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -599,20 +607,19 @@ const BaseItemGridList = ({
             e.stopPropagation();
 
             const selected = internalState.getSelected();
-            let currentIndex = -1;
-
-            if (selected.length > 0) {
-                const lastSelected = selected[selected.length - 1];
-                const lastRowId = internalState.extractRowId(lastSelected);
-                if (lastRowId) {
-                    currentIndex =
-                        getItemIndex?.(lastRowId) ??
-                        data.findIndex((d: any) => {
-                            const rowId = internalState.extractRowId(d);
-                            return rowId === lastRowId;
-                        });
-                }
-            }
+            const cursor = keyboardCursorRef.current;
+            const cursorRowId =
+                cursor &&
+                cursor.selectedCount === selected.length &&
+                internalState.isSelected(cursor.rowId)
+                    ? cursor.rowId
+                    : selected.length > 0
+                      ? internalState.extractRowId(selected[selected.length - 1])
+                      : undefined;
+            const currentIndex = cursorRowId
+                ? (getItemIndex?.(cursorRowId) ??
+                  data.findIndex((d: any) => internalState.extractRowId(d) === cursorRowId))
+                : -1;
 
             // Calculate grid position
             const currentRow =
@@ -700,89 +707,47 @@ const BaseItemGridList = ({
                 newIndex = 0;
             }
 
-            const newItem: any = resolvedGetItem(newIndex);
-            if (!newItem) return;
+            const newItem = resolvedGetItem(newIndex) as
+                | ItemListStateItemWithRequiredProperties
+                | undefined;
+            const newItemRowId = newItem && internalState.extractRowId(newItem);
+            if (!newItem || !newItemRowId) return;
 
-            // Handle Shift + Arrow for incremental range selection (matches shift+click behavior)
-            if (e.shiftKey) {
-                const selectedItems = internalState.getSelected();
-                const lastSelectedItem = selectedItems[selectedItems.length - 1];
-
-                if (lastSelectedItem) {
-                    // Find the indices of the last selected item and new item
-                    const lastRowId = internalState.extractRowId(lastSelectedItem);
-                    if (!lastRowId) return;
-
-                    const lastIndex =
-                        getItemIndex?.(lastRowId) ??
-                        data.findIndex((d: any) => {
-                            const rowId = internalState.extractRowId(d);
-                            return rowId === lastRowId;
-                        });
-
-                    if (lastIndex !== -1 && newIndex !== -1) {
-                        // Create range selection from last selected to new position
-                        const startIndex = Math.min(lastIndex, newIndex);
-                        const stopIndex = Math.max(lastIndex, newIndex);
-
-                        const rangeItems: ItemListStateItemWithRequiredProperties[] = [];
-                        for (let i = startIndex; i <= stopIndex; i++) {
-                            const rangeItem = resolvedGetItem(i);
-                            if (
-                                isRangeSelectableItem(rangeItem) &&
-                                internalState.extractRowId(rangeItem)
-                            ) {
-                                rangeItems.push(rangeItem);
-                            }
-                        }
-
-                        // Add range items to selection (matching shift+click behavior)
-                        const currentSelected = internalState.getSelected();
-                        const newSelected: ItemListStateItemWithRequiredProperties[] = [
-                            ...currentSelected.filter(
-                                (item): item is ItemListStateItemWithRequiredProperties =>
-                                    typeof item === 'object' && item !== null,
-                            ),
-                        ];
-                        rangeItems.forEach((rangeItem) => {
-                            const rangeRowId = internalState.extractRowId(rangeItem);
-                            if (
-                                rangeRowId &&
-                                !newSelected.some(
-                                    (selected) =>
-                                        internalState.extractRowId(selected) === rangeRowId,
-                                )
-                            ) {
-                                newSelected.push(rangeItem);
-                            }
-                        });
-
-                        // Ensure the last item in selection is the item at newIndex for incremental extension
-                        const newItemListItem = newItem as ItemListStateItemWithRequiredProperties;
-                        const newItemRowId = internalState.extractRowId(newItemListItem);
-                        if (newItemRowId) {
-                            // Remove the new item from its current position if it exists
-                            const filteredSelected = newSelected.filter(
-                                (item) => internalState.extractRowId(item) !== newItemRowId,
-                            );
-                            // Add it at the end so it becomes the last selected item
-                            filteredSelected.push(newItemListItem);
-                            internalState.setSelected(filteredSelected);
-                        }
-                    }
-                } else {
-                    // No previous selection, just select the new item
-                    const newItemListItem = newItem as ItemListStateItemWithRequiredProperties;
-                    if (internalState.extractRowId(newItemListItem)) {
-                        internalState.setSelected([newItemListItem]);
+            if (e.shiftKey && currentIndex !== -1) {
+                // Shift + Arrow adds the range from the cursor to the new
+                // position to the selection (matches shift+click behavior)
+                const rangeItems: ItemListStateItemWithRequiredProperties[] = [];
+                for (
+                    let i = Math.min(currentIndex, newIndex);
+                    i <= Math.max(currentIndex, newIndex);
+                    i++
+                ) {
+                    const rangeItem = resolvedGetItem(i);
+                    if (isRangeSelectableItem(rangeItem) && internalState.extractRowId(rangeItem)) {
+                        rangeItems.push(rangeItem);
                     }
                 }
+
+                const newSelected = selected.filter(
+                    (item): item is ItemListStateItemWithRequiredProperties =>
+                        typeof item === 'object' && item !== null,
+                );
+                rangeItems.forEach((rangeItem) => {
+                    const rangeRowId = internalState.extractRowId(rangeItem);
+                    if (
+                        !newSelected.some((item) => internalState.extractRowId(item) === rangeRowId)
+                    ) {
+                        newSelected.push(rangeItem);
+                    }
+                });
+                internalState.setSelected(newSelected);
+                keyboardCursorRef.current = {
+                    rowId: newItemRowId,
+                    selectedCount: newSelected.length,
+                };
             } else {
-                // Without Shift: select only the new item
-                const newItemListItem = newItem as ItemListStateItemWithRequiredProperties;
-                if (internalState.extractRowId(newItemListItem)) {
-                    internalState.setSelected([newItemListItem]);
-                }
+                internalState.setSelected([newItem]);
+                keyboardCursorRef.current = { rowId: newItemRowId, selectedCount: 1 };
             }
 
             scrollToIndex(newIndex);

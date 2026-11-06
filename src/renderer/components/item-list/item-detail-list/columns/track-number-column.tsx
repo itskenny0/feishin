@@ -1,51 +1,22 @@
 import { ItemDetailRowPlayControlCell } from './row-play-control-cell';
-import styles from './row-play-control-cell.module.css';
 import { ItemDetailListCellProps } from './types';
-import { useDetailRowPlayControl } from './use-detail-row-play-control';
 
 import { isRowPlayControlColumn } from '/@/renderer/components/item-list/helpers/get-row-play-control-column';
-import { Icon } from '/@/shared/components/icon/icon';
 import { TableColumn } from '/@/shared/types/types';
 
 const formatTrackNumber = (song: ItemDetailListCellProps['song']) => {
     const disc = song.discNumber ?? 1;
-    if (song.trackNumber == null) {
-        // Jellyfin libraries without track-number tags return undefined here,
-        // which previously crashed the column with a .toString() on undefined.
-        return `${disc}-`;
-    }
-    const track = song.trackNumber.toString().padStart(2, '0');
-    return `${disc}-${track}`;
+    // Jellyfin libraries without track-number tags have no trackNumber.
+    if (song.trackNumber == null) return `${disc}-`;
+    return `${disc}-${song.trackNumber.toString().padStart(2, '0')}`;
 };
 
-const DefaultTrackNumberColumn = ({ song }: ItemDetailListCellProps) => {
-    return <>{formatTrackNumber(song)}</>;
-};
+export const TrackNumberColumn = ({ columns, song }: ItemDetailListCellProps) => {
+    const label = formatTrackNumber(song);
 
-const PlayableTrackNumberColumn = (props: ItemDetailListCellProps) => {
-    const { handlePlay, isActive, isPlaying, showPlayControls } = useDetailRowPlayControl(props);
-
-    const indexContent = isActive ? (
-        <div className={styles.iconWrapper}>
-            <Icon fill="primary" icon={isPlaying ? 'mediaPlay' : 'mediaPause'} />
-        </div>
-    ) : (
-        formatTrackNumber(props.song)
-    );
-
-    return (
-        <ItemDetailRowPlayControlCell
-            indexContent={indexContent}
-            onPlay={handlePlay}
-            showPlayControls={showPlayControls}
-        />
-    );
-};
-
-export const TrackNumberColumn = (props: ItemDetailListCellProps) => {
-    if (!props.columns || !isRowPlayControlColumn(TableColumn.TRACK_NUMBER, props.columns)) {
-        return <DefaultTrackNumberColumn {...props} />;
+    if (!columns || !isRowPlayControlColumn(TableColumn.TRACK_NUMBER, columns)) {
+        return label;
     }
 
-    return <PlayableTrackNumberColumn {...props} />;
+    return <ItemDetailRowPlayControlCell label={label} song={song} />;
 };

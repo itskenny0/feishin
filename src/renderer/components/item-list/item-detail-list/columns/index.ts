@@ -1,11 +1,10 @@
-import React, { type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 
 import type { ItemDetailListCellProps } from './types';
 
 import { ActionsColumn } from './actions-column';
-import { AlbumArtistColumn } from './album-artist-column';
 import { AlbumColumn } from './album-column';
-import { ArtistColumn } from './artist-column';
+import { AlbumArtistColumn, ArtistColumn } from './artist-column';
 import { BitDepthColumn } from './bit-depth-column';
 import { BitRateColumn } from './bit-rate-column';
 import { BpmColumn } from './bpm-column';
@@ -30,12 +29,9 @@ import { RatingColumn } from './rating-column';
 import { ReleaseDateColumn } from './release-date-column';
 import { ReleaseYearColumn } from './release-year-column';
 import { RowIndexColumn } from './row-index-column';
-import { ItemDetailRowPlayControlCell } from './row-play-control-cell';
 import { SampleRateColumn } from './sample-rate-column';
 import { SizeColumn } from './size-column';
-import { TitleArtistColumn } from './title-artist-column';
-import { TitleColumn } from './title-column';
-import { TitleCombinedColumn } from './title-combined-column';
+import { TitleArtistColumn, TitleColumn, TitleCombinedColumn } from './title-column';
 import { TrackNumberColumn } from './track-number-column';
 import { YearColumn } from './year-column';
 
@@ -80,59 +76,9 @@ const COLUMN_MAP: Partial<Record<TableColumn, CellComponent>> = {
     [TableColumn.YEAR]: YearColumn,
 };
 
-export type DetailListCellComponentProps = ItemDetailListCellProps & { columnId?: string };
+export type DetailListCellComponentProps = ItemDetailListCellProps & { columnId: string };
 
-export function getDetailListCellComponent(
+export const getDetailListCellComponent = (
     columnId: string | TableColumn,
-): (props: DetailListCellComponentProps) => ReactNode {
-    const Component = COLUMN_MAP[columnId as TableColumn];
-    if (Component) {
-        return Component as (props: DetailListCellComponentProps) => ReactNode;
-    }
-    return (props: DetailListCellComponentProps) =>
-        React.createElement(DefaultColumn, {
-            columnId: props.columnId ?? (columnId as string),
-            song: props.song,
-        });
-}
-
-export type { ItemDetailListCellProps } from './types';
-
-export {
-    ActionsColumn,
-    AlbumArtistColumn,
-    AlbumColumn,
-    ArtistColumn,
-    BitDepthColumn,
-    BitRateColumn,
-    BpmColumn,
-    ChannelsColumn,
-    CodecColumn,
-    CommentColumn,
-    ComposerColumn,
-    DateAddedColumn,
-    DateColumn,
-    DefaultColumn,
-    DiscNumberColumn,
-    DurationColumn,
-    FavoriteColumn,
-    FolderNameColumn,
-    GenreBadgeColumn,
-    GenreColumn,
-    ImageColumn,
-    ItemDetailRowPlayControlCell,
-    LastPlayedColumn,
-    PathColumn,
-    PlayCountColumn,
-    RatingColumn,
-    ReleaseDateColumn,
-    ReleaseYearColumn,
-    RowIndexColumn,
-    SampleRateColumn,
-    SizeColumn,
-    TitleArtistColumn,
-    TitleColumn,
-    TitleCombinedColumn,
-    TrackNumberColumn,
-    YearColumn,
-};
+): ((props: DetailListCellComponentProps) => ReactNode) =>
+    COLUMN_MAP[columnId as TableColumn] ?? DefaultColumn;

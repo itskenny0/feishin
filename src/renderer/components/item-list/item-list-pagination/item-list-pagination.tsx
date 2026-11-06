@@ -1,4 +1,4 @@
-import { Fragment, ReactNode } from 'react';
+import { Fragment, ReactNode, useEffect } from 'react';
 
 import styles from './item-list-pagination.module.css';
 
@@ -21,6 +21,14 @@ export const ItemListWithPagination = ({
     pageCount,
     totalItemCount,
 }: ItemListWithPaginationProps) => {
+    // The page param survives search / filter changes; when the results shrink
+    // below the current page, move back to the last page instead of an empty one.
+    useEffect(() => {
+        if (pageCount > 0 && currentPage > pageCount - 1) {
+            onChange(pageCount - 1);
+        }
+    }, [currentPage, onChange, pageCount]);
+
     return (
         <div className={styles.container}>
             <Fragment key={currentPage}>{children}</Fragment>

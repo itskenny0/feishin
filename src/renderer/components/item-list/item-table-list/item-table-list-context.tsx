@@ -18,6 +18,11 @@ import { ItemControls, ItemTableListColumnConfig } from '/@/renderer/components/
 import { PlayerContext } from '/@/renderer/features/player/context/player-context';
 import { LibraryItem } from '/@/shared/types/domain-types';
 
+export type ItemTableListColumnResizeLiveContextValue = {
+    clearColumnResizePreview: () => void;
+    scheduleColumnResizePreview: (columnIndex: number, width: number) => void;
+};
+
 export type ItemTableListConfig = {
     cellPadding: 'lg' | 'md' | 'sm' | 'xl' | 'xs';
     columns: ItemTableListColumnConfig[];
@@ -52,33 +57,6 @@ export type ItemTableListGroupHeader = {
         internalState: ItemListStateActions;
         startDataIndex: number;
     }) => ReactElement;
-};
-
-const ItemTableListConfigContext = createContext<ItemTableListConfig | null>(null);
-
-export const ItemTableListConfigProvider = ({
-    children,
-    value,
-}: {
-    children: React.ReactNode;
-    value: ItemTableListConfig;
-}) => {
-    // Keep reference stable when the input reference is stable.
-    const memoValue = useMemo(() => value, [value]);
-    return (
-        <ItemTableListConfigContext.Provider value={memoValue}>
-            {children}
-        </ItemTableListConfigContext.Provider>
-    );
-};
-
-export const useItemTableListConfig = (): ItemTableListConfig | null => {
-    return useContext(ItemTableListConfigContext);
-};
-
-export type ItemTableListColumnResizeLiveContextValue = {
-    clearColumnResizePreview: () => void;
-    scheduleColumnResizePreview: (columnIndex: number, width: number) => void;
 };
 
 const ItemTableListColumnResizeLiveContext =

@@ -14,13 +14,3 @@ export const useIsFetchingItemListCount = ({ itemType }: { itemType: LibraryItem
 
     return isFetching > 0;
 };
-
-export const useIsFetchingItemList = ({ itemType }: { itemType: LibraryItem }) => {
-    const serverId = useCurrentServerId();
-
-    const isFetching = useIsFetching({
-        queryKey: queryKeys[getListQueryKeyName(itemType)].list(serverId),
-    });
-
-    return isFetching > 0;
-};

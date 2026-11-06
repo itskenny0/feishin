@@ -8,7 +8,6 @@ import {
 interface UseTableKeyboardNavigationProps {
     calculateScrollTopForIndex: (index: number) => number;
     data: unknown[];
-    enableHeader: boolean;
     enableSelection: boolean;
     extractRowId: (item: unknown) => string | undefined;
     getItem?: (index: number) => undefined | unknown;
@@ -20,6 +19,7 @@ interface UseTableKeyboardNavigationProps {
     ) => item is ItemListStateItemWithRequiredProperties;
     internalState: ItemListStateActions;
     itemCount?: number;
+    mapDataIndexToRowIndex: (dataIndex: number) => number;
     pinnedRightColumnCount: number;
     pinnedRightColumnRef: React.RefObject<HTMLDivElement | null>;
     rowRef: React.RefObject<HTMLDivElement | null>;
@@ -32,7 +32,6 @@ interface UseTableKeyboardNavigationProps {
 export const useTableKeyboardNavigation = ({
     calculateScrollTopForIndex,
     data,
-    enableHeader,
     enableSelection,
     extractRowId,
     getItem,
@@ -42,6 +41,7 @@ export const useTableKeyboardNavigation = ({
     hasRequiredStateItemProperties,
     internalState,
     itemCount,
+    mapDataIndexToRowIndex,
     pinnedRightColumnCount,
     pinnedRightColumnRef,
     rowRef,
@@ -84,8 +84,9 @@ export const useTableKeyboardNavigation = ({
                 internalState.setSelected([newItemListItem]);
             }
 
-            // Check if we need to scroll by determining if the item is at the edge of the viewport
-            const gridIndex = enableHeader ? newIndex + 1 : newIndex;
+            // Check if we need to scroll by determining if the item is at the edge of the viewport.
+            // The row index skips the header row and any group header rows above the item.
+            const gridIndex = mapDataIndexToRowIndex(newIndex);
 
             const mainContainer = rowRef.current?.childNodes[0] as HTMLDivElement | undefined;
             const pinnedRightContainer = pinnedRightColumnRef.current?.childNodes[0] as
@@ -137,7 +138,6 @@ export const useTableKeyboardNavigation = ({
             data,
             getItem,
             getItemIndex,
-            enableHeader,
             enableSelection,
             extractRowId,
             getRowHeightAtIndex,
@@ -145,6 +145,7 @@ export const useTableKeyboardNavigation = ({
             hasRequiredStateItemProperties,
             internalState,
             itemCount,
+            mapDataIndexToRowIndex,
             pinnedRightColumnCount,
             pinnedRightColumnRef,
             rowRef,

@@ -104,3 +104,108 @@ describe('useItemListInfiniteLoader accessor identity', () => {
         expect(result.current.getItemIndex).not.toBe(getItemIndex0);
     });
 });
+
+describe('useItemListInfiniteLoader visible range', () => {
+    it('fetches every unloaded page the visible range spans', async () => {
+        const listQueryFn = vi.fn(async ({ query }: { query: { startIndex: number } }) => ({
+            items: Array.from({ length: 10 }, (_, i) => ({
+                _itemType: LibraryItem.ALBUM,
+                id: `span-${query.startIndex + i}`,
+            })),
+        }));
+
+        const { result } = renderHook(
+            () =>
+                useItemListInfiniteLoader({
+                    eventKey: 'ALBUM',
+                    itemsPerPage: 10,
+                    itemType: LibraryItem.ALBUM,
+                    listCountQuery: {
+                        queryFn: () => Promise.resolve(40),
+                        queryKey: ['srv', 'count', 'span'],
+                    } as any,
+                    listQueryFn: listQueryFn as any,
+                    query: { searchTerm: 'span' },
+                    serverId: 'srv',
+                }),
+            { wrapper: makeWrapper() },
+        );
+
+        await act(async () => {
+            await new Promise((r) => setTimeout(r, 50));
+        });
+
+        // A jump (scrollbar drag, scroll restore) to rows 15-25: pages 1 and 2
+        // are both on screen and neither is loaded.
+        await act(async () => {
+            await result.current.onRangeChanged({ startIndex: 15, stopIndex: 25 });
+            await new Promise((r) => setTimeout(r, 50));
+        });
+
+        expect(result.current.getItem(15)).toMatchObject({ id: 'span-15' });
+        expect(result.current.getItem(25)).toMatchObject({ id: 'span-25' });
+    });
+});
+
+describe('useItemListInfiniteLoader query change', () => {
+    it('does not write a late page from the previous query into the new query', async () => {
+        const items = (term: string, startIndex: number) =>
+            Array.from({ length: 10 }, (_, i) => ({
+                _itemType: LibraryItem.ALBUM,
+                id: `${term}-${startIndex + i}`,
+            }));
+
+        let releaseStalePage: () => void = () => {};
+        const listQueryFn = vi.fn(
+            ({ query }: { query: { searchTerm: string; startIndex: number } }) => {
+                const page = { items: items(query.searchTerm, query.startIndex) };
+                if (query.searchTerm === 'late-a' && query.startIndex === 10) {
+                    return new Promise<typeof page>((resolve) => {
+                        releaseStalePage = () => resolve(page);
+                    });
+                }
+                return Promise.resolve(page);
+            },
+        );
+
+        const { rerender, result } = renderHook(
+            ({ searchTerm }: { searchTerm: string }) =>
+                useItemListInfiniteLoader({
+                    eventKey: 'ALBUM',
+                    itemsPerPage: 10,
+                    itemType: LibraryItem.ALBUM,
+                    listCountQuery: {
+                        queryFn: () => Promise.resolve(30),
+                        queryKey: ['srv', 'count', searchTerm],
+                    } as any,
+                    listQueryFn: listQueryFn as any,
+                    query: { searchTerm },
+                    serverId: 'srv',
+                }),
+            { initialProps: { searchTerm: 'late-a' }, wrapper: makeWrapper() },
+        );
+
+        await act(async () => {
+            await new Promise((r) => setTimeout(r, 50));
+        });
+
+        // Scroll into page 1 of query A; its fetch stays in flight.
+        act(() => {
+            void result.current.onRangeChanged({ startIndex: 12, stopIndex: 15 });
+        });
+
+        // The query changes (e.g. the search term); B's page 1 lands first.
+        rerender({ searchTerm: 'late-b' });
+        await act(async () => {
+            await new Promise((r) => setTimeout(r, 50));
+        });
+        expect(result.current.getItem(10)).toMatchObject({ id: 'late-b-10' });
+
+        // A's stale response must not overwrite B's rows.
+        await act(async () => {
+            releaseStalePage();
+            await new Promise((r) => setTimeout(r, 50));
+        });
+        expect(result.current.getItem(10)).toMatchObject({ id: 'late-b-10' });
+    });
+});

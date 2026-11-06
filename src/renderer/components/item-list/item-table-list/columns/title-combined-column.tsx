@@ -93,13 +93,12 @@ export const DefaultTitleCombinedColumn = (props: ItemTableListInnerColumn) => {
         });
     };
 
-    if (item && 'name' in item && 'imageUrl' in item && 'artists' in item) {
+    // Playlists have no `artists`; they still render image + name.
+    if (item && 'name' in item && 'imageUrl' in item) {
         const rowHeight = props.getRowHeight(props.rowIndex, props);
         const path = getTitlePath(props.itemType, (rowItem as any).id as string);
         const align = props.columns[props.columnIndex]?.align || 'start';
         const hasAlbumGroupColumn = props.hasAlbumGroupColumn ?? false;
-
-        const item = rowItem as any;
         const titleLinkProps = path
             ? {
                   component: Link,
@@ -183,8 +182,8 @@ export const DefaultTitleCombinedColumn = (props: ItemTableListInnerColumn) => {
                     </Text>
                     <div className={styles.artists}>
                         <JoinedArtists
-                            artistName={item.albumArtist}
-                            artists={item.albumArtists}
+                            artistName={item.albumArtistName ?? ''}
+                            artists={item.albumArtists ?? []}
                             linkProps={{ fw: 400, isMuted: true }}
                             rootTextProps={{
                                 className: styles.artists,

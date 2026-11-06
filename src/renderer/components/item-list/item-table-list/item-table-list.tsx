@@ -57,7 +57,6 @@ import {
 import {
     ItemTableListColumnResizeLiveProvider,
     type ItemTableListConfig,
-    ItemTableListConfigProvider,
     ItemTableListStoreProvider,
     useItemTableListColumnResizeLiveState,
 } from '/@/renderer/components/item-list/item-table-list/item-table-list-context';
@@ -1499,22 +1498,13 @@ const BaseItemTableList = ({
             // Grow the group's LAST row when the album image or wrapped album
             // info (title + artists + controls) needs more than the standard
             // combined row height. Other rows keep their standard height.
-            if (
-                cellProps?.hasAlbumGroupColumn &&
-                isLastInAlbumGroup(
-                    index,
-                    cellProps.getRowItem,
-                    cellProps.enableHeader,
-                    cellProps.data.length,
-                )
-            ) {
+            if (cellProps?.hasAlbumGroupColumn && isLastInAlbumGroup(index, cellProps.getRowItem)) {
                 const item = cellProps.getRowItem?.(index) as null | undefined | { album?: string };
                 if (item?.album) {
                     const groupRowCount = getAlbumGroupRowCount(
                         index,
                         cellProps.getRowItem,
                         cellProps.enableHeader,
-                        cellProps.data.length,
                     );
                     const groupStartRowIndex = getAlbumGroupStartRowIndex(
                         index,
@@ -1723,32 +1713,6 @@ const BaseItemTableList = ({
         [],
     );
 
-    const { handleKeyDown } = useTableKeyboardNavigation({
-        calculateScrollTopForIndex,
-        data,
-        enableHeader,
-        enableSelection,
-        extractRowId,
-        getItem,
-        getItemIndex,
-        getRowHeightAtIndex,
-        getStateItem,
-        hasRequiredStateItemProperties,
-        internalState,
-        itemCount: baseItemCount,
-        pinnedRightColumnCount,
-        pinnedRightColumnRef,
-        rowRef,
-        scrollToTableIndex,
-    });
-
-    useTableInitialScroll({
-        initialTop,
-        scrollToTableIndex,
-        scrollToTableOffset,
-        startRowIndex,
-    });
-
     // Maps a data index to a row index, accounting for inserted group header rows
     // (e.g. the Up Next sections). Without this, scrollToIndex lands on a group
     // header row (or the wrong data row) whenever groups are present.
@@ -1771,6 +1735,32 @@ const BaseItemTableList = ({
         },
         [enableHeader, groups],
     );
+
+    const { handleKeyDown } = useTableKeyboardNavigation({
+        calculateScrollTopForIndex,
+        data,
+        enableSelection,
+        extractRowId,
+        getItem,
+        getItemIndex,
+        getRowHeightAtIndex,
+        getStateItem,
+        hasRequiredStateItemProperties,
+        internalState,
+        itemCount: baseItemCount,
+        mapDataIndexToRowIndex,
+        pinnedRightColumnCount,
+        pinnedRightColumnRef,
+        rowRef,
+        scrollToTableIndex,
+    });
+
+    useTableInitialScroll({
+        initialTop,
+        scrollToTableIndex,
+        scrollToTableOffset,
+        startRowIndex,
+    });
 
     useTableImperativeHandle({
         autoScrollToActiveRow,
@@ -2010,15 +2000,13 @@ const BaseItemTableList = ({
 
     return (
         <ItemTableListStoreProvider activeRowId={activeRowId}>
-            <ItemTableListConfigProvider value={tableConfigValue}>
-                {onColumnResized ? (
-                    <ItemTableListColumnResizeLiveProvider value={columnResizeLiveValue}>
-                        {tableMotion}
-                    </ItemTableListColumnResizeLiveProvider>
-                ) : (
-                    tableMotion
-                )}
-            </ItemTableListConfigProvider>
+            {onColumnResized ? (
+                <ItemTableListColumnResizeLiveProvider value={columnResizeLiveValue}>
+                    {tableMotion}
+                </ItemTableListColumnResizeLiveProvider>
+            ) : (
+                tableMotion
+            )}
         </ItemTableListStoreProvider>
     );
 };

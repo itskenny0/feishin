@@ -5,17 +5,23 @@ import {
     JOINED_ARTISTS_MUTED_PROPS,
     JoinedArtists,
 } from '/@/renderer/features/albums/components/joined-artists';
+import { RelatedArtist } from '/@/shared/types/domain-types';
 
-export const ArtistColumn = ({ isRowHovered, song }: ItemDetailListCellProps) => {
-    const name = song.artistName?.trim() ?? '';
-    const hasArtists = name.length > 0 || (song.artists?.length ?? 0) > 0;
-
-    if (!hasArtists) return <>&nbsp;</>;
+const ArtistsCell = ({
+    artistName,
+    artists,
+    isRowHovered,
+}: {
+    artistName: null | string | undefined;
+    artists: RelatedArtist[] | undefined;
+    isRowHovered?: boolean;
+}) => {
+    if (!artistName?.trim() && !artists?.length) return <>&nbsp;</>;
 
     return (
         <JoinedArtists
-            artistName={song.artistName ?? ''}
-            artists={song.artists ?? []}
+            artistName={artistName ?? ''}
+            artists={artists ?? []}
             linkProps={JOINED_ARTISTS_MUTED_PROPS.linkProps}
             readOnly={!isRowHovered}
             rootTextProps={{
@@ -25,3 +31,15 @@ export const ArtistColumn = ({ isRowHovered, song }: ItemDetailListCellProps) =>
         />
     );
 };
+
+export const ArtistColumn = ({ isRowHovered, song }: ItemDetailListCellProps) => (
+    <ArtistsCell artistName={song.artistName} artists={song.artists} isRowHovered={isRowHovered} />
+);
+
+export const AlbumArtistColumn = ({ isRowHovered, song }: ItemDetailListCellProps) => (
+    <ArtistsCell
+        artistName={song.albumArtistName}
+        artists={song.albumArtists}
+        isRowHovered={isRowHovered}
+    />
+);

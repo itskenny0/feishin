@@ -82,7 +82,7 @@ export const DefaultTitleArtistColumn = (props: ItemTableListInnerColumn) => {
                     </Text>
                     <div className={styles.artists}>
                         <JoinedArtists
-                            artistName={item.albumArtist}
+                            artistName={item.albumArtistName}
                             artists={item.albumArtists}
                             linkProps={{ fw: 400, isMuted: true }}
                             rootTextProps={{

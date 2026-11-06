@@ -52,6 +52,7 @@ import {
 } from '/@/shared/types/domain-types';
 import { DragOperation, DragTarget } from '/@/shared/types/drag-and-drop';
 import { Play } from '/@/shared/types/types';
+import { albumFolderFromSongPath } from '/@/shared/utils/album-folder-from-path';
 import { stringToColor } from '/@/shared/utils/string-to-color';
 
 export type DataRow = {
@@ -193,6 +194,15 @@ export interface ItemCardDerivativeProps extends Omit<ItemCardProps, 'type'> {
 }
 
 type ItemCardData = NonNullable<ItemCardProps['data']>;
+
+// Songs are cache-keyed by their album cover: the thumbnail sweep never caches
+// a song's own imageId (on Subsonic/Navidrome it is not the album id).
+const getCoverCacheId = (data: unknown) => {
+    const item = data as
+        | undefined
+        | { _itemType?: LibraryItem; albumId?: null | string; imageId?: null | string };
+    return item?._itemType === LibraryItem.SONG ? (item.albumId ?? item.imageId) : item?.imageId;
+};
 
 const ItemCardStandardImageArea = memo(function ItemCardStandardImageArea({
     controls,
@@ -336,7 +346,7 @@ const ItemCardStandardImageArea = memo(function ItemCardStandardImageArea({
                     {...(variant === 'poster' ? { enableViewport: enableImageViewport } : {})}
                     explicitStatus={'explicitStatus' in data && data ? data.explicitStatus : null}
                     fetchPriority={imageFetchPriority}
-                    id={(data as { imageId?: string })?.imageId}
+                    id={getCoverCacheId(data)}
                     itemType={itemType}
                     src={(data as { imageUrl?: string })?.imageUrl}
                     thumbHash={(data as Album | AlbumArtist | Playlist | Song)?.thumbHash}
@@ -529,7 +539,7 @@ const CompactItemCardImageArea = memo(function CompactItemCardImageArea({
                     enableDebounce={false}
                     explicitStatus={'explicitStatus' in data && data ? data.explicitStatus : null}
                     fetchPriority={imageFetchPriority}
-                    id={data?.imageId}
+                    id={getCoverCacheId(data)}
                     itemType={itemType}
                     src={(data as Album | AlbumArtist | Playlist | Song)?.imageUrl}
                     thumbHash={(data as Album | AlbumArtist | Playlist | Song)?.thumbHash}
@@ -1234,16 +1244,9 @@ MemoizedCompactItemCard.displayName = 'MemoizedCompactItemCard';
 const MemoizedDefaultItemCard = memo(DefaultItemCard);
 MemoizedDefaultItemCard.displayName = 'MemoizedDefaultItemCard';
 
-const folderNameFromSongPath = (path?: null | string): null | string => {
-    if (!path) return null;
-    const segments = path.split(/[/\\]/).filter(Boolean);
-    if (segments.length < 2) return null;
-    return segments[segments.length - 2] ?? null;
-};
-
 const SongAlbumName = ({ song }: { song: Song }) => {
     const useFs = useShowFilesystemNameForAlbums();
-    const fsName = useFs ? folderNameFromSongPath(song.path) : null;
+    const fsName = useFs ? albumFolderFromSongPath(song.path) : null;
     const display = fsName || song.album || '';
     if (song.albumId) {
         const albumData = {

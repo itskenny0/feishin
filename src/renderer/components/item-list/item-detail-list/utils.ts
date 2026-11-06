@@ -20,13 +20,9 @@ const FIXED_TRACK_COLUMN_WIDTHS: Partial<Record<TableColumn, number>> = {
     [TableColumn.YEAR]: 56,
 };
 
-const HOVER_ONLY_COLUMNS: TableColumn[] = [
-    TableColumn.ACTIONS,
-    TableColumn.USER_FAVORITE,
-    TableColumn.USER_RATING,
-];
-
-const NO_HORIZONTAL_PADDING_COLUMNS: TableColumn[] = [
+// Icon-style columns: no horizontal padding, and content only shows on row hover
+// (favorite / rating stay visible when set).
+const ICON_COLUMNS: TableColumn[] = [
     TableColumn.ACTIONS,
     TableColumn.USER_FAVORITE,
     TableColumn.USER_RATING,
@@ -43,11 +39,7 @@ export function getTrackColumnFixed(columnId: TableColumn): {
 }
 
 export function isNoHorizontalPaddingColumn(columnId: TableColumn): boolean {
-    return NO_HORIZONTAL_PADDING_COLUMNS.includes(columnId);
-}
-
-export function isTrackColumnHoverOnly(columnId: TableColumn): boolean {
-    return HOVER_ONLY_COLUMNS.includes(columnId);
+    return ICON_COLUMNS.includes(columnId);
 }
 
 export function shouldShowHoverOnlyColumnContent(
@@ -55,7 +47,7 @@ export function shouldShowHoverOnlyColumnContent(
     isRowHovered: boolean,
     song: { userFavorite?: boolean | null; userRating?: null | number },
 ): boolean {
-    if (!HOVER_ONLY_COLUMNS.includes(columnId)) {
+    if (!ICON_COLUMNS.includes(columnId)) {
         return true;
     }
 

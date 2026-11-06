@@ -222,15 +222,15 @@ export const useItemListInfiniteLoader = ({
         previousDataQueryKeyRef.current = JSON.stringify(dataQueryKey);
     }
 
-    // Push items into the loader's dataMap. Shared by the cache-prime and
-    // network paths. When `markLoaded` is false (cache prime) we leave the
-    // page-loaded flag unset so the network revalidation still runs and the
-    // freshly-fetched items overwrite the cached ones.
+    // Push a fetched page into the loader's maps and mark it loaded. Shared by
+    // the cache and network paths. `maps` are the maps of the query the fetch
+    // was issued for: by the time a slow page lands the query may have changed
+    // and the refs point at the NEW query's maps, which must not receive the
+    // old query's rows.
     const writePageIntoDataMap = useCallback(
-        async (pageNumber: number, startIndex: number, items: unknown[], markLoaded: boolean) => {
-            // Mutate the ref-held maps in place (no clone) …
-            const dataMap = dataMapRef.current;
-            const idToIndexMap = idToIndexMapRef.current;
+        async (maps: SharedListMaps, pageNumber: number, startIndex: number, items: unknown[]) => {
+            // Mutate the shared maps in place (no clone) …
+            const { dataMap, idToIndexMap } = maps;
 
             items.forEach((item, offset) => {
                 const index = startIndex + offset;
@@ -273,9 +273,7 @@ export const useItemListInfiniteLoader = ({
             queryClient.setQueryData(dataQueryKey, (oldData: InfiniteLoaderCacheData) => {
                 const base = oldData ?? getInitialData();
                 return {
-                    pagesLoaded: markLoaded
-                        ? { ...base.pagesLoaded, [pageNumber]: true }
-                        : { ...base.pagesLoaded },
+                    pagesLoaded: { ...base.pagesLoaded, [pageNumber]: true },
                     version: base.version + 1,
                 };
             });
@@ -321,7 +319,12 @@ export const useItemListInfiniteLoader = ({
                     });
                     if (cached && cached.items.length > 0) {
                         cachedItems = cached.items;
-                        await writePageIntoDataMap(pageNumber, startIndex, cached.items, true);
+                        await writePageIntoDataMap(
+                            sharedMaps,
+                            pageNumber,
+                            startIndex,
+                            cached.items,
+                        );
                         lastFetchedPageRef.current = Math.max(
                             lastFetchedPageRef.current,
                             pageNumber,
@@ -367,7 +370,7 @@ export const useItemListInfiniteLoader = ({
                     staleTime: isRandomSort ? 1000 * 60 * 10 : 1000 * 15,
                 })
                 .then(async (result) => {
-                    await writePageIntoDataMap(pageNumber, startIndex, result.items, true);
+                    await writePageIntoDataMap(sharedMaps, pageNumber, startIndex, result.items);
                     lastFetchedPageRef.current = Math.max(lastFetchedPageRef.current, pageNumber);
                     // Write-through: persist the fresh server page into the
                     // local cache (bulkPut + search/row-cache invalidation)
@@ -400,6 +403,7 @@ export const useItemListInfiniteLoader = ({
             itemType,
             isRandomSort,
             localFetchPage,
+            sharedMaps,
             writePageIntoDataMap,
         ],
     );
@@ -498,17 +502,16 @@ export const useItemListInfiniteLoader = ({
             // Track the current visible range
             currentVisibleRangeRef.current = range;
 
-            const pageNumber = Math.floor(range.startIndex / itemsPerPage);
+            const firstPage = Math.floor(range.startIndex / itemsPerPage);
+            const lastPage = Math.max(
+                firstPage,
+                Math.min(
+                    Math.floor(range.stopIndex / itemsPerPage),
+                    Math.ceil((totalItemCount ?? 0) / itemsPerPage) - 1,
+                ),
+            );
 
             const currentData = queryClient.getQueryData<InfiniteLoaderCacheData>(dataQueryKey);
-
-            const startPageBoundary = pageNumber * itemsPerPage;
-            const endPageBoundary = (pageNumber + 1) * itemsPerPage;
-
-            const distanceFromStartBoundary = range.startIndex - startPageBoundary;
-            const distanceToEndBoundary = endPageBoundary - range.stopIndex;
-
-            const thresholdDistance = Math.floor(itemsPerPage * fetchThreshold);
 
             // A page only counts as loaded if its items are actually PRESENT
             // in the live map. `pagesLoaded` persists in the React Query
@@ -518,31 +521,40 @@ export const useItemListInfiniteLoader = ({
             // committed instance's map stayed empty, freezing the first rows
             // as skeletons forever (playlists table, device 2026-06-10).
             // Checking the page's first item self-heals every such mismatch.
-            const isCurrentPageLoaded =
-                (currentData?.pagesLoaded[pageNumber] ?? false) &&
-                (pageNumber * itemsPerPage >= (totalItemCount ?? 0) ||
-                    dataMapRef.current.has(pageNumber * itemsPerPage));
+            const isPageLoaded = (page: number) =>
+                (currentData?.pagesLoaded[page] ?? false) &&
+                (page * itemsPerPage >= (totalItemCount ?? 0) ||
+                    dataMapRef.current.has(page * itemsPerPage));
 
-            // Fetch current page if not loaded
-            if (!isCurrentPageLoaded) {
-                await fetchPage(pageNumber);
+            // Fetch EVERY unloaded page on screen: the virtualizer only reports
+            // a range again when it changes, so a jump (scrollbar drag, scroll
+            // restore) whose range spans two pages would otherwise leave the
+            // second one as skeletons until the next scroll.
+            let allVisibleLoaded = true;
+            for (let page = firstPage; page <= lastPage; page++) {
+                if (!isPageLoaded(page)) {
+                    allVisibleLoaded = false;
+                    await fetchPage(page);
+                }
             }
 
-            // If current page is loaded, check if we should prefetch adjacent pages
-            if (isCurrentPageLoaded) {
+            // Once everything visible is loaded, prefetch the adjacent pages
+            if (allVisibleLoaded) {
+                const thresholdDistance = Math.floor(itemsPerPage * fetchThreshold);
+
                 if (
-                    distanceFromStartBoundary <= thresholdDistance &&
-                    pageNumber > 0 &&
-                    !currentData?.pagesLoaded[pageNumber - 1]
+                    range.startIndex - firstPage * itemsPerPage <= thresholdDistance &&
+                    firstPage > 0 &&
+                    !currentData?.pagesLoaded[firstPage - 1]
                 ) {
-                    await fetchPage(pageNumber - 1);
+                    await fetchPage(firstPage - 1);
                 }
 
                 if (
-                    distanceToEndBoundary <= thresholdDistance &&
-                    !currentData?.pagesLoaded[pageNumber + 1]
+                    (lastPage + 1) * itemsPerPage - range.stopIndex <= thresholdDistance &&
+                    !currentData?.pagesLoaded[lastPage + 1]
                 ) {
-                    await fetchPage(pageNumber + 1);
+                    await fetchPage(lastPage + 1);
                 }
             }
         },
@@ -801,13 +813,5 @@ export const useItemListInfiniteLoader = ({
         onRangeChanged,
         refresh,
         updateItems,
-    };
-};
-
-export const parseListCountQuery = (query: any) => {
-    return {
-        ...query,
-        limit: 1,
-        startIndex: 0,
     };
 };

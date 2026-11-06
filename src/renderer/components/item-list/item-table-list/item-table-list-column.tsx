@@ -470,6 +470,8 @@ export const ItemTableListColumn = memo(ItemTableListColumnBase, itemTableListCo
 
 const NonMutedColumns = [TableColumn.TITLE, TableColumn.TITLE_ARTIST, TableColumn.TITLE_COMBINED];
 
+type GetRowItem = ((index: number) => unknown) | undefined;
+
 /**
  * Stable content-height estimate for album-group info (title + metadata + controls).
  * Used by the virtualizer before a group header mounts/measures, so scrolling in
@@ -512,38 +514,44 @@ export function getAlbumGroupHeightKey(item: unknown, groupRowCount?: number): s
     return `${itemKey}:${groupRowCount}`;
 }
 
+const rowAlbum = (getRowItem: GetRowItem, rowIndex: number) =>
+    (getRowItem?.(rowIndex) as null | undefined | { album?: string })?.album;
+
+// Album groups end at the first row whose item is missing or from another
+// album. Bound them through `getRowItem` only: it returns undefined past the
+// last row, while `data` in accessor (infinite) mode is just the header slot.
+
 // Counts how many consecutive rows belong to the same album group as `rowIndex`.
 export function getAlbumGroupRowCount(
     rowIndex: number,
-    getRowItem: ((index: number) => unknown) | undefined,
+    getRowItem: GetRowItem,
     enableHeader: boolean | undefined,
-    dataLength: number,
 ): number {
-    const item = getRowItem?.(rowIndex) as null | undefined | { album?: string };
-    if (!item?.album) return 1;
-
-    const firstDataRow = enableHeader ? 1 : 0;
-    const maxRow = enableHeader ? dataLength + 1 : dataLength;
-
-    let start = rowIndex;
-    while (start > firstDataRow) {
-        const prevItem = getRowItem?.(start - 1) as null | undefined | { album?: string };
-        if (!prevItem || prevItem.album !== item.album) break;
-        start--;
-    }
+    const album = rowAlbum(getRowItem, rowIndex);
+    if (!album) return 1;
 
     let end = rowIndex;
-    while (end + 1 < maxRow) {
-        const nextItem = getRowItem?.(end + 1) as null | undefined | { album?: string };
-        if (!nextItem || nextItem.album !== item.album) break;
-        end++;
-    }
+    while (rowAlbum(getRowItem, end + 1) === album) end++;
 
-    return end - start + 1;
+    return end - getAlbumGroupStartRowIndex(rowIndex, getRowItem, enableHeader) + 1;
 }
 
 export const ALBUM_GROUP_STACK_GAP = 8;
 export const ALBUM_GROUP_CELL_PADDING = 8;
+
+type TableColumnContainerProps = ItemTableListColumn & {
+    children: React.ReactNode;
+    className?: string;
+    containerStyle?: CSSProperties;
+    controls: ItemControls;
+    dragRef?: null | React.Ref<HTMLDivElement>;
+    isDraggedOver?: 'bottom' | 'top' | null;
+    isDragging?: boolean;
+    // Text cells never get the album-group cell treatment, even when rendered
+    // for the ALBUM_GROUP column (e.g. a folder row's null fallback).
+    isTextCell?: boolean;
+    type: TableColumn;
+};
 
 export function getAlbumGroupSpanHeight(
     groupRowCount: number,
@@ -574,19 +582,15 @@ export function getAlbumGroupSpanHeight(
 
 export function getAlbumGroupStartRowIndex(
     rowIndex: number,
-    getRowItem: ((index: number) => unknown) | undefined,
+    getRowItem: GetRowItem,
     enableHeader: boolean | undefined,
 ): number {
-    const item = getRowItem?.(rowIndex) as null | undefined | { album?: string };
-    if (!item?.album) return rowIndex;
+    const album = rowAlbum(getRowItem, rowIndex);
+    if (!album) return rowIndex;
 
     const firstDataRow = enableHeader ? 1 : 0;
     let start = rowIndex;
-    while (start > firstDataRow) {
-        const prevItem = getRowItem?.(start - 1) as null | undefined | { album?: string };
-        if (!prevItem || prevItem.album !== item.album) break;
-        start--;
-    }
+    while (start > firstDataRow && rowAlbum(getRowItem, start - 1) === album) start--;
 
     return start;
 }
@@ -595,21 +599,9 @@ export function isAlbumGroupingActive(columns: { id: string; isEnabled?: boolean
     return columns.some((col) => col.id === TableColumn.ALBUM_GROUP && col.isEnabled);
 }
 
-export function isLastInAlbumGroup(
-    rowIndex: number,
-    getRowItem: ((index: number) => unknown) | undefined,
-    enableHeader: boolean | undefined,
-    dataLength: number,
-): boolean {
-    const item = getRowItem?.(rowIndex) as null | undefined | { album?: string };
-    if (!item?.album) return true;
-
-    const nextRowIndex = rowIndex + 1;
-    const maxRow = enableHeader ? dataLength + 1 : dataLength;
-    if (nextRowIndex >= maxRow) return true;
-
-    const nextItem = getRowItem?.(nextRowIndex) as null | undefined | { album?: string };
-    return !nextItem || nextItem.album !== item.album;
+export function isLastInAlbumGroup(rowIndex: number, getRowItem: GetRowItem): boolean {
+    const album = rowAlbum(getRowItem, rowIndex);
+    return !album || rowAlbum(getRowItem, rowIndex + 1) !== album;
 }
 
 function baseRowHeightForSize(size: ItemTableListColumn['size']): number {
@@ -674,11 +666,7 @@ function getAlbumGroupClampHeight(props: ItemTableListInnerColumn): null | numbe
     const item = props.getRowItem?.(props.rowIndex) as null | undefined | { album?: string };
     if (!item?.album) return null;
 
-    if (
-        !isLastInAlbumGroup(props.rowIndex, props.getRowItem, props.enableHeader, props.data.length)
-    ) {
-        return null;
-    }
+    if (!isLastInAlbumGroup(props.rowIndex, props.getRowItem)) return null;
 
     const albumImageSize = props.albumGroupImageSize ?? 0;
     const isVertical = props.albumGroupVerticalLayout ?? false;
@@ -687,7 +675,6 @@ function getAlbumGroupClampHeight(props: ItemTableListInnerColumn): null | numbe
         props.rowIndex,
         props.getRowItem,
         props.enableHeader,
-        props.data.length,
     );
     const groupStartRowIndex = getAlbumGroupStartRowIndex(
         props.rowIndex,
@@ -732,12 +719,7 @@ function showHorizontalBorderFor(props: ItemTableListInnerColumn, isLastRow: boo
     // Album group uses group top/bottom edges only (no mid-group lines that would
     // cut through artwork). Other columns keep per-row borders.
     if (props.type === TableColumn.ALBUM_GROUP) {
-        return isLastInAlbumGroup(
-            props.rowIndex,
-            props.getRowItem,
-            !!props.enableHeader,
-            props.data.length,
-        );
+        return isLastInAlbumGroup(props.rowIndex, props.getRowItem);
     }
     return props.rowIndex === 1 || !isLastRow;
 }
@@ -750,200 +732,30 @@ function totalTableWidthOf(props: ItemTableListColumn) {
     );
 }
 
-export const TableColumnTextContainer = (
-    props: ItemTableListColumn & {
-        children: React.ReactNode;
-        className?: string;
-        containerClassName?: string;
-        controls: ItemControls;
-        dragRef?: null | React.Ref<HTMLDivElement>;
-        isDraggedOver?: 'bottom' | 'top' | null;
-        isDragging?: boolean;
-        type: TableColumn;
-    },
-) => {
-    const containerRef = useRef<HTMLDivElement>(null);
-    const isDataRow = props.enableHeader ? props.rowIndex > 0 : true;
-    const dataIndex = props.enableHeader ? props.rowIndex - 1 : props.rowIndex;
-    const item = isDataRow
-        ? (props.getRowItem?.(props.rowIndex) ?? props.data[props.rowIndex])
-        : null;
-    const itemRowId =
-        item && typeof item === 'object' && 'id' in item
-            ? props.internalState.extractRowId(item)
-            : undefined;
-    const isSelected = useItemSelectionState(props.internalState, itemRowId || undefined);
-    const clampHeight = getAlbumGroupClampHeight(props);
-
-    const isDragging = props.isDragging ?? false;
-    const mergedRef = useMergedRef(containerRef, props.dragRef ?? null);
-
-    // Offline UX: a song row with no downloaded copy can't play while the
-    // app is offline — grey it out (reads the in-memory availability
-    // snapshot; no per-row Dexie traffic; always false while online).
-    const offlineDimmed = useOfflineRowDimmed(isDataRow ? item : null);
-
-    const isLastColumn = props.columnIndex === props.columns.length - 1;
-    const isLastRow =
-        isDataRow &&
-        (props.enableHeader
-            ? props.rowIndex === props.data.length
-            : props.rowIndex === props.data.length - 1);
-
-    // Apply dragged over state to all cells in the row so border can span entire row
-    useEffect(() => {
-        if (!isDataRow || !containerRef.current) return;
-        const rowKey = `${props.tableId}-${props.rowIndex}`;
-        const edge =
-            props.isDraggedOver === 'top' || props.isDraggedOver === 'bottom'
-                ? props.isDraggedOver
-                : null;
-
-        containerRef.current.dispatchEvent(
-            new CustomEvent('itl:row-drag-over', {
-                bubbles: true,
-                detail: { edge, rowKey },
-            }),
-        );
-    }, [isDataRow, props.isDraggedOver, props.rowIndex, props.tableId]);
-
-    const handleClick = useDoubleClick({
-        onDoubleClick: (event: React.MouseEvent<HTMLDivElement>) => {
-            if (isDataRow && item) {
-                const rowId = props.internalState.extractRowId(item);
-                const index = rowId ? props.internalState.findItemIndex(rowId) : -1;
-                props.controls.onDoubleClick?.({
-                    event,
-                    index,
-                    internalState: props.internalState,
-                    item: item as ItemListItem,
-                    itemType: props.itemType,
-                });
-            }
-        },
-        onSingleClick: (event: React.MouseEvent<HTMLDivElement>) => {
-            // Don't trigger row selection if clicking on interactive elements
-            const target = event.target as HTMLElement;
-            const isInteractiveElement = target.closest(
-                'button, a, input, select, textarea, [role="button"]',
-            );
-
-            if (isInteractiveElement) {
-                return;
-            }
-
-            if (isDataRow && item && props.enableSelection) {
-                const rowId = props.internalState.extractRowId(item);
-                const index = rowId ? props.internalState.findItemIndex(rowId) : -1;
-                props.controls.onClick?.({
-                    event,
-                    index,
-                    internalState: props.internalState,
-                    item: item as ItemListItem,
-                    itemType: props.itemType,
-                });
-            }
-        },
-    });
-
-    const handleContextMenu = (event: React.MouseEvent<HTMLDivElement>) => {
-        if (isDataRow && item) {
-            event.preventDefault();
-            const rowId = props.internalState.extractRowId(item);
-            const index = rowId ? props.internalState.findItemIndex(rowId) : -1;
-            props.controls.onMore?.({
-                event,
-                index,
-                internalState: props.internalState,
-                item: item as ItemListItem,
-                itemType: props.itemType,
-            });
-        }
-    };
-
-    // See sibling component above for why we mirror contextmenu via
-    // long-press: Android WebView's native long-press → contextmenu
-    // synthesis isn't reliable on these table cells.
-    const longPressHandlers = useLongPress({
-        onLongPress: (event) =>
-            handleContextMenu(event as unknown as React.MouseEvent<HTMLDivElement>),
-    });
-
-    const showHorizontalBorder = showHorizontalBorderFor(props, isLastRow);
-    const showVerticalBorder =
-        !!props.enableVerticalBorders && !isLastColumn && props.type !== TableColumn.ALBUM_GROUP;
-
-    const cell = (
-        <div
-            {...longPressHandlers}
-            className={clsx(styles.container, props.containerClassName, {
-                [styles.alternateRowEven]:
-                    props.enableAlternateRowColors && isDataRow && dataIndex % 2 === 0,
-                [styles.alternateRowOdd]:
-                    props.enableAlternateRowColors && isDataRow && dataIndex % 2 === 1,
-                [styles.center]: props.columns[props.columnIndex].align === 'center',
+export const TableColumnTextContainer = ({
+    children,
+    className,
+    containerClassName,
+    ...props
+}: Omit<TableColumnContainerProps, 'containerStyle' | 'isTextCell'> & {
+    containerClassName?: string;
+}) => (
+    <TableColumnContainer {...props} className={containerClassName} isTextCell>
+        <Text
+            className={clsx(styles.content, className, {
                 [styles.compact]: props.size === 'compact',
-                [styles.dataRow]: isDataRow,
-                [styles.dragging]: isDataRow && isDragging,
                 [styles.large]: props.size === 'large',
-                [styles.left]: props.columns[props.columnIndex].align === 'start',
-                [styles.noHorizontalPadding]: isNoHorizontalPaddingColumn(props.type),
-                [styles.offlineDimmed]: offlineDimmed,
-                [styles.paddingLg]: props.cellPadding === 'lg',
-                [styles.paddingMd]: props.cellPadding === 'md',
-                [styles.paddingSm]: props.cellPadding === 'sm',
-                [styles.paddingXl]: props.cellPadding === 'xl',
-                [styles.paddingXs]: props.cellPadding === 'xs',
-                [styles.right]: props.columns[props.columnIndex].align === 'end',
-                [styles.rowHoverHighlightEnabled]: isDataRow && props.enableRowHoverHighlight,
-                [styles.rowSelected]: isDataRow && isSelected,
-                // When clamped, the bottom border is drawn on the spacer below
-                // instead.
-                [styles.withHorizontalBorder]: showHorizontalBorder && clampHeight === null,
-                [styles.withVerticalBorder]: showVerticalBorder,
             })}
-            data-row-index={isDataRow ? `${props.tableId}-${props.rowIndex}` : undefined}
-            onClick={handleClick}
-            onContextMenu={handleContextMenu}
-            ref={mergedRef}
-            style={clampHeight !== null ? { height: clampHeight } : props.style}
+            isMuted={!NonMutedColumns.includes(props.type)}
+            isNoSelect
         >
-            <Text
-                className={clsx(styles.content, props.className, {
-                    [styles.compact]: props.size === 'compact',
-                    [styles.large]: props.size === 'large',
-                })}
-                isMuted={!NonMutedColumns.includes(props.type)}
-                isNoSelect
-            >
-                {props.children}
-            </Text>
-        </div>
-    );
+            {children}
+        </Text>
+    </TableColumnContainer>
+);
 
-    return (
-        <ClampedCell
-            cell={cell}
-            clampHeight={clampHeight}
-            outerStyle={props.style}
-            showHorizontalBorder={showHorizontalBorder}
-            showVerticalBorder={showVerticalBorder}
-        />
-    );
-};
-
-export const TableColumnContainer = (
-    props: ItemTableListColumn & {
-        children: React.ReactNode;
-        className?: string;
-        containerStyle?: CSSProperties;
-        controls: ItemControls;
-        dragRef?: null | React.Ref<HTMLDivElement>;
-        isDraggedOver?: 'bottom' | 'top' | null;
-        isDragging?: boolean;
-        type: TableColumn;
-    },
-) => {
+export const TableColumnContainer = (props: TableColumnContainerProps) => {
+    const isAlbumGroupCell = props.type === TableColumn.ALBUM_GROUP && !props.isTextCell;
     const containerRef = useRef<HTMLDivElement>(null);
     const isDataRow = props.enableHeader ? props.rowIndex > 0 : true;
     const dataIndex = props.enableHeader ? props.rowIndex - 1 : props.rowIndex;
@@ -1073,7 +885,7 @@ export const TableColumnContainer = (
                 [styles.left]: props.columns[props.columnIndex].align === 'start',
                 [styles.noHorizontalPadding]: isNoHorizontalPaddingColumn(props.type),
                 [styles.noVerticalPadding]:
-                    props.type === TableColumn.ALBUM_GROUP && (props.albumGroupImageSize ?? 0) > 0,
+                    isAlbumGroupCell && (props.albumGroupImageSize ?? 0) > 0,
                 [styles.offlineDimmed]: offlineDimmed,
                 [styles.paddingLg]: props.cellPadding === 'lg',
                 [styles.paddingMd]: props.cellPadding === 'md',
@@ -1082,16 +894,13 @@ export const TableColumnContainer = (
                 [styles.paddingXs]: props.cellPadding === 'xs',
                 [styles.right]: props.columns[props.columnIndex].align === 'end',
                 [styles.rowHoverHighlightEnabled]:
-                    isDataRow &&
-                    props.enableRowHoverHighlight &&
-                    props.type !== TableColumn.ALBUM_GROUP,
-                [styles.rowSelected]:
-                    isDataRow && isSelected && props.type !== TableColumn.ALBUM_GROUP,
+                    isDataRow && props.enableRowHoverHighlight && !isAlbumGroupCell,
+                [styles.rowSelected]: isDataRow && isSelected && !isAlbumGroupCell,
                 // When clamped, the bottom border is drawn on the spacer below instead.
                 [styles.withHorizontalBorder]: showHorizontalBorder && clampHeight === null,
                 [styles.withVerticalBorder]: showVerticalBorder,
             })}
-            data-exclude-row-drag-border={props.type === TableColumn.ALBUM_GROUP ? true : undefined}
+            data-exclude-row-drag-border={isAlbumGroupCell ? true : undefined}
             data-row-index={isDataRow ? `${props.tableId}-${props.rowIndex}` : undefined}
             onClick={handleClick}
             onContextMenu={handleContextMenu}

@@ -43,10 +43,15 @@ export const DragPreview = memo(({ data }: DragPreviewProps) => {
     const item = firstItem as
         | undefined
         | {
+              _itemType?: LibraryItem;
+              albumId?: null | string;
               blurHash?: null | string;
               dominantColor?: null | string;
               thumbHash?: null | string;
           };
+    // Songs are cache-keyed by their album cover (the sweep never caches song ids).
+    const cacheItemId =
+        (item?._itemType === LibraryItem.SONG && item.albumId) || data.id[0] || undefined;
     const imagePlaceholderPriority = useImagePlaceholderPriority();
     const hashUrl = useImageHashUrl(
         item?.thumbHash,
@@ -61,7 +66,7 @@ export const DragPreview = memo(({ data }: DragPreviewProps) => {
         <div className={styles.container}>
             <div className={styles.preview}>
                 <div className={styles.content}>
-                    {(itemImage && data.id[0]) || hashUrl ? (
+                    {(itemImage && cacheItemId) || hashUrl ? (
                         <div
                             className={styles['image-container']}
                             style={
@@ -79,11 +84,11 @@ export const DragPreview = memo(({ data }: DragPreviewProps) => {
                                 raw server URL, which downloads on demand. Without
                                 an entity id we can't key the cache, so only the
                                 hash placeholder (if any) shows. */}
-                            {itemImage && data.id[0] ? (
+                            {itemImage && cacheItemId ? (
                                 <CachedImage
                                     alt={itemName}
                                     className={styles.image}
-                                    itemId={data.id[0]}
+                                    itemId={cacheItemId}
                                     size={96}
                                     src={itemImage}
                                     variant="itemCard"

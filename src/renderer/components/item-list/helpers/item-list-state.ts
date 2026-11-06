@@ -362,19 +362,6 @@ export const useItemSelectionState = (
 };
 
 /**
- * Hook to subscribe to expansion state for a specific item
- * Use this in components that need to rerender when a specific item's expansion changes
- */
-export const useItemExpansionState = (
-    internalState: ItemListStateActions | undefined,
-    rowId: string | undefined,
-): boolean => {
-    return useItemListStateSubscription(internalState, (state) =>
-        state && rowId ? state.expanded.has(rowId) : false,
-    );
-};
-
-/**
  * Hook to subscribe to dragging state for a specific item
  * Use this in components that need to rerender when a specific item's dragging state changes
  */
