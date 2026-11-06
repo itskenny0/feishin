@@ -34,6 +34,7 @@ import {
 const ROWS = {
     albums: [
         {
+            Id: 'al1',
             Payload: {
                 albumArtists: [{ id: 'aa1', name: 'The Beatles' }],
                 id: 'al1',
@@ -41,6 +42,7 @@ const ROWS = {
             } as Album,
         },
         {
+            Id: 'al2',
             Payload: {
                 albumArtists: [{ id: 'aa2', name: 'Pink Floyd' }],
                 id: 'al2',
@@ -49,14 +51,23 @@ const ROWS = {
         },
     ],
     artists: [
-        { Kind: 'AlbumArtist', Payload: { id: 'aa1', name: 'The Beatles' } as AlbumArtist },
-        { Kind: 'AlbumArtist', Payload: { id: 'aa2', name: 'Pink Floyd' } as AlbumArtist },
+        {
+            Id: 'aa1',
+            Kind: 'AlbumArtist',
+            Payload: { id: 'aa1', name: 'The Beatles' } as AlbumArtist,
+        },
+        {
+            Id: 'aa2',
+            Kind: 'AlbumArtist',
+            Payload: { id: 'aa2', name: 'Pink Floyd' } as AlbumArtist,
+        },
         // An Artist (song-artist) kind should be filtered out of the
         // album-artist index by the where('Kind') hop.
-        { Kind: 'Artist', Payload: { id: 'a3', name: 'John Lennon' } as AlbumArtist },
+        { Id: 'a3', Kind: 'Artist', Payload: { id: 'a3', name: 'John Lennon' } as AlbumArtist },
     ],
     songs: [
         {
+            Id: 's1',
             Payload: {
                 albumArtists: [{ id: 'aa1', name: 'The Beatles' }],
                 id: 's1',
@@ -64,6 +75,7 @@ const ROWS = {
             } as Song,
         },
         {
+            Id: 's2',
             Payload: {
                 albumArtists: [{ id: 'aa2', name: 'Pink Floyd' }],
                 id: 's2',
@@ -86,8 +98,9 @@ const collectionShim = <T>(rows: T[]): CollectionShim<T> => ({
     offset: (o: number) => collectionShim(rows.slice(o)),
     toArray: async () => rows,
 });
-const tableShim = <T>(rows: T[]) => ({
+const tableShim = <T extends { Id: string }>(rows: T[]) => ({
     ...collectionShim(rows),
+    bulkGet: async (ids: string[]) => ids.map((id) => rows.find((r) => r.Id === id)),
     where: (_k: string) => ({
         equals: (_v: string) =>
             collectionShim(
@@ -183,6 +196,7 @@ describe('search projection', () => {
 
         // Mutate the underlying row set and mark dirty
         ROWS.albums.push({
+            Id: 'al3',
             Payload: {
                 albumArtists: [{ id: 'aa3', name: 'Radiohead' }],
                 id: 'al3',
@@ -215,6 +229,7 @@ describe('search projection', () => {
         markSearchDirty('albums');
         const inFlight = searchAlbumsLocal('OK Computer');
         ROWS.albums.push({
+            Id: 'al3',
             Payload: {
                 albumArtists: [{ id: 'aa3', name: 'Radiohead' }],
                 id: 'al3',

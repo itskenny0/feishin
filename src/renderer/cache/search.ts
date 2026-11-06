@@ -5,13 +5,17 @@
 //
 // Index strategy
 // --------------
-// Each entity owns a single Fuse instance. The corpus is the full Dexie
-// row set for that entity (artists are filtered to Kind === 'AlbumArtist',
-// since the global search UI lists album artists). We index `Payload.name`
-// and, for songs/albums, the leading album-artist name so a search for
-// "beatles abbey" finds "Abbey Road" by the Beatles. The fuse threshold
-// of 0.3 is intentionally tight; the global search is supposed to feel
-// snappy and precise, not fuzzy-permissive.
+// Each entity owns a single Fuse index over slim `{ id, name, artist }`
+// entries (search-index.ts): artists are filtered to Kind === 'AlbumArtist',
+// since the global search UI lists album artists, and songs/albums also
+// match the leading album-artist name so a search for "beatles abbey" finds
+// "Abbey Road" by the Beatles. A search maps its hit ids back to payloads
+// with one `bulkGet`.
+//
+// The indexes live in a Web Worker (search-index.worker.ts) that reads the
+// DB itself, so neither the full-table read, the Fuse build nor the
+// per-keystroke Fuse scan runs on the renderer main thread. Without Worker
+// support (or if the worker fails) the same code runs on the main thread.
 //
 // Dirty marking
 // -------------
@@ -22,111 +26,205 @@
 // rebuilding on every write would dominate the wall-clock budget.
 
 import type { Album, AlbumArtist, Song } from '/@/shared/types/domain-types';
-
-import Fuse, { type IFuseOptions } from 'fuse.js';
+import type Fuse from 'fuse.js';
 
 import type { LibraryCacheDb } from './db';
+import type { SearchWorkerRequest, SearchWorkerResponse } from './search-index.worker';
 
 import { isCacheAvailableSync } from './capability';
 import { getActiveCacheDb } from './db';
 import { markRowsChanged } from './local-cache';
+import {
+    type ChunkTable,
+    createSearchFuse,
+    readSearchEntries,
+    type SearchEntity,
+    type SearchEntry,
+} from './search-index';
 import { useCacheStore } from './store';
 
-type IndexedEntity = 'albums' | 'artists' | 'songs';
+type IndexedEntity = SearchEntity;
 
-// Slim search-index entry. We hold a reference to the original Payload so
-// result mapping is a single property read, but the Fuse index itself only
-// walks the `name` / `artist` fields, which keeps the indexing cost
-// proportional to the indexed bytes, not to the full row payload.
-interface SearchEntry<P> {
-    artist?: string;
-    name: string;
-    payload: P;
-}
+// Worker client ------------------------------------------------------------
 
-const fuseOptions = <P>(
-    keys: IFuseOptions<SearchEntry<P>>['keys'],
-): IFuseOptions<SearchEntry<P>> => ({
-    ignoreLocation: true,
-    keys,
-    threshold: 0.3,
-    useExtendedSearch: false,
-});
+type WorkerCall =
+    | Omit<Extract<SearchWorkerRequest, { type: 'build' }>, 'id'>
+    | Omit<Extract<SearchWorkerRequest, { type: 'search' }>, 'id'>;
 
-// Load an entire (possibly very large) table/collection in chunks, yielding to
-// the event loop between chunks. A 14k-artist library used to build its Fuse
-// index from a single `toArray()` that structured-cloned every row's full
-// Payload in one synchronous burst — a 1-7s main-thread FREEZE on the first
-// search (the cost is the deserialization, not Fuse). Chunking the read and
-// yielding between chunks keeps input + paint responsive; the background
-// prewarm (see schedulePrewarm) then moves the work off the search path
-// entirely. Returns null if the active cache DB switched mid-load (checked
-// after every chunk, including the last) - the rows would belong to the
-// previous server, so the caller must discard and let the next caller rebuild
-// against the new DB.
-const INDEX_BUILD_CHUNK = 1000;
-const loadAllChunked = async <T>(
-    db: LibraryCacheDb,
-    queryChunk: (offset: number, limit: number) => Promise<T[]>,
-): Promise<null | T[]> => {
-    const rows: T[] = [];
-    for (let offset = 0; ; offset += INDEX_BUILD_CHUNK) {
-        const batch = await queryChunk(offset, INDEX_BUILD_CHUNK);
-        if (db !== getActiveCacheDb()) return null;
-        for (let i = 0; i < batch.length; i += 1) rows.push(batch[i]);
-        if (batch.length < INDEX_BUILD_CHUNK) break;
-        // Yield so a queued search keystroke / paint can interleave between
-        // chunk deserializations instead of waiting for the whole table.
-        await new Promise<void>((resolve) => {
-            setTimeout(resolve, 0);
-        });
-    }
-    return rows;
+// undefined: not spawned yet; null: unavailable, index on the main thread.
+let worker: null | undefined | Worker;
+let nextRequestId = 1;
+const pendingCalls = new Map<
+    number,
+    { reject: (err: Error) => void; resolve: (res: SearchWorkerResponse) => void }
+>();
+
+const disableWorker = (reason: string): void => {
+    console.warn('[cache] search: worker unavailable, indexing on the main thread', { reason });
+    worker?.terminate();
+    worker = null;
+    for (const call of pendingCalls.values()) call.reject(new Error(reason));
+    pendingCalls.clear();
+    // Indexes that lived in the worker are gone; rebuild on next use.
+    for (const entity of INDEXED_ENTITIES) indexes[entity].reset();
 };
 
-// One lazily-built Fuse index per entity, rebuilt on the next access after a
+const getWorker = (): null | Worker => {
+    if (worker !== undefined) return worker;
+    if (typeof Worker === 'undefined') {
+        worker = null;
+        return null;
+    }
+    try {
+        worker = new Worker(new URL('./search-index.worker.ts', import.meta.url), {
+            type: 'module',
+        });
+    } catch (err) {
+        disableWorker((err as Error)?.message ?? String(err));
+        return null;
+    }
+    worker.onmessage = (event: MessageEvent<SearchWorkerResponse>) => {
+        const msg = event.data;
+        const call = pendingCalls.get(msg.id);
+        if (!call) return;
+        pendingCalls.delete(msg.id);
+        if (msg.ok) call.resolve(msg);
+        else call.reject(new Error(msg.error));
+    };
+    worker.onerror = (event) => disableWorker(event.message || 'search worker error');
+    return worker;
+};
+
+const callWorker = (w: Worker, request: WorkerCall): Promise<SearchWorkerResponse> =>
+    new Promise((resolve, reject) => {
+        const id = nextRequestId;
+        nextRequestId += 1;
+        pendingCalls.set(id, { reject, resolve });
+        w.postMessage({ ...request, id });
+    });
+
+// A Fuse scan over 29k songs takes 0.3-1.3 s on a phone-class CPU, and the
+// search UI issues one per debounced keystroke. Per entity, at most one
+// search waits behind the running one; a newer keystroke replaces it (the
+// replaced caller gets no hits), so a fast typist never builds a backlog.
+interface QueuedSearch {
+    limit: number;
+    query: string;
+    resolve: (ids: string[]) => void;
+}
+const runningSearches = new Set<IndexedEntity>();
+const queuedSearches = new Map<IndexedEntity, QueuedSearch>();
+
+const runWorkerSearch = (w: Worker, entity: IndexedEntity, job: QueuedSearch): void => {
+    runningSearches.add(entity);
+    callWorker(w, { entity, limit: job.limit, query: job.query, type: 'search' })
+        .then(
+            (res) => job.resolve('ids' in res ? res.ids : []),
+            () => job.resolve([]),
+        )
+        .finally(() => {
+            runningSearches.delete(entity);
+            const next = queuedSearches.get(entity);
+            if (!next) return;
+            queuedSearches.delete(entity);
+            const current = getWorker();
+            if (current) runWorkerSearch(current, entity, next);
+            else next.resolve([]);
+        });
+};
+
+const searchInWorker = (entity: IndexedEntity, query: string, limit: number): Promise<string[]> =>
+    new Promise((resolve) => {
+        const w = getWorker();
+        if (!w) {
+            resolve([]);
+            return;
+        }
+        const job = { limit, query, resolve };
+        if (!runningSearches.has(entity)) {
+            runWorkerSearch(w, entity, job);
+            return;
+        }
+        queuedSearches.get(entity)?.resolve([]);
+        queuedSearches.set(entity, job);
+    });
+
+// Indexes -------------------------------------------------------------------
+
+// null: discarded because the active cache DB switched mid-build (the rows
+// belong to the previous server); the next caller rebuilds against the new DB.
+type Built = null | { handle: IndexHandle; rows: number };
+
+// `fuse` is set when the index was built on the main thread; without it the
+// index lives in the worker.
+interface IndexHandle {
+    db: LibraryCacheDb;
+    fuse?: Fuse<SearchEntry>;
+}
+
+// One lazily-built index per entity, rebuilt on the next access after a
 // dirty mark. Concurrent callers (a search + the background prewarm) share a
 // single in-flight build, and a build that a dirty mark / reset overtook is
 // still returned to its callers but not installed, so the next access
 // rebuilds from the fresh rows.
-const createIndex = <P>(
-    entity: IndexedEntity,
-    queryChunk: (db: LibraryCacheDb, offset: number, limit: number) => Promise<{ Payload: P }[]>,
-    toEntry: (payload: P) => SearchEntry<P>,
-    options: IFuseOptions<SearchEntry<P>>,
-) => {
-    let index: Fuse<SearchEntry<P>> | undefined;
-    let building: Promise<Fuse<SearchEntry<P>> | undefined> | undefined;
+const createIndex = <P>(entity: IndexedEntity) => {
+    let index: IndexHandle | undefined;
+    let building: Promise<IndexHandle | undefined> | undefined;
     let dirty = true;
     let generation = 0;
 
-    const build = async (): Promise<Fuse<SearchEntry<P>> | undefined> => {
+    const buildInWorker = async (w: Worker, db: LibraryCacheDb): Promise<'unavailable' | Built> => {
+        try {
+            const res = await callWorker(w, { dbName: db.name, entity, type: 'build' });
+            const rows = 'rows' in res ? res.rows : null;
+            return rows === null || db !== getActiveCacheDb() ? null : { handle: { db }, rows };
+        } catch (err) {
+            console.warn(`[cache] search: worker build failed (${entity}), using main thread`, {
+                error: (err as Error)?.message,
+            });
+            return 'unavailable';
+        }
+    };
+
+    const buildOnMainThread = async (db: LibraryCacheDb): Promise<Built> => {
+        const entries = await readSearchEntries(
+            db[entity] as unknown as ChunkTable,
+            entity,
+            () => db === getActiveCacheDb(),
+            true,
+        );
+        return entries
+            ? { handle: { db, fuse: createSearchFuse(entity, entries) }, rows: entries.length }
+            : null;
+    };
+
+    const build = async (): Promise<IndexHandle | undefined> => {
         const db = isCacheAvailableSync() ? getActiveCacheDb() : undefined;
         if (!db) return undefined;
         const gen = generation;
         const start = performance.now();
-        const rows = await loadAllChunked(db, (offset, limit) => queryChunk(db, offset, limit));
-        if (!rows) {
+        const w = getWorker();
+        let built: 'unavailable' | Built = w ? await buildInWorker(w, db) : 'unavailable';
+        const inWorker = built !== 'unavailable';
+        if (built === 'unavailable') built = await buildOnMainThread(db);
+        if (!built) {
             console.info(`[cache] search: ${entity} index discarded, active db changed mid-build`);
             return undefined;
         }
-        const built = new Fuse(
-            rows.map((r) => toEntry(r.Payload)),
-            options,
-        );
         if (gen === generation) {
-            index = built;
+            index = built.handle;
             dirty = false;
         }
         console.info('[cache] search: index built', {
             entity,
+            inWorker,
             ms: Math.round(performance.now() - start),
-            rows: rows.length,
+            rows: built.rows,
         });
-        return built;
+        return built.handle;
     };
 
-    const ensure = (): Promise<Fuse<SearchEntry<P>> | undefined> => {
+    const ensure = (): Promise<IndexHandle | undefined> => {
         if (index && !dirty) return Promise.resolve(index);
         building ??= build().finally(() => {
             building = undefined;
@@ -137,8 +235,18 @@ const createIndex = <P>(
     const search = async (query: string, limit: number): Promise<P[]> => {
         const trimmed = (query ?? '').trim();
         if (!trimmed) return [];
-        const idx = await ensure();
-        return idx ? idx.search(trimmed, { limit }).map((r) => r.item.payload) : [];
+        const handle = await ensure();
+        if (!handle) return [];
+        const ids = handle.fuse
+            ? handle.fuse.search(trimmed, { limit }).map((r) => r.item.id)
+            : await searchInWorker(entity, trimmed, limit);
+        if (ids.length === 0) return [];
+        const table = handle.db[entity] as unknown as {
+            bulkGet: (keys: string[]) => Promise<(undefined | { Payload: P })[]>;
+        };
+        const rows = await table.bulkGet(ids);
+        // A row deleted since the build simply drops out of the hits.
+        return rows.flatMap((row) => (row ? [row.Payload] : []));
     };
 
     const markDirty = (): void => {
@@ -155,41 +263,19 @@ const createIndex = <P>(
 };
 
 const indexes = {
-    albums: createIndex<Album>(
-        'albums',
-        (db, offset, limit) => db.albums.offset(offset).limit(limit).toArray(),
-        (p) => ({ artist: p.albumArtists?.[0]?.name ?? '', name: p.name ?? '', payload: p }),
-        fuseOptions([
-            { name: 'name', weight: 0.7 },
-            { name: 'artist', weight: 0.3 },
-        ]),
-    ),
-    artists: createIndex<AlbumArtist>(
-        'artists',
-        (db, offset, limit) =>
-            db.artists.where('Kind').equals('AlbumArtist').offset(offset).limit(limit).toArray(),
-        (p) => ({ name: p.name ?? '', payload: p }),
-        fuseOptions([{ name: 'name', weight: 1 }]),
-    ),
-    songs: createIndex<Song>(
-        'songs',
-        (db, offset, limit) => db.songs.offset(offset).limit(limit).toArray(),
-        (p) => ({ artist: p.albumArtists?.[0]?.name ?? '', name: p.name ?? '', payload: p }),
-        fuseOptions([
-            { name: 'name', weight: 0.6 },
-            { name: 'artist', weight: 0.4 },
-        ]),
-    ),
+    albums: createIndex<Album>('albums'),
+    artists: createIndex<AlbumArtist>('artists'),
+    songs: createIndex<Song>('songs'),
 };
 const INDEXED_ENTITIES = Object.keys(indexes) as IndexedEntity[];
 
 // Background prewarm: after rows are marked dirty (a sync/apply/sweep landed
 // fresh data) rebuild the indexes OFF the search path so the user's first
-// search is instant rather than paying the (now-chunked, but still non-zero)
-// build cost inline. Debounced so a burst of per-entity markSearchDirty calls
-// during a sweep coalesces into ONE rebuild, and run on idle so it never
-// competes with foreground work. ensure() is a no-op when its index is
-// already clean, so a redundant schedule is cheap.
+// search is instant rather than paying the build cost inline. Debounced so a
+// burst of per-entity markSearchDirty calls during a sweep coalesces into ONE
+// rebuild, and run on idle so it never competes with foreground work.
+// ensure() is a no-op when its index is already clean, so a redundant
+// schedule is cheap.
 let prewarmTimer: ReturnType<typeof setTimeout> | undefined;
 const runPrewarm = (): void => {
     for (const entity of INDEXED_ENTITIES) void indexes[entity].ensure();
@@ -242,6 +328,7 @@ export const resetSearchIndexes = (): void => {
         prewarmTimer = undefined;
     }
     for (const entity of INDEXED_ENTITIES) indexes[entity].reset();
+    worker?.postMessage({ type: 'reset' } satisfies SearchWorkerRequest);
 };
 
 const DEFAULT_LIMIT = 50;
@@ -265,7 +352,9 @@ export const searchSongsLocal = (query: string, limit = DEFAULT_LIMIT): Promise<
 // Subscribe once at import time to two cache-store transitions:
 //
 //   1. `activeServer` changes  → the entire Dexie DB switches under us,
-//      every index is invalid. Drop them all.
+//      every index is invalid. Drop them all. With the worker available, warm the
+//      new DB's indexes in the background (no main-thread cost) so the first
+//      search of a session doesn't wait on a cold build.
 //   2. `sweep` going from defined → undefined  → a hydration sweep just
 //      finished, so the corresponding entity got fresh rows. Mark it dirty
 //      and schedule an idle rebuild so the first user search after a sweep
@@ -283,6 +372,7 @@ if (typeof window !== 'undefined') {
         if (state.activeServer !== prevServer) {
             prevServer = state.activeServer;
             resetSearchIndexes();
+            if (state.activeServer && getWorker()) schedulePrewarm();
         }
         const next = state.sweep;
         const entity = prevSweep?.entity;
