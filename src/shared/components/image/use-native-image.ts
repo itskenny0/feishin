@@ -446,7 +446,16 @@ export function useNativeImage({
                         : tryResolveThumbnail(cacheItemId, cacheVariant, request);
                     if (useShared) {
                         void lookupPromise.then((late) => {
-                            if (!timedOut || !late || !late.startsWith('blob:')) return;
+                            // Any real cover qualifies: file-backed covers
+                            // resolve to native file URLs, not blob: URLs.
+                            if (
+                                !timedOut ||
+                                !late ||
+                                late === NO_ARTWORK_URL ||
+                                late === PENDING_SYNC_URL
+                            ) {
+                                return;
+                            }
                             if (objectUrlRef.current === late) return;
                             // The resolver result arrived AFTER the 5s cap.
                             // If nothing else has painted yet (the raw-URL

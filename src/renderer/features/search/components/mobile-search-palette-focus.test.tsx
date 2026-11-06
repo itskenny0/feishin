@@ -5,9 +5,16 @@
 // must focus its search input explicitly on mount.
 
 import { MantineProvider } from '@mantine/core';
-import { render } from '@testing-library/react';
+import { act, render } from '@testing-library/react';
 import { createRef } from 'react';
 import { describe, expect, it, vi } from 'vitest';
+
+const { useInfiniteQuery } = vi.hoisted(() => ({
+    useInfiniteQuery: vi.fn((_options: { enabled?: boolean; queryKey: unknown[] }) => ({
+        data: undefined,
+        isFetching: false,
+    })),
+}));
 
 vi.mock('react-router', () => ({
     createSearchParams: () => new URLSearchParams(),
@@ -16,7 +23,7 @@ vi.mock('react-router', () => ({
 }));
 vi.mock('@tanstack/react-query', async (importOriginal) => ({
     ...(await importOriginal<object>()),
-    useInfiniteQuery: () => ({ data: undefined, isFetching: false }),
+    useInfiniteQuery,
 }));
 vi.mock('@mantine/modals', () => ({ closeAllModals: vi.fn(), openModal: vi.fn() }));
 vi.mock('/@/renderer/features/player/context/player-context', () => ({
@@ -44,5 +51,39 @@ describe('MobileSearchPalette mount focus', () => {
 
         expect(searchInputRef.current).toBeTruthy();
         expect(document.activeElement).toBe(searchInputRef.current);
+    });
+});
+
+describe('MobileSearchPalette search debounce', () => {
+    it('does not search until typing pauses for 400ms', async () => {
+        vi.useFakeTimers();
+        const props = {
+            handleClose: vi.fn(),
+            onSelectResult: vi.fn(),
+            pages: [],
+            searchInputRef: createRef<HTMLInputElement>(),
+            setPages: vi.fn(),
+            setQuery: vi.fn(),
+        };
+        const view = (query: string) => (
+            <MantineProvider>
+                <MobileSearchPalette {...props} query={query} />
+            </MantineProvider>
+        );
+        // The search term is part of every section's query key.
+        const searchedTerms = () =>
+            new Set(useInfiniteQuery.mock.calls.map(([options]) => options.queryKey.at(-1)));
+
+        const { rerender } = render(view(''));
+        rerender(view('r'));
+        rerender(view('ra'));
+        rerender(view('rad'));
+        expect(searchedTerms()).toEqual(new Set([''])); // nothing searched while typing
+
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(400);
+        });
+        expect(searchedTerms()).toEqual(new Set(['', 'rad']));
+        vi.useRealTimers();
     });
 });

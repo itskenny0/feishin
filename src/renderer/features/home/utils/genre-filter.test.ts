@@ -10,6 +10,12 @@ describe('isCleanGenreName', () => {
         expect(isCleanGenreName('R&B')).toBe(true);
     });
 
+    it('accepts genre names in non-Latin scripts', () => {
+        expect(isCleanGenreName('ジャズ')).toBe(true);
+        expect(isCleanGenreName('Рок')).toBe(true);
+        expect(isCleanGenreName('가요')).toBe(true);
+    });
+
     it('rejects empty / whitespace-only names', () => {
         expect(isCleanGenreName('')).toBe(false);
         expect(isCleanGenreName('   ')).toBe(false);

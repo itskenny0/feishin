@@ -142,7 +142,9 @@ const SongSearch = () => {
 };
 
 const ArtistSearch = () => {
-    const { display, grid, itemsPerPage, pagination, table } = useListSettings(ItemListKey.ARTIST);
+    const { display, grid, itemsPerPage, pagination, table } = useListSettings(
+        ItemListKey.ALBUM_ARTIST,
+    );
     const [searchParams] = useSearchParams();
     const searchTerm = searchParams.get('query') || '';
     const emptyState = useSearchEmptyState(searchTerm.length > 0);

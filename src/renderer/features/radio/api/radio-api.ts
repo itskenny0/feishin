@@ -1,8 +1,8 @@
-import { queryOptions } from '@tanstack/react-query';
+import { QueryClient, queryOptions } from '@tanstack/react-query';
 
 import { api } from '/@/renderer/api';
 import { queryKeys } from '/@/renderer/api/query-keys';
-import { readSnapshot, snapshotSwr } from '/@/renderer/cache';
+import { dropSnapshotsForEntity, readSnapshot, snapshotSwr } from '/@/renderer/cache';
 import { QueryHookArgs } from '/@/renderer/lib/react-query';
 import { GetInternetRadioStationsResponse } from '/@/shared/types/domain-types';
 
@@ -26,4 +26,15 @@ export const radioQueries = {
             ...args.options,
         });
     },
+};
+
+/**
+ * Refetch the station list after a mutation. The snapshot goes first:
+ * snapshotSwr would otherwise answer the refetch with the pre-mutation list,
+ * and its throttled background revalidate may not run for up to a minute.
+ */
+export const invalidateRadioList = (queryClient: QueryClient, serverId: string | undefined) => {
+    if (!serverId) return;
+    dropSnapshotsForEntity('radio');
+    queryClient.invalidateQueries({ queryKey: queryKeys.radio.list(serverId) });
 };

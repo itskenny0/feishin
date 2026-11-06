@@ -41,7 +41,6 @@ import {
 } from '/@/renderer/features/lyrics/unsynchronized-lyrics';
 import { openLyricsSettingsModal } from '/@/renderer/features/lyrics/utils/open-lyrics-settings-modal';
 import { uploadLyricsToServer } from '/@/renderer/features/lyrics/utils/upload-lyrics-to-server';
-import { usePlayerEvents } from '/@/renderer/features/player/audio-player/hooks/use-player-events';
 import { useIsRadioActive } from '/@/renderer/features/radio/hooks/use-radio-player';
 import { ComponentErrorBoundary } from '/@/renderer/features/shared/components/component-error-boundary';
 import { queryClient } from '/@/renderer/lib/react-query';
@@ -129,6 +128,17 @@ export const Lyrics = ({ fadeOutNoLyricsMessage = true, settingsKey = 'default' 
         if (!serverId || !songId) return null;
         return queryKeys.songs.lyrics(serverId, { songId });
     }, [serverId, songId]);
+
+    // Keyed on the active song (not the local player's song-change event) so
+    // remote playback resets too; the ref lets an in-flight translation
+    // detect that the song changed under it.
+    const songIdRef = useRef(songId);
+    useEffect(() => {
+        songIdRef.current = songId;
+        setIndexState(0);
+        setShowTranslation(false);
+        setTranslatedLyrics(null);
+    }, [songId]);
 
     const shouldFetchLyrics = !isLyricsDisabled && !!currentSong?._serverId && !!currentSong?.id;
     const isWaitingToFetchLyrics = shouldFetchLyrics && pendingSongId !== currentSong?.id;
@@ -412,12 +422,14 @@ export const Lyrics = ({ fadeOutNoLyricsMessage = true, settingsKey = 'default' 
         const originalLyrics = Array.isArray(lyrics.lyrics)
             ? lyrics.lyrics.map((line) => getLyricLineText(line)).join('\n')
             : lyrics.lyrics;
+        const requestSongId = songIdRef.current;
         const TranslatedText: null | string = await translateLyrics(
             originalLyrics,
             translationApiKey,
             translationApiProvider,
             translationTargetLanguage,
         );
+        if (songIdRef.current !== requestSongId) return;
         setTranslatedLyrics(TranslatedText);
         setShowTranslation(true);
     }, [
@@ -449,17 +461,6 @@ export const Lyrics = ({ fadeOutNoLyricsMessage = true, settingsKey = 'default' 
             });
         },
         [setVisibleOverlayLayerKeys],
-    );
-
-    usePlayerEvents(
-        {
-            onCurrentSongChange: () => {
-                setIndexState(0);
-                setShowTranslation(false);
-                setTranslatedLyrics(null);
-            },
-        },
-        [],
     );
 
     useEffect(() => {
@@ -515,7 +516,13 @@ export const Lyrics = ({ fadeOutNoLyricsMessage = true, settingsKey = 'default' 
 
     const handleExportLyrics = useCallback(() => {
         if (lyrics && !isLyricsDisabled) {
-            openLyricsExportModal({ lyrics, offsetMs: currentOffsetMs, synced });
+            // currentOffsetMs already resolves lyrics.offsetMs; clear it so the
+            // exported [offset:] tag doesn't count it twice.
+            openLyricsExportModal({
+                lyrics: { ...lyrics, offsetMs: null },
+                offsetMs: currentOffsetMs,
+                synced,
+            });
         }
     }, [currentOffsetMs, isLyricsDisabled, lyrics, synced]);
 
@@ -525,21 +532,24 @@ export const Lyrics = ({ fadeOutNoLyricsMessage = true, settingsKey = 'default' 
     // 'Save to server' button doesn't fire two concurrent POSTs against the
     // same item.
     const savingLyricsRef = useRef(false);
+    const canSaveToServer =
+        credentialedServer?.type === ServerType.JELLYFIN && !!songId && !!displayLyrics;
     const handleSaveLyricsToServer = async () => {
         if (
-            !credentialedServer ||
-            credentialedServer.type !== ServerType.JELLYFIN ||
-            !currentSong?.id ||
-            !displayLyrics
+            credentialedServer?.type !== ServerType.JELLYFIN ||
+            !songId ||
+            !lyrics ||
+            savingLyricsRef.current
         ) {
             return;
         }
-        if (savingLyricsRef.current) return;
         savingLyricsRef.current = true;
         try {
+            // Upload the raw lyrics: displayLyrics carries furigana <ruby>
+            // markup when that layer is enabled.
             const outcome = await uploadLyricsToServer({
-                itemId: currentSong.id,
-                lyrics: displayLyrics,
+                itemId: songId,
+                lyrics,
                 server: credentialedServer,
             });
             switch (outcome.kind) {
@@ -578,13 +588,7 @@ export const Lyrics = ({ fadeOutNoLyricsMessage = true, settingsKey = 'default' 
                     // Bust the cached lyrics for this song so a manual refresh
                     // (or 'Clear') re-fetches the canonical server-side copy
                     // rather than serving the in-memory pre-upload version.
-                    if (currentSong._serverId && currentSong.id) {
-                        queryClient.invalidateQueries({
-                            queryKey: queryKeys.songs.lyrics(currentSong._serverId, {
-                                songId: currentSong.id,
-                            }),
-                        });
-                    }
+                    if (lyricsKey) queryClient.invalidateQueries({ queryKey: lyricsKey });
                     break;
                 case 'tooLarge':
                     toast.error({
@@ -598,11 +602,6 @@ export const Lyrics = ({ fadeOutNoLyricsMessage = true, settingsKey = 'default' 
             savingLyricsRef.current = false;
         }
     };
-
-    const canSaveToServer =
-        Boolean(credentialedServer && credentialedServer.type === ServerType.JELLYFIN) &&
-        Boolean(currentSong?.id) &&
-        Boolean(displayLyrics);
 
     const handleOpenSettings = () => {
         openLyricsSettingsModal(settingsKey);
@@ -696,6 +695,7 @@ export const Lyrics = ({ fadeOutNoLyricsMessage = true, settingsKey = 'default' 
                         overlayLayers={overlayLayerToggles}
                         setIndex={setIndex}
                         settingsKey={settingsKey}
+                        song={currentSong}
                         visibleOverlayKeys={visibleOverlayKeys}
                     />
                 </div>

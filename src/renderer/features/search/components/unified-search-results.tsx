@@ -17,9 +17,35 @@ import { Text } from '/@/shared/components/text/text';
 import { Album, AlbumArtist, LibraryItem, Song } from '/@/shared/types/domain-types';
 import { Play } from '/@/shared/types/types';
 
-// Page size matches SEARCH_PAGE_SIZE in search-api. We fetch a second page per
-// section (via fetchNextPage once) so each row/grid shows ~8 items.
+// Each section shows SECTION_LIMIT items; SEARCH_PAGE_SIZE matches search-api.
 const SECTION_LIMIT = 8;
+const SEARCH_PAGE_SIZE = 4;
+
+/**
+ * Fetch follow-up pages until a section holds SECTION_LIMIT items. The page
+ * count must be capped here: getNextPageParam keeps reporting a next page
+ * while pages come back full, so `hasNextPage` alone would page forever.
+ */
+export const useFillSection = (query: {
+    data?: { pages: unknown[] };
+    fetchNextPage: () => unknown;
+    hasNextPage: boolean;
+    isFetchingNextPage: boolean;
+    isFetchNextPageError: boolean;
+}) => {
+    const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isFetchNextPageError } = query;
+    const pageCount = data?.pages.length ?? 0;
+    useEffect(() => {
+        if (
+            hasNextPage &&
+            !isFetchingNextPage &&
+            !isFetchNextPageError &&
+            pageCount * SEARCH_PAGE_SIZE < SECTION_LIMIT
+        ) {
+            fetchNextPage();
+        }
+    }, [fetchNextPage, hasNextPage, isFetchingNextPage, isFetchNextPageError, pageCount]);
+};
 
 type TopResult =
     | null
@@ -76,18 +102,9 @@ export const UnifiedSearchResults = () => {
         searchQueries.searchAlbumArtistsInfinite({ enabled, searchTerm: deferredQuery, serverId }),
     );
 
-    // Fetch a second page (page size is 4) so each section can show ~8 items.
-    // Guarded by the fetching flag so we don't loop while a page is in flight.
-    useEffect(() => {
-        if (songsQuery.hasNextPage && !songsQuery.isFetchingNextPage) songsQuery.fetchNextPage();
-    }, [songsQuery.hasNextPage, songsQuery.isFetchingNextPage, songsQuery]);
-    useEffect(() => {
-        if (albumsQuery.hasNextPage && !albumsQuery.isFetchingNextPage) albumsQuery.fetchNextPage();
-    }, [albumsQuery.hasNextPage, albumsQuery.isFetchingNextPage, albumsQuery]);
-    useEffect(() => {
-        if (artistsQuery.hasNextPage && !artistsQuery.isFetchingNextPage)
-            artistsQuery.fetchNextPage();
-    }, [artistsQuery.hasNextPage, artistsQuery.isFetchingNextPage, artistsQuery]);
+    useFillSection(songsQuery);
+    useFillSection(albumsQuery);
+    useFillSection(artistsQuery);
 
     const songs = useMemo(
         () => (songsQuery.data?.pages.flatMap((p) => p.songs) ?? []).slice(0, SECTION_LIMIT),

@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { AxiosError } from 'axios';
 
 import { api } from '/@/renderer/api';
-import { queryKeys } from '/@/renderer/api/query-keys';
+import { invalidateRadioList } from '/@/renderer/features/radio/api/radio-api';
 import { MutationHookArgs } from '/@/renderer/lib/react-query';
 import {
     UpdateInternetRadioStationArgs,
@@ -26,10 +26,7 @@ export const useUpdateRadioStation = (args: MutationHookArgs) => {
             });
         },
         onSuccess: (_args, variables) => {
-            queryClient.invalidateQueries({
-                exact: false,
-                queryKey: queryKeys.radio.list(variables.apiClientProps.serverId),
-            });
+            invalidateRadioList(queryClient, variables.apiClientProps.serverId);
         },
         ...options,
     });

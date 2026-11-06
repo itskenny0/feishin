@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import styles from './lyrics-actions.module.css';
 
 import { openLyricSearchModal } from '/@/renderer/features/lyrics/components/lyrics-search-form';
-import { useLyricsSettings, usePlayerSong } from '/@/renderer/store';
+import { useLyricsSettings } from '/@/renderer/store';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Button } from '/@/shared/components/button/button';
 import { DropdownMenu } from '/@/shared/components/dropdown-menu/dropdown-menu';
@@ -17,7 +17,7 @@ import { Stack } from '/@/shared/components/stack/stack';
 import { Switch } from '/@/shared/components/switch/switch';
 import { Text } from '/@/shared/components/text/text';
 import { Tooltip } from '/@/shared/components/tooltip/tooltip';
-import { LyricsKind, LyricsOverride } from '/@/shared/types/domain-types';
+import { LyricsKind, LyricsOverride, QueueSong } from '/@/shared/types/domain-types';
 
 export type OverlayLayerToggle = {
     key: string;
@@ -43,6 +43,8 @@ interface LyricsActionsProps {
     overlayLayers?: OverlayLayerToggle[];
     setIndex: (idx: number) => void;
     settingsKey?: string;
+    /** The song the lyrics belong to (the remote device's when one is active). */
+    song: QueueSong | undefined;
     synced?: boolean;
     visibleOverlayKeys?: Set<string>;
 }
@@ -84,10 +86,10 @@ export const LyricsActions = ({
     onUpdateOffset,
     overlayLayers = [],
     setIndex,
+    song: currentSong,
     visibleOverlayKeys = new Set(),
 }: LyricsActionsProps) => {
     const { t } = useTranslation();
-    const currentSong = usePlayerSong();
     const { sources } = useLyricsSettings();
 
     const handleLyricOffset = (e: number | string) => {

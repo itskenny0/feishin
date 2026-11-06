@@ -29,7 +29,9 @@ interface CachedSwrArgs<T> {
 const mocks = vi.hoisted(() => ({
     jfLyrics: { current: 'plain lyrics line' as unknown },
     lastSwr: { current: undefined as CachedSwrArgs<any> | undefined },
-    serverFeatureSingleStructured: { current: true },
+    prevQueryData: { current: undefined as unknown },
+    serverFeature: { current: 'lyricsSingleStructured' },
+    structuredLyrics: { current: undefined as unknown },
 }));
 
 vi.mock('/@/renderer/cache', () => ({
@@ -80,22 +82,20 @@ vi.mock('/@/renderer/store', () => ({
 }));
 
 vi.mock('/@/renderer/lib/react-query', () => ({
-    queryClient: { getQueryData: () => undefined },
+    queryClient: { getQueryData: () => mocks.prevQueryData.current },
 }));
 
 vi.mock('is-electron', () => ({ default: () => false }));
 
 vi.mock('/@/shared/api/utils', () => ({
-    // ServerFeature.LYRICS_SINGLE_STRUCTURED resolves to 'lyricsSingleStructured'.
-    hasFeature: (_server: unknown, feature: string) =>
-        feature === 'lyricsSingleStructured' ? mocks.serverFeatureSingleStructured.current : false,
+    hasFeature: (_server: unknown, feature: string) => feature === mocks.serverFeature.current,
 }));
 
 vi.mock('/@/renderer/api', () => ({
     api: {
         controller: {
             getLyrics: vi.fn(async () => mocks.jfLyrics.current),
-            getStructuredLyrics: vi.fn(async () => undefined),
+            getStructuredLyrics: vi.fn(async () => mocks.structuredLyrics.current),
         },
     },
 }));
@@ -141,7 +141,9 @@ const song = (): QueueSong =>
 
 beforeEach(() => {
     mocks.lastSwr.current = undefined;
-    mocks.serverFeatureSingleStructured.current = true;
+    mocks.prevQueryData.current = undefined;
+    mocks.serverFeature.current = 'lyricsSingleStructured';
+    mocks.structuredLyrics.current = undefined;
     mocks.jfLyrics.current = 'plain lyrics line';
 });
 
@@ -212,5 +214,47 @@ describe('lyrics Dexie cache wiring', () => {
         const { db } = makeDb();
         const seeded = await mocks.lastSwr.current!.fromCache!(db);
         expect(seeded).toBeUndefined();
+    });
+
+    it.each([
+        ['a search override', { overrideSelection: { id: 'remote-1', source: 'lrclib' } }],
+        ['a Clear', { suppressRemoteAuto: true }],
+    ])('fromCache() is bypassed while %s is pending', async (_label, prev) => {
+        const options = lyricsQueries.songLyrics(
+            { options: {}, query: { songId: 'song-1' }, serverId: 'srv1' },
+            song(),
+        );
+        await options.queryFn!({ signal: undefined } as never);
+
+        const { db, lyrics } = makeDb();
+        lyrics.rows.set('song-1', {
+            __cachedAt: Date.now(),
+            Lyrics: 'cached line',
+            Payload: { lyrics: 'cached line', remote: true, source: 'lrclib' },
+            SongId: 'song-1',
+            Synced: false,
+        } as CachedLyrics);
+
+        mocks.prevQueryData.current = prev;
+        expect(await mocks.lastSwr.current!.fromCache!(db)).toBeUndefined();
+    });
+
+    it('defaults to the first synced main structured lyric, not index 0', async () => {
+        mocks.serverFeature.current = 'lyricsMultipleStructured';
+        mocks.structuredLyrics.current = [
+            { lang: 'eng', lyrics: 'plain text', synced: false },
+            { kind: 'main', lang: 'eng', lyrics: [{ startMs: 0, text: 'a' }], synced: true },
+        ];
+        const options = lyricsQueries.songLyrics(
+            { options: {}, query: { songId: 'song-1' }, serverId: 'srv1' },
+            song(),
+        );
+
+        const fresh = (await options.queryFn!({ signal: undefined } as never)) as {
+            selectedStructuredIndex: number;
+            selectedSynced: boolean;
+        };
+        expect(fresh.selectedStructuredIndex).toBe(1);
+        expect(fresh.selectedSynced).toBe(true);
     });
 });

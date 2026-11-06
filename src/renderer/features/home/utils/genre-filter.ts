@@ -34,6 +34,7 @@ export const isCleanGenreName = (name: string): boolean => {
     // pure-numeric or symbol-heavy junk like "808" or "/// dark". The decade
     // exception above bypasses this rule.
     if (DECADE_NAME_RE.test(trimmed)) return true;
-    const letterCount = (trimmed.match(/[a-zA-Z]/g) || []).length;
+    // Any script counts: "ジャズ" / "Рок" are real genres.
+    const letterCount = (trimmed.match(/\p{L}/gu) || []).length;
     return letterCount * 2 >= trimmed.length;
 };

@@ -294,7 +294,12 @@ const VisualizerInner = () => {
             setMotion(audioMotion);
             for (const node of inputNodes) audioMotion.connectInput(node);
         }
+    }, [playbackType, webAudio, motion, libraryLoaded, isPlaying]);
 
+    // Destroy on unmount or audio-graph change. Kept out of the init effect so
+    // a pause (isPlaying) doesn't destroy the instance; the idle timer below
+    // owns that after its 5s grace.
+    useEffect(() => {
         return () => {
             if (motion) {
                 try {
@@ -305,7 +310,7 @@ const VisualizerInner = () => {
                 setMotion(undefined);
             }
         };
-    }, [playbackType, webAudio, motion, libraryLoaded, isPlaying]);
+    }, [playbackType, webAudio, motion]);
 
     // Kill visualizer after 5 seconds of pause
     useEffect(() => {

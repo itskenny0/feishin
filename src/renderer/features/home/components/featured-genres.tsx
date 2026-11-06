@@ -7,13 +7,7 @@ import styles from './featured-genres.module.css';
 
 import { api } from '/@/renderer/api';
 import { queryKeys } from '/@/renderer/api/query-keys';
-import {
-    cachedSwr,
-    isCacheAvailableSync,
-    readSnapshot,
-    snapshotSwr,
-    toCachedAlbumRow,
-} from '/@/renderer/cache';
+import { cachedSwr, isCacheAvailableSync, readSnapshot, toCachedAlbumRow } from '/@/renderer/cache';
 import { useCachedItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { useFuzzyGenreIds } from '/@/renderer/features/genres/api/genres-api';
 import { useGenreListSuspenseQuery } from '/@/renderer/features/genres/queries/genres-queries';
@@ -50,40 +44,13 @@ const GENRE_FETCH_LIMIT = 300;
 // still have MAX_VISIBLE_GENRES usable tiles.
 const GENRE_SAMPLE_SIZE = MAX_VISIBLE_GENRES * 2;
 
-function getGenresToShow(breakpoints: {
-    isLargerThanLg: boolean;
-    isLargerThanMd: boolean;
-    isLargerThanSm: boolean;
-    isLargerThanXl: boolean;
-    isLargerThanXxl: boolean;
-    isLargerThanXxxl: boolean;
-}) {
-    if (breakpoints.isLargerThanXxxl) {
-        return 18;
-    }
-
-    if (breakpoints.isLargerThanXxl) {
-        return 15;
-    }
-
-    if (breakpoints.isLargerThanXl) {
-        return 12;
-    }
-
-    if (breakpoints.isLargerThanLg) {
-        return 12;
-    }
-
-    if (breakpoints.isLargerThanMd) {
-        return 12;
-    }
-
-    if (breakpoints.isLargerThanSm) {
-        return 8;
-    }
-
+const getGenresToShow = (cq: { is2xl: boolean; is3xl: boolean; isMd: boolean; isSm: boolean }) => {
+    if (cq.is3xl) return 18;
+    if (cq.is2xl) return 15;
+    if (cq.isMd) return 12;
+    if (cq.isSm) return 8;
     return 6;
-}
+};
 
 /**
  * Randomly samples up to `count` items from `items` using a partial
@@ -139,16 +106,7 @@ export const FeaturedGenres = () => {
         return sampleN(clean, GENRE_SAMPLE_SIZE);
     }, [genresQuery.data]);
 
-    const genresToShow = useMemo(() => {
-        return getGenresToShow({
-            isLargerThanLg: cq.isLg,
-            isLargerThanMd: cq.isMd,
-            isLargerThanSm: cq.isSm,
-            isLargerThanXl: cq.isXl,
-            isLargerThanXxl: cq.is2xl,
-            isLargerThanXxxl: cq.is3xl,
-        });
-    }, [cq.isLg, cq.isMd, cq.isSm, cq.isXl, cq.is2xl, cq.is3xl]);
+    const genresToShow = getGenresToShow(cq);
 
     const visibleGenres = useMemo(() => {
         return randomGenres.slice(0, genresToShow);
@@ -264,25 +222,22 @@ const GenrePlayButton = ({ genre }: { genre: Genre }) => {
         // only takes a single genre string, which would defeat the fuzzy
         // expansion. Sort RANDOM + a generous limit gives a comparable
         // shuffled set. Wrap in try/catch so an offline tap doesn't throw
-        // out of the click handler — the queue just stays put.
+        // out of the click handler - the queue just stays put. No snapshot
+        // fallback: the shared player-fetch key would replay the previously
+        // tapped genre's songs.
         try {
             const data = await queryClient.fetchQuery({
                 gcTime: 0,
-                queryFn: (ctx) =>
-                    snapshotSwr({
-                        ctx,
-                        queryKey: queryKeys.player.fetch(),
-                        remote: ({ signal }) =>
-                            api.controller.getSongList({
-                                apiClientProps: { serverId, signal },
-                                query: {
-                                    genreIds: fuzzyIds,
-                                    limit: 100,
-                                    sortBy: SongListSort.RANDOM,
-                                    sortOrder: SortOrder.DESC,
-                                    startIndex: 0,
-                                },
-                            }),
+                queryFn: ({ signal }) =>
+                    api.controller.getSongList({
+                        apiClientProps: { serverId, signal },
+                        query: {
+                            genreIds: fuzzyIds,
+                            limit: 100,
+                            sortBy: SongListSort.RANDOM,
+                            sortOrder: SortOrder.DESC,
+                            startIndex: 0,
+                        },
                     }),
                 queryKey: queryKeys.player.fetch(),
                 staleTime: 0,

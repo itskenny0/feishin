@@ -97,19 +97,3 @@ export const useRadioStore = createWithEqualityFn<RadioStoreSlice>()(
         },
     ),
 );
-
-export const useRadioStoreActions = () => useRadioStore((state) => state.actions);
-
-export const useRadioStations = (serverId: string) => {
-    return useRadioStore((state) => {
-        const serverStations = state.stations[serverId];
-        if (!serverStations) {
-            return [];
-        }
-        return Object.values(serverStations);
-    });
-};
-
-export const useRadioStation = (serverId: string, stationId: string) => {
-    return useRadioStore((state) => state.stations[serverId]?.[stationId] || null);
-};

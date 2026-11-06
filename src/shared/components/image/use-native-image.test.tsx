@@ -213,4 +213,27 @@ describe('useNativeImage — late shared-cache result adoption', () => {
         expect(release).not.toHaveBeenCalled();
         vi.useRealTimers();
     });
+
+    it('adopts a late file-backed (non-blob) cover too', async () => {
+        vi.useFakeTimers();
+        let resolveAcquire: (v: string) => void = () => {};
+        const acquire = vi.fn(() => new Promise<string>((r) => (resolveAcquire = r)));
+        registerThumbnailUrlCache(acquire, vi.fn(), () => undefined);
+
+        const { result } = renderHook(() => useNativeImage({ enabled: true, request }));
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(5_100);
+        });
+        expect(result.current.displaySrc).toBeUndefined();
+
+        await act(async () => {
+            resolveAcquire('http://localhost/_capacitor_file_/covers/abc-itemCard.webp');
+            await vi.advanceTimersByTimeAsync(0);
+        });
+
+        expect(result.current.displaySrc).toBe(
+            'http://localhost/_capacitor_file_/covers/abc-itemCard.webp',
+        );
+        vi.useRealTimers();
+    });
 });

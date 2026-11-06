@@ -7,6 +7,7 @@ import styles from './quick-picks.module.css';
 import { ItemImage } from '/@/renderer/components/item-image/item-image';
 import { useAlbumInfiniteListSuspenseQuery } from '/@/renderer/features/albums/queries/albums-queries';
 import { ContextMenuController } from '/@/renderer/features/context-menu/context-menu-controller';
+import { homeQueryKey } from '/@/renderer/features/home/utils/home-query-key';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
 import { useSongListInfinite } from '/@/renderer/features/songs/components/song-infinite-carousel';
 import { useLongPress } from '/@/renderer/hooks/use-long-press';
@@ -34,8 +35,6 @@ const QUICK_PICK_LIMIT = 8;
 // recency is unreliable there), so on Jellyfin we share the song shelf's
 // stream and fold the songs into their albums; everywhere else we share the
 // album shelf's stream directly.
-const RECENTLY_PLAYED_ALBUM_QUERY_KEY = ['home', 'album', 'recentlyPlayed'] as const;
-const RECENTLY_PLAYED_SONG_QUERY_KEY = ['home', 'song', 'recentlyPlayed'] as const;
 const RECENTLY_PLAYED_PAGE_SIZE = 20;
 
 interface QuickPickItem {
@@ -204,7 +203,7 @@ const QuickPicksAlbums = () => {
             sortBy: AlbumListSort.RECENTLY_PLAYED,
             sortOrder: SortOrder.DESC,
         },
-        queryKey: RECENTLY_PLAYED_ALBUM_QUERY_KEY,
+        queryKey: homeQueryKey('album', 'recentlyPlayed', serverId),
         serverId,
     });
 
@@ -227,12 +226,13 @@ const QuickPicksAlbums = () => {
  * unique albums those songs belong to, in first-played order.
  */
 const QuickPicksJellyfinSongs = () => {
+    const serverId = useCurrentServerId();
     const { data } = useSongListInfinite(
         SongListSort.RECENTLY_PLAYED,
         SortOrder.DESC,
         RECENTLY_PLAYED_PAGE_SIZE,
         undefined,
-        RECENTLY_PLAYED_SONG_QUERY_KEY,
+        homeQueryKey('song', 'recentlyPlayed', serverId),
     );
 
     const songs = data?.pages.flatMap((page: SongListResponse) => page.items) ?? [];
@@ -243,7 +243,8 @@ const QuickPicksJellyfinSongs = () => {
         seen.add(song.albumId);
         items.push({
             id: song.albumId,
-            imageId: song.imageId,
+            // Album tile: key the cover on the album, never the song's imageId.
+            imageId: song.albumId,
             imageUrl: song.imageUrl,
             name: song.album ?? song.name,
         });

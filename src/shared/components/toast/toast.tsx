@@ -77,7 +77,7 @@ const showToast = ({ message, onClose, type, ...props }: NotificationProps) => {
         },
         message: message ?? '',
         onClose,
-        title: getTitle(type),
+        title: props.title ?? getTitle(type),
         withBorder: true,
         withCloseButton: true,
     });

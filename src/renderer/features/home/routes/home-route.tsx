@@ -19,6 +19,7 @@ import { HomeHero } from '/@/renderer/features/home/components/spotify-home/home
 import { PlaylistShelf } from '/@/renderer/features/home/components/spotify-home/playlist-shelf';
 import { QuickPicks } from '/@/renderer/features/home/components/spotify-home/quick-picks';
 import { ShelfTitle } from '/@/renderer/features/home/components/spotify-home/shelf-title';
+import { homeQueryKey } from '/@/renderer/features/home/utils/home-query-key';
 import { MobileDevicePickerButton } from '/@/renderer/features/jellyfin-remote-target';
 import { AnimatedPage } from '/@/renderer/features/shared/components/animated-page';
 import { ComponentErrorBoundary } from '/@/renderer/features/shared/components/component-error-boundary';
@@ -80,6 +81,7 @@ const HomeRoute = () => {
     const containerQuery = useStableContainerQuery(rawContainerQuery);
 
     const isJellyfin = server?.type === ServerType.JELLYFIN;
+    const serverId = server?.id;
 
     // User-configured section visibility/order from Settings → General → Home.
     // Resolved against the live section set so legacy ids are dropped and any
@@ -135,7 +137,7 @@ const HomeRoute = () => {
                         <SongInfiniteCarousel
                             containerQuery={containerQuery}
                             enableRefresh
-                            queryKey={['home', 'song', 'mostPlayed'] as const}
+                            queryKey={homeQueryKey('song', 'mostPlayed', serverId)}
                             rowCount={1}
                             sortBy={SongListSort.PLAY_COUNT}
                             sortOrder={SortOrder.DESC}
@@ -145,7 +147,7 @@ const HomeRoute = () => {
                         <AlbumInfiniteCarousel
                             containerQuery={containerQuery}
                             enableRefresh
-                            queryKey={['home', 'album', 'mostPlayed'] as const}
+                            queryKey={homeQueryKey('album', 'mostPlayed', serverId)}
                             rowCount={1}
                             sortBy={AlbumListSort.PLAY_COUNT}
                             sortOrder={SortOrder.DESC}
@@ -181,7 +183,7 @@ const HomeRoute = () => {
                     <AlbumInfiniteCarousel
                         containerQuery={containerQuery}
                         enableRefresh
-                        queryKey={['home', 'album', 'random'] as const}
+                        queryKey={homeQueryKey('album', 'random', serverId)}
                         rowCount={1}
                         sortBy={AlbumListSort.RANDOM}
                         sortOrder={SortOrder.ASC}
@@ -201,7 +203,7 @@ const HomeRoute = () => {
                     <AlbumInfiniteCarousel
                         containerQuery={containerQuery}
                         enableRefresh
-                        queryKey={['home', 'album', 'recentlyAdded'] as const}
+                        queryKey={homeQueryKey('album', 'recentlyAdded', serverId)}
                         rowCount={1}
                         sortBy={AlbumListSort.RECENTLY_ADDED}
                         sortOrder={SortOrder.DESC}
@@ -222,7 +224,7 @@ const HomeRoute = () => {
                         <SongInfiniteCarousel
                             containerQuery={containerQuery}
                             enableRefresh
-                            queryKey={['home', 'song', 'recentlyPlayed'] as const}
+                            queryKey={homeQueryKey('song', 'recentlyPlayed', serverId)}
                             rowCount={1}
                             sortBy={SongListSort.RECENTLY_PLAYED}
                             sortOrder={SortOrder.DESC}
@@ -232,7 +234,7 @@ const HomeRoute = () => {
                         <AlbumInfiniteCarousel
                             containerQuery={containerQuery}
                             enableRefresh
-                            queryKey={['home', 'album', 'recentlyPlayed'] as const}
+                            queryKey={homeQueryKey('album', 'recentlyPlayed', serverId)}
                             rowCount={1}
                             sortBy={AlbumListSort.RECENTLY_PLAYED}
                             sortOrder={SortOrder.DESC}
@@ -247,7 +249,7 @@ const HomeRoute = () => {
                     <AlbumInfiniteCarousel
                         containerQuery={containerQuery}
                         enableRefresh
-                        queryKey={['home', 'album', 'recentlyReleased'] as const}
+                        queryKey={homeQueryKey('album', 'recentlyReleased', serverId)}
                         rowCount={1}
                         sortBy={AlbumListSort.RELEASE_DATE}
                         sortOrder={SortOrder.DESC}
@@ -256,7 +258,7 @@ const HomeRoute = () => {
                 </ComponentErrorBoundary>
             ),
         }),
-        [containerQuery, isJellyfin, t],
+        [containerQuery, isJellyfin, serverId, t],
     );
 
     const rows: ReactNode[] = useMemo(() => {

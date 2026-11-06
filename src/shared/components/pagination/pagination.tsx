@@ -80,7 +80,8 @@ export const Pagination = ({
                     onChange={handleChange}
                     value={currentPageValue}
                 />
-                <Popover position="top">
+                {/* Re-seed on open: the page may have changed since mount. */}
+                <Popover onOpen={() => setGoToPage(currentPageValue)} position="top">
                     <Popover.Target>
                         <ActionIcon
                             className={styles.control}
@@ -101,7 +102,7 @@ export const Pagination = ({
                                 min={1}
                                 onChange={(e) => setGoToPage(Number(e))}
                                 onKeyDown={handleGoToKeyDown}
-                                value={currentPageValue}
+                                value={goToPage}
                                 width={120}
                             />
                             <ActionIcon
@@ -113,7 +114,7 @@ export const Pagination = ({
                     </Popover.Dropdown>
                 </Popover>
             </Group>
-            {containerQuery.isSm && totalItemCount && (
+            {containerQuery.isSm && totalItemCount > 0 && (
                 <Text isNoSelect weight={500}>
                     {currentPageStartIndex} - {currentPageEndIndex} <Separator /> {totalItemCount}
                 </Text>

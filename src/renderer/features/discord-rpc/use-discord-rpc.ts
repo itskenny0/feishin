@@ -38,6 +38,14 @@ const DiscordStatusDisplayType = {
 type ActivityState = [QueueSong | undefined, number, PlayerStatus];
 type ActivityTrigger = 'initial' | 'interval' | 'seek' | 'status_change' | 'track_change';
 
+// Built lazily: store-mocking tests import this module without the enum.
+const statusDisplayType = (type: `${DiscordDisplayType}`) =>
+    ({
+        [DiscordDisplayType.ARTIST_NAME]: DiscordStatusDisplayType.STATE,
+        [DiscordDisplayType.FEISHIN]: DiscordStatusDisplayType.NAME,
+        [DiscordDisplayType.SONG_NAME]: DiscordStatusDisplayType.DETAILS,
+    })[type];
+
 const MAX_FIELD_LENGTH = 127;
 const MAX_URL_LENGTH = 256;
 
@@ -104,13 +112,44 @@ export const useDiscordRpc = () => {
     useEffect(() => {
         largeImageCacheRef.current = null;
     }, [discordSettings.showServerImage, lastfmApiKey]);
+    // False once unmounted (RPC disabled / private mode). Checked after the
+    // awaits in setActivity so an in-flight update can't re-open the
+    // connection the unmount just quit.
+    const aliveRef = useRef(true);
+
     // If the component is unmounted while RPC is enabled, quit RPC
     useEffect(() => {
+        aliveRef.current = true;
         return () => {
+            aliveRef.current = false;
             if (previousEnabledRef.current) {
                 discordRpc?.quit();
             }
         };
+    }, []);
+
+    // Connect if needed. False when the hook unmounted meanwhile or Discord is
+    // unreachable (initialize rejects when Discord isn't running; the
+    // interval would otherwise surface that as an unhandled rejection).
+    const ensureConnected = useCallback(async (clientId: string): Promise<boolean> => {
+        const isConnected = await discordRpc?.isConnected();
+        if (!aliveRef.current) return false;
+        if (isConnected) return true;
+
+        logger.info('Discord RPC was initialized', { clientId });
+        previousEnabledRef.current = true;
+        try {
+            await discordRpc?.initialize(clientId);
+        } catch (error) {
+            logger.debug('Discord RPC could not connect', { error });
+            return false;
+        }
+
+        if (!aliveRef.current) {
+            discordRpc?.quit();
+            return false;
+        }
+        return true;
     }, []);
 
     const setActivity = useCallback(
@@ -146,12 +185,6 @@ export const useDiscordRpc = () => {
                 const title = radioMetadata?.title || stationName || 'Radio';
                 const artist = radioMetadata?.artist || stationName || '';
 
-                const statusDisplayMap = {
-                    [DiscordDisplayType.ARTIST_NAME]: DiscordStatusDisplayType.STATE,
-                    [DiscordDisplayType.FEISHIN]: DiscordStatusDisplayType.NAME,
-                    [DiscordDisplayType.SONG_NAME]: DiscordStatusDisplayType.DETAILS,
-                };
-
                 const activity: SetActivity = {
                     details: truncate(title),
                     instance: false,
@@ -170,18 +203,11 @@ export const useDiscordRpc = () => {
                                 : undefined
                             : sentenceCase(current[2]),
                     state: truncate(artist),
-                    statusDisplayType: statusDisplayMap[discordSettings.displayType],
+                    statusDisplayType: statusDisplayType(discordSettings.displayType),
                     type: discordSettings.showAsListening ? 2 : 0,
                 };
 
-                const isConnected = await discordRpc?.isConnected();
-                if (!isConnected) {
-                    logger.info('Discord RPC was initialized', {
-                        clientId: discordSettings.clientId,
-                    });
-                    previousEnabledRef.current = true;
-                    await discordRpc?.initialize(discordSettings.clientId);
-                }
+                if (!(await ensureConnected(discordSettings.clientId))) return;
 
                 logger.debug('Activity was set for Discord RPC', {
                     currentStatus: current[2],
@@ -214,12 +240,6 @@ export const useDiscordRpc = () => {
 
             const artists = song?.artists.map((artist) => artist.name).join(', ');
 
-            const statusDisplayMap = {
-                [DiscordDisplayType.ARTIST_NAME]: DiscordStatusDisplayType.STATE,
-                [DiscordDisplayType.FEISHIN]: DiscordStatusDisplayType.NAME,
-                [DiscordDisplayType.SONG_NAME]: DiscordStatusDisplayType.DETAILS,
-            };
-
             const activity: SetActivity = {
                 details: truncate(minLen2(song?.name) || 'Idle'),
                 instance: false,
@@ -228,7 +248,7 @@ export const useDiscordRpc = () => {
                 smallImageKey: undefined,
                 smallImageText: undefined,
                 state: truncate(minLen2(artists) || 'Unknown artist'),
-                statusDisplayType: statusDisplayMap[discordSettings.displayType],
+                statusDisplayType: statusDisplayType(discordSettings.displayType),
                 // I would love to use the actual type as opposed to hardcoding to 2,
                 // but manually installing the discord-types package appears to break things
                 type: discordSettings.showAsListening ? 2 : 0,
@@ -374,17 +394,7 @@ export const useDiscordRpc = () => {
                 }
             }
 
-            // Initialize if needed
-            const isConnected = await discordRpc?.isConnected();
-            if (!isConnected) {
-                logger.info('Discord RPC was initialized', {
-                    clientId: discordSettings.clientId,
-                });
-
-                previousEnabledRef.current = true;
-
-                await discordRpc?.initialize(discordSettings.clientId);
-            }
+            if (!(await ensureConnected(discordSettings.clientId))) return;
 
             logger.debug('Activity was set for Discord RPC', {
                 albumName: song.album,
@@ -405,6 +415,7 @@ export const useDiscordRpc = () => {
         [
             discordSettings.showAsListening,
             discordSettings.showServerImage,
+            ensureConnected,
             discordSettings.showStateIcon,
             discordSettings.showPaused,
             lastfmApiKey,

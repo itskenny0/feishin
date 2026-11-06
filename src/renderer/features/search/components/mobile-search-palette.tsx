@@ -27,6 +27,7 @@ import { Icon } from '/@/shared/components/icon/icon';
 import { Spinner } from '/@/shared/components/spinner/spinner';
 import { TextInput } from '/@/shared/components/text-input/text-input';
 import { Text } from '/@/shared/components/text/text';
+import { useDebouncedValue } from '/@/shared/hooks/use-debounced-value';
 import { LibraryItem, ServerListItemWithCredential } from '/@/shared/types/domain-types';
 import { Play } from '/@/shared/types/types';
 
@@ -200,7 +201,10 @@ export function MobileSearchPalette({
     const { t } = useTranslation();
     const navigate = useNavigate();
     const server = useCurrentServer();
-    const deferredQuery = useDeferredValue(query);
+    // Same 400ms debounce as the desktop palette: each search term fires three
+    // server searches plus a local index search.
+    const [debouncedQuery = ''] = useDebouncedValue(query, 400);
+    const deferredQuery = useDeferredValue(debouncedQuery);
     const hasQuery = query.trim() !== '';
 
     // Focus the search field on mount so the soft keyboard pops immediately
@@ -591,7 +595,7 @@ function MobileResults({ debouncedQuery, onSelectResult, query }: ResultsSection
                 onSelectResult={onSelectResult}
                 query={query}
             />
-            {!anyLoading && totalResults === 0 ? (
+            {!anyLoading && debouncedQuery === query && totalResults === 0 ? (
                 <div className={styles.empty}>
                     <Icon className={styles.emptyIcon} icon="search" size="2xl" />
                     <Text isMuted>

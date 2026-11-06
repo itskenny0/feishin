@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { AxiosError } from 'axios';
 
 import { api } from '/@/renderer/api';
-import { queryKeys } from '/@/renderer/api/query-keys';
+import { invalidateRadioList } from '/@/renderer/features/radio/api/radio-api';
 import { MutationHookArgs } from '/@/renderer/lib/react-query';
 import {
     UploadInternetRadioStationImageArgs,
@@ -26,14 +26,7 @@ export const useUploadInternetRadioStationImage = (args: MutationHookArgs) => {
             });
         },
         onSuccess: (_data, variables) => {
-            const { apiClientProps } = variables;
-            const serverId = apiClientProps.serverId;
-
-            if (!serverId) return;
-
-            queryClient.invalidateQueries({
-                queryKey: queryKeys.radio.list(serverId),
-            });
+            invalidateRadioList(queryClient, variables.apiClientProps.serverId);
         },
         ...options,
     });

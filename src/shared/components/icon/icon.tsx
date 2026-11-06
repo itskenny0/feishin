@@ -1,5 +1,4 @@
 import clsx from 'clsx';
-import { motion } from 'motion/react';
 import {
     type ComponentType,
     type CSSProperties,
@@ -424,7 +423,7 @@ export interface IconProps extends Omit<IconBaseProps, 'color' | 'fill' | 'size'
 }
 
 const _Icon = forwardRef<HTMLDivElement, IconProps>((props, ref) => {
-    const { animate, className, color, fill, icon, size = 'md' } = props;
+    const { animate, className, color, fill, icon, size = 'md', ...rest } = props;
 
     const IconComponent: ComponentType<any> = AppIcon[icon];
 
@@ -445,6 +444,7 @@ const _Icon = forwardRef<HTMLDivElement, IconProps>((props, ref) => {
 
     return (
         <IconComponent
+            {...rest}
             className={classNames}
             fill={fill}
             ref={ref}
@@ -458,8 +458,6 @@ _Icon.displayName = 'Icon';
 export const Icon = memo(_Icon);
 
 Icon.displayName = 'Icon';
-
-export const MotionIcon: ComponentType = motion.create(Icon);
 
 function isPredefinedSize(size: IconProps['size']) {
     return (

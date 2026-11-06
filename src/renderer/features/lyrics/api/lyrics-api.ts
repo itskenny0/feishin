@@ -1,10 +1,10 @@
 import { queryOptions, useQuery } from '@tanstack/react-query';
 import isElectron from 'is-electron';
-import { useMemo } from 'react';
 
 import { api } from '/@/renderer/api';
 import { queryKeys } from '/@/renderer/api/query-keys';
 import { cachedSwr, readSnapshot, snapshotSwr, toLyricsRow } from '/@/renderer/cache';
+import { getDefaultStructuredIndex } from '/@/renderer/features/lyrics/api/lyrics-utils';
 import { queryClient, QueryHookArgs } from '/@/renderer/lib/react-query';
 import { getServerById, useSettingsStore } from '/@/renderer/store';
 import { hasFeature } from '/@/shared/api/utils';
@@ -295,15 +295,13 @@ export const lyricsQueries = {
         const lyricsKey = queryKeys.songs.lyrics(args.serverId, args.query);
 
         // The heavy `remote` step assembles local + remote-auto + override
-        // lyrics in parallel and persists the local flavour back to Dexie
-        // so future loads can paint instantly across app restarts.
+        // lyrics in parallel; `apply` below persists the selection to Dexie.
         const remote = async ({ signal }: { signal?: AbortSignal }): Promise<LyricsQueryResult> => {
             if (!song) return emptyResult();
 
             const prev = queryClient.getQueryData<LyricsQueryResult>(lyricsKey);
             const overrideSelection = prev?.overrideSelection ?? null;
             const suppressRemoteAuto = prev?.suppressRemoteAuto ?? false;
-            const selectedStructuredIndex = prev?.selectedStructuredIndex ?? 0;
             const selectedOffsetMs = prev?.selectedOffsetMs ?? null;
             const preferLocalLyrics = useSettingsStore.getState().lyrics.preferLocalLyrics;
 
@@ -362,6 +360,12 @@ export const lyricsQueries = {
                 ]);
             }
 
+            // Default to the first synced main lyric, not index 0: structured
+            // lists can lead with an unsynced or translation entry.
+            const selectedStructuredIndex =
+                prev?.selectedStructuredIndex ??
+                (Array.isArray(local) && local.length > 0 ? getDefaultStructuredIndex(local) : 0);
+
             const partial: Pick<
                 LyricsQueryResult,
                 'local' | 'overrideData' | 'overrideSelection' | 'remoteAuto' | 'selectedOffsetMs'
@@ -377,17 +381,13 @@ export const lyricsQueries = {
                 preferLocalLyrics,
                 selectedStructuredIndex,
             );
-            const result: LyricsQueryResult = {
-                ...emptyResult(),
+            return {
                 ...partial,
                 selected,
-                selectedOffsetMs,
                 selectedStructuredIndex,
                 selectedSynced,
                 suppressRemoteAuto,
             };
-
-            return result;
         };
 
         return queryOptions({
@@ -413,15 +413,17 @@ export const lyricsQueries = {
                         await db.lyrics.put(toLyricsRow(song.id, selected, Date.now()));
                     },
                     ctx,
-                    // Dexie read-through. If the lyrics for this track were
-                    // cached on a previous load, return a synthetic seed so
-                    // any concurrent mounts during the network round-trip
-                    // see a primed value. The persisted `Payload` carries
-                    // the full FullLyricsMetadata so artist/source/synced
-                    // state survives an app restart, not just the lyric
-                    // text itself.
+                    // Dexie read-through. The persisted `Payload` carries the
+                    // full FullLyricsMetadata so artist/source/synced state
+                    // survives an app restart, not just the lyric text.
+                    // Skipped while a search override or Clear is pending:
+                    // the cached row would otherwise be served (and, with
+                    // sync-first, the network never consulted), dropping the
+                    // user's choice.
                     fromCache: async (db) => {
                         if (!song?.id) return undefined;
+                        const prev = queryClient.getQueryData<LyricsQueryResult>(lyricsKey);
+                        if (prev?.overrideSelection || prev?.suppressRemoteAuto) return undefined;
                         const cached = await db.lyrics.get(song.id);
                         if (!cached?.Payload) return undefined;
                         return {
@@ -481,10 +483,7 @@ export const lyricsQueries = {
  * empty box that scrolls into view below the cover.
  */
 export const useHasLyrics = (song: QueueSong | undefined): boolean | null => {
-    const enabled = useMemo(
-        () => Boolean(song?.id && song?._serverId),
-        [song?._serverId, song?.id],
-    );
+    const enabled = Boolean(song?.id && song?._serverId);
     const { data, isLoading } = useQuery(
         lyricsQueries.songLyrics(
             {

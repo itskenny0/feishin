@@ -275,8 +275,9 @@ const VisualizerInner = ({ chromeless }: { chromeless?: boolean }) => {
     useEffect(() => {
         // Cleanup on unmount or when webAudio changes, but not on playback resume
         // (resumeInitGeneration). The unmount cleanup disconnects the audio nodes;
-        // skipping it leaks a butterchurn Wasm instance per open/close.
-        cleanupVisualizer();
+        // skipping it leaks a butterchurn Wasm instance per open/close. Cleanup
+        // only: a body call would run after the init effect above and tear down
+        // the instance it just created for the new webAudio.
         return () => {
             cleanupVisualizer();
         };
