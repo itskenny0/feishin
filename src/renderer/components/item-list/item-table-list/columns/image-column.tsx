@@ -18,6 +18,7 @@ import { Icon } from '/@/shared/components/icon/icon';
 import { Skeleton } from '/@/shared/components/skeleton/skeleton';
 import { Folder, LibraryItem } from '/@/shared/types/domain-types';
 import { Play } from '/@/shared/types/types';
+import { songCoverId } from '/@/shared/utils/song-cover-id';
 
 const ImageColumnBase = (props: ItemTableListInnerColumn) => {
     const rowItem = props.getRowItem?.(props.rowIndex) ?? (props.data as any[])[props.rowIndex];
@@ -93,11 +94,9 @@ const ImageColumnBase = (props: ItemTableListInnerColumn) => {
                         enableDebounce={true}
                         enableViewport={true}
                         explicitStatus={item?.explicitStatus}
-                        // Songs cover = the album cover (cached by albumId). The
-                        // already-cached library still has songs keyed to their
-                        // own imageId, so fall back to albumId to resolve the
-                        // sweep-cached album cover without a full re-sync.
-                        id={item?.albumId ?? item?.imageId}
+                        // Songs key on songCoverId (the album cover unless their
+                        // own art is distinct); other items on their imageId.
+                        id={songCoverId(item)}
                         itemType={item?._itemType}
                         src={item?.imageUrl}
                         thumbHash={item?.thumbHash}

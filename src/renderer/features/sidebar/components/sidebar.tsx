@@ -58,6 +58,7 @@ import { Tooltip } from '/@/shared/components/tooltip/tooltip';
 import { useDisclosure } from '/@/shared/hooks/use-disclosure';
 import { ExplicitStatus, LibraryItem } from '/@/shared/types/domain-types';
 import { Platform } from '/@/shared/types/types';
+import { songCoverId } from '/@/shared/utils/song-cover-id';
 
 const SidebarPlaylistSection = () => {
     const isAddDragActive = useSidebarPlaylistAddDragMonitor();
@@ -363,10 +364,9 @@ const SidebarImage = () => {
                         enableDebounce={false}
                         enableViewport={false}
                         fetchPriority="high"
-                        // Album cover (cached by albumId); the song's own imageId
-                        // (Subsonic coverArt) isn't swept, so keying on it would miss
-                        // the cache forever. Matches the player cover surfaces.
-                        id={currentSong.albumId ?? currentSong.imageId}
+                        // Keyed like the sweep caches it (album cover unless the
+                        // track art is distinct). Matches the player cover surfaces.
+                        id={songCoverId(currentSong)}
                         itemType={LibraryItem.SONG}
                         serverId={currentSong._serverId}
                         thumbHash={currentSong.thumbHash}

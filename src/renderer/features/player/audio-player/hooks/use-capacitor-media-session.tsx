@@ -19,6 +19,7 @@ import {
 import { toast } from '/@/shared/components/toast/toast';
 import { LibraryItem, QueueSong } from '/@/shared/types/domain-types';
 import { PlayerStatus } from '/@/shared/types/types';
+import { songCoverId } from '/@/shared/utils/song-cover-id';
 
 /**
  * Android background-audio + persistent media notification.
@@ -103,7 +104,7 @@ const buildMetadata = async (song: QueueSong) => {
     // won't do: they're renderer-scoped and the native side can't read them.
     let imageUrl: null | string = null;
     let source: 'cache' | 'none' | 'remote' = 'none';
-    const coverItemId = (song?.albumId ?? song?.imageId) || song.id;
+    const coverItemId = songCoverId(song) || song.id;
     const cached = coverItemId ? await getCachedThumbnailDataUrl(coverItemId) : null;
     if (cached) {
         imageUrl = cached;
@@ -111,7 +112,7 @@ const buildMetadata = async (song: QueueSong) => {
     } else if (getIsOnline()) {
         imageUrl =
             getItemImageUrl({
-                id: song?.albumId ?? song?.imageId ?? undefined,
+                id: songCoverId(song),
                 imageUrl: song.imageUrl,
                 itemType: LibraryItem.SONG,
                 type: 'itemCard',

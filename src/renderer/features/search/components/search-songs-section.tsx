@@ -19,6 +19,7 @@ import { Spinner } from '/@/shared/components/spinner/spinner';
 import { Text } from '/@/shared/components/text/text';
 import { LibraryItem } from '/@/shared/types/domain-types';
 import { Play } from '/@/shared/types/types';
+import { songCoverId } from '/@/shared/utils/song-cover-id';
 
 interface SearchSongsSectionProps {
     debouncedQuery: string;
@@ -143,8 +144,8 @@ export function SearchSongsSection({
                                     explicitStatus={song.explicitStatus}
                                     highlightQuery={debouncedQuery}
                                     id={song.id}
-                                    // Songs are cache-keyed by their album cover (own imageId isn't swept).
-                                    imageId={song.albumId ?? song.imageId}
+                                    // Songs key on songCoverId (album cover unless their own art is distinct).
+                                    imageId={songCoverId(song) ?? null}
                                     imageUrl={song.imageUrl}
                                     isHighlighted={isHighlighted}
                                     itemType={LibraryItem.SONG}

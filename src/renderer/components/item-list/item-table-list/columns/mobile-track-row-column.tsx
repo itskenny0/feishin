@@ -19,6 +19,7 @@ import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { ExplicitIndicator } from '/@/shared/components/explicit-indicator/explicit-indicator';
 import { Text } from '/@/shared/components/text/text';
 import { LibraryItem, QueueSong } from '/@/shared/types/domain-types';
+import { songCoverId } from '/@/shared/utils/song-cover-id';
 
 /**
  * Single-column track row used on phone viewports in place of the wide
@@ -120,8 +121,8 @@ export const MobileTrackRowColumn = (props: ItemTableListInnerColumn) => {
                         enableDebounce={true}
                         enableViewport={true}
                         explicitStatus={item?.explicitStatus}
-                        // Songs are cache-keyed by their album cover (own imageId isn't swept).
-                        id={item?.albumId ?? item?.imageId}
+                        // Songs key on songCoverId (album cover unless their own art is distinct).
+                        id={songCoverId(item)}
                         itemType={item?._itemType}
                         serverId={item?._serverId}
                         src={item?.imageUrl}

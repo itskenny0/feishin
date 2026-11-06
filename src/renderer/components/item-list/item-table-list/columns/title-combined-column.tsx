@@ -30,6 +30,7 @@ import { Text } from '/@/shared/components/text/text';
 import { Folder, LibraryItem, QueueSong } from '/@/shared/types/domain-types';
 import { Play } from '/@/shared/types/types';
 import { lastPathSegment } from '/@/shared/utils/album-folder-from-path';
+import { songCoverId } from '/@/shared/utils/song-cover-id';
 
 export const DefaultTitleCombinedColumn = (props: ItemTableListInnerColumn) => {
     const rowItem = props.getRowItem?.(props.rowIndex) ?? (props.data as any[])[props.rowIndex];
@@ -122,7 +123,7 @@ export const DefaultTitleCombinedColumn = (props: ItemTableListInnerColumn) => {
                             enableDebounce={true}
                             enableViewport={true}
                             explicitStatus={item?.explicitStatus}
-                            id={item?.albumId ?? item?.imageId}
+                            id={songCoverId(item)}
                             itemType={item?._itemType}
                             src={item?.imageUrl}
                             thumbHash={item?.thumbHash}
@@ -289,7 +290,7 @@ export const QueueSongTitleCombinedColumn = (props: ItemTableListInnerColumn) =>
                             blurHash={item?.blurHash}
                             dominantColor={item?.dominantColor}
                             explicitStatus={item?.explicitStatus}
-                            id={item?.albumId ?? item?.imageId}
+                            id={songCoverId(item)}
                             itemType={item?._itemType}
                             serverId={item?._serverId}
                             src={item?.imageUrl}

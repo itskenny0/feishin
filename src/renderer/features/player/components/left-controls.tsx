@@ -50,6 +50,7 @@ import { PlaybackSelectors } from '/@/shared/constants/playback-selectors';
 import { LibraryItem, Song } from '/@/shared/types/domain-types';
 import { albumFolderFromSongPath } from '/@/shared/utils/album-folder-from-path';
 import { isPlausibleReleaseYear } from '/@/shared/utils/release-year';
+import { songCoverId } from '/@/shared/utils/song-cover-id';
 
 export const LeftControls = () => {
     const { t } = useTranslation();
@@ -195,9 +196,9 @@ export const LeftControls = () => {
                                             enableViewport={false}
                                             explicitStatus={currentSong?.explicitStatus}
                                             fetchPriority="high"
-                                            // Album cover (cached by albumId); the
-                                            // song's own imageId isn't swept.
-                                            id={currentSong?.albumId ?? currentSong?.imageId}
+                                            // Keyed like the sweep caches it (album
+                                            // cover unless the track art is distinct).
+                                            id={songCoverId(currentSong)}
                                             itemType={LibraryItem.SONG}
                                             key={currentSong?.id ?? 'playerbar-empty'}
                                             serverId={currentSong?._serverId}

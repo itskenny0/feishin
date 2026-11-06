@@ -23,6 +23,7 @@ import { Table } from '/@/shared/components/table/table';
 import { Tabs } from '/@/shared/components/tabs/tabs';
 import { Text } from '/@/shared/components/text/text';
 import { LibraryItem, Song } from '/@/shared/types/domain-types';
+import { songCoverId } from '/@/shared/utils/song-cover-id';
 
 export const SongEditModal = ({ songs }: { songs: Song[] }) => {
     const { t } = useTranslation();
@@ -80,7 +81,7 @@ export const SongEditModal = ({ songs }: { songs: Song[] }) => {
                         containerClassName={styles.scopeOptionImage}
                         enableViewport={false}
                         explicitStatus={song.explicitStatus}
-                        id={song.albumId ?? song.imageId}
+                        id={songCoverId(song)}
                         itemType={LibraryItem.SONG}
                         serverId={song._serverId}
                         src={song.imageUrl}

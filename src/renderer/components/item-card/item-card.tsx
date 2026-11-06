@@ -54,6 +54,7 @@ import { DragOperation, DragTarget } from '/@/shared/types/drag-and-drop';
 import { Play } from '/@/shared/types/types';
 import { albumFolderFromSongPath } from '/@/shared/utils/album-folder-from-path';
 import { lastPathSegment } from '/@/shared/utils/album-folder-from-path';
+import { songCoverId } from '/@/shared/utils/song-cover-id';
 import { stringToColor } from '/@/shared/utils/string-to-color';
 
 export type DataRow = {
@@ -196,13 +197,18 @@ export interface ItemCardDerivativeProps extends Omit<ItemCardProps, 'type'> {
 
 type ItemCardData = NonNullable<ItemCardProps['data']>;
 
-// Songs are cache-keyed by their album cover: the thumbnail sweep never caches
-// a song's own imageId (on Subsonic/Navidrome it is not the album id).
+// Songs key on songCoverId (the album cover unless their own art is distinct),
+// matching what the thumbnail sweep caches; other entities key on their imageId.
 const getCoverCacheId = (data: unknown) => {
     const item = data as
         | undefined
-        | { _itemType?: LibraryItem; albumId?: null | string; imageId?: null | string };
-    return item?._itemType === LibraryItem.SONG ? (item.albumId ?? item.imageId) : item?.imageId;
+        | {
+              _itemType?: LibraryItem;
+              albumId?: null | string;
+              hasOwnCover?: boolean;
+              imageId?: null | string;
+          };
+    return item?._itemType === LibraryItem.SONG ? songCoverId(item) : item?.imageId;
 };
 
 const ItemCardStandardImageArea = memo(function ItemCardStandardImageArea({

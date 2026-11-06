@@ -11,6 +11,7 @@ import {
 } from '/@/renderer/store/player.store';
 import { LibraryItem, QueueSong } from '/@/shared/types/domain-types';
 import { PlayerRepeat, PlayerShuffle } from '/@/shared/types/types';
+import { songCoverId } from '/@/shared/utils/song-cover-id';
 
 /** How many upcoming queue items get their cover warmed. */
 const PREFETCH_COUNT = 2;
@@ -110,7 +111,7 @@ export const usePrefetchUpcomingCovers = (): void => {
 
             // Prime the CURRENT (+ previous + upcoming) covers into the
             // IN-MEMORY shared URL cache IMMEDIATELY — before the
-            // playback-flowing wait — keyed by albumId, the SAME key the
+            // playback-flowing wait - keyed by songCoverId, the SAME key the
             // fullscreen player art resolves against. This is what lets the
             // fullscreen cover paint synchronously on its first render via the
             // cross-variant peek (instead of an async Dexie hop + crossfade
@@ -119,12 +120,12 @@ export const usePrefetchUpcomingCovers = (): void => {
             // variant already in memory. Zero-ref + grace-windowed, so this
             // can't pin blob memory.
             const memIds = [current, previous, ...upcoming]
-                .map((song) => song?.albumId ?? song?.imageId)
+                .map((song) => songCoverId(song))
                 .filter((id): id is string => Boolean(id));
             if (memIds.length > 0) {
                 // `table` (the player-bar / miniplayer cover), `itemCard` (the
                 // fullscreen cross-variant seed + cards), and `fullScreen` (the
-                // hi-res now-playing art). Priming all three keyed by albumId
+                // hi-res now-playing art). Priming all three keyed by songCoverId
                 // means every now-playing cover surface peeks a hit instead of
                 // racing an async resolve at play-start.
                 void preloadThumbnailUrls(memIds, 'table');
@@ -155,7 +156,7 @@ export const usePrefetchUpcomingCovers = (): void => {
 
             let started = 0;
             for (const song of warmTargets) {
-                const imageId = song?.albumId ?? song?.imageId ?? undefined;
+                const imageId = songCoverId(song);
                 if (!imageId || !song._serverId) continue;
                 const key = `${song._serverId}:${imageId}`;
                 if (inflightRef.current.has(key) || prefetchedRef.current.has(key)) continue;

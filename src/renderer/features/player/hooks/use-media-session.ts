@@ -21,6 +21,7 @@ import {
 } from '/@/renderer/store';
 import { LibraryItem, QueueSong } from '/@/shared/types/domain-types';
 import { PlayerStatus, PlayerType } from '/@/shared/types/types';
+import { songCoverId } from '/@/shared/utils/song-cover-id';
 
 // `navigator.mediaSession` is missing in some Android System WebView builds
 // (Capacitor APKs land in one of them — the v20j boot-error overlay
@@ -237,7 +238,7 @@ export const useMediaSession = () => {
             }
 
             const imageUrl = getItemImageUrl({
-                id: song?.albumId ?? song?.imageId ?? undefined,
+                id: songCoverId(song),
                 imageUrl: song?.imageUrl,
                 itemType: LibraryItem.SONG,
                 type: 'itemCard',

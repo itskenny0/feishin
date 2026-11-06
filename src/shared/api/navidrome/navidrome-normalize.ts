@@ -259,6 +259,9 @@ const normalizeSong = (
                 ? { album: item.rgAlbumGain ?? undefined, track: item.rgTrackGain }
                 : null,
         genres: toGenres(item.genres, server),
+        // No cheap signal tells a track's own art apart from its album cover
+        // (the song coverArt is always its own `mf-` id), so `hasOwnCover` stays
+        // unset and cover surfaces key on the album (see songCoverId).
         id,
         imageId: id,
         imageUrl: null,

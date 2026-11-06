@@ -16,6 +16,7 @@ import { Icon } from '/@/shared/components/icon/icon';
 import { Text } from '/@/shared/components/text/text';
 import { Album, AlbumArtist, LibraryItem, Song } from '/@/shared/types/domain-types';
 import { Play } from '/@/shared/types/types';
+import { songCoverId } from '/@/shared/utils/song-cover-id';
 
 // Each section shows SECTION_LIMIT items; SEARCH_PAGE_SIZE matches search-api.
 const SECTION_LIMIT = 8;
@@ -298,9 +299,9 @@ const TopResultCard = ({ onPlay, result }: TopResultCardProps) => {
                     className={`${styles.topImage} ${isArtist ? styles.topImageRound : ''}`}
                     explicitStatus={isArtist ? null : (item as Album | Song).explicitStatus}
                     height={120}
-                    // A song top-result is cache-keyed by its album cover (its own
-                    // imageId/coverArt isn't swept); albums/artists key on their own id.
-                    id={isSong ? ((item as Song).albumId ?? imageId) : imageId}
+                    // A song top-result keys on songCoverId (album cover unless its
+                    // own art is distinct); albums/artists key on their own id.
+                    id={isSong ? songCoverId(item as Song) : imageId}
                     itemType={kind}
                     src={imageUrl}
                     type="itemCard"
@@ -371,8 +372,8 @@ const SongRow = ({ onPlay, song }: SongRowProps) => {
                     className={styles.songThumb}
                     explicitStatus={song.explicitStatus}
                     height={40}
-                    // Songs are cache-keyed by their album cover (own imageId isn't swept).
-                    id={song.albumId ?? song.imageId}
+                    // Songs key on songCoverId (album cover unless their own art is distinct).
+                    id={songCoverId(song)}
                     itemType={LibraryItem.SONG}
                     src={song.imageUrl}
                     type="table"

@@ -392,6 +392,15 @@ export class LibraryCacheDb extends Dexie {
         this.version(13).stores({
             offlineTargets: 'Key, EntityType, Status, AddedAt, EnqueuedAt',
         });
+
+        // v14: sparse `OwnCoverId` index on songs, set only for tracks whose
+        // own art is distinct from their album cover, so the thumbnail sweep
+        // enumerates them key-only (no Payload deserialization). Additive
+        // index, no data transform: rows written before v14 lack the field
+        // until the one-shot song re-sync (lifecycle) rewrites them.
+        this.version(14).stores({
+            songs: 'Id, AlbumId, [AlbumId+ParentIndexNumber+IndexNumber], AlbumArtistId, DateLastSaved, [AlbumId+IndexNumber], __cachedAt, OwnCoverId',
+        });
     }
 }
 const handles = new Map<Key, LibraryCacheDb>();

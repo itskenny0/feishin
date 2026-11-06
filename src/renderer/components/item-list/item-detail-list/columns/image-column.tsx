@@ -13,6 +13,7 @@ import {
 import { usePlayButtonBehavior } from '/@/renderer/store';
 import { LibraryItem } from '/@/shared/types/domain-types';
 import { Play } from '/@/shared/types/types';
+import { songCoverId } from '/@/shared/utils/song-cover-id';
 
 export const ImageColumn = ({
     controls,
@@ -49,8 +50,8 @@ export const ImageColumn = ({
                 className={styles.compactImage}
                 containerClassName={styles.compactContainer}
                 explicitStatus={song.explicitStatus}
-                // Songs are cache-keyed by their album cover (own imageId isn't swept).
-                id={song.albumId ?? song.imageId}
+                // Songs key on songCoverId (album cover unless their own art is distinct).
+                id={songCoverId(song)}
                 itemType={LibraryItem.SONG}
                 serverId={song._serverId}
                 thumbHash={song.thumbHash}

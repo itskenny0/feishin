@@ -407,6 +407,10 @@ export type Song = {
     folderId: null | string;
     gain: GainInfo | null;
     genres: Genre[];
+    // True only when the track's own artwork is provably distinct from its
+    // album cover (set by the normalizer). Cover surfaces then key on the
+    // song's own `imageId` instead of the album; see `songCoverId`.
+    hasOwnCover?: boolean;
     id: string;
     imageId: null | string;
     imageUrl: null | string;

@@ -11,6 +11,7 @@ import {
 import { usePlayerActions, usePlayerSong } from '/@/renderer/store';
 import { LibraryItem, QueueSong } from '/@/shared/types/domain-types';
 import { PlayerShuffle, ServerType } from '/@/shared/types/types';
+import { songCoverId } from '/@/shared/utils/song-cover-id';
 
 const utils = isElectron() ? window.api.utils : null;
 const mpris = isElectron() && (utils?.isLinux() || utils?.isMacOS()) ? window.api.mpris : null;
@@ -27,7 +28,7 @@ export const useMPRIS = () => {
     const { metadata: radioMetadata, stationName } = useRadioPlayer();
 
     const imageUrl = useItemImageUrl({
-        id: currentSong?.albumId ?? currentSong?.imageId ?? undefined,
+        id: songCoverId(currentSong),
         imageUrl: currentSong?.imageUrl,
         itemType: LibraryItem.SONG,
         type: 'itemCard',

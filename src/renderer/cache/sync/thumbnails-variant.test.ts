@@ -22,12 +22,15 @@ const mocks = vi.hoisted(() => {
         toArray: vi.fn(async () => rows),
         toCollection: () => ({ primaryKeys: async () => rows.map((r) => r.Id) }),
     });
+    // Song cover keys as read off the sparse `OwnCoverId` index.
+    const songCoverIds: string[] = [];
     const db = {
         albums: keyColl(albums),
         artists: keyColl(artists),
         playlists: keyColl(playlists),
+        songs: { orderBy: () => ({ uniqueKeys: async () => songCoverIds }) },
     };
-    return { albums, artists, db, playlists };
+    return { albums, artists, db, playlists, songCoverIds };
 });
 
 vi.mock('/@/renderer/cache/db', () => ({
@@ -71,6 +74,7 @@ beforeEach(() => {
     mocks.albums.length = 0;
     mocks.artists.length = 0;
     mocks.playlists.length = 0;
+    mocks.songCoverIds.length = 0;
 });
 
 afterEach(() => {
@@ -162,5 +166,39 @@ describe('collectPending — variant fan-out', () => {
         // Default (fullScreen off) => 3 items × 3 small variants = 9 work units.
         const pending = await collectPending(withMode(DEFAULT_OFF, 'download'));
         expect(pending).toHaveLength(9);
+    });
+
+    it('also sweeps songs with distinct own art, keyed on their cover id', async () => {
+        mocks.albums.push({ Id: 'a1' });
+        mocks.songCoverIds.push('s1');
+
+        const pending = await collectPending(withMode(DEFAULT_OFF, 'downscale'));
+
+        expect(pending.map((p) => [p.itemId, p.itemType, p.kind])).toEqual([
+            ['a1', 'album', 'album'],
+            ['s1', 'song', 'song'],
+        ]);
+    });
+
+    it('song covers skip the bounded fullScreen bucket; albums keep it', async () => {
+        mocks.albums.push({ Id: 'a1' });
+        mocks.songCoverIds.push('s1');
+        const hiRes: LocalCacheImageVariants = {
+            ...DEFAULT_OFF,
+            variants: { ...DEFAULT_OFF.variants, fullScreen: { enabled: true, px: 1080 } },
+        };
+
+        const download = await collectPending(withMode(hiRes, 'download'));
+        const variantsOf = (id: string) =>
+            download.filter((p) => p.itemId === id).map((p) => p.variant);
+        expect(variantsOf('a1')).toContain('fullScreen');
+        expect(variantsOf('s1')).not.toContain('fullScreen');
+        expect(variantsOf('s1').length).toBeGreaterThan(0);
+
+        const downscale = await collectPending(withMode(hiRes, 'downscale'));
+        expect(downscale.map((p) => [p.itemId, p.px])).toEqual([
+            ['a1', 1080],
+            ['s1', 300],
+        ]);
     });
 });

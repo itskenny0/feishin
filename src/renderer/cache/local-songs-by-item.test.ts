@@ -22,7 +22,10 @@ const mocks = vi.hoisted(() => {
         }));
     const db = {
         playlistSongs: { where: makeWhere(playlistSongsRows) },
-        songs: { where: makeWhere(songsRows) },
+        songs: {
+            get: async (id: string) => songsRows.find((r) => r.Id === id),
+            where: makeWhere(songsRows),
+        },
     };
     return { db, playlistSongsRows, songsRows };
 });
@@ -31,7 +34,10 @@ vi.mock('/@/renderer/cache/db', () => ({
     getActiveCacheDb: () => mocks.db,
 }));
 
-import { resolveSongsByItemTypeLocal } from '/@/renderer/cache/local-songs-by-item';
+import {
+    getCachedSongCoverId,
+    resolveSongsByItemTypeLocal,
+} from '/@/renderer/cache/local-songs-by-item';
 import { LibraryItem } from '/@/shared/types/domain-types';
 
 const songRow = (id: string, albumId: string, disc: number, track: number) => ({
@@ -113,5 +119,19 @@ describe('resolveSongsByItemTypeLocal', () => {
             itemType: LibraryItem.FOLDER,
         });
         expect(songs).toBeUndefined();
+    });
+});
+
+describe('getCachedSongCoverId', () => {
+    it('keys a cached song on its album cover unless its own art is distinct', async () => {
+        mocks.songsRows.push(songRow('shared', 'al1', 1, 1), {
+            ...songRow('own', 'al1', 1, 2),
+            Payload: { albumId: 'al1', hasOwnCover: true, id: 'own', imageId: 'own' },
+        });
+        mocks.songsRows[0].Payload.albumId = 'al1';
+
+        expect(await getCachedSongCoverId('shared')).toBe('al1');
+        expect(await getCachedSongCoverId('own')).toBe('own');
+        expect(await getCachedSongCoverId('missing')).toBeNull();
     });
 });

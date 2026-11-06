@@ -131,6 +131,14 @@ describe('toCachedSongRow', () => {
         const row = toCachedSongRow(song({ albumArtists: undefined }));
         expect(row.AlbumArtistId).toBeUndefined();
     });
+
+    it('indexes OwnCoverId (the song cover key) only for songs with distinct own art', () => {
+        expect(toCachedSongRow(song({ hasOwnCover: true, imageId: 's1' })).OwnCoverId).toBe('s1');
+        expect(toCachedSongRow(song({ imageId: 'al2' })).OwnCoverId).toBeUndefined();
+        expect(
+            toCachedSongRow(song({ hasOwnCover: false, imageId: 's1' })).OwnCoverId,
+        ).toBeUndefined();
+    });
 });
 
 describe('toCachedPlaylistRow', () => {

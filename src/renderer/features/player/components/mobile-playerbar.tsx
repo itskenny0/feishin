@@ -51,6 +51,7 @@ import { Tooltip } from '/@/shared/components/tooltip/tooltip';
 import { PlaybackSelectors } from '/@/shared/constants/playback-selectors';
 import { LibraryItem } from '/@/shared/types/domain-types';
 import { albumFolderFromSongPath } from '/@/shared/utils/album-folder-from-path';
+import { songCoverId } from '/@/shared/utils/song-cover-id';
 
 export const MobilePlayerbar = () => {
     const { t } = useTranslation();
@@ -311,14 +312,13 @@ export const MobilePlayerbar = () => {
                                                     : currentSong.explicitStatus
                                             }
                                             fetchPriority="high"
-                                            // Album cover (cached by albumId); the song's own
-                                            // imageId (Subsonic coverArt) isn't swept, so keying on
-                                            // it would miss the cache forever. Matches every other
+                                            // Keyed like the sweep caches it (album cover unless
+                                            // the track art is distinct). Matches every other
                                             // player cover surface (left-controls, fullscreen art).
                                             id={
                                                 isRadioActive
                                                     ? currentStationArt?.imageId
-                                                    : (currentSong.albumId ?? currentSong.imageId)
+                                                    : songCoverId(currentSong)
                                             }
                                             itemType={LibraryItem.SONG}
                                             thumbHash={isRadioActive ? null : currentSong.thumbHash}

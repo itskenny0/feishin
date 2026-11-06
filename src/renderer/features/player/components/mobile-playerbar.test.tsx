@@ -77,7 +77,11 @@ describe('MobilePlayerbar remote mirroring', () => {
 // Drive `currentSong` (via the remote mirror) with an explicit albumId/imageId
 // so we can assert the cover's cache key. `useActiveNowPlayingItem` returns the
 // mirrored now-playing item unchanged when a Connect target is active.
-const setRemoteMirroredSong = (fields: { albumId?: string; imageId?: null | string }) => {
+const setRemoteMirroredSong = (fields: {
+    albumId?: string;
+    hasOwnCover?: boolean;
+    imageId?: null | string;
+}) => {
     const { actions } = useRemoteTargetStore.getState();
     actions.setTarget({
         capabilities: ['PlayPause', 'NextTrack', 'PreviousTrack'],
@@ -123,5 +127,13 @@ describe('MobilePlayerbar cover cache key', () => {
         renderBar();
 
         expect(screen.getByTestId('mini-cover').getAttribute('data-id')).toBe('coverart-9');
+    });
+
+    it("keys the cover on the track's own image when its art is distinct from the album", () => {
+        setRemoteMirroredSong({ albumId: 'album-1', hasOwnCover: true, imageId: 'song-1' });
+
+        renderBar();
+
+        expect(screen.getByTestId('mini-cover').getAttribute('data-id')).toBe('song-1');
     });
 });

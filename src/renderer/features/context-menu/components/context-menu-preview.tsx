@@ -14,6 +14,7 @@ import { Text } from '/@/shared/components/text/text';
 import { useImageHashUrl } from '/@/shared/hooks/use-image-hash-url';
 import { LibraryItem } from '/@/shared/types/domain-types';
 import { lastPathSegment } from '/@/shared/utils/album-folder-from-path';
+import { songCoverId, SongCoverSource } from '/@/shared/utils/song-cover-id';
 
 interface ContextMenuPreviewProps {
     items: unknown[];
@@ -65,16 +66,12 @@ const SONG_ITEM_TYPES = new Set<LibraryItem | undefined>([
 ]);
 
 // Covers render from the local cache only, keyed the way the thumbnail sweep
-// stores them: songs share their album's cover (albumId ?? imageId), every
-// other entity keys on its own id.
+// stores them: songs on songCoverId (their album's cover unless their own art
+// is distinct), every other entity on its own id.
 const getCacheItemId = (item: unknown, itemType?: LibraryItem): null | string => {
     if (!item || typeof item !== 'object') return null;
-    const { albumId, id, imageId } = item as {
-        albumId?: null | string;
-        id?: unknown;
-        imageId?: null | string;
-    };
-    if (SONG_ITEM_TYPES.has(itemType)) return albumId ?? imageId ?? null;
+    if (SONG_ITEM_TYPES.has(itemType)) return songCoverId(item as SongCoverSource) ?? null;
+    const { id } = item as { id?: unknown };
     return typeof id === 'string' ? id : null;
 };
 

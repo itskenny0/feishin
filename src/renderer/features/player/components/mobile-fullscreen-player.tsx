@@ -63,6 +63,7 @@ import { Stack } from '/@/shared/components/stack/stack';
 import { Text } from '/@/shared/components/text/text';
 import { LibraryItem, ServerType } from '/@/shared/types/domain-types';
 import { ItemListKey } from '/@/shared/types/types';
+import { songCoverId } from '/@/shared/utils/song-cover-id';
 
 const AudioMotionAnalyzerVisualizer = lazyImport(() =>
     import('/@/renderer/features/visualizer/components/audiomotionanalyzer/visualizer').then(
@@ -201,13 +202,13 @@ const BackgroundImage = memo(({ dynamicBackground, dynamicIsImage }: BackgroundI
     const { nextSong } = usePlayerData();
 
     const currentImageUrl = useCachedItemImageUrl({
-        id: currentSong?.albumId ?? currentSong?.imageId ?? undefined,
+        id: songCoverId(currentSong),
         itemType: LibraryItem.SONG,
         type: 'itemCard',
     });
 
     const nextImageUrl = useCachedItemImageUrl({
-        id: nextSong?.albumId ?? nextSong?.imageId ?? undefined,
+        id: songCoverId(nextSong),
         itemType: LibraryItem.SONG,
         type: 'itemCard',
     });
@@ -426,8 +427,8 @@ const MobilePlayerContainer = memo(
         const { currentStationArt: currentRadioStationArt } = useRadioPlayer();
 
         // The dynamic background samples whatever art is on screen. On radio
-        // that is the station art, otherwise the album cover, which caches
-        // under albumId - the id the thumbnail sweep keys on.
+        // that is the station art, otherwise the song cover, keyed by
+        // songCoverId like the thumbnail sweep caches it.
         const imageUrl = useCachedItemImageUrl(
             isRadioActive
                 ? {
@@ -438,7 +439,7 @@ const MobilePlayerContainer = memo(
                       type: 'itemCard',
                   }
                 : {
-                      id: currentSong?.albumId ?? currentSong?.imageId ?? undefined,
+                      id: songCoverId(currentSong),
                       imageUrl: currentSong?.imageUrl,
                       itemType: LibraryItem.SONG,
                       type: 'itemCard',

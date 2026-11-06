@@ -21,6 +21,7 @@ import type {
 
 import { getActiveCacheDb } from './db';
 import { markRowCacheDirty } from './local-cache';
+import { songOwnCoverId } from './row-mappers';
 import { useCacheStore } from './store';
 
 import { controller } from '/@/renderer/api/controller';
@@ -623,7 +624,12 @@ const refetchFavoriteEntity = async (
                     });
                     const cached = await db.songs.get(id);
                     if (cached) {
-                        await db.songs.put({ ...cached, __cachedAt: now, Payload: song });
+                        await db.songs.put({
+                            ...cached,
+                            __cachedAt: now,
+                            OwnCoverId: songOwnCoverId(song),
+                            Payload: song,
+                        });
                     }
                 }
             } else if (kind === 'Playlist') {

@@ -197,3 +197,68 @@ describe('jfNormalize.song — "no media sources" warn is rate-limited per id', 
         ).toBe(true);
     });
 });
+
+// A song gets its OWN cover identity only when its art is provably distinct
+// from the album cover: the thumbnail sweep caches per-song covers only for
+// those, and Jellyfin gives almost every track with embedded art its own
+// Primary image that is usually just the album cover again.
+describe('jfNormalize.song cover identity', () => {
+    const TRACK_ART = 'eYDcL2~qxuNGIUE1D%IUayoL9ZIUxaxbt7W;s:t7bIof%MozRjRkf6';
+    const ALBUM_ART = 'e56RM@tRIURj-=%39WIUM{t7xvbE?dozRiWFM_t7ISM{RkM_xuof%O';
+    const ALBUM_ART_REENCODED = 'eHR{.2?b-q%Nxv?Fj]S5a$s;^-kDR%ocR%.9t6xCadR%%2n~IokAoJ';
+    const ALBUM_ART_ORIGINAL = 'eHR{.2?b-q%Nxv?Fj[S5a$s;^-kDR%ocR%.9t6xCadR%%2n~IokAoJ';
+
+    const withArt = (ownHash: null | string, albumHash: null | string, albumTag = 'atag') =>
+        baseSong({
+            AlbumPrimaryImageTag: albumTag,
+            ImageBlurHashes: {
+                Primary: {
+                    ...(ownHash ? { otag: ownHash } : {}),
+                    ...(albumHash ? { atag: albumHash } : {}),
+                },
+            },
+            ImageTags: { Primary: 'otag' },
+        });
+
+    it('keys distinct own art on the song id', () => {
+        const result = jfNormalize.song(withArt(TRACK_ART, ALBUM_ART), server);
+        expect(result.hasOwnCover).toBe(true);
+        expect(result.imageId).toBe('song1');
+    });
+
+    it('keys own art identical to the album cover on the album id', () => {
+        const result = jfNormalize.song(withArt(ALBUM_ART, ALBUM_ART), server);
+        expect(result.hasOwnCover).toBe(false);
+        expect(result.imageId).toBe('alb1');
+    });
+
+    it('treats a re-encode of the album cover (quantization noise) as the album cover', () => {
+        const result = jfNormalize.song(withArt(ALBUM_ART_REENCODED, ALBUM_ART_ORIGINAL), server);
+        expect(result.hasOwnCover).toBe(false);
+        expect(result.imageId).toBe('alb1');
+    });
+
+    it('keys on the album id when a blurhash is missing (cannot prove distinct)', () => {
+        expect(jfNormalize.song(withArt(null, ALBUM_ART), server).imageId).toBe('alb1');
+        expect(jfNormalize.song(withArt(TRACK_ART, null), server).imageId).toBe('alb1');
+        const noHashes = baseSong({
+            AlbumPrimaryImageTag: 'atag',
+            ImageTags: { Primary: 'otag' },
+        });
+        expect(jfNormalize.song(noHashes, server).hasOwnCover).toBe(false);
+        expect(jfNormalize.song(noHashes, server).imageId).toBe('alb1');
+    });
+
+    it('keys own art on the song id when the album has no art', () => {
+        const result = jfNormalize.song(withArt(TRACK_ART, null, ''), server);
+        expect(result.hasOwnCover).toBe(true);
+        expect(result.imageId).toBe('song1');
+    });
+
+    it('keys a song without own art on its album, or null with no art at all', () => {
+        const albumOnly = baseSong({ AlbumPrimaryImageTag: 'atag' });
+        expect(jfNormalize.song(albumOnly, server).imageId).toBe('alb1');
+        expect(jfNormalize.song(albumOnly, server).hasOwnCover).toBe(false);
+        expect(jfNormalize.song(baseSong(), server).imageId).toBeNull();
+    });
+});

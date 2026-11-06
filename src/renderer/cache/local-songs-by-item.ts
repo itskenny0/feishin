@@ -16,6 +16,7 @@ import type { Song } from '/@/shared/types/domain-types';
 import { getActiveCacheDb } from './db';
 
 import { LibraryItem } from '/@/shared/types/domain-types';
+import { songCoverId } from '/@/shared/utils/song-cover-id';
 
 const byAlbumOrder = (a: Song, b: Song): number => {
     const disc = (a.discNumber ?? 0) - (b.discNumber ?? 0);
@@ -26,17 +27,17 @@ const byAlbumOrder = (a: Song, b: Song): number => {
 };
 
 /**
- * Resolve a cached song's ALBUM id. A song's cover lives on its album — the
- * thumbnail sweep caches album/artist covers, never per-song — so any surface
- * that wants a song's artwork must key on the album id, not the song id.
- * Returns null when the song isn't cached or the cache is unavailable.
+ * Resolve a cached song's cover cache key (`songCoverId`): its album's cover,
+ * or its own when the track art is distinct - the same key the thumbnail sweep
+ * caches it under. Returns null when the song isn't cached or the cache is
+ * unavailable.
  */
-export const getCachedSongAlbumId = async (songId: string): Promise<null | string> => {
+export const getCachedSongCoverId = async (songId: string): Promise<null | string> => {
     const db = getActiveCacheDb();
     if (!db) return null;
     try {
         const row = await db.songs.get(songId);
-        return row?.AlbumId ?? row?.Payload?.albumId ?? null;
+        return songCoverId(row?.Payload) ?? row?.AlbumId ?? null;
     } catch {
         return null;
     }

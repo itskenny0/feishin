@@ -5,8 +5,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ContextMenuPreview } from '/@/renderer/features/context-menu/components/context-menu-preview';
 import { LibraryItem } from '/@/shared/types/domain-types';
 
-// Covers render cache-only, keyed like the thumbnail sweep: songs share their
-// album's cover row (albumId ?? imageId), never the song id.
+// Covers render cache-only, keyed like the thumbnail sweep (songCoverId): songs
+// share their album's cover row (albumId ?? imageId) unless their own art is
+// distinct, in which case they key on their own imageId.
 const cachedImage = vi.fn();
 
 vi.mock('/@/renderer/cache', () => ({
@@ -39,6 +40,18 @@ describe('ContextMenuPreview cover cache key', () => {
             expect(renderedItemId()).toBe('album-1');
         },
     );
+
+    it('keys a song with distinct own art on its own imageId', () => {
+        const song = {
+            albumId: 'album-1',
+            hasOwnCover: true,
+            id: 'song-1',
+            imageId: 'song-1',
+            name: 'Song',
+        };
+        render(<ContextMenuPreview items={[song]} itemType={LibraryItem.QUEUE_SONG} />);
+        expect(renderedItemId()).toBe('song-1');
+    });
 
     it('falls back to the imageId for a song without an albumId', () => {
         const song = { albumId: null, id: 'song-1', imageId: 'cover-1', name: 'Song' };

@@ -49,6 +49,7 @@ export { resolveSongsByItemTypeLocal } from './local-songs-by-item';
 export { enqueueMutation } from './mutations';
 export { OfflineDownloadBanner } from './offline-download-banner';
 export {
+    songOwnCoverId,
     toCachedAlbumRow,
     toCachedArtistRow,
     toCachedGenreRow,

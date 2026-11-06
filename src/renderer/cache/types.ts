@@ -125,6 +125,10 @@ export interface CachedSong extends CachedBase {
     DateLastSaved: string;
     Id: string;
     IndexNumber: number | undefined;
+    // Cover cache key (`songCoverId`) for a song whose own art is distinct
+    // from its album cover; undefined otherwise. Sparse index (schema v14):
+    // the thumbnail sweep reads it key-only to pre-cache those covers.
+    OwnCoverId?: string;
     ParentIndexNumber: number | undefined;
     Payload: Song;
 }

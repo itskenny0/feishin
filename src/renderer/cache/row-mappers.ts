@@ -16,6 +16,8 @@ import type {
 
 import type { CachedAlbum, CachedArtist, CachedGenre, CachedPlaylist, CachedSong } from './types';
 
+import { songCoverId } from '/@/shared/utils/song-cover-id';
+
 const nowMs = (): number => Date.now();
 
 export const toCachedAlbumRow = (album: Album): CachedAlbum => ({
@@ -42,6 +44,11 @@ export const toCachedArtistRow = (
     SortName: (artist.name ?? '').toLowerCase(),
 });
 
+// Sparse-indexed: set only for songs whose own art is distinct from the album
+// cover, so the thumbnail sweep can enumerate them key-only.
+export const songOwnCoverId = (song: Song): string | undefined =>
+    song.hasOwnCover ? songCoverId(song) : undefined;
+
 export const toCachedSongRow = (song: Song): CachedSong => ({
     __cachedAt: nowMs(),
     AlbumArtistId: song.albumArtists?.[0]?.id,
@@ -49,6 +56,7 @@ export const toCachedSongRow = (song: Song): CachedSong => ({
     DateLastSaved: song.updatedAt ?? '',
     Id: song.id,
     IndexNumber: song.trackNumber,
+    OwnCoverId: songOwnCoverId(song),
     ParentIndexNumber: song.discNumber,
     Payload: song,
 });

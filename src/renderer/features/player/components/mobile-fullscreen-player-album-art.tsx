@@ -42,6 +42,7 @@ import { Center } from '/@/shared/components/center/center';
 import { Icon } from '/@/shared/components/icon/icon';
 import { PlaybackSelectors } from '/@/shared/constants/playback-selectors';
 import { ExplicitStatus, LibraryItem } from '/@/shared/types/domain-types';
+import { songCoverId } from '/@/shared/utils/song-cover-id';
 
 const imageVariants: Variants = {
     closed: {
@@ -142,7 +143,7 @@ export const MobileFullscreenPlayerAlbumArt = () => {
     const isRemote = useRemoteTargetStore((s) => s.targetDeviceId !== null);
     const remoteSong = useActiveNowPlayingItem();
     const remoteImageUrl = useCachedItemImageUrl({
-        id: remoteSong?.albumId ?? remoteSong?.imageId ?? undefined,
+        id: songCoverId(remoteSong),
         // The MQTT-lane mirror builds a stub Song that carries `imageUrl` (from
         // the wire `track.art`) but no `imageId`, so resolving by id alone
         // returns nothing → placeholder disc. Forward imageUrl too (same pattern
@@ -159,7 +160,7 @@ export const MobileFullscreenPlayerAlbumArt = () => {
     // the target doesn't report `nxt`.
     const remoteNextSong = useActiveNextItem();
     const remoteNextImageUrl = useCachedItemImageUrl({
-        id: remoteNextSong?.albumId ?? remoteNextSong?.imageId ?? undefined,
+        id: songCoverId(remoteNextSong),
         imageUrl: remoteNextSong?.imageUrl,
         itemType: LibraryItem.SONG,
         size: requestImageSize,
@@ -183,21 +184,21 @@ export const MobileFullscreenPlayerAlbumArt = () => {
     });
 
     const currentImageUrl = useCachedItemImageUrl({
-        id: currentSong?.albumId ?? currentSong?.imageId ?? undefined,
+        id: songCoverId(currentSong),
         itemType: LibraryItem.SONG,
         size: requestImageSize,
         type: 'fullScreenPlayer',
     });
 
     const nextImageUrl = useCachedItemImageUrl({
-        id: nextSong?.albumId ?? nextSong?.imageId ?? undefined,
+        id: songCoverId(nextSong),
         itemType: LibraryItem.SONG,
         size: requestImageSize,
         type: 'fullScreenPlayer',
     });
 
     const previousImageUrl = useCachedItemImageUrl({
-        id: previousSong?.albumId ?? previousSong?.imageId ?? undefined,
+        id: songCoverId(previousSong),
         itemType: LibraryItem.SONG,
         size: requestImageSize,
         type: 'fullScreenPlayer',

@@ -217,6 +217,9 @@ const normalizeSong = (
                   }
                 : null,
         genres: getGenres(item, server),
+        // No cheap signal tells a track's own coverArt apart from its album
+        // cover, so `hasOwnCover` stays unset and cover surfaces key on the
+        // album (see songCoverId).
         id: item.id.toString(),
         imageId: item.coverArt?.toString() || null,
         imageUrl: null,

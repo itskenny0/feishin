@@ -14,6 +14,7 @@ import {
     Song,
 } from '/@/shared/types/domain-types';
 import { ServerListItem, ServerType } from '/@/shared/types/types';
+import { blurHashesDiffer } from '/@/shared/utils/blurhash';
 
 const TICKS_PER_MS = 10000;
 
@@ -55,21 +56,28 @@ const getTags = (item: AlbumOrSong): null | Record<string, string[]> => {
     return null;
 };
 
-const getSongImageId = (item: z.infer<typeof jfType._response.song>): null | string => {
-    // Prefer the ALBUM cover. The thumbnail sweep only caches album/artist
-    // covers (keyed by albumId), so a song referencing its OWN id never
-    // resolves from the local cache → blank cover in every track list (the
-    // cache-only render path no longer falls back to the network). The album
-    // cover is the standard track cover anyway; the song's own embedded art is
-    // a rare fallback.
-    if (item.AlbumPrimaryImageTag && item.AlbumId) {
-        return item.AlbumId;
-    }
+// Whether a song's own Primary image is provably distinct from its album
+// cover. Jellyfin gives almost every track with embedded art its own Primary
+// image, usually the album cover again, so keying every song on its own image
+// would multiply the thumbnail sweep by the track count. The item carries a
+// blurhash for both its own tag and the album's tag; only a real difference
+// (or an album with no art at all) counts. A missing blurhash cannot prove
+// anything, so the song stays on the album cover.
+const songHasOwnCover = (item: z.infer<typeof jfType._response.song>): boolean => {
+    const ownTag = item.ImageTags?.Primary;
+    if (!ownTag) return false;
+    const albumTag = item.AlbumId ? item.AlbumPrimaryImageTag : undefined;
+    if (!albumTag) return true;
+    const hashes = item.ImageBlurHashes?.Primary;
+    return blurHashesDiffer(hashes?.[ownTag], hashes?.[albumTag]);
+};
 
-    if (item.ImageTags?.Primary) {
-        return item.Id;
-    }
-
+const getSongImageId = (
+    item: z.infer<typeof jfType._response.song>,
+    hasOwnCover: boolean,
+): null | string => {
+    if (hasOwnCover) return item.Id;
+    if (item.AlbumPrimaryImageTag && item.AlbumId) return item.AlbumId;
     return null;
 };
 
@@ -165,6 +173,7 @@ const normalizeSong = (
     }
 
     const { releaseDate, releaseYear } = jellyfinPremiereFields(item);
+    const hasOwnCover = songHasOwnCover(item);
 
     return {
         _itemType: LibraryItem.SONG,
@@ -209,8 +218,9 @@ const normalizeSong = (
                   }
                 : null,
         genres: toGenres(item.GenreItems, server) || null,
+        hasOwnCover,
         id: item.Id,
-        imageId: getSongImageId(item),
+        imageId: getSongImageId(item, hasOwnCover),
         imageUrl: null,
         isResumable: item.Type === 'AudioBook',
         lastPlayedAt: null,

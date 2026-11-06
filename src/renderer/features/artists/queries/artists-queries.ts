@@ -16,6 +16,7 @@ import {
     markRowsChangedFromPage,
     markSearchDirty,
     pageRefsFromItems,
+    songOwnCoverId,
     useCachedQuery,
 } from '/@/renderer/cache';
 import {
@@ -102,6 +103,7 @@ const toCachedSongRow = (song: Song) => ({
     DateLastSaved: song.updatedAt ?? song.lastPlayedAt ?? '',
     Id: song.id,
     IndexNumber: song.trackNumber,
+    OwnCoverId: songOwnCoverId(song),
     ParentIndexNumber: song.discNumber,
     Payload: song,
 });

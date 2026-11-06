@@ -1,7 +1,7 @@
 // Thumbnail pre-cache sweep (schema v11 — multi-resolution variant cache).
-// Iterates every album / artist / playlist row in Dexie and fills the
-// `[ItemId+Variant]` table with one pre-sized cover per enabled surface
-// bucket.
+// Iterates every album / artist / playlist row in Dexie, plus every song whose
+// own art is distinct from its album cover, and fills the `[ItemId+Variant]`
+// table with one pre-sized cover per enabled surface bucket.
 //
 // Two generation modes (the global `localCache.imageVariants.mode` switch):
 //  - download:  one server request per (item × enabled variant) at that
@@ -58,7 +58,7 @@ const DEFAULT_CONCURRENCY = 24;
 const MIN_CONCURRENCY = 1;
 const MAX_CONCURRENCY = 64;
 
-type EntityKind = 'album' | 'artist' | 'playlist';
+type EntityKind = 'album' | 'artist' | 'playlist' | 'song';
 
 /**
  * One unit of sweep work.
@@ -118,11 +118,6 @@ export const collectPending = async (cfg: LocalCacheImageVariants): Promise<Pend
     const enabled = enabledVariants(cfg).filter((v) => v.px > 0);
     if (enabled.length === 0) return [];
 
-    // Downscale source fetch must be at least the largest enabled variant so
-    // nothing upscales. `enabled` is sorted ascending, so the final entry is the
-    // largest bounded variant.
-    const largestPx = enabled[enabled.length - 1].px;
-
     const items: { itemId: string; itemType: LibraryItem; kind: EntityKind }[] = [];
 
     // Only the primary key (Id) is needed here, so read keys instead of whole
@@ -146,19 +141,53 @@ export const collectPending = async (cfg: LocalCacheImageVariants): Promise<Pend
         items.push({ itemId: id, itemType: LibraryItem.PLAYLIST, kind: 'playlist' });
     }
 
+    // Songs whose own art is distinct from their album cover. Every other song
+    // shares its album's cover (already swept above). The sparse `OwnCoverId`
+    // index holds only those songs and its keys ARE the cover cache keys
+    // (`songCoverId`), so reading the index keys alone enumerates them without
+    // deserializing a single song Payload, even on a 100k-track library.
+    const songCoverIds = (await db.songs.orderBy('OwnCoverId').uniqueKeys()) as string[];
+    let songCovers = 0;
+    for (const id of songCoverIds) {
+        if (!id) continue;
+        items.push({ itemId: id, itemType: LibraryItem.SONG, kind: 'song' });
+        songCovers += 1;
+    }
+    console.info('[cache] thumbnails sweep: collected items', {
+        albums: albumIds.length,
+        artists: artistIds.length,
+        playlists: playlistIds.length,
+        songCovers,
+    });
+
+    // Song covers skip the hi-res fullScreen bucket: it is about two thirds of
+    // a cover's bytes, and with roughly half of a large library's tracks
+    // carrying distinct art it would push a capped platform (Android/web, 2 GB
+    // default) into eviction churn. The now-playing view fetches fullScreen on
+    // demand (and prefetches the queue), painting the cached 400px meanwhile.
+    const songVariants = enabled.filter((v) => v.variant !== 'fullScreen');
+    const variantsFor = (kind: EntityKind) => (kind === 'song' ? songVariants : enabled);
+
     const out: PendingThumbnail[] = [];
     if (cfg.mode === 'download') {
         // One unit per (item × enabled variant).
         for (const item of items) {
-            for (const v of enabled) {
+            for (const v of variantsFor(item.kind)) {
                 out.push({ ...item, px: v.px, variant: v.variant });
             }
         }
     } else {
-        // downscale: one unit per item; the worker fetches once at the largest
-        // enabled px and produces every enabled variant locally.
+        // downscale: one unit per item; the worker fetches once at the item's
+        // largest variant (sorted ascending, so the last entry, so nothing
+        // upscales) and produces every variant locally.
         for (const item of items) {
-            out.push({ ...item, downscaleVariants: enabled, px: largestPx });
+            const variants = variantsFor(item.kind);
+            if (variants.length === 0) continue;
+            out.push({
+                ...item,
+                downscaleVariants: variants,
+                px: variants[variants.length - 1].px,
+            });
         }
     }
 
@@ -204,7 +233,12 @@ type TemplateMap = Partial<Record<LibraryItem, RequestTemplate>>;
 
 const buildTemplates = (serverId: string): TemplateMap => {
     const templates: TemplateMap = {};
-    for (const lt of [LibraryItem.ALBUM, LibraryItem.ALBUM_ARTIST, LibraryItem.PLAYLIST]) {
+    for (const lt of [
+        LibraryItem.ALBUM,
+        LibraryItem.ALBUM_ARTIST,
+        LibraryItem.PLAYLIST,
+        LibraryItem.SONG,
+    ]) {
         const tpl = buildRequestTemplate(serverId, lt);
         if (tpl) templates[lt] = tpl;
     }
@@ -563,6 +597,9 @@ export const runThumbnailsSweep = async (
     let fetched = 0;
     let skipped = 0;
     let failed = 0;
+    // Song-cover units fetched this sweep (subset of `fetched`), so the
+    // completion log shows what the per-song phase actually cost.
+    let songCoversFetched = 0;
     let lastAnomalyWarnAt = 0;
 
     // Pre-fetch every existing thumbnail row's `[ItemId, Variant]` key so the
@@ -972,6 +1009,7 @@ export const runThumbnailsSweep = async (
                     // UNbroken run of 404s (a real load-shed) trips the throttle.
                     noteOk();
                     fetched += 1;
+                    if (next.kind === 'song') songCoversFetched += 1;
                     markUnitCached(next);
                     done += 1; // uncached → cached this sweep
                 } else if (outcome === 'missing') {
@@ -1127,6 +1165,7 @@ export const runThumbnailsSweep = async (
         fetched,
         items: total,
         skipped,
+        songCoversFetched,
     });
 
     // Update the user-visible thumbnail count to reflect what we just

@@ -30,6 +30,7 @@ import {
 } from '/@/renderer/store';
 import { Group } from '/@/shared/components/group/group';
 import { LibraryItem } from '/@/shared/types/domain-types';
+import { songCoverId } from '/@/shared/utils/song-cover-id';
 
 const mainBackground = 'var(--theme-colors-background)';
 
@@ -65,17 +66,16 @@ const BackgroundImage = memo(({ dynamicBackground, dynamicIsImage }: BackgroundI
     const currentSong = usePlayerSong();
     const { nextSong } = usePlayerData();
 
-    // Cache-first, and keyed on albumId: the sweep caches covers by album, and
-    // on Subsonic/Navidrome a song's imageId is the coverArt id, not the album
-    // id — keying on it alone renders a blank cover.
+    // Cache-first, keyed on songCoverId: the album cover the sweep caches,
+    // unless the track's own art is distinct (then its own swept cover).
     const currentImageUrl = useCachedItemImageUrl({
-        id: currentSong?.albumId ?? currentSong?.imageId ?? undefined,
+        id: songCoverId(currentSong),
         itemType: LibraryItem.SONG,
         type: 'itemCard',
     });
 
     const nextImageUrl = useCachedItemImageUrl({
-        id: nextSong?.albumId ?? nextSong?.imageId ?? undefined,
+        id: songCoverId(nextSong),
         itemType: LibraryItem.SONG,
         type: 'itemCard',
     });
@@ -246,8 +246,8 @@ const PlayerContainer = memo(
         const { currentStationArt: currentRadioStationArt } = useRadioPlayer();
 
         // The dynamic background samples whatever art is on screen. On radio
-        // that is the station art, otherwise the album cover, which caches
-        // under albumId - the id the thumbnail sweep keys on.
+        // that is the station art, otherwise the song cover, keyed by
+        // songCoverId like the thumbnail sweep caches it.
         const imageUrl = useCachedItemImageUrl(
             isRadioActive
                 ? {
@@ -258,7 +258,7 @@ const PlayerContainer = memo(
                       type: 'itemCard',
                   }
                 : {
-                      id: currentSong?.albumId ?? currentSong?.imageId ?? undefined,
+                      id: songCoverId(currentSong),
                       imageUrl: currentSong?.imageUrl,
                       itemType: LibraryItem.SONG,
                       type: 'itemCard',

@@ -31,6 +31,7 @@ import { useDebouncedValue } from '/@/shared/hooks/use-debounced-value';
 import { LibraryItem, ServerListItemWithCredential } from '/@/shared/types/domain-types';
 import { Play } from '/@/shared/types/types';
 import { lastPathSegment } from '/@/shared/utils/album-folder-from-path';
+import { songCoverId } from '/@/shared/utils/song-cover-id';
 
 interface MobileSearchPaletteProps {
     handleClose: () => void;
@@ -767,8 +768,8 @@ function SongResults({ debouncedQuery, onSelectResult, query }: ResultsSectionPr
                 <MobileSearchRow
                     explicitStatus={song.explicitStatus}
                     highlightQuery={debouncedQuery}
-                    // Songs are cache-keyed by their album cover (own imageId isn't swept).
-                    imageId={song.albumId ?? song.imageId}
+                    // Songs key on songCoverId (album cover unless their own art is distinct).
+                    imageId={songCoverId(song)}
                     imageUrl={song.imageUrl}
                     index={index}
                     itemType={LibraryItem.SONG}

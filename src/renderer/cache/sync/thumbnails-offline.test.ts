@@ -55,6 +55,7 @@ const mocks = vi.hoisted(() => {
         albums: keyColl(albumIds),
         artists: keyColl([]),
         playlists: keyColl([]),
+        songs: { orderBy: () => ({ uniqueKeys: async () => [] }) },
         thumbnails: thumbnailsTable,
     };
     return { albumIds, db, store, thumbnailsTable };

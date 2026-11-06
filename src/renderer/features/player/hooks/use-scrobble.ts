@@ -20,6 +20,7 @@ import { hasFeature } from '/@/shared/api/utils';
 import { LibraryItem, QueueSong, ServerType } from '/@/shared/types/domain-types';
 import { ServerFeature } from '/@/shared/types/features-types';
 import { PlayerStatus } from '/@/shared/types/types';
+import { songCoverId } from '/@/shared/utils/song-cover-id';
 
 type ScrobbleManualHandlers = {
     forceSubmitScrobble: () => void;
@@ -130,7 +131,7 @@ export const useScrobble = () => {
     const playbackRate = usePlayerSpeed();
 
     const imageUrl = useItemImageUrl({
-        id: currentSong?.albumId ?? currentSong?.imageId ?? undefined,
+        id: songCoverId(currentSong),
         imageUrl: currentSong?.imageUrl,
         itemType: LibraryItem.SONG,
         type: 'itemCard',

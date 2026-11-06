@@ -22,6 +22,7 @@ import { refreshOfflineAvailability, refreshOfflineStats } from './offline-media
 import { offlineManager } from './offline/manager';
 import { resetSearchIndexes } from './search';
 import { clearAllSnapshots, dropSnapshotsForServer } from './snapshot';
+import { scheduleSongCoverResyncOnce, SONG_COVER_RESYNC_FLAG } from './song-cover-resync';
 import { useCacheActions, useCacheStore } from './store';
 import { cancelHydration, hydrate } from './sync';
 
@@ -385,6 +386,10 @@ export const useCacheLifecycle = (): void => {
                 // re-fetches them under the new soft-miss + stress gate.
                 // syncMeta-flagged → runs once per DB, never blocks boot.
                 void runThumbnailMissPurgeOnce(db);
+                // One-shot: songs cached before tracks got their own cover
+                // identity are re-synced once so distinct per-track art shows
+                // and the thumbnail sweep caches it. syncMeta-flagged.
+                void scheduleSongCoverResyncOnce(db, currentServer);
                 // Restore the cache store from the persistent layer so the
                 // dashboard shows accurate counts + hydration states after
                 // a cold start. Both fields live in memory only; without
@@ -432,7 +437,13 @@ export const useCacheLifecycle = (): void => {
                             // miss-purge marker, the offline song-meta heal
                             // flag) — they aren't hydration state.
                             const et = meta.EntityType as string;
-                            if (et === MISS_PURGE_FLAG || et === 'offlineSongMetaHeal_v1') continue;
+                            if (
+                                et === MISS_PURGE_FLAG ||
+                                et === SONG_COVER_RESYNC_FLAG ||
+                                et === 'offlineSongMetaHeal_v1'
+                            ) {
+                                continue;
+                            }
                             actions.setHydrationState(meta.EntityType, meta.hydrationState);
                         }
                         console.info('[cache] lifecycle: restored counts + hydration', {
