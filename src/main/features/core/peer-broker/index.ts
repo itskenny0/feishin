@@ -180,26 +180,30 @@ export const startPeerBroker = async (config: PeerBrokerConfig): Promise<void> =
     const aedes = await Aedes.createBroker();
     attachHandlers(aedes, config.roomKey);
 
-    const httpServer = await buildHttpServer(config);
-    const wsServer = new WebSocketServer({ server: httpServer });
+    let httpServer: HttpServer | HttpsServer;
+    try {
+        httpServer = await buildHttpServer(config);
+        await new Promise<void>((resolve, reject) => {
+            httpServer.once('error', reject);
+            httpServer.listen(config.port, config.host, () => {
+                httpServer.removeListener('error', reject);
+                resolve();
+            });
+        });
+    } catch (err) {
+        // aedes runs heartbeat intervals until closed; don't leak one per failed start.
+        aedes.close();
+        throw err;
+    }
 
+    // Attached only once listening: ws re-emits the http server's 'error', and
+    // an unhandled re-emit of e.g. EADDRINUSE threw before the listen promise
+    // could reject, leaving the enable IPC call pending forever.
+    const wsServer = new WebSocketServer({ server: httpServer });
+    wsServer.on('error', (err) => warn('server error', { err: err.message }));
     wsServer.on('connection', (ws, req) => {
         const stream = createWebSocketStream(ws);
         aedes.handle(stream as unknown as Parameters<typeof aedes.handle>[0], req as never);
-    });
-
-    await new Promise<void>((resolve, reject) => {
-        const onError = (err: Error) => {
-            httpServer.removeListener('listening', onListening);
-            reject(err);
-        };
-        const onListening = () => {
-            httpServer.removeListener('error', onError);
-            resolve();
-        };
-        httpServer.once('error', onError);
-        httpServer.once('listening', onListening);
-        httpServer.listen(config.port, config.host);
     });
 
     const bonjour = new Bonjour();

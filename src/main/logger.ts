@@ -139,7 +139,6 @@ const exportDiagnosticsArchive = async (payload: ExportDiagnosticsPayload = {}) 
         settings: {
             ignoreCors: store.get('ignore_cors'),
             ignoreSsl: store.get('ignore_ssl'),
-            releaseChannel: store.get('release_channel'),
         },
     };
 

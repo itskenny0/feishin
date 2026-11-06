@@ -76,11 +76,13 @@ const isPlaybackItemEnabled = (inputFocused: boolean, accelerator?: string): boo
 export default class MenuBuilder {
     applicationMenu: Menu | null = null;
     developmentEnvironmentSetup = false;
-    mainWindow: BrowserWindow;
+    // Resolved at click time, never captured: on macOS the application menu
+    // outlives a closed (destroyed) window, whose webContents must not be used.
+    getWindow: () => BrowserWindow | null;
     showMainWindow: () => void;
 
-    constructor(mainWindow: BrowserWindow, showMainWindow: () => void) {
-        this.mainWindow = mainWindow;
+    constructor(getWindow: () => BrowserWindow | null, showMainWindow: () => void) {
+        this.getWindow = getWindow;
         this.showMainWindow = showMainWindow;
     }
 
@@ -103,23 +105,17 @@ export default class MenuBuilder {
                 { type: 'separator' },
                 {
                     accelerator: 'Command+,',
-                    click: () => {
-                        this.mainWindow.webContents.send('renderer-open-settings');
-                    },
+                    click: this.send('renderer-open-settings'),
                     label: 'Settings...',
                 },
                 { type: 'separator' },
                 {
-                    click: () => {
-                        this.mainWindow.webContents.send('renderer-open-manage-servers');
-                    },
+                    click: this.send('renderer-open-manage-servers'),
                     label: 'Manage Servers...',
                 },
                 {
                     checked: privateMode,
-                    click: () => {
-                        this.mainWindow.webContents.send('renderer-toggle-private-mode');
-                    },
+                    click: this.send('renderer-toggle-private-mode'),
                     id: MENU_ITEM_IDS.privateMode,
                     label: 'Private Session',
                     type: 'checkbox',
@@ -138,9 +134,7 @@ export default class MenuBuilder {
             label: 'File',
             submenu: [
                 {
-                    click: () => {
-                        this.mainWindow.webContents.send('renderer-open-create-playlist');
-                    },
+                    click: this.send('renderer-open-create-playlist'),
                     label: 'Create Playlist...',
                 },
                 { type: 'separator' },
@@ -153,16 +147,12 @@ export default class MenuBuilder {
             submenu: [
                 {
                     accelerator: accelerators?.globalSearch,
-                    click: () => {
-                        this.mainWindow.webContents.send('renderer-open-command-palette');
-                    },
+                    click: this.send('renderer-open-command-palette'),
                     label: 'Command Palette...',
                 },
                 {
                     checked: sidebarCollapsed,
-                    click: () => {
-                        this.mainWindow.webContents.send('renderer-toggle-sidebar');
-                    },
+                    click: this.send('renderer-toggle-sidebar'),
                     id: MENU_ITEM_IDS.sidebarCollapsed,
                     label: 'Collapse Sidebar',
                     type: 'checkbox',
@@ -189,9 +179,7 @@ export default class MenuBuilder {
             submenu: [
                 {
                     accelerator: accelerators?.play || accelerators?.playPause,
-                    click: () => {
-                        this.mainWindow.webContents.send('renderer-player-play');
-                    },
+                    click: this.send('renderer-player-play'),
                     enabled: isPlaybackItemEnabled(
                         inputFocused,
                         accelerators?.play || accelerators?.playPause,
@@ -202,9 +190,7 @@ export default class MenuBuilder {
                 },
                 {
                     accelerator: accelerators?.pause || accelerators?.playPause,
-                    click: () => {
-                        this.mainWindow.webContents.send('renderer-player-pause');
-                    },
+                    click: this.send('renderer-player-pause'),
                     enabled: isPlaybackItemEnabled(
                         inputFocused,
                         accelerators?.pause || accelerators?.playPause,
@@ -216,36 +202,28 @@ export default class MenuBuilder {
                 { type: 'separator' },
                 {
                     accelerator: accelerators?.next,
-                    click: () => {
-                        this.mainWindow.webContents.send('renderer-player-next');
-                    },
+                    click: this.send('renderer-player-next'),
                     enabled: isPlaybackItemEnabled(inputFocused, accelerators?.next),
                     id: MENU_ITEM_IDS.next,
                     label: 'Next',
                 },
                 {
                     accelerator: accelerators?.previous,
-                    click: () => {
-                        this.mainWindow.webContents.send('renderer-player-previous');
-                    },
+                    click: this.send('renderer-player-previous'),
                     enabled: isPlaybackItemEnabled(inputFocused, accelerators?.previous),
                     id: MENU_ITEM_IDS.previous,
                     label: 'Previous',
                 },
                 {
                     accelerator: accelerators?.seekForward,
-                    click: () => {
-                        this.mainWindow.webContents.send('renderer-player-skip-forward');
-                    },
+                    click: this.send('renderer-player-skip-forward'),
                     enabled: isPlaybackItemEnabled(inputFocused, accelerators?.seekForward),
                     id: MENU_ITEM_IDS.seekForward,
                     label: 'Seek Forward',
                 },
                 {
                     accelerator: accelerators?.seekBackward,
-                    click: () => {
-                        this.mainWindow.webContents.send('renderer-player-skip-backward');
-                    },
+                    click: this.send('renderer-player-skip-backward'),
                     enabled: isPlaybackItemEnabled(inputFocused, accelerators?.seekBackward),
                     id: MENU_ITEM_IDS.seekBackward,
                     label: 'Seek Backforward',
@@ -254,9 +232,7 @@ export default class MenuBuilder {
                 {
                     accelerator: accelerators?.shuffle,
                     checked: shuffleEnabled,
-                    click: () => {
-                        this.mainWindow.webContents.send('renderer-player-toggle-shuffle');
-                    },
+                    click: this.send('renderer-player-toggle-shuffle'),
                     enabled: isPlaybackItemEnabled(inputFocused, accelerators?.shuffle),
                     id: MENU_ITEM_IDS.shuffle,
                     label: 'Shuffle',
@@ -265,9 +241,7 @@ export default class MenuBuilder {
                 {
                     accelerator: accelerators?.repeat,
                     checked: isRepeatEnabled,
-                    click: () => {
-                        this.mainWindow.webContents.send('renderer-player-toggle-repeat');
-                    },
+                    click: this.send('renderer-player-toggle-repeat'),
                     enabled: isPlaybackItemEnabled(inputFocused, accelerators?.repeat),
                     id: MENU_ITEM_IDS.repeat,
                     label: 'Repeat',
@@ -276,9 +250,7 @@ export default class MenuBuilder {
                 { type: 'separator' },
                 {
                     accelerator: accelerators?.stop,
-                    click: () => {
-                        this.mainWindow.webContents.send('renderer-player-stop');
-                    },
+                    click: this.send('renderer-player-stop'),
                     enabled: isPlaybackItemEnabled(inputFocused, accelerators?.stop),
                     id: MENU_ITEM_IDS.stop,
                     label: 'Stop',
@@ -286,18 +258,14 @@ export default class MenuBuilder {
                 { type: 'separator' },
                 {
                     accelerator: accelerators?.volumeUp,
-                    click: () => {
-                        this.mainWindow.webContents.send('renderer-player-volume-up');
-                    },
+                    click: this.send('renderer-player-volume-up'),
                     enabled: isPlaybackItemEnabled(inputFocused, accelerators?.volumeUp),
                     id: MENU_ITEM_IDS.volumeUp,
                     label: 'Volume Up',
                 },
                 {
                     accelerator: accelerators?.volumeDown,
-                    click: () => {
-                        this.mainWindow.webContents.send('renderer-player-volume-down');
-                    },
+                    click: this.send('renderer-player-volume-down'),
                     enabled: isPlaybackItemEnabled(inputFocused, accelerators?.volumeDown),
                     id: MENU_ITEM_IDS.volumeDown,
                     label: 'Volume Down',
@@ -335,9 +303,7 @@ export default class MenuBuilder {
                 },
                 { type: 'separator' },
                 {
-                    click: () => {
-                        this.mainWindow.webContents.send('renderer-open-release-notes');
-                    },
+                    click: this.send('renderer-open-release-notes'),
                     label: 'Version ' + packageJson.version,
                 },
             ],
@@ -354,124 +320,23 @@ export default class MenuBuilder {
         ];
     }
 
-    buildDefaultTemplate(): MenuItemConstructorOptions[] {
-        const templateDefault: MenuItemConstructorOptions[] = [
-            {
-                label: '&File',
-                submenu: [
-                    {
-                        accelerator: 'Ctrl+O',
-                        label: '&Open',
-                    },
-                    {
-                        accelerator: 'Ctrl+,',
-                        click: () => {
-                            this.mainWindow.webContents.send('renderer-open-settings');
-                        },
-                        label: '&Settings...',
-                    },
-                    { type: 'separator' },
-                    {
-                        accelerator: 'Ctrl+W',
-                        click: () => {
-                            this.mainWindow.close();
-                        },
-                        label: '&Close',
-                    },
-                ],
-            },
-            {
-                label: '&View',
-                submenu:
-                    process.env.NODE_ENV === 'development' || process.env.DEBUG_PROD === 'true'
-                        ? [
-                              {
-                                  accelerator: 'Ctrl+R',
-                                  click: () => {
-                                      this.mainWindow.webContents.reload();
-                                  },
-                                  label: '&Reload',
-                              },
-                              {
-                                  accelerator: 'F11',
-                                  click: () => {
-                                      this.mainWindow.setFullScreen(
-                                          !this.mainWindow.isFullScreen(),
-                                      );
-                                  },
-                                  label: 'Toggle &Full Screen',
-                              },
-                              {
-                                  accelerator: 'Alt+Ctrl+I',
-                                  click: () => {
-                                      this.mainWindow.webContents.toggleDevTools();
-                                  },
-                                  label: 'Toggle &Developer Tools',
-                              },
-                          ]
-                        : [
-                              {
-                                  accelerator: 'F11',
-                                  click: () => {
-                                      this.mainWindow.setFullScreen(
-                                          !this.mainWindow.isFullScreen(),
-                                      );
-                                  },
-                                  label: 'Toggle &Full Screen',
-                              },
-                          ],
-            },
-            {
-                label: 'Help',
-                submenu: [
-                    {
-                        click() {
-                            shell.openExternal('https://github.com/jeffvli/feishin');
-                        },
-                        label: 'Learn More',
-                    },
-                    {
-                        click() {
-                            shell.openExternal(
-                                'https://github.com/jeffvli/feishin?tab=readme-ov-file#getting-started',
-                            );
-                        },
-                        label: 'Documentation',
-                    },
-                    {
-                        click() {
-                            shell.openExternal('https://github.com/jeffvli/feishin/discussions');
-                        },
-                        label: 'Community Discussions',
-                    },
-                    {
-                        click() {
-                            shell.openExternal('https://github.com/jeffvli/feishin/issues');
-                        },
-                        label: 'Search Issues',
-                    },
-                ],
-            },
-        ];
-
-        return templateDefault;
-    }
-
-    buildMenu(playbackState: MenuPlaybackState = {}): Menu {
+    buildMenu(playbackState: MenuPlaybackState = {}): void {
         if (process.env.NODE_ENV === 'development' || process.env.DEBUG_PROD === 'true') {
             this.setupDevelopmentEnvironment();
         }
 
-        const template =
-            process.platform === 'darwin'
-                ? this.buildDarwinTemplate(playbackState)
-                : this.buildDefaultTemplate();
+        // Windows/Linux run without an application menu (the app draws its own).
+        if (process.platform !== 'darwin') {
+            Menu.setApplicationMenu(null);
+            return;
+        }
 
-        const menu = Menu.buildFromTemplate(template);
-        this.applicationMenu = menu;
-        Menu.setApplicationMenu(menu);
+        this.applicationMenu = Menu.buildFromTemplate(this.buildDarwinTemplate(playbackState));
+        Menu.setApplicationMenu(this.applicationMenu);
+    }
 
-        return menu;
+    send(channel: string): () => void {
+        return () => this.getWindow()?.webContents.send(channel);
     }
 
     setupDevelopmentEnvironment(): void {
@@ -480,19 +345,22 @@ export default class MenuBuilder {
             return;
         }
 
+        const window = this.getWindow();
+        if (!window) return;
+
         this.developmentEnvironmentSetup = true;
 
-        this.mainWindow.webContents.on('context-menu', (_, props) => {
+        window.webContents.on('context-menu', (_, props) => {
             const { x, y } = props;
 
             Menu.buildFromTemplate([
                 {
                     click: () => {
-                        this.mainWindow.webContents.inspectElement(x, y);
+                        window.webContents.inspectElement(x, y);
                     },
                     label: 'Inspect element',
                 },
-            ]).popup({ window: this.mainWindow });
+            ]).popup({ window });
         });
     }
 

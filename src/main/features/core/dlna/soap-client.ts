@@ -176,11 +176,6 @@ export function getRinconId(device: DlnaDevice): string {
     return device.id.replace(/^uuid:/i, '');
 }
 
-export function getTopologyControlUrl(device: DlnaDevice): string {
-    const base = new URL(device.location);
-    return `${base.protocol}//${base.hostname}:1400/ZoneGroupTopology/Control`;
-}
-
 export function getTopologyEventUrl(device: DlnaDevice): string {
     const base = new URL(device.location);
     return `${base.protocol}//${base.hostname}:1400/ZoneGroupTopology/Event`;
@@ -214,26 +209,12 @@ export async function getVolume(device: DlnaDevice): Promise<number> {
         RC,
         'GetVolume',
         `<InstanceID>0</InstanceID><Channel>Master</Channel>`,
+        // Polled every tick alongside position/transport; a stalled renderer
+        // must not hold the poller for the 15 s command limit.
+        POLL_TIMEOUT_MS,
     );
     const match = xml.match(/<CurrentVolume>(.*?)<\/CurrentVolume>/);
     return match ? parseInt(match[1], 10) : 0;
-}
-
-export async function getZoneGroupState(device: DlnaDevice): Promise<string> {
-    const xml = await soapRequest(
-        getTopologyControlUrl(device),
-        'urn:schemas-upnp-org:service:ZoneGroupTopology:1',
-        'GetZoneGroupState',
-        '',
-    );
-    const match = xml.match(/<ZoneGroupState>([\s\S]*?)<\/ZoneGroupState>/);
-    if (!match) return '';
-    return match[1]
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&amp;/g, '&')
-        .replace(/&apos;/g, "'")
-        .replace(/&quot;/g, '"');
 }
 
 export async function joinGroup(member: DlnaDevice, coordinator: DlnaDevice): Promise<void> {

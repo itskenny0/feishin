@@ -50,6 +50,9 @@ interface OpenOptions {
 }
 
 const sockets = new Map<string, ActiveSocket>();
+// WebContents already hooked to drop their sockets on destroy. One hook per
+// window, not per socket: mqtt.js reconnects with a fresh id every attempt.
+const hookedContents = new WeakSet<WebContents>();
 
 /** Best-effort send to a (possibly destroyed) WebContents. */
 const safeSend = (wc: WebContents, channel: string, payload: unknown): void => {
@@ -139,7 +142,14 @@ const openSocket = (wc: WebContents, options: OpenOptions): void => {
 
     // Drop every socket a window opened when that window goes away so a
     // navigated/closed renderer can't strand a live broker connection.
-    wc.once('destroyed', () => destroySocket(id));
+    if (!hookedContents.has(wc)) {
+        hookedContents.add(wc);
+        wc.once('destroyed', () => {
+            for (const [socketId, entry] of sockets) {
+                if (entry.webContents === wc) destroySocket(socketId);
+            }
+        });
+    }
 };
 
 const writeSocket = (id: string, dataBase64: string): void => {

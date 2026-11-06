@@ -91,10 +91,6 @@ const customCssUpdatedListener = (
     };
 };
 
-const playerErrorListener = (cb: (data: { code: number }) => void) => {
-    ipcRenderer.on('player-error-listener', (_, data) => cb(data));
-};
-
 const mainMessageListener = (
     cb: (data: { message: string; type: 'error' | 'info' | 'success' | 'warning' }) => void,
 ) => {
@@ -103,10 +99,6 @@ const mainMessageListener = (
 
 const download = (url: string) => {
     ipcRenderer.send('download-url', url);
-};
-
-const checkForUpdates = (): Promise<{ updateAvailable: boolean; version?: string }> => {
-    return ipcRenderer.invoke('app-check-for-updates');
 };
 
 const startPowerSaveBlocker = (full: boolean) => {
@@ -178,7 +170,6 @@ const rendererUpdateAvailable = (cb: (version: string) => void) => {
 
 export const utils = {
     cancelReadSongMetadata,
-    checkForUpdates,
     customCssUpdatedListener,
     disableAutoUpdates,
     download,
@@ -196,7 +187,6 @@ export const utils = {
     openCustomCssFolder,
     openItem,
     openLogsFolder,
-    playerErrorListener,
     readLocalImage,
     readSongMetadataBatch,
     rendererOpenCommandPalette,

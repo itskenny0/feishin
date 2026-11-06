@@ -11,6 +11,20 @@ import { logger } from '/@/renderer/utils/logger';
 export const useSyncSettingsToMain = () => {
     const hasRunRef = useRef(false);
 
+    // Main reads `disable_auto_updates` at the next launch's ready-to-show,
+    // before the delayed comparison below runs, so mirror it as soon as it
+    // changes (e.g. a settings import) instead of one launch too late.
+    useEffect(() => {
+        if (!isElectron() || !window.api.localSettings) return;
+
+        return useSettingsStore.subscribe((state, prev) => {
+            const disabled = state.window.disableAutoUpdate;
+            if (disabled !== prev.window.disableAutoUpdate) {
+                window.api.localSettings.set('disable_auto_updates', disabled);
+            }
+        });
+    }, []);
+
     useEffect(() => {
         if (hasRunRef.current) {
             return;

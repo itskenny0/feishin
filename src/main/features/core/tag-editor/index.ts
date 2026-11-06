@@ -69,7 +69,8 @@ ipcMain.handle(
         } catch (err) {
             return { artworkKind: 'none', error: String(err), success: false };
         } finally {
-            activeReadController = null;
+            // A newer read may have replaced the controller; keep it cancellable.
+            if (activeReadController?.signal === signal) activeReadController = null;
         }
     },
 );

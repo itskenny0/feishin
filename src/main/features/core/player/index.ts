@@ -10,7 +10,6 @@ import log from '../../../logger';
 import { store } from '../settings';
 
 import { isMacOS, isWindows } from '/@/main/env';
-import { PlayerData } from '/@/shared/types/domain-types';
 
 declare module 'node-mpv';
 
@@ -19,7 +18,6 @@ let mpvInstance: MpvAPI | null = null;
 // only check it would otherwise conclude mpv is absent and spawn a throwaway instance
 // alongside the one being started.
 let mpvCreatePromise: null | Promise<MpvAPI> = null;
-let currentPlayerData: null | PlayerData = null;
 const socketPath = isWindows() ? `\\\\.\\pipe\\mpvserver-${pid}` : `/tmp/node-mpv-${pid}.sock`;
 
 // While quitting/restarting mpv, playlist-pos goes to -1 and node-mpv emits stopped/paused/
@@ -228,14 +226,6 @@ const createMpv = async (data: {
         sendIfCurrent('renderer-player-pause');
     });
 
-    // Event output every interval set by time_update, used to update the current time
-    mpv.on('timeposition', (time: number) => {
-        if (eventGeneration !== playbackEventGeneration) {
-            return;
-        }
-        getMainWindow()?.webContents.send('renderer-player-current-time', time);
-    });
-
     return mpv;
 };
 
@@ -303,55 +293,13 @@ const setAudioPlayerFallback = (isError: boolean) => {
 
 ipcMain.on('player-set-properties', async (_event, data: Record<string, any>) => {
     mpvLog({ action: `Setting properties: ${JSON.stringify(data)}`, level: 'debug' });
-    if (data.length === 0) {
-        return;
-    }
 
     try {
-        if (data.length === 1) {
-            getMpvInstance()?.setProperty(Object.keys(data)[0], Object.values(data)[0]);
-        } else {
-            getMpvInstance()?.setMultipleProperties(data);
-        }
+        await getMpvInstance()?.setMultipleProperties(data);
     } catch (err: any | NodeMpvError) {
         mpvLog({ action: `Failed to set properties: ${JSON.stringify(data)}` }, err);
     }
 });
-
-ipcMain.handle(
-    'player-restart',
-    async (_event, data: { extraParameters?: string[]; properties?: Record<string, any> }) => {
-        try {
-            mpvLog({
-                action: `Attempting to initialize mpv with parameters: ${JSON.stringify(data)}`,
-                level: 'debug',
-            });
-
-            // Clean up previous mpv instance
-            suppressRendererPlaybackEvents = true;
-            playbackEventGeneration += 1;
-            getMpvInstance()?.stop();
-            getMpvInstance()
-                ?.quit()
-                .catch((error) => {
-                    mpvLog({ action: 'Failed to quit existing MPV' }, error);
-                });
-            mpvInstance = null;
-
-            mpvCreatePromise = createMpv(data);
-            try {
-                mpvInstance = await mpvCreatePromise;
-            } finally {
-                mpvCreatePromise = null;
-            }
-            mpvLog({ action: 'Restarted mpv', toast: 'success' });
-            setAudioPlayerFallback(false);
-        } catch (err: any | NodeMpvError) {
-            mpvLog({ action: 'Failed to restart mpv, falling back to web player' }, err);
-            setAudioPlayerFallback(true);
-        }
-    },
-);
 
 ipcMain.handle(
     'player-initialize',
@@ -393,19 +341,6 @@ ipcMain.handle('player-is-running', async () => {
     return getMpvInstance()?.isRunning();
 });
 
-ipcMain.handle('player-clean-up', async () => {
-    getMpvInstance()?.stop();
-    getMpvInstance()?.clearPlaylist();
-});
-
-ipcMain.on('player-start', async () => {
-    try {
-        await getMpvInstance()?.play();
-    } catch (err: any | NodeMpvError) {
-        mpvLog({ action: 'Failed to start mpv playback' }, err);
-    }
-});
-
 // Starts the player
 ipcMain.on('player-play', async () => {
     try {
@@ -421,42 +356,6 @@ ipcMain.on('player-pause', async () => {
         await getMpvInstance()?.pause();
     } catch (err: any | NodeMpvError) {
         mpvLog({ action: 'Failed to pause mpv playback' }, err);
-    }
-});
-
-// Stops the player
-ipcMain.on('player-stop', async () => {
-    try {
-        await getMpvInstance()?.stop();
-    } catch (err: any | NodeMpvError) {
-        mpvLog({ action: 'Failed to stop mpv playback' }, err);
-    }
-});
-
-// Goes to the next track in the playlist
-ipcMain.on('player-next', async () => {
-    try {
-        await getMpvInstance()?.next();
-    } catch (err: any | NodeMpvError) {
-        mpvLog({ action: 'Failed to go to next track' }, err);
-    }
-});
-
-// Goes to the previous track in the playlist
-ipcMain.on('player-previous', async () => {
-    try {
-        await getMpvInstance()?.prev();
-    } catch (err: any | NodeMpvError) {
-        mpvLog({ action: 'Failed to go to previous track' }, err);
-    }
-});
-
-// Seeks forward or backward by the given amount of seconds
-ipcMain.on('player-seek', async (_event, time: number) => {
-    try {
-        await getMpvInstance()?.seek(time);
-    } catch (err: any | NodeMpvError) {
-        mpvLog({ action: `Failed to seek by ${time} seconds` }, err);
     }
 });
 
@@ -596,16 +495,6 @@ ipcMain.handle('player-get-time', async (): Promise<number | undefined> => {
         mpvLog({ action: `Failed to get current time` }, err);
         return undefined;
     }
-});
-
-// Updates the current player metadata (song data)
-ipcMain.on('player-update-metadata', (_event, data: PlayerData) => {
-    currentPlayerData = data;
-});
-
-// Returns the current player metadata (song data)
-ipcMain.handle('player-metadata', async (): Promise<null | PlayerData> => {
-    return currentPlayerData;
 });
 
 // Returns the stream metadata from mpv (for radio streams)
@@ -844,20 +733,4 @@ process.on('SIGINT', async () => {
 process.on('SIGTERM', async () => {
     await cleanupMpv(true);
     process.exit(0);
-});
-
-// Handle uncaught exceptions - cleanup mpv before crashing
-process.on('uncaughtException', async (error) => {
-    log.error('Uncaught exception:', error);
-    await cleanupMpv(true).catch(() => {
-        // Ignore cleanup errors during crash
-    });
-});
-
-// Handle unhandled rejections - cleanup mpv
-process.on('unhandledRejection', async (reason) => {
-    log.error('Unhandled rejection:', reason);
-    await cleanupMpv(true).catch(() => {
-        // Ignore cleanup errors
-    });
 });

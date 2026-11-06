@@ -63,8 +63,6 @@ const removeGroupMember = (deviceId: string): Promise<{ success: boolean }> =>
     ipcRenderer.invoke('dlna-group-remove-member', deviceId);
 const setGroupMemberVolume = (deviceId: string, vol: number) =>
     ipcRenderer.send('dlna-group-member-volume', { deviceId, volume: vol });
-const setGroupMemberMute = (deviceId: string, muted: boolean) =>
-    ipcRenderer.send('dlna-group-member-mute', { deviceId, muted });
 const getGroupState = (): Promise<GroupMember[]> => ipcRenderer.invoke('dlna-group-get-state');
 function singleOn<T extends (...args: any[]) => void>(channel: string, cb: T): () => void {
     ipcRenderer.on(channel, cb);
@@ -76,7 +74,6 @@ const rendererCurrentTime = (cb: (event: IpcRendererEvent, time: number) => void
 const rendererDlnaTrackEnded = (
     cb: (event: IpcRendererEvent, payload?: { gapless?: boolean }) => void,
 ) => singleOn('renderer-dlna-track-ended', cb);
-const rendererTrackEnded = rendererDlnaTrackEnded;
 const rendererDlnaConnectPlayback = (
     cb: (
         event: IpcRendererEvent,
@@ -120,17 +117,9 @@ const checkSpeedFile = (data: {
     speed: number;
     url: string;
 }): Promise<null | string> => ipcRenderer.invoke('dlna-check-speed-file', data);
-const cancelSpeedFile = (data: { preservePitch: boolean; speed: number; url: string }) =>
-    ipcRenderer.send('dlna-cancel-speed-file', data);
 
 const getSpeakerProperties = (deviceId: string): Promise<null | SpeakerProperties> =>
     ipcRenderer.invoke('dlna-get-speaker-properties', deviceId);
-const createSpeedProxy = (data: {
-    offset: number;
-    preservePitch: boolean;
-    speed: number;
-    url: string;
-}): Promise<null | string> => ipcRenderer.invoke('dlna-create-speed-proxy', data);
 const destroySpeedProxy = () => ipcRenderer.send('dlna-destroy-speed-proxy');
 
 const setSpeakerProperty = (
@@ -141,11 +130,9 @@ const setSpeakerProperty = (
 
 export const dlnaPlayer = {
     addGroupMember,
-    cancelSpeedFile,
     checkSpeedFile,
     clearNextUrl,
     connect,
-    createSpeedProxy,
     destroySpeedProxy,
     disconnect,
     disconnectPassive,
@@ -160,7 +147,6 @@ export const dlnaPlayer = {
     prepareSpeedFile,
     removeGroupMember,
     seek,
-    setGroupMemberMute,
     setGroupMemberVolume,
     setNextUrl,
     setRadioMode,
@@ -180,7 +166,6 @@ export const dlnaPlayerListener = {
     rendererDlnaTrackEnded,
     rendererDlnaTransportState,
     rendererDlnaVolume,
-    rendererTrackEnded,
 };
 
 export type DlnaPlayer = typeof dlnaPlayer;

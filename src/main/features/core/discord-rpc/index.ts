@@ -72,11 +72,3 @@ ipcMain.handle('discord-rpc-quit', () => {
     client = null;
     log.info('Discord RPC quit');
 });
-
-export const discordRpc = {
-    clearActivity,
-    createClient,
-    isConnected,
-    quit,
-    setActivity,
-};

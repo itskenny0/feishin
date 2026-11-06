@@ -140,7 +140,7 @@ enum Encoding {
 }
 
 const GZIP_REGEX = /\bgzip\b/;
-const ZLIB_REGEX = /bdeflate\b/;
+const ZLIB_REGEX = /\bdeflate\b/;
 
 const currentState: SongState = {};
 let currentQueueState: { currentUniqueId: null | string; items: RemoteQueueItem[] } = {
@@ -475,6 +475,10 @@ const enableServer = (config: RemoteConfig): Promise<void> => {
                 settle(() => reject(error));
             });
             wsServer = new WebSocketServer<typeof StatefulWebSocket>({ server });
+            // ws re-emits the http server's 'error' (e.g. EADDRINUSE), which the
+            // server listener above already logs and handles; without a listener
+            // here the re-emit is an uncaught exception.
+            wsServer.on('error', () => {});
 
             wsServer!.on('connection', (ws: StatefulWebSocket) => {
                 let authFail: number | undefined;
@@ -737,13 +741,7 @@ const enableServer = (config: RemoteConfig): Promise<void> => {
                                 break;
                             }
                             case 'volume': {
-                                let volume = Number(json.volume);
-
-                                if (volume > 100) {
-                                    volume = 100;
-                                } else if (volume < 0) {
-                                    volume = 0;
-                                }
+                                const volume = Math.min(100, Math.max(0, Number(json.volume)));
 
                                 currentState.volume = volume;
 
@@ -808,20 +806,24 @@ const enableServer = (config: RemoteConfig): Promise<void> => {
     });
 };
 
-ipcMain.handle('remote-enable', async (_event, enabled: boolean) => {
-    settings.enabled = enabled;
-
-    if (enabled) {
-        try {
-            await enableServer(settings);
-        } catch (error) {
-            return (error as Error).message;
-        }
-    } else {
+// Returns null on success, or the error message for the settings UI.
+const applyEnabled = async (): Promise<null | string> => {
+    if (!settings.enabled) {
         shutdownServer();
+        return null;
     }
 
-    return null;
+    try {
+        await enableServer(settings);
+        return null;
+    } catch (error) {
+        return (error as Error).message;
+    }
+};
+
+ipcMain.handle('remote-enable', async (_event, enabled: boolean) => {
+    settings.enabled = enabled;
+    return applyEnabled();
 });
 
 ipcMain.handle('remote-port', async (_event, port: number) => {
@@ -836,22 +838,8 @@ ipcMain.on('remote-password', (_event, password: string) => {
 ipcMain.handle(
     'remote-settings',
     async (_event, enabled: boolean, port: number, username: string, password: string) => {
-        settings.enabled = enabled;
-        settings.password = password;
-        settings.port = port;
-        settings.username = username;
-
-        if (enabled) {
-            try {
-                await enableServer(settings);
-            } catch (error) {
-                return (error as Error).message;
-            }
-        } else {
-            shutdownServer();
-        }
-
-        return null;
+        Object.assign(settings, { enabled, password, port, username });
+        return applyEnabled();
     },
 );
 
@@ -978,35 +966,6 @@ ipcMain.on('update-accent-color', (_event, color: { dark: string; light: string 
     currentAccentColor = color;
     broadcast({ data: color, event: 'accent-color' });
 });
-
-if (mprisPlayer) {
-    mprisPlayer.on('loopStatus', (event: string) => {
-        const repeat = event === 'Playlist' ? 'all' : event === 'Track' ? 'one' : 'none';
-
-        currentState.repeat = repeat as PlayerRepeat;
-        broadcast({ data: repeat, event: 'repeat' } as ServerEvent);
-    });
-
-    mprisPlayer.on('shuffle', (shuffle: boolean) => {
-        currentState.shuffle = shuffle;
-        broadcast({ data: shuffle, event: 'shuffle' });
-    });
-
-    mprisPlayer.on('volume', (vol: number) => {
-        let volume = Math.round(vol * 100);
-
-        if (volume > 100) {
-            volume = 100;
-        } else if (volume < 0) {
-            volume = 0;
-        }
-        currentState.volume = volume;
-        broadcast({ data: volume, event: 'volume' });
-        getMainWindow()?.webContents.send('request-volume', {
-            volume,
-        });
-    });
-}
 
 ipcMain.on('update-position', (_event, position: number) => {
     currentState.position = position;

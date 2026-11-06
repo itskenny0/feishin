@@ -20,16 +20,10 @@ import {
     Tray,
 } from 'electron';
 import electronLocalShortcut from 'electron-localshortcut';
-import {
-    AppImageUpdater,
-    autoUpdater,
-    MacUpdater,
-    NsisUpdater,
-    UpdateCheckResult,
-} from 'electron-updater';
-import { access, constants } from 'fs';
+import { autoUpdater } from 'electron-updater';
+import { constants } from 'fs';
+import { access } from 'fs/promises';
 import path, { join } from 'path';
-import semver from 'semver';
 
 import packageJson from '../../package.json';
 import { loadDeferredCoreFeatures } from './features';
@@ -60,47 +54,14 @@ const GITHUB_UPDATER_CONFIG = {
     repo: 'feishin',
 };
 
-const ALPHA_UPDATER_CONFIG = {
-    ...GITHUB_UPDATER_CONFIG,
-    channel: 'alpha',
-};
-
 type UpdaterInstance = typeof autoUpdater;
 
+// The fork is a single rolling release channel: always pull the newest GitHub
+// release from GITHUB_UPDATER_CONFIG. A leftover upstream `release_channel`
+// (alpha/beta) in the main store must not steer the updater, since the fork
+// publishes no alpha/beta channel files.
 class AppUpdater {
     constructor() {
-        const effectiveChannel = store.get('release_channel') as string;
-        log.info('Effective update channel:', effectiveChannel);
-        if (effectiveChannel === 'alpha') {
-            checkAllChannelsAndGetBest().then(({ result, updater: updaterInstance }) => {
-                attachUpdaterMilestoneLogs(updaterInstance);
-
-                if (!result?.isUpdateAvailable) {
-                    log.info('Updater check complete', { available: false });
-                    return;
-                }
-
-                log.info('Updater check complete', {
-                    available: true,
-                    version: result.updateInfo.version,
-                });
-
-                updaterInstance.autoInstallOnAppQuit = true;
-                updaterInstance.autoRunAppAfterInstall = true;
-                if (isMacOS()) {
-                    getMainWindow()?.webContents.send(
-                        'update-available',
-                        result.updateInfo.version,
-                    );
-                } else {
-                    log.info('Updater download starting', { version: result.updateInfo.version });
-                    updaterInstance.autoDownload = true;
-                    updaterInstance.checkForUpdatesAndNotify();
-                }
-            });
-            return;
-        }
-
         const updater = configureAndGetUpdater();
         attachUpdaterMilestoneLogs(updater);
 
@@ -124,7 +85,9 @@ class AppUpdater {
                 })
                 .catch((err) => log.error('Check for updates failed', err));
         } else {
-            autoUpdater.checkForUpdatesAndNotify();
+            autoUpdater
+                .checkForUpdatesAndNotify()
+                .catch((err) => log.error('Check for updates failed', err));
         }
     }
 }
@@ -160,184 +123,18 @@ function attachUpdaterMilestoneLogs(updater: UpdaterInstance): void {
     });
 }
 
-async function checkAllChannelsAndGetBest(): Promise<{
-    result: null | UpdateCheckResult;
-    updater: UpdaterInstance;
-}> {
-    const currentVersion = packageJson.version;
-    const candidates: Array<{
-        channel: 'alpha' | 'beta' | 'latest';
-        result: UpdateCheckResult;
-        updater: UpdaterInstance;
-    }> = [];
-
-    const alphaUpdater = createAlphaUpdaterInstance({ probeOnly: true });
-
-    try {
-        log.info('Checking for updates on alpha channel');
-        const alphaResult = await alphaUpdater.checkForUpdates();
-        if (
-            alphaResult?.updateInfo?.version &&
-            alphaResult.isUpdateAvailable &&
-            semver.valid(alphaResult.updateInfo.version) &&
-            semver.gt(alphaResult.updateInfo.version, currentVersion)
-        ) {
-            candidates.push({ channel: 'alpha', result: alphaResult, updater: alphaUpdater });
-        }
-    } catch (e) {
-        log.warn('Alpha channel check failed', e);
-    }
-
-    try {
-        const latestUpdater = createGithubUpdaterInstance('latest', { probeOnly: true });
-        log.info('Checking for updates on latest channel (GitHub)');
-        const latestResult = await latestUpdater.checkForUpdates();
-        if (
-            latestResult?.updateInfo?.version &&
-            latestResult.isUpdateAvailable &&
-            semver.valid(latestResult.updateInfo.version) &&
-            semver.gt(latestResult.updateInfo.version, currentVersion)
-        ) {
-            candidates.push({ channel: 'latest', result: latestResult, updater: latestUpdater });
-        }
-    } catch (e) {
-        log.warn('Latest channel check failed', e);
-    }
-
-    if (candidates.length === 0) {
-        return { result: null, updater: alphaUpdater };
-    }
-
-    const best = candidates.reduce((a, b) =>
-        semver.gt(a.result.updateInfo.version, b.result.updateInfo.version) ? a : b,
-    );
-
-    if (best.channel === 'latest') {
-        configureAutoUpdaterForChannel('latest');
-        return { result: best.result, updater: autoUpdater };
-    }
-
-    return { result: best.result, updater: best.updater };
-}
-
 function configureAndGetUpdater(): UpdaterInstance {
-    const isBetaVersion = packageJson.version.includes('-beta');
-    const isAlphaVersion = packageJson.version.includes('-alpha');
-    let releaseChannel = store.get('release_channel');
-    const isNotConfigured = !releaseChannel;
-
-    log.info('Release channel:', releaseChannel);
-    log.info('Is beta version:', isBetaVersion);
-    log.info('Is alpha version:', isAlphaVersion);
-    log.info('Is not configured:', isNotConfigured);
-
-    if (isNotConfigured) {
-        log.info('Release channel not configured, setting default channel');
-        const defaultChannel = isAlphaVersion ? 'alpha' : isBetaVersion ? 'beta' : 'latest';
-        store.set('release_channel', defaultChannel);
-        releaseChannel = defaultChannel;
-    }
-
-    const effectiveChannel = store.get('release_channel') as string;
-
-    if (effectiveChannel === 'alpha') {
-        return createAlphaUpdaterInstance();
-    }
-
     autoUpdater.logger = autoUpdaterLogInterface;
     autoUpdater.autoInstallOnAppQuit = true;
     autoUpdater.autoRunAppAfterInstall = true;
     // Pin the feed at runtime so the fork always pulls releases from
     // itskenny0/feishin regardless of the bundled app-update.yml.
     autoUpdater.setFeedURL(GITHUB_UPDATER_CONFIG);
-
-    if (effectiveChannel === 'beta') {
-        autoUpdater.channel = 'beta';
-        autoUpdater.allowDowngrade = true;
-        autoUpdater.allowPrerelease = true;
-        autoUpdater.disableDifferentialDownload = true;
-    } else {
-        autoUpdater.channel = 'latest';
-        autoUpdater.allowDowngrade = false;
-        autoUpdater.allowPrerelease = false;
-    }
+    autoUpdater.channel = 'latest';
+    autoUpdater.allowDowngrade = false;
+    autoUpdater.allowPrerelease = false;
 
     return autoUpdater;
-}
-
-function configureAutoUpdaterForChannel(channel: 'beta' | 'latest'): void {
-    autoUpdater.logger = autoUpdaterLogInterface;
-    autoUpdater.autoInstallOnAppQuit = true;
-    autoUpdater.autoRunAppAfterInstall = true;
-    if (channel === 'beta') {
-        autoUpdater.channel = 'beta';
-        autoUpdater.allowDowngrade = true;
-        autoUpdater.allowPrerelease = true;
-        autoUpdater.disableDifferentialDownload = true;
-    } else {
-        autoUpdater.channel = 'latest';
-        autoUpdater.allowDowngrade = false;
-        autoUpdater.allowPrerelease = false;
-    }
-}
-
-function createAlphaUpdaterInstance(
-    options: { probeOnly?: boolean } = {},
-): AppImageUpdater | MacUpdater | NsisUpdater {
-    const probeOnly = options.probeOnly ?? false;
-    let updater: AppImageUpdater | MacUpdater | NsisUpdater;
-
-    if (isMacOS()) {
-        updater = new MacUpdater(ALPHA_UPDATER_CONFIG);
-    } else if (isLinux()) {
-        updater = new AppImageUpdater(ALPHA_UPDATER_CONFIG);
-    } else {
-        updater = new NsisUpdater(ALPHA_UPDATER_CONFIG);
-    }
-
-    updater.logger = autoUpdaterLogInterface;
-    updater.channel = ALPHA_UPDATER_CONFIG.channel;
-    updater.allowPrerelease = true;
-    updater.disableDifferentialDownload = true;
-    updater.allowDowngrade = true;
-    updater.autoDownload = !probeOnly;
-    updater.autoInstallOnAppQuit = true;
-    updater.autoRunAppAfterInstall = true;
-
-    return updater;
-}
-
-function createGithubUpdaterInstance(
-    channel: 'beta' | 'latest',
-    options: { probeOnly?: boolean } = {},
-): AppImageUpdater | MacUpdater | NsisUpdater {
-    const probeOnly = options.probeOnly ?? false;
-    let updater: AppImageUpdater | MacUpdater | NsisUpdater;
-
-    if (isMacOS()) {
-        updater = new MacUpdater(GITHUB_UPDATER_CONFIG);
-    } else if (isLinux()) {
-        updater = new AppImageUpdater(GITHUB_UPDATER_CONFIG);
-    } else {
-        updater = new NsisUpdater(GITHUB_UPDATER_CONFIG);
-    }
-
-    updater.logger = autoUpdaterLogInterface;
-    updater.autoDownload = !probeOnly;
-    updater.autoInstallOnAppQuit = true;
-    updater.autoRunAppAfterInstall = true;
-    updater.channel = channel;
-
-    if (channel === 'beta') {
-        updater.allowDowngrade = true;
-        updater.allowPrerelease = true;
-        updater.disableDifferentialDownload = true;
-    } else {
-        updater.allowDowngrade = false;
-        updater.allowPrerelease = false;
-    }
-
-    return updater;
 }
 
 protocol.registerSchemesAsPrivileged([
@@ -346,6 +143,10 @@ protocol.registerSchemesAsPrivileged([
 
 process.on('uncaughtException', (error: any) => {
     log.error('Error in main process', error);
+});
+
+process.on('unhandledRejection', (reason) => {
+    log.error('Unhandled rejection in main process', reason);
 });
 
 if (store.get('ignore_ssl')) {
@@ -368,18 +169,21 @@ let exitFromTray = false;
 let forceQuit = false;
 let powerSaveBlockerId: null | number = null;
 let menuBuilder: MenuBuilder | null = null;
-let currentPlaybackStatus: PlayerStatus = PlayerStatus.PAUSED;
-let currentPrivateMode = false;
-let currentRepeatMode: PlayerRepeat = PlayerRepeat.NONE;
-let currentSidebarCollapsed = false;
-let currentShuffleEnabled = false;
+// Renderer playback/UI state mirrored into the macOS application menu.
+const menuState: MenuPlaybackState = {
+    accelerators: {},
+    inputFocused: false,
+    playbackStatus: PlayerStatus.PAUSED,
+    privateMode: false,
+    repeatMode: PlayerRepeat.NONE,
+    shuffleEnabled: false,
+    sidebarCollapsed: false,
+};
 
 app.on('before-quit', () => {
     forceQuit = true;
     log.info('App quitting', { reason: exitFromTray ? 'tray' : 'before-quit' });
 });
-let playbackMenuAccelerators: MenuPlaybackState['accelerators'] = {};
-let inputFocused = false;
 // The auto-update network check is deferred to `ready-to-show` (off the
 // cold-start critical path). This guards against firing it more than once
 // for the primary window.
@@ -387,8 +191,8 @@ let appUpdaterStarted = false;
 
 ipcMain.on('input-focus-state', (_event, focused: boolean) => {
     const next = !!focused;
-    if (inputFocused === next) return;
-    inputFocused = next;
+    if (menuState.inputFocused === next) return;
+    menuState.inputFocused = next;
     if (isMacOS()) {
         updateMainMenu();
     }
@@ -473,30 +277,16 @@ export const showMainWindow = () => {
     createWinThumbarButtons();
 };
 
-const getMainMenuState = (): MenuPlaybackState => ({
-    accelerators: playbackMenuAccelerators,
-    inputFocused,
-    playbackStatus: currentPlaybackStatus,
-    privateMode: currentPrivateMode,
-    repeatMode: currentRepeatMode,
-    shuffleEnabled: currentShuffleEnabled,
-    sidebarCollapsed: currentSidebarCollapsed,
-});
-
 const rebuildMainMenu = () => {
     if (!menuBuilder || !mainWindow) return;
 
-    menuBuilder.buildMenu(getMainMenuState());
-
-    if (process.platform !== 'darwin') {
-        Menu.setApplicationMenu(null);
-    }
+    menuBuilder.buildMenu(menuState);
 };
 
 const updateMainMenu = () => {
     if (!menuBuilder || !mainWindow) return;
 
-    menuBuilder.updateMenu(getMainMenuState());
+    menuBuilder.updateMenu(menuState);
 };
 
 export const sendToastToRenderer = ({
@@ -579,12 +369,7 @@ const createTray = () => {
             type: 'separator',
         },
         {
-            click: () => {
-                if (mainWindow === null) createWindow(false);
-                else {
-                    showMainWindow();
-                }
-            },
+            click: showMainWindow,
             label: 'Open main window',
         },
         {
@@ -783,47 +568,6 @@ async function createWindow(first = true): Promise<void> {
         },
     );
 
-    ipcMain.handle(
-        'app-check-for-updates',
-        async (): Promise<{ error?: boolean; updateAvailable: boolean; version?: string }> => {
-            if (disableAutoUpdates()) {
-                console.log('Auto updates are disabled');
-                return { updateAvailable: false };
-            }
-
-            try {
-                console.log('Checking for updates');
-                const updater = configureAndGetUpdater();
-                const result = await updater.checkForUpdates();
-
-                const updateAvailable = result?.isUpdateAvailable ?? false;
-                console.log('Update available:', updateAvailable);
-                if (updateAvailable && store.get('disable_auto_updates') !== true) {
-                    if (isMacOS()) {
-                        getMainWindow()?.webContents.send(
-                            'update-available',
-                            result?.updateInfo?.version,
-                        );
-                    } else {
-                        console.log('Downloading update');
-                        updater.downloadUpdate();
-                    }
-                }
-
-                return {
-                    updateAvailable,
-                    version: result?.updateInfo?.version,
-                };
-            } catch (err) {
-                // Log the actual error and surface a distinguishable result so
-                // the renderer can tell a failed check apart from "up to date"
-                // (a bare { updateAvailable: false } looked identical to success).
-                console.error('Error checking for updates', err);
-                return { error: true, updateAvailable: false };
-            }
-        },
-    );
-
     ipcMain.on('app-restart', () => {
         // Fix for .AppImage
         if (process.env.APPIMAGE) {
@@ -929,7 +673,6 @@ async function createWindow(first = true): Promise<void> {
     mainWindow.on('closed', () => {
         log.info('Main window closed');
         ipcMain.removeHandler('window-clear-cache');
-        ipcMain.removeHandler('app-check-for-updates');
         // createWindow() registers these ipcMain.on listeners and the local
         // shortcut on every invocation (macOS re-activate, tray "open main
         // window"). Without tearing them down on close they accumulate, so a
@@ -992,7 +735,7 @@ async function createWindow(first = true): Promise<void> {
         app.setAppUserModelId('org.jeffvli.feishin');
     }
 
-    menuBuilder = new MenuBuilder(mainWindow, showMainWindow);
+    menuBuilder = new MenuBuilder(getMainWindow, showMainWindow);
     rebuildMainMenu();
 
     // Open URLs in the user's browser
@@ -1077,7 +820,6 @@ app.commandLine.appendSwitch('js-flags', '--expose-gc');
 // Must duplicate with the one in renderer process settings.store.ts
 enum BindingActions {
     GLOBAL_SEARCH = 'globalSearch',
-    LOCAL_SEARCH = 'localSearch',
     MUTE = 'volumeMute',
     NEXT = 'next',
     NEXT_ALBUM = 'nextAlbum',
@@ -1090,8 +832,6 @@ enum BindingActions {
     SKIP_BACKWARD = 'skipBackward',
     SKIP_FORWARD = 'skipForward',
     STOP = 'stop',
-    TOGGLE_FULLSCREEN_PLAYER = 'toggleFullscreenPlayer',
-    TOGGLE_QUEUE = 'toggleQueue',
     TOGGLE_REPEAT = 'toggleRepeat',
     VOLUME_DOWN = 'volumeDown',
     VOLUME_UP = 'volumeUp',
@@ -1108,35 +848,24 @@ const getMenuAccelerator = (
     return hotkeyToElectronAccelerator(hotkey);
 };
 
-const HOTKEY_ACTIONS: Record<BindingActions, () => void> = {
-    [BindingActions.GLOBAL_SEARCH]: () => {},
-    [BindingActions.LOCAL_SEARCH]: () => {},
-    [BindingActions.MUTE]: () => getMainWindow()?.webContents.send('renderer-player-volume-mute'),
-    [BindingActions.NEXT]: () => getMainWindow()?.webContents.send('renderer-player-next'),
-    [BindingActions.NEXT_ALBUM]: () =>
-        getMainWindow()?.webContents.send('renderer-player-next-album'),
-    [BindingActions.PAUSE]: () => getMainWindow()?.webContents.send('renderer-player-pause'),
-    [BindingActions.PLAY]: () => getMainWindow()?.webContents.send('renderer-player-play'),
-    [BindingActions.PLAY_PAUSE]: () =>
-        getMainWindow()?.webContents.send('renderer-player-play-pause'),
-    [BindingActions.PREVIOUS]: () => getMainWindow()?.webContents.send('renderer-player-previous'),
-    [BindingActions.PREVIOUS_ALBUM]: () =>
-        getMainWindow()?.webContents.send('renderer-player-previous-album'),
-    [BindingActions.SHUFFLE]: () =>
-        getMainWindow()?.webContents.send('renderer-player-toggle-shuffle'),
-    [BindingActions.SKIP_BACKWARD]: () =>
-        getMainWindow()?.webContents.send('renderer-player-skip-backward'),
-    [BindingActions.SKIP_FORWARD]: () =>
-        getMainWindow()?.webContents.send('renderer-player-skip-forward'),
-    [BindingActions.STOP]: () => getMainWindow()?.webContents.send('renderer-player-stop'),
-    [BindingActions.TOGGLE_FULLSCREEN_PLAYER]: () => {},
-    [BindingActions.TOGGLE_QUEUE]: () => {},
-    [BindingActions.TOGGLE_REPEAT]: () =>
-        getMainWindow()?.webContents.send('renderer-player-toggle-repeat'),
-    [BindingActions.VOLUME_DOWN]: () =>
-        getMainWindow()?.webContents.send('renderer-player-volume-down'),
-    [BindingActions.VOLUME_UP]: () =>
-        getMainWindow()?.webContents.send('renderer-player-volume-up'),
+// Renderer channel each global hotkey triggers. Bindings without one (e.g.
+// search, queue, fullscreen player) are in-app only.
+const HOTKEY_CHANNELS: Partial<Record<BindingActions, string>> = {
+    [BindingActions.MUTE]: 'renderer-player-volume-mute',
+    [BindingActions.NEXT]: 'renderer-player-next',
+    [BindingActions.NEXT_ALBUM]: 'renderer-player-next-album',
+    [BindingActions.PAUSE]: 'renderer-player-pause',
+    [BindingActions.PLAY]: 'renderer-player-play',
+    [BindingActions.PLAY_PAUSE]: 'renderer-player-play-pause',
+    [BindingActions.PREVIOUS]: 'renderer-player-previous',
+    [BindingActions.PREVIOUS_ALBUM]: 'renderer-player-previous-album',
+    [BindingActions.SHUFFLE]: 'renderer-player-toggle-shuffle',
+    [BindingActions.SKIP_BACKWARD]: 'renderer-player-skip-backward',
+    [BindingActions.SKIP_FORWARD]: 'renderer-player-skip-forward',
+    [BindingActions.STOP]: 'renderer-player-stop',
+    [BindingActions.TOGGLE_REPEAT]: 'renderer-player-toggle-repeat',
+    [BindingActions.VOLUME_DOWN]: 'renderer-player-volume-down',
+    [BindingActions.VOLUME_UP]: 'renderer-player-volume-up',
 };
 
 ipcMain.on(
@@ -1148,24 +877,23 @@ ipcMain.on(
         // Since we're not tracking the previous shortcuts, we need to unregister all of them
         globalShortcut.unregisterAll();
 
-        for (const shortcut of Object.keys(data)) {
-            const isGlobalHotkey = data[shortcut as BindingActions].isGlobal;
-            const isValidHotkey =
-                data[shortcut as BindingActions].hotkey &&
-                data[shortcut as BindingActions].hotkey !== '';
+        for (const [action, { hotkey, isGlobal }] of Object.entries(data)) {
+            if (!isGlobal || !hotkey) continue;
 
-            if (isGlobalHotkey && isValidHotkey) {
-                const accelerator = hotkeyToElectronAccelerator(
-                    data[shortcut as BindingActions].hotkey,
-                );
-
+            const channel = HOTKEY_CHANNELS[action as BindingActions];
+            const accelerator = hotkeyToElectronAccelerator(hotkey);
+            try {
+                // Throws on an accelerator Electron can't parse; that must not
+                // abort registering the remaining shortcuts.
                 globalShortcut.register(accelerator, () => {
-                    HOTKEY_ACTIONS[shortcut as BindingActions]();
+                    if (channel) getMainWindow()?.webContents.send(channel);
                 });
+            } catch (error) {
+                log.warn('Failed to register global shortcut', { accelerator, action, error });
             }
         }
 
-        playbackMenuAccelerators = {
+        menuState.accelerators = {
             globalSearch: getMenuAccelerator(data, BindingActions.GLOBAL_SEARCH),
             next: getMenuAccelerator(data, BindingActions.NEXT),
             pause: getMenuAccelerator(data, BindingActions.PAUSE),
@@ -1211,10 +939,6 @@ ipcMain.handle('power-save-blocker-stop', () => {
         return stopped;
     }
     return false;
-});
-
-ipcMain.handle('power-save-blocker-is-started', () => {
-    return powerSaveBlockerId !== null && powerSaveBlocker.isStarted(powerSaveBlockerId);
 });
 
 app.on('window-all-closed', () => {
@@ -1373,67 +1097,26 @@ if (!singleInstance) {
         .catch((error) => log.error(error));
 }
 
-// Register 'open-item' handler globally, ensuring it is only registered once
-if (!ipcMain.eventNames().includes('open-item')) {
-    ipcMain.handle('open-item', async (_event, path: string) => {
-        return new Promise<void>((resolve, reject) => {
-            access(path, constants.F_OK, (error) => {
-                if (error) {
-                    reject(error);
-                    return;
-                }
+ipcMain.handle('open-item', async (_event, path: string) => {
+    await access(path, constants.F_OK);
+    shell.showItemInFolder(path);
+});
 
-                shell.showItemInFolder(path);
-                resolve();
-            });
-        });
+ipcMain.handle('open-application-directory', async () => {
+    shell.openPath(app.getPath('userData'));
+});
+
+const MENU_STATE_CHANNELS = {
+    'update-playback': 'playbackStatus',
+    'update-private-mode': 'privateMode',
+    'update-repeat': 'repeatMode',
+    'update-shuffle': 'shuffleEnabled',
+    'update-sidebar-collapsed': 'sidebarCollapsed',
+} as const;
+
+for (const [channel, key] of Object.entries(MENU_STATE_CHANNELS)) {
+    ipcMain.on(channel, (_event, value) => {
+        menuState[key] = value;
+        if (isMacOS()) updateMainMenu();
     });
 }
-
-// Register 'open-application-directory' handler globally, ensuring it is only registered once
-if (!ipcMain.eventNames().includes('open-application-directory')) {
-    ipcMain.handle('open-application-directory', async () => {
-        const userDataPath = app.getPath('userData');
-        shell.openPath(userDataPath);
-    });
-}
-
-ipcMain.on('update-playback', (_event, status: PlayerStatus) => {
-    currentPlaybackStatus = status;
-
-    if (!isMacOS()) return;
-
-    updateMainMenu();
-});
-
-ipcMain.on('update-repeat', (_event, repeat: PlayerRepeat) => {
-    currentRepeatMode = repeat;
-
-    if (!isMacOS()) return;
-
-    updateMainMenu();
-});
-
-ipcMain.on('update-shuffle', (_event, shuffle: boolean) => {
-    currentShuffleEnabled = shuffle;
-
-    if (!isMacOS()) return;
-
-    updateMainMenu();
-});
-
-ipcMain.on('update-private-mode', (_event, privateMode: boolean) => {
-    currentPrivateMode = privateMode;
-
-    if (!isMacOS()) return;
-
-    updateMainMenu();
-});
-
-ipcMain.on('update-sidebar-collapsed', (_event, collapsedSidebar: boolean) => {
-    currentSidebarCollapsed = collapsedSidebar;
-
-    if (!isMacOS()) return;
-
-    updateMainMenu();
-});

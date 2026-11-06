@@ -126,7 +126,6 @@ let eventServerPort = 0;
 let subscriptionSid: null | string = null;
 let subscriptionRenewalTimeout: NodeJS.Timeout | null = null;
 let topologyPollingInterval: NodeJS.Timeout | null = null;
-let speedProxyProcess: ChildProcess | null = null;
 let isPausedIntentionally = false;
 let currentFfmpegProcess: ChildProcess | null = null;
 let currentTranscodeFile = '';
@@ -145,12 +144,14 @@ cleanupTempFiles();
 
 function cleanupTempFiles() {
     servedTempFiles.clear();
+    const tmpDir = os.tmpdir();
     try {
-        const tmpDir = os.tmpdir();
-        const files = readdirSync(tmpDir);
-        for (const file of files) {
-            if (file.startsWith('dlna-speed-') && file.endsWith('.mp3')) {
+        for (const file of readdirSync(tmpDir)) {
+            if (!file.startsWith('dlna-speed-') || !file.endsWith('.mp3')) continue;
+            try {
                 unlinkSync(path.join(tmpDir, file));
+            } catch (err) {
+                dlnaLog(`Failed to delete temp file ${file}`, err);
             }
         }
     } catch (err) {
@@ -462,6 +463,7 @@ async function ensureEventServer(): Promise<void> {
                     const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
                     const chunksize = end - start + 1;
                     const file = createReadStream(resolvedPath, { end, start });
+                    file.on('error', () => res.destroy());
                     res.writeHead(206, {
                         'Accept-Ranges': 'bytes',
                         'Content-Length': chunksize,
@@ -475,7 +477,9 @@ async function ensureEventServer(): Promise<void> {
                         'Content-Length': fileSize,
                         'Content-Type': 'audio/mpeg',
                     });
-                    createReadStream(resolvedPath).pipe(res);
+                    createReadStream(resolvedPath)
+                        .on('error', () => res.destroy())
+                        .pipe(res);
                 }
             } catch (err) {
                 dlnaLog('Static file serve error', err);
@@ -587,7 +591,8 @@ function fetchXml(url: string): Promise<string> {
     });
 }
 
-async function fullDisconnect(): Promise<void> {
+// `stopPlayback: false` is the passive variant: the speaker keeps playing.
+async function forgetDevice(stopPlayback: boolean): Promise<void> {
     stopPositionPolling();
     hasStartedPlaying = false;
     lastCommandedUri = '';
@@ -598,14 +603,20 @@ async function fullDisconnect(): Promise<void> {
     nearEndStallCount = 0;
     isRadioMode = false;
     if (connectedDevice) {
-        try {
-            await stop(connectedDevice);
-        } catch {
-            // Catch
+        if (stopPlayback) {
+            try {
+                await stop(connectedDevice);
+            } catch {
+                // Catch
+            }
         }
         await stopEventSubscription(connectedDevice);
         await stopTopologySubscription(connectedDevice);
-        dlnaLog(`Disconnected from ${connectedDevice.name}`);
+        dlnaLog(
+            stopPlayback
+                ? `Disconnected from ${connectedDevice.name}`
+                : `Passive disconnect from ${connectedDevice.name} (speaker keeps playing)`,
+        );
     }
     connectedDevice = null;
     currentCoordinatorId = '';
@@ -627,6 +638,8 @@ async function fullDisconnect(): Promise<void> {
         eventServer = null;
         eventServerPort = 0;
     }
+    // Its output is deleted below; don't leave ffmpeg transcoding into it.
+    stopCurrentTranscode();
     cleanupTempFiles();
 }
 
@@ -782,7 +795,9 @@ function handleTopologyNotify(xml: string): void {
         const incomingSize = Math.max(newMembers.length, 1);
         if (expectedGroupMemberCount >= 0 && incomingSize !== expectedGroupMemberCount) {
             if (topologyRefreshAttempt < 10) {
-                scheduleTopologyVerification();
+                // Don't re-arm a pending check: the 4 s topology poll lands here
+                // too, and resetting the timer each time meant it never fired.
+                if (!pendingTopologyRefreshTimeout) scheduleTopologyVerification();
             } else {
                 expectedGroupMemberCount = -1;
                 topologyRefreshAttempt = 0;
@@ -826,44 +841,6 @@ function handleTopologyNotify(xml: string): void {
     } catch (error) {
         dlnaLog('Topology parse error', error);
     }
-}
-
-async function passiveDisconnect(): Promise<void> {
-    stopPositionPolling();
-    hasStartedPlaying = false;
-    lastCommandedUri = '';
-    lastQueuedNextUri = '';
-    lastAutoAdvancedAt = 0;
-    lastAutoAdvancedUri = '';
-    lastKnownDuration = 0;
-    nearEndStallCount = 0;
-    isRadioMode = false;
-    if (connectedDevice) {
-        await stopEventSubscription(connectedDevice);
-        await stopTopologySubscription(connectedDevice);
-        dlnaLog(`Passive disconnect from ${connectedDevice.name} (speaker keeps playing)`);
-    }
-    connectedDevice = null;
-    currentCoordinatorId = '';
-    groupMembers = [];
-    groupMemberVolumes = {};
-    expectedGroupMemberCount = -1;
-    topologyRefreshAttempt = 0;
-    if (pendingTopologyRefreshTimeout) {
-        clearTimeout(pendingTopologyRefreshTimeout);
-        pendingTopologyRefreshTimeout = null;
-    }
-    if (topologyPollingInterval) {
-        clearInterval(topologyPollingInterval);
-        topologyPollingInterval = null;
-    }
-    sendGroupStateToRenderer();
-    if (eventServer) {
-        eventServer.close();
-        eventServer = null;
-        eventServerPort = 0;
-    }
-    cleanupTempFiles();
 }
 
 function refreshTopology() {
@@ -1080,9 +1057,6 @@ function startPositionPolling() {
                 realPosition = posInfo.position * proxyState.speed;
             }
             getMainWindow()?.webContents.send('renderer-dlna-current-time', realPosition);
-            if (posInfo.duration > 0) {
-                getMainWindow()?.webContents.send('renderer-dlna-duration', posInfo.duration);
-            }
             // Track that playback has started
             if (transportState === 'PLAYING' || transportState === 'TRANSITIONING')
                 hasStartedPlaying = true;
@@ -1457,17 +1431,6 @@ function stopPositionPolling() {
     }
 }
 
-function stopSpeedProxy(): void {
-    if (speedProxyProcess) {
-        try {
-            speedProxyProcess.kill('SIGKILL');
-        } catch (error) {
-            log.error('[DLNA] Failed to stop playback speed proxy', error);
-        }
-        speedProxyProcess = null;
-    }
-}
-
 async function stopTopologySubscription(device: DlnaDevice): Promise<void> {
     if (topologyRenewalTimeout) {
         clearTimeout(topologyRenewalTimeout);
@@ -1573,7 +1536,7 @@ ipcMain.handle('dlna-discover', async () => {
 // Connect to a specific DLNA device
 ipcMain.handle('dlna-connect', async (_event, device: DlnaDevice) => {
     try {
-        if (connectedDevice) await fullDisconnect();
+        if (connectedDevice) await forgetDevice(true);
         const actualDevice = device.groupMembers?.find((m) => m.id === device.id) || device;
         connectedDevice = actualDevice;
         currentCoordinatorId = actualDevice.id;
@@ -1668,7 +1631,7 @@ ipcMain.handle('dlna-connect', async (_event, device: DlnaDevice) => {
 // Disconnect from the current device
 ipcMain.handle('dlna-disconnect', async () => {
     try {
-        await fullDisconnect();
+        await forgetDevice(true);
         return true;
     } catch (err) {
         dlnaLog('Failed to disconnect', err);
@@ -1683,7 +1646,7 @@ ipcMain.handle('dlna-disconnect', async () => {
 
 ipcMain.handle('dlna-disconnect-passive', async () => {
     try {
-        await passiveDisconnect();
+        await forgetDevice(false);
         return true;
     } catch (err) {
         dlnaLog('Failed to passive-disconnect', err);
@@ -2230,6 +2193,8 @@ ipcMain.handle(
             }
             dlnaLog(`Transcode started for speed: ${data.speed}`);
             const ffmpeg = spawn('ffmpeg', [
+                '-nostdin',
+                '-y',
                 '-loglevel',
                 'error',
                 '-i',
@@ -2291,11 +2256,6 @@ ipcMain.handle(
     },
 );
 
-ipcMain.on('dlna-cancel-speed-file', () => {
-    stopCurrentTranscode();
-});
-
 ipcMain.on('dlna-destroy-speed-proxy', () => {
-    stopSpeedProxy();
     stopCurrentTranscode();
 });
