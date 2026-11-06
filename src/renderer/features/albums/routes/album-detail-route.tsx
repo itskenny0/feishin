@@ -1,15 +1,15 @@
 import { useRef } from 'react';
-import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router';
 
+import { queryKeys } from '/@/renderer/api/query-keys';
 import { useCachedItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { NativeScrollArea } from '/@/renderer/components/native-scroll-area/native-scroll-area';
 import { useNativeScrollPersist } from '/@/renderer/components/native-scroll-area/use-native-scroll-persist';
 import { AlbumDetailContent } from '/@/renderer/features/albums/components/album-detail-content';
 import { AlbumDetailHeader } from '/@/renderer/features/albums/components/album-detail-header';
+import { DetailLoadFallback } from '/@/renderer/features/albums/components/detail-load-fallback';
 import { useAlbumDetailSuspenseQuery } from '/@/renderer/features/albums/queries/albums-queries';
 import { AnimatedPage } from '/@/renderer/features/shared/components/animated-page';
-import { EmptyState } from '/@/renderer/features/shared/components/empty-state';
 import {
     LibraryBackgroundImage,
     LibraryBackgroundOverlay,
@@ -24,7 +24,6 @@ import { LibraryItem } from '/@/shared/types/domain-types';
 const ALBUM_DETAIL_BG_FALLBACK = 'var(--theme-colors-foreground-muted)';
 
 const AlbumDetailRoute = () => {
-    const { t } = useTranslation();
     const scrollAreaRef = useRef<HTMLDivElement>(null);
     const headerRef = useRef<HTMLDivElement>(null);
     const { albumBackground, albumBackgroundBlur } = useAlbumBackground();
@@ -59,21 +58,19 @@ const AlbumDetailRoute = () => {
 
     // The suspense query can legitimately resolve to `null` when the cold
     // network fetch fails or times out with nothing cached (see
-    // `cachedSwr`'s fallback path) — common on flaky mobile connections.
-    // Render a graceful empty state instead of dereferencing null data,
-    // which previously threw "Cannot read properties of null (reading
-    // 'name')" and tripped the page error boundary. All hooks above run
+    // `cachedSwr`'s fallback path) - common on flaky mobile connections and
+    // on a server busy with a sync. Render the still-loading / retry fallback
+    // instead of dereferencing null data. All hooks above run
     // unconditionally (they already null-guard their inputs) so this early
     // return doesn't violate the rules of hooks.
     if (!detailQuery.data) {
         return (
             <AnimatedPage key={`album-detail-${albumId}`}>
-                <EmptyState
-                    description={t('error.networkError', {
-                        defaultValue: 'Could not load this album. Check your connection and retry.',
-                    })}
+                <DetailLoadFallback
                     icon="itemAlbum"
-                    title={t('error.genericError', { defaultValue: 'Something went wrong' })}
+                    isRetrying={detailQuery.isFetching}
+                    onRetry={() => void detailQuery.refetch()}
+                    queryKey={queryKeys.albums.detail(serverId ?? '', { id: albumId })}
                 />
             </AnimatedPage>
         );

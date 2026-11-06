@@ -1,18 +1,17 @@
 import { useSuspenseQueries } from '@tanstack/react-query';
 import { Suspense, useRef } from 'react';
-import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router';
 
 import { useCachedItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { NativeScrollArea } from '/@/renderer/components/native-scroll-area/native-scroll-area';
 import { useNativeScrollPersist } from '/@/renderer/components/native-scroll-area/use-native-scroll-persist';
 import { albumQueries } from '/@/renderer/features/albums/api/album-api';
+import { DetailLoadFallback } from '/@/renderer/features/albums/components/detail-load-fallback';
 import { artistsQueries } from '/@/renderer/features/artists/api/artists-api';
 import { AlbumArtistDetailContent } from '/@/renderer/features/artists/components/album-artist-detail-content';
 import { AlbumArtistDetailHeader } from '/@/renderer/features/artists/components/album-artist-detail-header';
 import { useAlbumArtistInfoQuery } from '/@/renderer/features/artists/queries/artists-queries';
 import { AnimatedPage } from '/@/renderer/features/shared/components/animated-page';
-import { EmptyState } from '/@/renderer/features/shared/components/empty-state';
 import {
     LibraryBackgroundImage,
     LibraryBackgroundOverlay,
@@ -27,7 +26,6 @@ import { Spinner } from '/@/shared/components/spinner/spinner';
 import { AlbumListSort, LibraryItem, SortOrder } from '/@/shared/types/domain-types';
 
 const AlbumArtistDetailRouteContent = () => {
-    const { t } = useTranslation();
     const scrollAreaRef = useRef<HTMLDivElement>(null);
     const headerRef = useRef<HTMLDivElement>(null);
     // Single serverId source across the route + header + content. Reading
@@ -49,9 +47,13 @@ const AlbumArtistDetailRouteContent = () => {
 
     const routeId = (artistId || albumArtistId) as string;
 
+    const detailQueryOptions = artistsQueries.albumArtistDetail({
+        query: { id: routeId },
+        serverId,
+    });
     const [detailQuery, albumsQuery] = useSuspenseQueries({
         queries: [
-            artistsQueries.albumArtistDetail({ query: { id: routeId }, serverId }),
+            detailQueryOptions,
             albumQueries.list({
                 query: {
                     artistIds: [routeId],
@@ -107,21 +109,19 @@ const AlbumArtistDetailRouteContent = () => {
     const showBlurredImage = artistBackground;
 
     // The suspense query can legitimately resolve to `null` on a cold
-    // network failure with nothing cached (cachedSwr fallback). Mirror the
-    // album-detail guard: render a graceful empty state instead of an
-    // empty header + empty content tree. All hooks above run
-    // unconditionally and null-guard their inputs, so this early return is
-    // rules-of-hooks safe.
+    // network failure or timeout with nothing cached (cachedSwr fallback).
+    // Mirror the album-detail guard: render the still-loading / retry
+    // fallback instead of an empty header + empty content tree. All hooks
+    // above run unconditionally and null-guard their inputs, so this early
+    // return is rules-of-hooks safe.
     if (!detailQuery.data) {
         return (
             <AnimatedPage key={`album-artist-detail-${routeId}`}>
-                <EmptyState
-                    description={t('error.networkError', {
-                        defaultValue:
-                            'Could not load this artist. Check your connection and retry.',
-                    })}
+                <DetailLoadFallback
                     icon="emptyArtistImage"
-                    title={t('error.genericError', { defaultValue: 'Something went wrong' })}
+                    isRetrying={detailQuery.isFetching}
+                    onRetry={() => void detailQuery.refetch()}
+                    queryKey={detailQueryOptions.queryKey}
                 />
             </AnimatedPage>
         );

@@ -3,7 +3,9 @@ import { Suspense, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { generatePath, useNavigate, useParams } from 'react-router';
 
+import { queryKeys } from '/@/renderer/api/query-keys';
 import { ListContext, useListContext } from '/@/renderer/context/list-context';
+import { DetailLoadFallback } from '/@/renderer/features/albums/components/detail-load-fallback';
 import { ClientSideSongFilters } from '/@/renderer/features/playlists/components/client-side-song-filters';
 import { PlaylistDetailSongListContent } from '/@/renderer/features/playlists/components/playlist-detail-song-list-content';
 import { PlaylistDetailSongListHeader } from '/@/renderer/features/playlists/components/playlist-detail-song-list-header';
@@ -16,7 +18,6 @@ import { usePlaylistSongListFilters } from '/@/renderer/features/playlists/hooks
 import { useUpdatePlaylist } from '/@/renderer/features/playlists/mutations/update-playlist-mutation';
 import { usePlaylistDetailSuspenseQuery } from '/@/renderer/features/playlists/queries/playlists-queries';
 import { AnimatedPage } from '/@/renderer/features/shared/components/animated-page';
-import { EmptyState } from '/@/renderer/features/shared/components/empty-state';
 import { ListWithSidebarContainer } from '/@/renderer/features/shared/components/list-with-sidebar-container';
 import { PageErrorBoundary } from '/@/renderer/features/shared/components/page-error-boundary';
 import { AppRoute } from '/@/renderer/router/routes';
@@ -253,13 +254,13 @@ const PlaylistDetailSongListRoute = () => {
     if (!detailQuery?.data) {
         return (
             <AnimatedPage key={`playlist-detail-songList-${playlistId}`}>
-                <EmptyState
-                    description={t('error.networkError', {
-                        defaultValue:
-                            'Could not load this playlist. Check your connection and retry.',
-                    })}
+                <DetailLoadFallback
                     icon="emptySongImage"
-                    title={t('error.genericError', { defaultValue: 'Something went wrong' })}
+                    isRetrying={detailQuery.isFetching}
+                    onRetry={() => void detailQuery.refetch()}
+                    queryKey={queryKeys.playlists.detail(server?.id ?? '', playlistId, {
+                        id: playlistId,
+                    })}
                 />
             </AnimatedPage>
         );

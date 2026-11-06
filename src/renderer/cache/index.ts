@@ -24,6 +24,7 @@ export {
     readEntityCountFallback,
     snapshotSwr,
     useCachedQuery,
+    useColdFetchPending,
 } from './hooks';
 export { HydrationBanner } from './hydration-banner';
 export { preloadThumbnailUrls, resolveThumbnail } from './images';

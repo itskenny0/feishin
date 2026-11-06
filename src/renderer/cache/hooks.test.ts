@@ -3,7 +3,12 @@ import type { QueryFunctionContext, QueryKey } from '@tanstack/react-query';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { cachedSwr, readEntityCountFallback, snapshotSwr } from '/@/renderer/cache/hooks';
+import {
+    cachedSwr,
+    isColdFetchPending,
+    readEntityCountFallback,
+    snapshotSwr,
+} from '/@/renderer/cache/hooks';
 import { readSnapshot, writeSnapshot } from '/@/renderer/cache/snapshot';
 import { useCacheStore } from '/@/renderer/cache/store';
 
@@ -200,5 +205,87 @@ describe('cold-timeout late adoption', () => {
 
         expect(apply).toHaveBeenCalledWith(FAKE_DB, { items: ['late'] });
         expect(readSnapshot(queryKey)).toEqual({ items: ['late'] });
+    });
+});
+
+describe('cold-timeout pending state', () => {
+    // A detail page whose cold fetch lost the 8s race renders its null
+    // fallback. It must be able to tell "the server is still answering" (the
+    // late result will fill the page in) from "the fetch is gone" (offer a
+    // retry) - otherwise a slow server reads as a hard network error.
+    const coldAlbum = (queryKey: QueryKey, remote: () => Promise<unknown>) =>
+        cachedSwr({
+            apply: async () => {},
+            ctx: makeCtx(queryKey),
+            fromCache: async () => undefined,
+            queryKey,
+            remote,
+        });
+
+    it('is pending after a cold timeout until the late result is adopted', async () => {
+        vi.useFakeTimers();
+        useCacheStore.setState((s) => ({ ...s, cacheAvailable: true }) as never);
+        const queryKey: QueryKey = ['test', 'pending-ok', Math.random()];
+        let resolveRemote: (v: unknown) => void = () => {};
+        const promise = coldAlbum(queryKey, () => new Promise((r) => (resolveRemote = r)));
+
+        expect(isColdFetchPending(queryKey)).toBe(false);
+        await vi.advanceTimersByTimeAsync(8_000);
+        await expect(promise).resolves.toBeNull();
+        expect(isColdFetchPending(queryKey)).toBe(true);
+
+        resolveRemote({ id: 'late' });
+        await vi.advanceTimersByTimeAsync(0);
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(readSnapshot(queryKey)).toEqual({ id: 'late' });
+        expect(isColdFetchPending(queryKey)).toBe(false);
+    });
+
+    it('stops pending when the late request fails', async () => {
+        vi.useFakeTimers();
+        useCacheStore.setState((s) => ({ ...s, cacheAvailable: true }) as never);
+        const queryKey: QueryKey = ['test', 'pending-fail', Math.random()];
+        let rejectRemote: (e: Error) => void = () => {};
+        const promise = coldAlbum(queryKey, () => new Promise((_r, j) => (rejectRemote = j)));
+
+        await vi.advanceTimersByTimeAsync(8_000);
+        await expect(promise).resolves.toBeNull();
+        expect(isColdFetchPending(queryKey)).toBe(true);
+
+        rejectRemote(new TypeError('Network Error'));
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(isColdFetchPending(queryKey)).toBe(false);
+    });
+
+    it('is never pending for a fetch that answered inside the race', async () => {
+        useCacheStore.setState((s) => ({ ...s, cacheAvailable: true }) as never);
+        const queryKey: QueryKey = ['test', 'pending-fast', Math.random()];
+
+        await expect(coldAlbum(queryKey, async () => ({ id: 'fast' }))).resolves.toEqual({
+            id: 'fast',
+        });
+        expect(isColdFetchPending(queryKey)).toBe(false);
+    });
+
+    it('tracks snapshotSwr late fetches too', async () => {
+        vi.useFakeTimers();
+        const queryKey: QueryKey = ['test', 'pending-snap', Math.random()];
+        let resolveRemote: (v: unknown) => void = () => {};
+        const promise = snapshotSwr({
+            ctx: makeCtx(queryKey),
+            queryKey,
+            remote: () => new Promise((r) => (resolveRemote = r)),
+        });
+
+        await vi.advanceTimersByTimeAsync(8_000);
+        await expect(promise).resolves.toBeNull();
+        expect(isColdFetchPending(queryKey)).toBe(true);
+
+        resolveRemote({ items: [] });
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(isColdFetchPending(queryKey)).toBe(false);
     });
 });

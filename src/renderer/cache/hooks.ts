@@ -1,6 +1,7 @@
 import type { InfiniteData, QueryFunctionContext, QueryKey } from '@tanstack/react-query';
 
-import { useQuery } from '@tanstack/react-query';
+import { hashKey, useQuery } from '@tanstack/react-query';
+import { useSyncExternalStore } from 'react';
 
 import type { LibraryCacheDb } from './db';
 import type { EntityType } from './types';
@@ -84,6 +85,39 @@ const isLikelyNetworkError = (err: unknown): boolean => {
     );
 };
 
+// Cold fetches that lost the COLD_NETWORK_TIMEOUT_MS race but are still in
+// flight (their late result will be adopted), counted per query hash. A
+// surface that rendered its null fallback reads this to show "still loading"
+// instead of a hard error, and to offer a retry only once nothing is pending.
+const lateColdFetches = new Map<string, number>();
+const lateListeners = new Set<() => void>();
+
+const trackLateFetch = (queryKey: QueryKey, adoption: Promise<unknown>): void => {
+    const hash = hashKey(queryKey);
+    const notify = () => lateListeners.forEach((listener) => listener());
+    lateColdFetches.set(hash, (lateColdFetches.get(hash) ?? 0) + 1);
+    notify();
+    void adoption.finally(() => {
+        const left = (lateColdFetches.get(hash) ?? 1) - 1;
+        if (left > 0) lateColdFetches.set(hash, left);
+        else lateColdFetches.delete(hash);
+        notify();
+    });
+};
+
+export const isColdFetchPending = (queryKey: QueryKey): boolean =>
+    lateColdFetches.has(hashKey(queryKey));
+
+const subscribeLateFetches = (listener: () => void): (() => void) => {
+    lateListeners.add(listener);
+    return () => {
+        lateListeners.delete(listener);
+    };
+};
+
+export const useColdFetchPending = (queryKey: QueryKey): boolean =>
+    useSyncExternalStore(subscribeLateFetches, () => isColdFetchPending(queryKey));
+
 /**
  * Snapshot-only SWR runner for queries that don't have a Dexie table to
  * fall back on (sidecar lists, etc.). Same shape as `cachedSwr` minus
@@ -149,14 +183,21 @@ export const snapshotSwr = async <TData>(args: {
             // so the page fills in instead of staying empty until a manual
             // refresh (device, 2026-06-10: a long playlist rendered "no
             // items" forever).
-            void remotePromise
-                .then((late) => {
-                    if (late === null || late === undefined) return;
-                    writeSnapshot(queryKey, late);
-                    queryClient.setQueryData(queryKey, late);
-                    console.info('[cache] cold network late result adopted', queryKey);
-                })
-                .catch(() => {});
+            trackLateFetch(
+                queryKey,
+                remotePromise
+                    .then((late) => {
+                        if (late === null || late === undefined) return;
+                        writeSnapshot(queryKey, late);
+                        queryClient.setQueryData(queryKey, late);
+                        console.info('[cache] cold network late result adopted', queryKey);
+                    })
+                    .catch((err) => {
+                        console.info('[cache] cold network late result failed', queryKey, {
+                            error: (err as Error)?.message,
+                        });
+                    }),
+            );
             return fresh;
         }
         writeSnapshot(queryKey, fresh);
@@ -342,21 +383,28 @@ export const cachedSwr = async <TData>(args: {
             // LATE ADOPTION: the slow response still lands when it arrives —
             // persisted to Dexie + snapshot and pushed into the query cache
             // so the surface fills in instead of settling on empty forever.
-            void remotePromise
-                .then(async (late) => {
-                    if (late === null || late === undefined) return;
-                    if (db && apply) {
-                        try {
-                            await apply(db, late);
-                        } catch (applyErr) {
-                            console.warn('[cache] apply failed (late)', queryKey, applyErr);
+            trackLateFetch(
+                queryKey,
+                remotePromise
+                    .then(async (late) => {
+                        if (late === null || late === undefined) return;
+                        if (db && apply) {
+                            try {
+                                await apply(db, late);
+                            } catch (applyErr) {
+                                console.warn('[cache] apply failed (late)', queryKey, applyErr);
+                            }
                         }
-                    }
-                    writeSnapshot(queryKey, late);
-                    queryClient.setQueryData(queryKey, late);
-                    console.info('[cache] cold network late result adopted', queryKey);
-                })
-                .catch(() => {});
+                        writeSnapshot(queryKey, late);
+                        queryClient.setQueryData(queryKey, late);
+                        console.info('[cache] cold network late result adopted', queryKey);
+                    })
+                    .catch((err) => {
+                        console.info('[cache] cold network late result failed', queryKey, {
+                            error: (err as Error)?.message,
+                        });
+                    }),
+            );
             return fallbackOnFailure();
         }
         if (fresh === null || fresh === undefined) {

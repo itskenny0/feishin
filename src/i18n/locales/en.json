@@ -299,7 +299,9 @@
         "radioErrorDescription": "Something went wrong while loading your radio stations.",
         "foldersTitle": "This folder is empty",
         "foldersDescription": "There are no subfolders or songs here. Use the breadcrumb above to go back.",
-        "retry": "Try again"
+        "retry": "Try again",
+        "slowServerTitle": "Still loading",
+        "slowServerDescription": "The server is taking longer than usual. This page fills in as soon as it answers."
     },
     "error": {
         "apiRouteError": "Unable to route request",
