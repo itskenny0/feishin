@@ -225,14 +225,67 @@ export const useAndroidStatusBar = () => {
     }, []);
 };
 
+const escapeKeydown = () =>
+    new KeyboardEvent('keydown', {
+        bubbles: true,
+        cancelable: true,
+        code: 'Escape',
+        key: 'Escape',
+    });
+
+const MANTINE_OVERLAY_SELECTOR =
+    '.mantine-Modal-content, .mantine-Drawer-content, .mantine-Popover-dropdown';
+
+/**
+ * Back-gesture step 1: close the topmost DOM-rendered overlay by synthesising
+ * Escape. Returns true when a Radix menu or a Mantine modal / drawer /
+ * popover was open, i.e. the press is consumed.
+ *
+ * Open state is read BEFORE dispatching. A closing Radix menu flips to
+ * data-state="closed" at once but its popper wrapper lingers through the exit
+ * animation, so counting wrappers a frame later missed the close and the same
+ * press also ran history.back() (or exited the app at a root route).
+ */
+export const dismissDomOverlayForBack = (): boolean => {
+    const menuOpen =
+        document.querySelector('[data-radix-menu-content][data-state="open"]') !== null;
+    // Portals append in open order, so the last visible one is the topmost.
+    // Hidden (keepMounted / detached-target) overlays carry display: none.
+    const overlays = menuOpen
+        ? []
+        : Array.from(document.querySelectorAll<HTMLElement>(MANTINE_OVERLAY_SELECTOR)).filter(
+              (el) => el.style.display !== 'none',
+          );
+    const topOverlay = overlays[overlays.length - 1];
+
+    if (!topOverlay) {
+        // Radix listens on the document; so do the bottom sheets and other
+        // ad-hoc Escape closers, which keep receiving it as before.
+        document.dispatchEvent(escapeKeydown());
+        return menuOpen;
+    }
+
+    // Mantine closes modals / drawers from a window capture listener that
+    // calls event.target.getAttribute() (it threw for a document-targeted
+    // event, so they never closed) and popovers from a capture handler on the
+    // dropdown. Dispatch on the overlay itself and stop it there, so it never
+    // bubbles to page-level Escape hotkeys (the fullscreen player's minimise
+    // binds on <html>) for the same press.
+    const stop = (event: Event) => event.stopPropagation();
+    topOverlay.addEventListener('keydown', stop);
+    topOverlay.dispatchEvent(escapeKeydown());
+    topOverlay.removeEventListener('keydown', stop);
+    return true;
+};
+
 /**
  * Hardware back button. Dismisses open overlays before walking back
  * through router history, in the order Android users expect:
  *
- *   1. Context menus / dropdowns / popovers — Radix listens for the
- *      Escape key and closes on it, so we dispatch a synthetic
- *      keydown('Escape') and bail out if anything handled it (i.e. the
- *      DOM has fewer popper wrappers afterwards).
+ *   1. Context menus and Mantine modals / drawers / popovers: closed with
+ *      a synthetic keydown('Escape'); the press is consumed when one was
+ *      open (dismissDomOverlayForBack). Registered dismiss callbacks
+ *      (bottom sheets, the mobile fullscreen player) come next.
  *   2. Visualizer overlay — collapse via the FullScreenPlayer store.
  *   3. Fullscreen player overlay — collapse via the same store.
  *   4. Command palette — close via the AppStore opener.
@@ -267,31 +320,10 @@ export const useAndroidBackButton = () => {
                  * fight Vite's import graph in dev. .getState() is
                  * the synchronous read; we don't subscribe.
                  */
-                const handle = await CapApp.addListener('backButton', async ({ canGoBack }) => {
-                    // 1. Dispatch Escape so Radix popovers / context
-                    //    menus / Mantine modals close themselves. They
-                    //    listen via document-level keydown, so this is
-                    //    the cheapest universal "close any popup" call.
-                    const popperWrappersBefore = document.querySelectorAll(
-                        '[data-radix-popper-content-wrapper]',
-                    ).length;
-                    document.dispatchEvent(
-                        new KeyboardEvent('keydown', {
-                            bubbles: true,
-                            cancelable: true,
-                            code: 'Escape',
-                            key: 'Escape',
-                        }),
-                    );
-                    // Give Radix a frame to react then re-check.
-                    await new Promise((r) => requestAnimationFrame(r));
-                    const popperWrappersAfter = document.querySelectorAll(
-                        '[data-radix-popper-content-wrapper]',
-                    ).length;
-                    if (popperWrappersAfter < popperWrappersBefore) {
-                        // Something popped. Consume the back press.
-                        return;
-                    }
+                const handle = await CapApp.addListener('backButton', ({ canGoBack }) => {
+                    // 1. Context menus / Mantine modals and drawers close
+                    //    on a synthetic Escape (see dismissDomOverlayForBack).
+                    if (dismissDomOverlayForBack()) return;
 
                     // 1b. Custom bottom sheets (e.g. the mobile Jellyfin
                     //     "Connect to a device" picker). These render

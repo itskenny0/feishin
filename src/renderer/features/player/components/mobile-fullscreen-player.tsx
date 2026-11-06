@@ -18,6 +18,7 @@ import styles from './mobile-fullscreen-player.module.css';
 
 import { useCachedItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { ContextMenuController } from '/@/renderer/features/context-menu/context-menu-controller';
+import { useBottomSheetStore } from '/@/renderer/features/jellyfin-remote-target/components/bottom-sheet/bottom-sheet-store';
 import { useActiveNowPlayingItem } from '/@/renderer/features/jellyfin-remote-target/hooks/use-active-player-source';
 import { useHasLyrics } from '/@/renderer/features/lyrics/api/lyrics-api';
 import { Lyrics } from '/@/renderer/features/lyrics/lyrics';
@@ -48,6 +49,7 @@ import {
     useFullScreenPlayerDynamicBackground,
     useFullScreenPlayerDynamicImageBlur,
     useFullScreenPlayerDynamicIsImage,
+    useFullScreenPlayerStore,
     useFullScreenPlayerStoreActions,
     useFullScreenPlayerVisualizerAsBackground,
     useFullScreenPlayerVisualizerExpanded,
@@ -649,6 +651,23 @@ export const MobileFullscreenPlayer = () => {
     useEffect(() => {
         onDismissRef.current = handleToggleFullScreenPlayer;
     }, [handleToggleFullScreenPlayer]);
+
+    // Android back: leave the queue / lyrics view first, else slide the player
+    // down like the collapse button (the back handler's store fallback
+    // unmounts it with no exit animation). On the shared back-dismiss stack so
+    // a sheet opened from the player (device picker) still closes first.
+    useEffect(() => {
+        const id = 'mobile-fullscreen-player';
+        useBottomSheetStore.getState().push(id, () => {
+            const { actions, activeTab: tab } = useFullScreenPlayerStore.getState();
+            if (tab === 'queue' || tab === 'lyrics') {
+                actions.setStore({ activeTab: 'player' });
+                return;
+            }
+            onDismissRef.current();
+        });
+        return () => useBottomSheetStore.getState().remove(id);
+    }, []);
 
     // Entrance animation — slide up from the bottom of the viewport.
     useEffect(() => {

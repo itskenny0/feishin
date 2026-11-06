@@ -4,7 +4,6 @@ import clsx from 'clsx';
 import { animate, AnimatePresence, LayoutGroup, motion, useMotionValue } from 'motion/react';
 import React, { memo, MouseEvent, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link } from 'react-router';
 
 import styles from './mobile-playerbar.module.css';
 
@@ -29,7 +28,6 @@ import {
 import { ComponentErrorBoundary } from '/@/renderer/features/shared/components/component-error-boundary';
 import { TrackmapCanvas } from '/@/renderer/features/trackmap';
 import { triggerHaptic } from '/@/renderer/hooks/use-haptic';
-import { AppRoute } from '/@/renderer/router/routes';
 import {
     useFullScreenPlayerExpanded,
     useFullScreenPlayerStoreActions,
@@ -213,6 +211,9 @@ export const MobilePlayerbar = () => {
             if (!start) return;
             const dy = event.clientY - start.y;
             const dx = Math.abs(event.clientX - start.x);
+            // Judge direction only after some travel: a finger's first
+            // samples jitter sideways, which abandoned real swipes.
+            if (Math.abs(dy) < 10 && dx < 10) return;
             // Only commit on clearly vertical-up motion. If the user is
             // moving more horizontally, the inner drag handler owns this
             // gesture — bail so we don't double-fire.
@@ -339,16 +340,17 @@ export const MobilePlayerbar = () => {
                             <>
                                 <div className={styles.lineItem} onClick={stopPropagation}>
                                     <Group align="center" gap="xs" wrap="nowrap">
+                                        {/* Not a link: navigating to the queue
+                                            page under the fullscreen player
+                                            stranded the user there on close. */}
                                         <Text
                                             className={PlaybackSelectors.songTitle}
-                                            component={Link}
                                             fw={700}
                                             isLink
                                             onClick={handleToggleFullScreenPlayer}
                                             onContextMenu={handleToggleContextMenu}
                                             overflow="hidden"
                                             size="sm"
-                                            to={AppRoute.NOW_PLAYING}
                                             truncate
                                         >
                                             {title || '—'}

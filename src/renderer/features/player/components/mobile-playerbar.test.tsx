@@ -1,11 +1,12 @@
 import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { MemoryRouter, useLocation } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { useRemoteTargetStore } from '/@/renderer/features/jellyfin-remote-target/store/remote-target-store';
 import { MobilePlayerbar } from '/@/renderer/features/player/components/mobile-playerbar';
+import { useFullScreenPlayerStore } from '/@/renderer/store';
 
 // Probe the ItemImage so we can assert which entity id the mini-player cover
 // keys on. Preserve the module's other exports (e.g. useCachedItemImageUrl)
@@ -135,5 +136,78 @@ describe('MobilePlayerbar cover cache key', () => {
         renderBar();
 
         expect(screen.getByTestId('mini-cover').getAttribute('data-id')).toBe('song-1');
+    });
+});
+
+describe('MobilePlayerbar title tap', () => {
+    it('opens the fullscreen player without navigating the page underneath it', () => {
+        setRemoteMirroredSong({ albumId: 'album-1' });
+        useFullScreenPlayerStore.getState().actions.setStore({ expanded: false });
+        let pathname = '';
+        const LocationProbe = () => {
+            pathname = useLocation().pathname;
+            return null;
+        };
+
+        render(
+            <QueryClientProvider client={new QueryClient()}>
+                <MantineProvider>
+                    <MemoryRouter initialEntries={['/library/albums/album-1']}>
+                        <MobilePlayerbar />
+                        <LocationProbe />
+                    </MemoryRouter>
+                </MantineProvider>
+            </QueryClientProvider>,
+        );
+
+        fireEvent.click(screen.getByText('Song'));
+
+        expect(useFullScreenPlayerStore.getState().expanded).toBe(true);
+        // Closing the player must land back on the album, not the queue page.
+        expect(pathname).toBe('/library/albums/album-1');
+    });
+});
+
+describe('MobilePlayerbar swipe up', () => {
+    // Pointer samples on the bar root, where the swipe-up listener lives.
+    const swipe = (points: Array<[number, number]>) => {
+        const bar = document.querySelector('.media-player') as HTMLElement;
+        const [start, ...moves] = points;
+        fireEvent.pointerDown(bar, { clientX: start[0], clientY: start[1], pointerType: 'touch' });
+        for (const [x, y] of moves) {
+            fireEvent.pointerMove(bar, { clientX: x, clientY: y, pointerType: 'touch' });
+        }
+        fireEvent.pointerUp(bar, { pointerType: 'touch' });
+    };
+
+    it('opens the fullscreen player even when the first move is sideways jitter', () => {
+        setRemoteMirroredSong({ albumId: 'album-1' });
+        useFullScreenPlayerStore.getState().actions.setStore({ expanded: false });
+        renderBar();
+
+        // A real finger's first sample is often a pixel or two sideways.
+        swipe([
+            [100, 400],
+            [102, 399],
+            [103, 370],
+            [103, 330],
+        ]);
+
+        expect(useFullScreenPlayerStore.getState().expanded).toBe(true);
+    });
+
+    it('ignores a horizontal swipe (that is the prev/next carousel)', () => {
+        setRemoteMirroredSong({ albumId: 'album-1' });
+        useFullScreenPlayerStore.getState().actions.setStore({ expanded: false });
+        renderBar();
+
+        swipe([
+            [100, 400],
+            [130, 396],
+            [180, 380],
+            [240, 340],
+        ]);
+
+        expect(useFullScreenPlayerStore.getState().expanded).toBe(false);
     });
 });

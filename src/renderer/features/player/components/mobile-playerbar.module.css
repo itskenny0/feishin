@@ -8,6 +8,15 @@
     height: 90px;
     padding: 0.5rem 1rem;
     overflow: hidden;
+
+    /*
+     * The bar never scrolls, so the browser must not claim any pan here: a
+     * vertical pan fired pointercancel after the first move and the swipe-up
+     * to open the fullscreen player never reached its threshold. Taps,
+     * long-press and the horizontal prev/next drag are pointer-driven and
+     * unaffected (this also overrides the drag's inline pan-y).
+     */
+    touch-action: none;
 }
 
 /*
@@ -124,18 +133,7 @@
     gap: 8px;
     align-items: center;
     min-width: 0;
-
-    /*
-     * touch-action: pan-y lets the browser claim vertical scrolling
-     * (so dragging the bar up/down still scrolls the page underneath)
-     * while horizontal movement is left untouched for the Motion
-     * drag="x" on this element to interpret as a prev/next gesture.
-     * Without this declaration, Capacitor's WebView sometimes claims
-     * the horizontal pan for itself and the drag never sees the
-     * pointermove events past the first ~10px.
-     */
     overflow: hidden;
-    touch-action: pan-y;
 }
 
 .image-wrapper {

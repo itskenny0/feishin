@@ -351,7 +351,14 @@ export const SleepTimerButton = () => {
                     variant="subtle"
                 />
             </Popover.Target>
-            <Popover.Dropdown maw={480} miw={320} onClick={(e) => e.stopPropagation()} p="sm">
+            {/* Capped to the viewport: at 480px it ran ~95px off a phone
+                screen, cutting off the fade input and a preset column. */}
+            <Popover.Dropdown
+                maw="min(480px, calc(100vw - 16px))"
+                miw="min(320px, calc(100vw - 16px))"
+                onClick={(e) => e.stopPropagation()}
+                p="sm"
+            >
                 <Stack gap="sm">
                     <Paper className={styles.activeStatus} p="md" radius="md">
                         <Text fw={600} size="sm" ta="center">
