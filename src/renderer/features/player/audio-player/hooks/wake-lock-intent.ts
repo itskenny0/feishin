@@ -11,8 +11,8 @@ import { PlayerStatus } from '/@/shared/types/types';
  *
  * This module holds the decision of *what to do* with the lock for a given
  * player status, kept pure and free of any Capacitor / timer / native imports
- * so it is unit-testable in isolation. The hook that owns the side effects
- * (use-capacitor-media-session.tsx) interprets these intents:
+ * so it is unit-testable in isolation. The controller that owns the side effects
+ * (wake-lock-controller.ts) interprets these intents:
  *
  *   - 'acquire'          -> ensure the lock is held now (play).
  *   - 'release'          -> release the lock now (no track / hard stop).

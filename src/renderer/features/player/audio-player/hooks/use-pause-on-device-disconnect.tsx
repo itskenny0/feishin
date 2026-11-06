@@ -1,7 +1,7 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 
-import { usePlayerActions, usePlayerStatus } from '/@/renderer/store';
-import { PlayerStatus } from '/@/shared/types/types';
+import { pauseForAudioOutputLoss } from './audio-output-loss';
+import { addBecomingNoisyListener } from './native-audio-output';
 
 /**
  * Auto-pause when the active audio output device disappears.
@@ -28,12 +28,12 @@ import { PlayerStatus } from '/@/shared/types/types';
  * default behaviour of blasting audio at strangers.
  */
 const usePauseOnDeviceDisconnect = () => {
-    const { mediaPause } = usePlayerActions();
-    const status = usePlayerStatus();
-    // Stash the latest status in a ref so the device-change handler
-    // (registered once) can read it without re-binding on every play/pause.
-    const statusRef = useRef(status);
-    statusRef.current = status;
+    // Android: the WebView's devicechange / audiooutput list does not see
+    // headphones or Bluetooth going away (music kept playing on the
+    // loudspeaker). The native AudioOutput plugin forwards
+    // ACTION_AUDIO_BECOMING_NOISY instead, which also arrives while the app
+    // is backgrounded with the screen off. No-op elsewhere.
+    useEffect(() => addBecomingNoisyListener(() => pauseForAudioOutputLoss('becoming-noisy')), []);
 
     useEffect(() => {
         const md = typeof navigator !== 'undefined' ? navigator.mediaDevices : undefined;
@@ -70,9 +70,8 @@ const usePauseOnDeviceDisconnect = () => {
             previousOutputs = current;
 
             if (removed.length === 0) return;
-            if (statusRef.current !== PlayerStatus.PLAYING) return;
 
-            mediaPause();
+            pauseForAudioOutputLoss('device-change');
         };
 
         snapshot();
@@ -80,7 +79,7 @@ const usePauseOnDeviceDisconnect = () => {
         return () => {
             md.removeEventListener('devicechange', handler);
         };
-    }, [mediaPause]);
+    }, []);
 };
 
 export const PauseOnDeviceDisconnectHook = () => {

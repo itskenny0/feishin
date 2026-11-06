@@ -1,10 +1,13 @@
 import type { Dispatch } from 'react';
 import type ReactPlayer from 'react-player';
 
+import isElectron from 'is-electron';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { isExternalPause, isExternalPlay } from './engine/external-playback';
 import { playerHandoff } from './engine/player-handoff';
+import { getLastAudioOutputLossAt } from './hooks/audio-output-loss';
 
 import { eventEmitter } from '/@/renderer/events/event-emitter';
 import {
@@ -28,6 +31,7 @@ import {
     usePlayerTransition,
     usePlayerVolume,
 } from '/@/renderer/store';
+import { logger } from '/@/renderer/utils/logger';
 import { toast } from '/@/shared/components/toast/toast';
 import { QueueSong } from '/@/shared/types/domain-types';
 import { CrossfadeStyle, PlayerRepeat, PlayerStatus, PlayerStyle } from '/@/shared/types/types';
@@ -41,7 +45,7 @@ export function WebPlayer() {
     const { num, player1, player2, status } = usePlayerCoreData();
     const repeat = usePlayerRepeat();
     const repeatOneProgressRef = useRef({ player1: 0, player2: 0 });
-    const { mediaAutoNext, mediaPause, setTimestamp } = usePlayerActions();
+    const { mediaAutoNext, mediaPause, mediaPlay, setTimestamp } = usePlayerActions();
     const playback = useMpvSettings();
     const { webAudio } = useWebAudio();
 
@@ -635,6 +639,64 @@ export function WebPlayer() {
         });
     }, [mediaPause, t]);
 
+    // Follow play/pause changes the platform makes to the audible element on
+    // its own (Android WebView audio focus: a call, another music app, a
+    // voice assistant; iOS audio-session interruptions). Without this the
+    // store kept saying "playing" over silence. Electron has no audio focus
+    // and its media keys already go through the store, so it is left as is.
+    const systemPausedAtRef = useRef(0);
+    const handleElementPause = useCallback(
+        (slot: 1 | 2, element: HTMLMediaElement | null) => {
+            if (isElectron()) return;
+            const external = isExternalPause({
+                activeSlot: num,
+                element,
+                isTransitioning: Boolean(isTransitioning),
+                renderedStatus: localPlayerStatus,
+                slot,
+                storeStatus: usePlayerStoreBase.getState().player.status,
+            });
+            if (!external) return;
+            systemPausedAtRef.current = Date.now();
+            logger.info('[player] audio paused by the system (audio focus); pausing player', {
+                slot,
+            });
+            mediaPause();
+        },
+        [isTransitioning, localPlayerStatus, mediaPause, num],
+    );
+
+    const handleElementPlay = useCallback(
+        (slot: 1 | 2, element: HTMLMediaElement | null) => {
+            if (isElectron()) return;
+            const external = isExternalPlay({
+                activeSlot: num,
+                element,
+                hasSource: Boolean(slot === 1 ? player1Url : player2Url),
+                isTransitioning: Boolean(isTransitioning),
+                renderedStatus: localPlayerStatus,
+                slot,
+                storeStatus: usePlayerStoreBase.getState().player.status,
+            });
+            if (!external) return;
+            // Headphones went away while the system had us suspended (e.g.
+            // unplugged during a call): its automatic resume would play on
+            // the loudspeaker, so keep the pause instead.
+            if (getLastAudioOutputLossAt() > systemPausedAtRef.current) {
+                logger.info(
+                    '[player] system resume after the audio output was lost; staying paused',
+                );
+                playerRef.current?.pause();
+                return;
+            }
+            logger.info('[player] audio resumed by the system (audio focus); resuming player', {
+                slot,
+            });
+            mediaPlay();
+        },
+        [isTransitioning, localPlayerStatus, mediaPlay, num, player1Url, player2Url],
+    );
+
     const loopPlayer1 = repeat === PlayerRepeat.ONE && num === 1;
     const loopPlayer2 = repeat === PlayerRepeat.ONE && num === 2;
 
@@ -644,6 +706,8 @@ export function WebPlayer() {
             isTransitioning={Boolean(isTransitioning)}
             loopPlayer1={loopPlayer1}
             loopPlayer2={loopPlayer2}
+            onElementPause={handleElementPause}
+            onElementPlay={handleElementPlay}
             onEndedPlayer1={handleOnEndedPlayer1}
             onEndedPlayer2={handleOnEndedPlayer2}
             onErrorPause={handleOnErrorPause}

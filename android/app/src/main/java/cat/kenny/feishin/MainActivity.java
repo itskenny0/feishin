@@ -14,6 +14,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(WakeLockPlugin.class);
         registerPlugin(MediaVolumesPlugin.class);
         registerPlugin(SyncForegroundServicePlugin.class);
+        registerPlugin(AudioOutputPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

@@ -28,6 +28,10 @@ interface WebPlayerEngineProps {
     isTransitioning: boolean;
     loopPlayer1: boolean;
     loopPlayer2: boolean;
+    /** The slot's <audio> fired 'pause' (any cause; the caller decides). */
+    onElementPause?: (slot: 1 | 2, element: HTMLMediaElement | null) => void;
+    /** The slot's <audio> fired 'play' (any cause; the caller decides). */
+    onElementPlay?: (slot: 1 | 2, element: HTMLMediaElement | null) => void;
     onEndedPlayer1: () => void;
     onEndedPlayer2: () => void;
     onErrorPause: () => void;
@@ -68,6 +72,8 @@ export const WebPlayerEngine = (props: WebPlayerEngineProps) => {
         isTransitioning,
         loopPlayer1,
         loopPlayer2,
+        onElementPause,
+        onElementPlay,
         onEndedPlayer1,
         onEndedPlayer2,
         onErrorPause,
@@ -323,6 +329,15 @@ export const WebPlayerEngine = (props: WebPlayerEngineProps) => {
     useEffect(() => {
         if (playerStatus !== PlayerStatus.PLAYING) {
             pauseBothPlayers();
+            // A pending network retry would load() + play() 2s later and
+            // restart audio the user just paused. The replay-after-error
+            // effect below reloads the errored element on the next play.
+            for (const timer of [networkRetryTimer1, networkRetryTimer2]) {
+                if (timer.current) {
+                    clearTimeout(timer.current);
+                    timer.current = null;
+                }
+            }
             return;
         }
         if (isTransitioning) {
@@ -391,6 +406,11 @@ export const WebPlayerEngine = (props: WebPlayerEngineProps) => {
         [onStartedPlayer2, preservesPitch],
     );
 
+    const mediaElementOf = (ref: React.RefObject<null | ReactPlayer>) => {
+        const internal = ref.current?.getInternalPlayer();
+        return internal instanceof HTMLMediaElement ? internal : null;
+    };
+
     if (isLoading || !ReactPlayerComponent) {
         return <div id="web-player-engine" style={{ display: 'none' }} />;
     }
@@ -415,6 +435,12 @@ export const WebPlayerEngine = (props: WebPlayerEngineProps) => {
                     networkRetryCount1,
                     networkRetryTimer1,
                 )}
+                onPause={
+                    onElementPause ? () => onElementPause(1, mediaElementOf(player1Ref)) : undefined
+                }
+                onPlay={
+                    onElementPlay ? () => onElementPlay(1, mediaElementOf(player1Ref)) : undefined
+                }
                 onProgress={onProgressPlayer1}
                 onReady={handleOnReadyPlayer1}
                 playbackRate={speed || 1}
@@ -443,6 +469,12 @@ export const WebPlayerEngine = (props: WebPlayerEngineProps) => {
                     networkRetryCount2,
                     networkRetryTimer2,
                 )}
+                onPause={
+                    onElementPause ? () => onElementPause(2, mediaElementOf(player2Ref)) : undefined
+                }
+                onPlay={
+                    onElementPlay ? () => onElementPlay(2, mediaElementOf(player2Ref)) : undefined
+                }
                 onProgress={onProgressPlayer2}
                 onReady={handleOnReadyPlayer2}
                 playbackRate={speed || 1}

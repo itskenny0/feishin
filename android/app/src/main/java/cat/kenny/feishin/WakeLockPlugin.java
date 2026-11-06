@@ -35,7 +35,8 @@ import com.getcapacitor.annotation.CapacitorPlugin;
  * media-session plugin in node_modules, which must stay vendor-owned.
  *
  * Method surface (all resolve immediately):
- *   - acquire()  -> ensure the partial wake lock is held (idempotent).
+ *   - acquire()  -> ensure the partial wake lock is held and re-arm its
+ *                   watchdog timeout (idempotent).
  *   - release()  -> release the partial wake lock if held (idempotent).
  *   - isHeld()   -> resolves { held: boolean }.
  *
@@ -55,10 +56,9 @@ public class WakeLockPlugin extends Plugin {
     private static final String WAKE_LOCK_TAG = "feishin:playback";
 
     // Backstop so a renderer crash mid-playback cannot pin the CPU awake
-    // forever. 10 minutes comfortably exceeds the longest single track we
-    // expect; the renderer re-acquires on the next position tick / status
-    // push well inside this window, so a still-playing track never lets the
-    // lock lapse in practice.
+    // forever. Every acquire() re-arms this window and the renderer calls
+    // acquire() periodically while playing (well inside 10 minutes), so
+    // continuous playback never lets the lock lapse.
     private static final long WATCHDOG_TIMEOUT_MS = 10 * 60 * 1000L;
 
     private PowerManager.WakeLock wakeLock = null;
@@ -87,8 +87,14 @@ public class WakeLockPlugin extends Plugin {
                 call.reject("PowerManager unavailable");
                 return;
             }
-            if (!lock.isHeld()) {
-                lock.acquire(WATCHDOG_TIMEOUT_MS);
+            // Always (re)acquire: on a non-reference-counted lock this re-arms
+            // the watchdog timeout. Acquiring only when not held let the lock
+            // lapse 10 minutes into continuous playback, because the player
+            // status (and so the renderer's acquire) does not change across
+            // track boundaries.
+            boolean wasHeld = lock.isHeld();
+            lock.acquire(WATCHDOG_TIMEOUT_MS);
+            if (!wasHeld) {
                 Log.i(TAG, "partial wake lock acquired");
             }
         }

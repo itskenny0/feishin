@@ -3,20 +3,22 @@ import { MediaSession } from '@jofr/capacitor-media-session';
 import { useEffect, useRef } from 'react';
 
 import { acquireWakeLock, releaseWakeLock } from './native-wake-lock';
-import { WAKE_LOCK_RELEASE_GRACE_MS, wakeLockIntentForStatus } from './wake-lock-intent';
+import { createWakeLockController } from './wake-lock-controller';
 
 import { getCachedThumbnailDataUrl } from '/@/renderer/cache/images';
 import { getItemImageUrl } from '/@/renderer/components/item-image/item-image';
-import { useIsRadioActive } from '/@/renderer/features/radio/hooks/use-radio-player';
+import { eventEmitter } from '/@/renderer/events/event-emitter';
+import { useIsRadioActive, useRadioStore } from '/@/renderer/features/radio/hooks/use-radio-player';
 import { getIsOnline, subscribeIsOnline } from '/@/renderer/lib/network-status';
 import {
     subscribeCurrentTrack,
+    subscribePlayerSpeed,
     subscribePlayerStatus,
     usePlayerActions,
     usePlayerStore,
     useTimestampStoreBase,
 } from '/@/renderer/store';
-import { toast } from '/@/shared/components/toast/toast';
+import { logger } from '/@/renderer/utils/logger';
 import { LibraryItem, QueueSong } from '/@/shared/types/domain-types';
 import { PlayerStatus } from '/@/shared/types/types';
 import { songCoverId } from '/@/shared/utils/song-cover-id';
@@ -42,17 +44,20 @@ import { songCoverId } from '/@/shared/utils/song-cover-id';
  *     code path.
  *   - Metadata refreshed on track change.
  *   - playbackState pushed on every status change (subscribePlayerStatus).
- *   - Position state pushed every few seconds while playing — pinning
- *     this to a 5s interval mirrors the cadence the Android Auto reference
- *     apps (zaptrax etc.) settled on; more frequent updates trigger
- *     redundant native bridge round-trips and battery cost.
+ *   - Position state pushed on every play/pause, track change, seek and
+ *     repeat (the lock-screen seekbar extrapolates from the last push, so a
+ *     stale one makes it jump), plus every few seconds while playing to
+ *     correct drift. 5s mirrors the cadence the Android Auto reference apps
+ *     (zaptrax etc.) settled on; more frequent updates trigger redundant
+ *     native bridge round-trips and battery cost.
  *   - Action handlers wired to the same usePlayerActions store the Web
  *     MediaSession hook uses, so play/pause/next/prev/seek from the
  *     notification or lockscreen drive the same code path as in-app
  *     clicks.
- *   - Radio is intentionally not surfaced through the plugin: the
- *     existing Web hook handles radio metadata in-WebView and we
- *     don't have a sensible position/duration story for live streams.
+ *   - Radio: the notification shows the station / stream title with no
+ *     seekbar (live streams have no position/duration story); next/prev/
+ *     seek are ignored. Without this it kept showing the queue's last song
+ *     while the radio played.
  */
 
 // Static import of @jofr/capacitor-media-session. The package ships a
@@ -74,21 +79,6 @@ import { songCoverId } from '/@/shared/utils/song-cover-id';
 // inert. iOS background audio is handled natively via AVAudioSession in
 // AppDelegate.swift + the `audio` UIBackgroundMode.
 const isAndroid = Capacitor.getPlatform() === 'android';
-
-// One-shot telemetry toast so we can see on the device whether the
-// plugin actually loaded. Without this it was impossible to tell from
-// the user's perspective whether the plugin was even imported in the
-// shipped APK or silently bailing.
-let bootToastShown = false;
-const showBootToast = (message: string, kind: 'info' | 'warn' = 'info') => {
-    if (bootToastShown) return;
-    bootToastShown = true;
-    if (kind === 'warn') {
-        toast.warn({ message, title: 'Media notification' });
-    } else {
-        toast.info({ message, title: 'Media notification' });
-    }
-};
 
 const buildMetadata = async (song: QueueSong) => {
     // OFFLINE: never hand the native plugin a REMOTE artwork URL. The plugin
@@ -146,6 +136,19 @@ const setMetadataSafe = (song: QueueSong): void => {
         .catch(() => {});
 };
 
+const setRadioMetadata = (radio: ReturnType<typeof useRadioStore.getState>): void => {
+    // Supersede any in-flight song metadata build.
+    metadataSeq += 1;
+    MediaSession.setMetadata({
+        album: '',
+        artist: radio.metadata?.artist || '',
+        artwork: [],
+        title: radio.metadata?.title || radio.stationName || '',
+    }).catch(() => {});
+    // Duration 0 hides the seekbar left over from the previous song.
+    MediaSession.setPositionState({ duration: 0, playbackRate: 1, position: 0 }).catch(() => {});
+};
+
 const useCapacitorMediaSession = () => {
     const { mediaNext, mediaPause, mediaPlay, mediaPrevious, mediaSeekToTimestamp, mediaStop } =
         usePlayerActions();
@@ -191,36 +194,30 @@ const useCapacitorMediaSession = () => {
         // so the WebView's HTML5 <audio> doesn't stall when backgrounded —
         // the foreground media-session service alone doesn't prevent the SoC
         // from suspending on aggressive OEM builds (MIUI/HyperOS, Mi 9T).
-        let wakeLockReleaseTimer: null | ReturnType<typeof setTimeout> = null;
-        const clearWakeLockReleaseTimer = () => {
-            if (wakeLockReleaseTimer) {
-                clearTimeout(wakeLockReleaseTimer);
-                wakeLockReleaseTimer = null;
-            }
-        };
-        // Translate a status into an acquire / immediate-release / delayed-
-        // release of the native wake lock. Pure decision lives in
-        // wakeLockIntentForStatus(); the timer + native side effects live here.
-        const applyWakeLockForStatus = (status: PlayerStatus) => {
-            const intent = wakeLockIntentForStatus(status);
-            if (intent === 'acquire') {
-                clearWakeLockReleaseTimer();
-                acquireWakeLock();
-            } else if (intent === 'release') {
-                clearWakeLockReleaseTimer();
-                releaseWakeLock();
-            } else {
-                // 'release-grace' — paused: hold the lock briefly so a quick
-                // resume or track-boundary gap doesn't thrash acquire/release.
-                clearWakeLockReleaseTimer();
-                wakeLockReleaseTimer = setTimeout(() => {
-                    wakeLockReleaseTimer = null;
-                    releaseWakeLock();
-                }, WAKE_LOCK_RELEASE_GRACE_MS);
-            }
+        // The controller re-acquires periodically while playing so the native
+        // watchdog never lapses mid-session.
+        const wakeLock = createWakeLockController({
+            acquire: acquireWakeLock,
+            release: releaseWakeLock,
+        });
+
+        // The notification / lock-screen seekbar extrapolates from the last
+        // pushed position, so push on every discontinuity, not just on the
+        // periodic tick.
+        const pushPositionState = () => {
+            if (currentDurationSec <= 0 || useRadioStore.getState().currentStreamUrl) return;
+            const timestamp = useTimestampStoreBase.getState().timestamp;
+            MediaSession.setPositionState({
+                duration: currentDurationSec,
+                playbackRate: usePlayerStore.getState().player.speed || 1,
+                position: Math.min(Math.max(0, timestamp), currentDurationSec),
+            }).catch(() => {
+                // Silent: setPositionState can fail when the duration drifts
+                // (e.g. mid-skip) and the next push corrects it.
+            });
         };
 
-        showBootToast('Wiring Android media notification…');
+        logger.info('[media-session] wiring Android media notification');
 
         const init = async () => {
             try {
@@ -250,16 +247,14 @@ const useCapacitorMediaSession = () => {
             } catch (err) {
                 // If the native plugin failed to register (wrong
                 // Capacitor version, missing gradle wiring, etc.) every
-                // call above throws. Surface a one-time error toast so
-                // we can see it on the device rather than silently
-                // failing.
-                showBootToast(`Media plugin error: ${(err as Error).message ?? 'unknown'}`, 'warn');
+                // call above throws.
+                logger.warn('[media-session] media plugin unavailable', { error: err });
                 return;
             }
         };
 
         const unsubscribeTrack = subscribeCurrentTrack(({ song }) => {
-            if (isRadioActiveRef.current) return;
+            if (useRadioStore.getState().currentStreamUrl) return;
             if (!song) {
                 // Queue cleared / mediaStop — wipe metadata so the
                 // lockscreen / notification doesn't keep showing the
@@ -275,12 +270,38 @@ const useCapacitorMediaSession = () => {
                 // Hard stop: no track is current, so nothing needs the CPU
                 // pinned awake. Release immediately (cancels any pending
                 // grace-period release too).
-                clearWakeLockReleaseTimer();
-                releaseWakeLock();
+                wakeLock.releaseNow();
                 return;
             }
             currentDurationSec = (song.duration ?? 0) / 1000;
             setMetadataSafe(song);
+            // New duration + reset position now, instead of letting the
+            // seekbar run on with the previous track's numbers until the
+            // next tick.
+            pushPositionState();
+        });
+
+        eventEmitter.on('PLAYER_SEEK_TO_TIMESTAMP', pushPositionState);
+        eventEmitter.on('PLAYER_REPEATED', pushPositionState);
+
+        const unsubscribeRadio = useRadioStore.subscribe((radio, prev) => {
+            if (radio.currentStreamUrl) {
+                if (
+                    radio.currentStreamUrl !== prev.currentStreamUrl ||
+                    radio.metadata !== prev.metadata ||
+                    radio.stationName !== prev.stationName
+                ) {
+                    setRadioMetadata(radio);
+                }
+                return;
+            }
+            if (!prev.currentStreamUrl) return;
+            // Radio dismissed: back to the queue's current track.
+            const song = usePlayerStore.getState().getCurrentSong();
+            if (!song) return;
+            currentDurationSec = (song.duration ?? 0) / 1000;
+            setMetadataSafe(song);
+            pushPositionState();
         });
 
         // Coming back ONLINE: refresh metadata so the notification regains
@@ -288,7 +309,7 @@ const useCapacitorMediaSession = () => {
         // it there — the plugin's native artwork download crashes the app
         // when the server is unreachable).
         const unsubscribeOnline = subscribeIsOnline(() => {
-            if (!getIsOnline() || isRadioActiveRef.current) return;
+            if (!getIsOnline() || useRadioStore.getState().currentStreamUrl) return;
             const song = usePlayerStore.getState().getCurrentSong();
             if (song) {
                 setMetadataSafe(song);
@@ -316,7 +337,7 @@ const useCapacitorMediaSession = () => {
             }
             // Hold/release the native partial wake lock around play/pause so
             // background audio doesn't stall when the screen turns off.
-            applyWakeLockForStatus(status);
+            wakeLock.apply(status);
             const playbackState =
                 status === PlayerStatus.PLAYING
                     ? 'playing'
@@ -324,11 +345,14 @@ const useCapacitorMediaSession = () => {
                       ? 'paused'
                       : 'none';
             MediaSession.setPlaybackState({ playbackState }).catch((err) => {
-                showBootToast(
-                    `setPlaybackState failed: ${(err as Error).message ?? 'unknown'}`,
-                    'warn',
-                );
+                logger.warn('[media-session] setPlaybackState failed', {
+                    error: err,
+                    playbackState,
+                });
             });
+            // Pin the exact play/pause position; the last periodic push can be
+            // up to one tick old, which made the paused seekbar jump back.
+            if (playbackState !== 'none') pushPositionState();
 
             // Manage the position-update ticker around play/pause so
             // we don't waste battery polling while paused or stopped.
@@ -336,22 +360,13 @@ const useCapacitorMediaSession = () => {
                 clearInterval(positionInterval);
                 positionInterval = null;
             }
-            if (playbackState === 'playing' && currentDurationSec > 0) {
-                positionInterval = setInterval(() => {
-                    const position = useTimestampStoreBase.getState().timestamp;
-                    MediaSession.setPositionState({
-                        duration: currentDurationSec,
-                        playbackRate: 1,
-                        position,
-                    }).catch(() => {
-                        // Silent — setPositionState can fail when the
-                        // duration drifts (e.g. mid-skip) and there's
-                        // nothing useful to do besides try again next
-                        // tick.
-                    });
-                }, 5000);
+            if (playbackState === 'playing') {
+                positionInterval = setInterval(pushPositionState, 5000);
             }
         };
+
+        // Playback speed changes how fast the lock-screen seekbar should run.
+        const unsubscribeSpeed = subscribePlayerSpeed(pushPositionState);
 
         const unsubscribeStatus = subscribePlayerStatus(({ status }) => applyStatus(status));
 
@@ -364,23 +379,29 @@ const useCapacitorMediaSession = () => {
             // toast so we can confirm on the device that we got past
             // this step.
             const currentSongNow = usePlayerStore.getState().getCurrentSong();
-            if (currentSongNow && !isRadioActiveRef.current) {
+            const radioNow = useRadioStore.getState();
+            if (radioNow.currentStreamUrl) {
+                setRadioMetadata(radioNow);
+            } else if (currentSongNow) {
                 currentDurationSec = (currentSongNow.duration ?? 0) / 1000;
                 setMetadataSafe(currentSongNow);
             }
             const status = usePlayerStore.getState().player.status;
             applyStatus(status);
-            showBootToast(`Media notification armed (status: ${PlayerStatus[status] ?? status})`);
+            logger.info('[media-session] media notification armed', { status });
         });
 
         return () => {
             if (positionInterval) clearInterval(positionInterval);
             // Never leak a held CPU wake lock across an unmount / hot reload.
-            clearWakeLockReleaseTimer();
-            releaseWakeLock();
+            wakeLock.dispose();
             unsubscribeTrack();
             unsubscribeOnline();
             unsubscribeStatus();
+            unsubscribeSpeed();
+            unsubscribeRadio();
+            eventEmitter.off('PLAYER_SEEK_TO_TIMESTAMP', pushPositionState);
+            eventEmitter.off('PLAYER_REPEATED', pushPositionState);
             // Clear handlers + state so backgrounding the app and a
             // subsequent hot reload doesn't leave dangling references in
             // the native plugin.
